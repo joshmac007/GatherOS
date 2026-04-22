@@ -1,0 +1,40 @@
+{
+  "name": "moodmark",
+  "productName": "Moodmark",
+  "version": "0.1.0",
+  "description": "A local-first macOS app for saving, browsing, and organizing visual inspiration.",
+  "private": true,
+  "main": "src/main/index.js",
+  "author": {
+    "name": "Moodmark"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n vite,electron -c cyan,magenta \"npm:dev:vite\" \"npm:dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "build": "vite build && electron-builder",
+    "build:renderer": "vite build",
+    "build:mac:arm": "vite build && electron-builder --mac --arm64",
+    "build:mac:x64": "vite build && electron-builder --mac --x64",
+    "release": "vite build && electron-builder --publish always",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "electron-updater": "^6.3.9",
+    "nanoid": "^5.0.7",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.8",
+    "wait-on": "^7.2.0"
+  }
+}

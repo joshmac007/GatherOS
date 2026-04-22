@@ -1,0 +1,25 @@
+appId: com.moodmark.app
+productName: Moodmark
+directories:
+  output: dist/build
+  buildResources: build
+files:
+  - src/main/**/*
+  - dist/renderer/**/*
+  - package.json
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/sharp/**/*
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+publish:
+  provider: github
+  owner: BrettfromDJ
+  repo: gatheros

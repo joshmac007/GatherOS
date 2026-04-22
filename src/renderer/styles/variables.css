@@ -1,0 +1,12 @@
+:root {
+  --sidebar-bg: rgba(28, 28, 30, 0.72);
+  --content-bg: #1c1c1e;
+  --border: rgba(255, 255, 255, 0.08);
+  --accent: #534AB7;
+  --text-primary: rgba(255, 255, 255, 0.9);
+  --text-secondary: rgba(255, 255, 255, 0.45);
+  --text-tertiary: rgba(255, 255, 255, 0.25);
+  --titlebar-height: 36px;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
