@@ -96,17 +96,16 @@ function CaptureOverlay() {
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', display: 'block' }}
             alt=""
           />
-          {sel ? (
-            // Four dim rectangles around the selection; selection itself is untouched.
-            <>
-              <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: sel.y, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', left: 0, top: sel.y + sel.h, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', left: 0, top: sel.y, width: sel.x, height: sel.h, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', left: sel.x + sel.w, top: sel.y, right: 0, height: sel.h, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', left: sel.x, top: sel.y, width: sel.w, height: sel.h, border: '2px solid rgba(255,255,255,0.9)', boxSizing: 'border-box', pointerEvents: 'none' }} />
-            </>
-          ) : (
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none' }} />
+          {sel && (
+            <div style={{
+              position: 'absolute',
+              left: sel.x, top: sel.y,
+              width: sel.w, height: sel.h,
+              border: '2px solid rgba(255, 255, 255, 0.95)',
+              boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.5)',
+              boxSizing: 'border-box',
+              pointerEvents: 'none',
+            }} />
           )}
         </>
       ) : (
