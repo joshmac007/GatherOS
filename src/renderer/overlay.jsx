@@ -96,9 +96,8 @@ function CaptureOverlay() {
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', display: 'block' }}
             alt=""
           />
-          {/* dark veil; punched out by the selection box-shadow */}
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', pointerEvents: 'none' }} />
-          {sel && (
+          {sel ? (
+            // Dim everything EXCEPT the selection via a big box-shadow.
             <div style={{
               position: 'absolute',
               left: sel.x, top: sel.y,
@@ -106,6 +105,13 @@ function CaptureOverlay() {
               background: 'transparent',
               boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)',
               border: '2px solid rgba(255,255,255,0.85)',
+              pointerEvents: 'none',
+            }} />
+          ) : (
+            // No selection yet — dim the whole screen.
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'rgba(0,0,0,0.45)',
               pointerEvents: 'none',
             }} />
           )}
