@@ -1,14 +1,17 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
 const path = require('node:path');
 
 const { initDatabase, closeDatabase } = require('./db');
-const { ensureStorageDirs } = require('./storage');
+const { ensureStorageDirs, saveImageFromFile } = require('./storage');
+const { insertSave } = require('./db');
 const { registerIpcHandlers } = require('./ipc');
+const { setMainWindow, registerCaptureHotkey, unregisterCaptureHotkey, startScreenshotCapture } = require('./capture');
 
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:5173';
 
 let mainWindow = null;
+let tray = null;
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -31,12 +34,12 @@ function createMainWindow() {
     },
   });
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
+  setMainWindow(mainWindow);
 
+  mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
     mainWindow = null;
+    setMainWindow(null);
   });
 
   if (isDev) {
@@ -48,27 +51,70 @@ function createMainWindow() {
   return mainWindow;
 }
 
+function buildTrayIcon() {
+  // 16×16 purple square — replaced with a real icon asset in Session 5.
+  const size = 16;
+  const buf = Buffer.alloc(size * size * 4);
+  for (let i = 0; i < size * size; i++) {
+    buf[i * 4] = 0x53; buf[i * 4 + 1] = 0x4a;
+    buf[i * 4 + 2] = 0xb7; buf[i * 4 + 3] = 0xff;
+  }
+  return nativeImage.createFromBuffer(buf, { width: size, height: size });
+}
+
+function createTray() {
+  tray = new Tray(buildTrayIcon());
+  tray.setToolTip('Moodmark');
+
+  const menu = Menu.buildFromTemplate([
+    { label: 'Open Moodmark', click: () => {
+      if (mainWindow) mainWindow.focus();
+      else createMainWindow();
+    }},
+    { label: 'Capture Screenshot  ⌘⇧S', click: startScreenshotCapture },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() },
+  ]);
+  tray.setContextMenu(menu);
+
+  tray.on('click', () => {
+    if (mainWindow) mainWindow.focus();
+    else createMainWindow();
+  });
+
+  tray.on('drop-files', async (_e, files) => {
+    for (const file of files) {
+      try {
+        const imgData = await saveImageFromFile(file);
+        const record = insertSave(imgData);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('save:created', record);
+        }
+      } catch (err) {
+        console.error('Tray drop failed:', err);
+      }
+    }
+  });
+}
+
 app.whenReady().then(() => {
   ensureStorageDirs();
   initDatabase();
   registerIpcHandlers();
   createMainWindow();
+  createTray();
+  registerCaptureHotkey();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('will-quit', () => {
+  unregisterCaptureHotkey();
   closeDatabase();
 });
-
-module.exports = { createMainWindow };

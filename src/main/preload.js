@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('moodmark', {
     getAll: (opts) => ipcRenderer.invoke('saves:get-all', opts ?? {}),
     update: (payload) => ipcRenderer.invoke('saves:update', payload),
     delete: (id) => ipcRenderer.invoke('saves:delete', id),
+    dropFile: (filePath) => ipcRenderer.invoke('saves:drop-file', filePath),
   },
   collections: {
     getAll: () => ipcRenderer.invoke('collections:get-all'),

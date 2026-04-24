@@ -21,6 +21,7 @@ body {
 }
 
 .app-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -54,4 +55,39 @@ body {
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 12px;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: rgba(83, 74, 183, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.drop-message {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.toast-stack > * {
+  pointer-events: auto;
 }
