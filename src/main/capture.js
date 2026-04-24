@@ -34,16 +34,12 @@ async function ensureScreenRecordingPermission() {
   let status = systemPreferences.getMediaAccessStatus('screen');
   if (status === 'granted') return true;
 
-  // Calling desktopCapturer.getSources() triggers the system prompt the
-  // first time. After the user responds, the status updates.
   try {
     await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width: 1, height: 1 },
     });
-  } catch {
-    // Ignore — we'll re-check status below.
-  }
+  } catch {}
 
   status = systemPreferences.getMediaAccessStatus('screen');
   if (status === 'granted') return true;
@@ -86,6 +82,7 @@ async function startScreenshotCapture() {
     hasShadow: false,
     skipTaskbar: true,
     enableLargerThanScreen: true,
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload-overlay.js'),
       contextIsolation: true,
@@ -96,12 +93,7 @@ async function startScreenshotCapture() {
 
   overlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWin.setAlwaysOnTop(true, 'screen-saver');
-
-  overlayWin.webContents.session.setDisplayMediaRequestHandler((_req, callback) => {
-    desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
-      callback({ video: sources[0] });
-    });
-  });
+  overlayWin.setIgnoreMouseEvents(false);
 
   overlayWin.on('closed', () => { overlayWin = null; });
 
@@ -114,23 +106,61 @@ async function startScreenshotCapture() {
   }
 }
 
-async function handleOverlayComplete(dataUrl) {
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.close();
-  }
+async function handleOverlayComplete(rect) {
+  if (!overlayWin) return;
+  const win = overlayWin;
+  overlayWin = null;
 
-  const { saveImageFromBase64 } = require('./storage');
-  const { insertSave } = require('./db');
+  // Hide the overlay before capturing so it doesn't appear in the screenshot.
+  win.setOpacity(0);
+  win.hide();
+
+  // Give the compositor a frame to render without the overlay.
+  await new Promise((r) => setTimeout(r, 120));
 
   try {
-    const imgData = await saveImageFromBase64(dataUrl);
+    const cropped = await captureAndCrop(rect);
+    win.close();
+
+    const { saveImageFromBuffer } = require('./storage');
+    const { insertSave } = require('./db');
+    const imgData = await saveImageFromBuffer(cropped, 'png');
     const record = insertSave(imgData);
     if (_mainWindow && !_mainWindow.isDestroyed()) {
       _mainWindow.webContents.send('save:created', record);
     }
   } catch (err) {
-    console.error('Failed to save screenshot:', err);
+    console.error('Failed to capture screenshot:', err);
+    if (!win.isDestroyed()) win.close();
   }
+}
+
+async function captureAndCrop(rect) {
+  const sharp = require('sharp');
+  const display = screen.getPrimaryDisplay();
+  const sf = display.scaleFactor || 1;
+  const targetWidth = Math.round(display.size.width * sf);
+  const targetHeight = Math.round(display.size.height * sf);
+
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: targetWidth, height: targetHeight },
+  });
+  const source =
+    sources.find((s) => Number(s.display_id) === display.id) || sources[0];
+
+  const pngBuffer = source.thumbnail.toPNG();
+
+  // Clamp the rect to the actual thumbnail size.
+  const thumbSize = source.thumbnail.getSize();
+  const scaleX = thumbSize.width / targetWidth;
+  const scaleY = thumbSize.height / targetHeight;
+  const left = Math.max(0, Math.min(thumbSize.width - 1, Math.round(rect.x * scaleX)));
+  const top = Math.max(0, Math.min(thumbSize.height - 1, Math.round(rect.y * scaleY)));
+  const width = Math.max(1, Math.min(thumbSize.width - left, Math.round(rect.w * scaleX)));
+  const height = Math.max(1, Math.min(thumbSize.height - top, Math.round(rect.h * scaleY)));
+
+  return sharp(pngBuffer).extract({ left, top, width, height }).png().toBuffer();
 }
 
 function handleOverlayCancel() {

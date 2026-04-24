@@ -34,6 +34,11 @@ async function saveImageFromFile(sourcePath) {
   return _writeImageFiles(buffer, ext, sharp);
 }
 
+async function saveImageFromBuffer(buffer, ext = 'png') {
+  const sharp = require('sharp');
+  return _writeImageFiles(buffer, ext, sharp);
+}
+
 async function _writeImageFiles(buffer, ext, sharp) {
   const id = crypto.randomUUID();
   const filePath = path.join(getImagesDir(), `${id}.${ext}`);
@@ -68,5 +73,6 @@ module.exports = {
   getThumbsDir,
   saveImageFromBase64,
   saveImageFromFile,
+  saveImageFromBuffer,
   deleteImageFiles,
 };
