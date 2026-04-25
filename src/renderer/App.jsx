@@ -96,7 +96,7 @@ export default function App() {
   } = useLibrary();
 
   const [selected, setSelected] = useState(() => new Set());
-  const [gridColumns, setGridColumns] = useState(4);
+  const [gridColumns, setGridColumns] = useState(3);
   const [focusedId, setFocusedId] = useState(null);
   const [dragging, setDragging] = useState(false);
 
