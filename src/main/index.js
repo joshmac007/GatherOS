@@ -55,9 +55,11 @@ const CONTENT_TYPES = {
 function registerMoodmarkFileProtocol() {
   protocol.handle('moodmark-file', async (req) => {
     const url = new URL(req.url);
-    // moodmark-file:///Users/.../thumbs/abc.jpg → /Users/.../thumbs/abc.jpg
-    const abs = decodeURIComponent(url.pathname);
-    console.log('[moodmark-file]', abs);
+    // URL shape: moodmark-file://local/<URI-encoded-absolute-path>
+    // Stored as one opaque pathname segment so "/Users" isn't mistaken
+    // for the authority in Chromium's URL parser.
+    const encoded = url.pathname.replace(/^\/+/, '');
+    const abs = decodeURIComponent(encoded);
 
     if (!fs.existsSync(abs)) {
       console.error('[moodmark-file] not found:', abs);
