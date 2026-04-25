@@ -85,30 +85,24 @@
   appearance: none;
   width: 100%;
   padding: 6px 12px 6px 32px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.45) 100%);
-  backdrop-filter: blur(16px) saturate(1.5);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
+  background: #FAFAF9;
+  border: none;
+  border-radius: 22px;
   color: var(--text-primary);
   font: inherit;
   font-size: 13px;
   outline: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    inset 0 -0.5px 0 rgba(0, 0, 0, 0.02),
-    0 1px 1px rgba(0, 0, 0, 0.03);
-  transition: background 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  box-shadow: 0 4px 34px 20px rgba(0, 0, 0, 0.02), 0 0 1px 1px #FFF inset;
+  transition: box-shadow 120ms ease;
 }
 
 .search:focus {
-  background: #ffffff;
-  border-color: var(--accent);
-  /* Inset ring so focus doesn't expand the visual width of the field. */
+  /* Stack an inset accent ring on top of the same halo so focus is
+     visible without changing the field's footprint or surface. */
   box-shadow:
-    inset 0 0 0 1px var(--accent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    inset 0 0 0 1.5px var(--accent),
+    0 4px 34px 20px rgba(0, 0, 0, 0.02),
+    0 0 1px 1px #FFF inset;
 }
 
 /* Hide WebKit's native search ornaments so our custom icon stays visible
