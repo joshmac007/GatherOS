@@ -65,7 +65,7 @@ function extFromUrl(url) {
   }
 }
 
-async function saveImageFromUrl(url) {
+async function saveImageFromUrl(url, opts = {}) {
   const sharp = require('sharp');
 
   if (url.startsWith('data:')) {
@@ -75,21 +75,27 @@ async function saveImageFromUrl(url) {
     throw new Error('Blob URLs only exist inside the browser; drag the image directly instead.');
   }
 
-  const res = await fetch(url, {
-    redirect: 'follow',
-    headers: {
-      // Some hosts (e.g. Twitter) reject the default Node UA.
-      'User-Agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Moodmark/1.0',
-      Accept: 'image/*,*/*;q=0.8',
-    },
-  });
+  const headers = {
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+    Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  };
+  if (opts.referer) headers.Referer = opts.referer;
+
+  console.log('[drop-url] fetching:', url, opts.referer ? `(ref: ${opts.referer})` : '');
+  const res = await fetch(url, { redirect: 'follow', headers });
   if (!res.ok) {
     throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`);
   }
   const contentType = res.headers.get('content-type') || '';
+  if (!contentType.startsWith('image/') && !extFromUrl(url)) {
+    throw new Error(`Response is not an image: ${contentType || 'unknown'}`);
+  }
   const ext = extFromMime(contentType) || extFromUrl(url) || 'png';
   const buffer = Buffer.from(await res.arrayBuffer());
+  if (buffer.length === 0) {
+    throw new Error('Empty image response');
+  }
   return _writeImageFiles(buffer, ext, sharp);
 }
 

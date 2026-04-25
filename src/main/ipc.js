@@ -34,13 +34,29 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('saves:drop-url', async (_e, payload) => {
-    const url = typeof payload === 'string' ? payload : payload?.url;
-    const sourceUrl = typeof payload === 'object' ? payload?.sourceUrl : null;
-    if (!url) throw new Error('drop-url called without a URL');
-    const imgData = await saveImageFromUrl(url);
-    const record = insertSave({ ...imgData, sourceUrl: sourceUrl || url });
-    notifySaved(record);
-    return record;
+    const candidates = Array.isArray(payload?.urls)
+      ? payload.urls
+      : Array.isArray(payload)
+        ? payload
+        : [typeof payload === 'string' ? payload : payload?.url].filter(Boolean);
+    const referer = payload?.sourceUrl || null;
+    if (candidates.length === 0) throw new Error('drop-url called without any URLs');
+
+    const errors = [];
+    for (const url of candidates) {
+      try {
+        const imgData = await saveImageFromUrl(url, { referer });
+        const record = insertSave({
+          ...imgData,
+          sourceUrl: referer || url,
+        });
+        notifySaved(record);
+        return record;
+      } catch (err) {
+        errors.push(`${url}: ${err.message}`);
+      }
+    }
+    throw new Error(`All ${candidates.length} URL(s) failed:\n${errors.join('\n')}`);
   });
 
   ipcMain.handle('collections:get-all', () => []);

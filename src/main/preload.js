@@ -12,8 +12,11 @@ contextBridge.exposeInMainWorld('moodmark', {
       if (!filePath) return Promise.reject(new Error('No filesystem path on dropped file'));
       return ipcRenderer.invoke('saves:drop-file', filePath);
     },
-    dropUrl: (url, sourceUrl) =>
-      ipcRenderer.invoke('saves:drop-url', { url, sourceUrl }),
+    dropUrl: (urls, sourceUrl) =>
+      ipcRenderer.invoke('saves:drop-url', {
+        urls: Array.isArray(urls) ? urls : [urls],
+        sourceUrl,
+      }),
   },
   collections: {
     getAll: () => ipcRenderer.invoke('collections:get-all'),

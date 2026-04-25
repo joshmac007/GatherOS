@@ -6,6 +6,83 @@ import DetailPanel from './components/DetailPanel.jsx';
 import FocusedView from './components/FocusedView.jsx';
 import { useLibrary } from './hooks/useLibrary.js';
 
+function pickLargestFromSrcset(srcset) {
+  if (!srcset) return null;
+  let best = null;
+  let bestWidth = -1;
+  for (const part of srcset.split(',')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const [url, descriptor] = trimmed.split(/\s+/);
+    const w = descriptor && descriptor.endsWith('w')
+      ? parseFloat(descriptor)
+      : descriptor && descriptor.endsWith('x')
+        ? parseFloat(descriptor) * 1000 // arbitrary weight so 2x > 1x
+        : 0;
+    if (url && w > bestWidth) {
+      best = url;
+      bestWidth = w;
+    }
+  }
+  return best;
+}
+
+function extractDropImageUrls(dataTransfer) {
+  const seen = new Set();
+  const candidates = [];
+  const add = (url) => {
+    if (!url) return;
+    let u = url.trim();
+    if (!u || seen.has(u)) return;
+    if (!/^(https?:|data:)/i.test(u)) return;
+    seen.add(u);
+    candidates.push(u);
+  };
+
+  // 1. text/html — usually has the actual <img src>, sometimes srcset.
+  const html = dataTransfer.getData('text/html');
+  if (html) {
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      for (const img of doc.querySelectorAll('img')) {
+        add(pickLargestFromSrcset(img.getAttribute('srcset')));
+        add(img.getAttribute('src'));
+        add(img.getAttribute('data-src'));
+        add(img.getAttribute('data-original'));
+      }
+    } catch {
+      const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+      if (m) add(m[1]);
+    }
+  }
+
+  // 2. text/uri-list — first non-comment line is the dragged URL.
+  const uriList = dataTransfer.getData('text/uri-list');
+  if (uriList) {
+    for (const line of uriList.split(/\r?\n/)) {
+      const t = line.trim();
+      if (t && !t.startsWith('#')) add(t);
+    }
+  }
+
+  // 3. text/plain fallback.
+  const text = dataTransfer.getData('text/plain');
+  if (text) add(text);
+
+  // The referer (page the image came from) is usually NOT a candidate
+  // image but is useful for hot-link-protected hosts.
+  let sourceUrl = null;
+  if (uriList) {
+    const firstUri = uriList
+      .split(/\r?\n/)
+      .find((l) => l && !l.startsWith('#'))
+      ?.trim();
+    if (firstUri && firstUri !== candidates[0]) sourceUrl = firstUri;
+  }
+
+  return { candidates, sourceUrl };
+}
+
 export default function App() {
   const {
     saves,
@@ -116,41 +193,14 @@ export default function App() {
       return;
     }
 
-    // No files — likely a drag from a webpage. Try to recover an image URL.
-    const html = e.dataTransfer.getData('text/html');
-    const uriList = e.dataTransfer.getData('text/uri-list');
-    const text = e.dataTransfer.getData('text/plain');
+    const { candidates, sourceUrl } = extractDropImageUrls(e.dataTransfer);
+    if (candidates.length === 0) return;
 
-    let imageUrl = null;
-    let sourceUrl = null;
-
-    if (html) {
-      const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-      if (m) imageUrl = m[1];
-    }
-    if (!imageUrl && uriList) {
-      imageUrl = uriList
-        .split(/\r?\n/)
-        .find((l) => l && !l.startsWith('#'))
-        ?.trim() || null;
-    }
-    if (!imageUrl && text && /^https?:\/\//i.test(text.trim())) {
-      imageUrl = text.trim();
-    }
-    if (uriList && uriList !== imageUrl) {
-      const candidate = uriList
-        .split(/\r?\n/)
-        .find((l) => l && !l.startsWith('#'))
-        ?.trim();
-      if (candidate && candidate !== imageUrl) sourceUrl = candidate;
-    }
-
-    if (imageUrl) {
-      try {
-        await window.moodmark.saves.dropUrl(imageUrl, sourceUrl);
-      } catch (err) {
-        console.error('URL drop failed:', err);
-      }
+    console.log('[drop] candidates:', candidates, 'referer:', sourceUrl);
+    try {
+      await window.moodmark.saves.dropUrl(candidates, sourceUrl);
+    } catch (err) {
+      console.error('URL drop failed:', err);
     }
   }, []);
 
