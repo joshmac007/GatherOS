@@ -66,7 +66,7 @@ function registerIpcHandlers() {
         const imgData = await saveImageFromUrl(url, { referer });
         const record = insertSave({
           ...imgData,
-          sourceUrl: referer || url,
+          sourceUrl: referer || null,
         });
         notifySaved(record);
         return record;

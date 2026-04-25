@@ -27,6 +27,24 @@ function pickLargestFromSrcset(srcset) {
   return best;
 }
 
+function looksLikeImageUrl(url) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    if (/\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|#|$)/i.test(u.pathname)) return true;
+    // Common image CDN hosts that aren't the user-facing page.
+    const cdnHosts = [
+      'pbs.twimg.com', 'i.pinimg.com', 'i.imgur.com', 'i.redd.it',
+      'preview.redd.it', 'media.tumblr.com', 'cdninstagram.com',
+      'cdn.dribbble.com', 'mir-s3-cdn-cf.behance.net', 'images.unsplash.com',
+      'cdn-images-1.medium.com', 'substackcdn.com', 'fbcdn.net',
+    ];
+    return cdnHosts.some((h) => u.hostname === h || u.hostname.endsWith('.' + h));
+  } catch {
+    return false;
+  }
+}
+
 function extractDropImageUrls(dataTransfer) {
   const seen = new Set();
   const candidates = [];
@@ -39,11 +57,22 @@ function extractDropImageUrls(dataTransfer) {
     candidates.push(u);
   };
 
-  // 1. text/html — usually has the actual <img src>, sometimes srcset.
+  let pageUrl = null;
+
+  // 1. text/html — collect every <img> we can find AND look for an <a>
+  //    that wraps the image; that link's href is almost always the page
+  //    URL the user was on (Pinterest pin, Tumblr post, Reddit thread, etc.).
   const html = dataTransfer.getData('text/html');
   if (html) {
     try {
       const doc = new DOMParser().parseFromString(html, 'text/html');
+      const anchor = doc.querySelector('a[href]');
+      if (anchor) {
+        const href = anchor.getAttribute('href');
+        if (href && /^https?:\/\//i.test(href) && !looksLikeImageUrl(href)) {
+          pageUrl = href;
+        }
+      }
       for (const img of doc.querySelectorAll('img')) {
         add(pickLargestFromSrcset(img.getAttribute('srcset')));
         add(img.getAttribute('src'));
@@ -69,18 +98,19 @@ function extractDropImageUrls(dataTransfer) {
   const text = dataTransfer.getData('text/plain');
   if (text) add(text);
 
-  // The referer (page the image came from) is usually NOT a candidate
-  // image but is useful for hot-link-protected hosts.
-  let sourceUrl = null;
-  if (uriList) {
+  // 4. If the HTML fragment didn't give us a page URL, fall back to the
+  //    uri-list — but only if it doesn't itself look like an image URL.
+  if (!pageUrl && uriList) {
     const firstUri = uriList
       .split(/\r?\n/)
       .find((l) => l && !l.startsWith('#'))
       ?.trim();
-    if (firstUri && firstUri !== candidates[0]) sourceUrl = firstUri;
+    if (firstUri && !looksLikeImageUrl(firstUri) && firstUri !== candidates[0]) {
+      pageUrl = firstUri;
+    }
   }
 
-  return { candidates, sourceUrl };
+  return { candidates, sourceUrl: pageUrl };
 }
 
 export default function App() {
