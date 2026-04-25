@@ -1,11 +1,17 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('moodmark', {
   saves: {
     getAll: (opts) => ipcRenderer.invoke('saves:get-all', opts ?? {}),
     update: (payload) => ipcRenderer.invoke('saves:update', payload),
     delete: (id) => ipcRenderer.invoke('saves:delete', id),
-    dropFile: (filePath) => ipcRenderer.invoke('saves:drop-file', filePath),
+    dropFile: (file) => {
+      // Electron 32+ removed File.path; webUtils.getPathForFile is the
+      // sanctioned replacement and must be called from the preload.
+      const filePath = webUtils.getPathForFile(file);
+      if (!filePath) return Promise.reject(new Error('No filesystem path on dropped file'));
+      return ipcRenderer.invoke('saves:drop-file', filePath);
+    },
   },
   collections: {
     getAll: () => ipcRenderer.invoke('collections:get-all'),

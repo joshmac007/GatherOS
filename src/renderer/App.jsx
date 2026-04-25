@@ -24,7 +24,7 @@ export default function App() {
     const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'));
     for (const file of files) {
       try {
-        await window.moodmark.saves.dropFile(file.path);
+        await window.moodmark.saves.dropFile(file);
       } catch (err) {
         console.error('Drop failed:', err);
       }
