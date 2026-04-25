@@ -113,6 +113,9 @@ button {
 }
 
 .selection-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 14px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.6) 100%);
@@ -125,6 +128,18 @@ button {
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     0 1px 1px rgba(0, 0, 0, 0.04);
   transition: background 120ms ease, transform 80ms ease, box-shadow 120ms ease;
+}
+
+.selection-btn-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+}
+
+.selection-btn-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .selection-btn:hover {

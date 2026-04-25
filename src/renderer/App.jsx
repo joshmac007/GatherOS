@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
-import Sidebar from './components/Sidebar.jsx';
+import Sidebar, { CollectionIcon } from './components/Sidebar.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import Grid from './components/Grid.jsx';
 import DetailPanel from './components/DetailPanel.jsx';
@@ -410,6 +410,7 @@ export default function App() {
               className="selection-btn"
               onClick={openBulkPicker}
             >
+              <span className="selection-btn-icon"><CollectionIcon /></span>
               Add to Collection
             </button>
           )}
