@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
+import TagSuggestions from './TagSuggestions.jsx';
 import { CollectionIcon } from './Sidebar.jsx';
+
+const SUGGESTION_LIMIT = 6;
 
 function TagIcon() {
   return (
@@ -79,8 +82,10 @@ function ExternalLinkIcon() {
 export default function DetailPanel({
   record,
   allCollections = [],
+  allTags = [],
   onClose,
   onCollectionsChanged,
+  onTagsChanged,
   onUpdateMeta,
 }) {
   const src = fileUrl(record.file_path);
@@ -117,7 +122,40 @@ export default function DetailPanel({
   const [tags, setTags] = useState([]);
   const [tagDraft, setTagDraft] = useState('');
   const [addingTag, setAddingTag] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   const tagInputRef = React.useRef(null);
+
+  const suggestions = useMemo(() => {
+    const draft = tagDraft.trim().toLowerCase();
+    if (!draft) return [];
+    const usedIds = new Set(tags.map((t) => t.id));
+    return allTags
+      .filter((t) => !usedIds.has(t.id) && t.name.toLowerCase().startsWith(draft))
+      .sort((a, b) => (b.save_count || 0) - (a.save_count || 0) || a.name.localeCompare(b.name))
+      .slice(0, SUGGESTION_LIMIT);
+  }, [tagDraft, tags, allTags]);
+
+  // "Create '<draft>'" row when the draft doesn't exactly match any
+  // existing tag (used or unused). Keeps free-typing a clear path.
+  const showCreateRow = useMemo(() => {
+    const draft = tagDraft.trim().toLowerCase();
+    if (!draft) return false;
+    const exists = allTags.some((t) => t.name.toLowerCase() === draft);
+    return !exists;
+  }, [tagDraft, allTags]);
+
+  const totalSuggestionRows = suggestions.length + (showCreateRow ? 1 : 0);
+
+  // Reset highlight whenever the suggestion list changes shape.
+  useEffect(() => {
+    setSuggestionIndex(0);
+  }, [tagDraft]);
+
+  // Reopen the suggestion popover whenever a fresh draft starts.
+  useEffect(() => {
+    if (tagDraft) setSuggestionsOpen(true);
+  }, [tagDraft]);
 
   function startAddingTag() {
     setAddingTag(true);
@@ -146,29 +184,56 @@ export default function DetailPanel({
     setTags(rows);
   }
 
-  async function commitTag({ keepOpen = false } = {}) {
-    const name = tagDraft.trim();
-    if (name) {
-      await window.moodmark.tags.addToSave({ saveId: record.id, name });
+  async function addTagByName(name, { keepOpen = false } = {}) {
+    const trimmed = (name || '').trim();
+    if (trimmed) {
+      await window.moodmark.tags.addToSave({ saveId: record.id, name: trimmed });
       setTagDraft('');
       refreshTags();
+      onTagsChanged?.();
     }
     if (keepOpen) focusTagInput();
+  }
+
+  async function commitTag({ keepOpen = false } = {}) {
+    // Prefer the highlighted suggestion when the popover is open.
+    if (suggestionsOpen && suggestionIndex < suggestions.length && suggestions[suggestionIndex]) {
+      await addTagByName(suggestions[suggestionIndex].name, { keepOpen });
+      return;
+    }
+    await addTagByName(tagDraft, { keepOpen });
   }
 
   async function removeTag(tagId) {
     await window.moodmark.tags.removeFromSave({ saveId: record.id, tagId });
     refreshTags();
+    onTagsChanged?.();
   }
 
   function handleTagKeyDown(e) {
-    if (e.key === 'Enter' || e.key === ',') {
-      // Commit the current tag and immediately reopen for the next one.
+    if (e.key === 'ArrowDown') {
+      if (totalSuggestionRows > 0 && suggestionsOpen) {
+        e.preventDefault();
+        setSuggestionIndex((i) => (i + 1) % totalSuggestionRows);
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (totalSuggestionRows > 0 && suggestionsOpen) {
+        e.preventDefault();
+        setSuggestionIndex((i) => (i - 1 + totalSuggestionRows) % totalSuggestionRows);
+      }
+    } else if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab') {
+      // Tab also commits, so the user can keep firing tags from the popover.
+      if (e.key === 'Tab' && !tagDraft.trim()) return; // let Tab move focus normally
       e.preventDefault();
       commitTag({ keepOpen: true });
     } else if (e.key === 'Escape') {
-      setTagDraft('');
-      setAddingTag(false);
+      // First Escape collapses the suggestion list, second exits adding mode.
+      if (suggestionsOpen && totalSuggestionRows > 0) {
+        setSuggestionsOpen(false);
+      } else {
+        setTagDraft('');
+        setAddingTag(false);
+      }
     } else if (e.key === 'Backspace' && tagDraft === '' && tags.length > 0) {
       // Backspace on empty input removes the most recently added tag.
       removeTag(tags[tags.length - 1].id);
@@ -177,8 +242,14 @@ export default function DetailPanel({
 
   function handleTagBlur() {
     // Commit any pending text on blur and exit adding mode.
-    commitTag();
+    addTagByName(tagDraft);
     setAddingTag(false);
+  }
+
+  function handleSuggestionPick(item) {
+    // Mouse pick from the popover. item.name carries either an existing tag
+    // name or the typed draft (for the synthetic "Create" row).
+    addTagByName(item.name, { keepOpen: true });
   }
 
   async function refreshMemberships() {
@@ -384,15 +455,27 @@ export default function DetailPanel({
             </span>
           ))}
           {addingTag ? (
-            <input
-              ref={tagInputRef}
-              className={styles.tagInput}
-              value={tagDraft}
-              onChange={(e) => setTagDraft(e.target.value)}
-              onKeyDown={handleTagKeyDown}
-              onBlur={handleTagBlur}
-              placeholder="tag"
-            />
+            <span className={styles.tagInputAnchor}>
+              <input
+                ref={tagInputRef}
+                className={styles.tagInput}
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+                onKeyDown={handleTagKeyDown}
+                onBlur={handleTagBlur}
+                placeholder="tag"
+              />
+              {suggestionsOpen && (
+                <TagSuggestions
+                  suggestions={suggestions}
+                  activeIndex={suggestionIndex}
+                  showCreateRow={showCreateRow}
+                  draft={tagDraft.trim()}
+                  onPick={handleSuggestionPick}
+                  onHoverIndex={setSuggestionIndex}
+                />
+              )}
+            </span>
           ) : (
             <button
               type="button"

@@ -419,6 +419,14 @@
   color: var(--accent);
 }
 
+.tagInputAnchor {
+  /* Positioning context for the autocomplete popover so it
+     aligns to the input rather than the whole tag pill row. */
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 .tagInput {
   /* Match the .addPillBtn footprint when empty, then grow with content. */
   padding: 3px 10px;

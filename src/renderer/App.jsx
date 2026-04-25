@@ -109,6 +109,16 @@ export default function App() {
     if (!loading) loadCollections();
   }, [loading, loadCollections]);
 
+  // Tags state — used by DetailPanel for autocomplete suggestions.
+  const [allTags, setAllTags] = useState([]);
+
+  const loadAllTags = useCallback(async () => {
+    const data = await window.moodmark.tags.getAll();
+    setAllTags(data);
+  }, []);
+
+  useEffect(() => { loadAllTags(); }, [loadAllTags]);
+
   // Card context menu
   const [cardCtx, setCardCtx] = useState(null); // { saveId, x, y, items }
   // Bulk "Add to Collection" picker, anchored above the selection bar.
@@ -397,8 +407,10 @@ export default function App() {
           <DetailPanel
             record={focused}
             allCollections={collections}
+            allTags={allTags}
             onClose={() => setFocusedId(null)}
             onCollectionsChanged={loadCollections}
+            onTagsChanged={loadAllTags}
             onUpdateMeta={updateSaveMeta}
           />
         )}

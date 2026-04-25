@@ -1,0 +1,93 @@
+.list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  min-width: 160px;
+  max-width: 240px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    0 10px 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.item.active {
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--accent);
+}
+
+.hash {
+  color: rgba(0, 122, 255, 0.55);
+}
+
+.item.active .hash {
+  color: var(--accent);
+}
+
+.name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-left: 6px;
+}
+
+.item.active .count {
+  color: rgba(0, 122, 255, 0.7);
+}
+
+.createItem {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  margin-top: 2px;
+  padding-top: 6px;
+}
+
+/* When the create row is the only row (no existing-tag matches), drop
+   the divider so it doesn't float above nothing. */
+.createItem:only-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 4px;
+}
+
+.createLabel {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  margin-right: 2px;
+}
+
+.item.active .createLabel {
+  color: var(--accent);
+}
