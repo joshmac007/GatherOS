@@ -345,6 +345,9 @@ export default function App() {
               onNext={goNext}
               hasPrev={focusedIndex > 0}
               hasNext={focusedIndex < saves.length - 1}
+              onToggleFavorite={toggleFavorite}
+              onOpenInPreview={handleOpenInPreview}
+              onDelete={handleDelete}
             />
           ) : (
             <>
@@ -376,9 +379,6 @@ export default function App() {
             record={focused}
             allCollections={collections}
             onClose={() => setFocusedId(null)}
-            onToggleFavorite={toggleFavorite}
-            onDelete={handleDelete}
-            onOpenInPreview={handleOpenInPreview}
             onCollectionsChanged={loadCollections}
           />
         )}

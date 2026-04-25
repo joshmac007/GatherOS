@@ -32,6 +32,79 @@
   gap: 8px;
 }
 
+.divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(0, 0, 0, 0.1);
+  margin: 0 2px;
+}
+
+.iconBtn {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  -webkit-app-region: no-drag;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.iconBtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.iconBtn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+
+.iconBtn:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.iconBtnFavorited,
+.iconBtnFavorited:hover {
+  color: #ff9f0a;
+}
+
+.iconBtnDanger:hover {
+  background: rgba(193, 50, 42, 0.08);
+  color: #c1322a;
+}
+
+.iconBtn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: rgba(28, 28, 30, 0.92);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  z-index: 100;
+  transition: opacity 100ms ease;
+}
+
+.iconBtn[data-tooltip]:hover::after {
+  opacity: 1;
+  transition-delay: 250ms;
+}
+
 .zoomLabel {
   display: inline-block;
   min-width: 36px;

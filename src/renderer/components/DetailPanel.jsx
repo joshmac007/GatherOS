@@ -4,60 +4,6 @@ import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
 import { CollectionIcon } from './Sidebar.jsx';
 
-function StarIcon({ filled }) {
-  return (
-    <svg
-      className={styles.icon}
-      viewBox="0 0 14 14"
-      fill={filled ? 'currentColor' : 'none'}
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polygon points="7,1.5 8.7,5.3 12.8,5.7 9.7,8.4 10.6,12.5 7,10.4 3.4,12.5 4.3,8.4 1.2,5.7 5.3,5.3" />
-    </svg>
-  );
-}
-
-function PreviewIcon() {
-  return (
-    <svg
-      className={styles.icon}
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8.5 2h3.5v3.5" />
-      <path d="M12 2L7 7" />
-      <path d="M11.5 8.5V11.5a0.5 0.5 0 0 1 -0.5 0.5H3a0.5 0.5 0 0 1 -0.5 -0.5V3.5a0.5 0.5 0 0 1 0.5 -0.5H5.5" />
-    </svg>
-  );
-}
-
-function ExportIcon() {
-  return (
-    <svg
-      className={styles.icon}
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M7 1.5v7.5" />
-      <path d="M4 4.5L7 1.5 10 4.5" />
-      <path d="M2.5 9v2.5a0.5 0.5 0 0 0 0.5 0.5h8a0.5 0.5 0 0 0 0.5 -0.5V9" />
-    </svg>
-  );
-}
-
 function TagIcon() {
   return (
     <svg
@@ -69,26 +15,6 @@ function TagIcon() {
       aria-hidden="true"
     >
       <path d="M2.5 5h9M2.5 9h9M5.5 2l-1 10M9.5 2l-1 10" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      className={styles.icon}
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2 3.5h10" />
-      <path d="M5 3.5V2.25a0.75 0.75 0 0 1 0.75 -0.75h2.5a0.75 0.75 0 0 1 0.75 0.75V3.5" />
-      <path d="M3.25 3.5v8.25a0.75 0.75 0 0 0 0.75 0.75h6a0.75 0.75 0 0 0 0.75 -0.75V3.5" />
-      <path d="M5.75 6v4M8.25 6v4" />
     </svg>
   );
 }
@@ -110,12 +36,6 @@ function formatBytes(n) {
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
-function defaultExportName(record) {
-  const ext = (record.file_path.split('.').pop() || 'png').toLowerCase();
-  if (record.title) return `${record.title}.${ext}`;
-  return `moodmark-${record.id.slice(0, 8)}.${ext}`;
-}
-
 function fileTypeLabel(filePath) {
   if (!filePath) return null;
   const ext = (filePath.split('.').pop() || '').toUpperCase();
@@ -127,13 +47,9 @@ export default function DetailPanel({
   record,
   allCollections = [],
   onClose,
-  onToggleFavorite,
-  onDelete,
-  onOpenInPreview,
   onCollectionsChanged,
 }) {
   const src = fileUrl(record.file_path);
-  const favorited = !!record.favorited;
   const typeLabel = fileTypeLabel(record.file_path);
   const [copiedColor, setCopiedColor] = useState(null);
 
@@ -250,10 +166,6 @@ export default function DetailPanel({
       return [];
     }
   }, [record.palette]);
-
-  const handleExport = () => {
-    window.moodmark.image.export(record.file_path, defaultExportName(record));
-  };
 
   const copyColor = async (hex) => {
     try {
@@ -410,34 +322,6 @@ export default function DetailPanel({
           </>
         ) : null}
       </dl>
-
-      <div className={styles.actions}>
-        <button
-          className={`${styles.actionBtn} ${favorited ? styles.active : ''}`}
-          onClick={() => onToggleFavorite(record.id, !favorited)}
-        >
-          <StarIcon filled={favorited} />
-          <span>{favorited ? 'Favorited' : 'Favorite'}</span>
-        </button>
-        <button
-          className={styles.actionBtn}
-          onClick={() => onOpenInPreview(record.file_path)}
-        >
-          <PreviewIcon />
-          <span>Open in Preview</span>
-        </button>
-        <button className={styles.actionBtn} onClick={handleExport}>
-          <ExportIcon />
-          <span>Export…</span>
-        </button>
-        <button
-          className={`${styles.actionBtn} ${styles.danger}`}
-          onClick={() => onDelete(record.id)}
-        >
-          <TrashIcon />
-          <span>Delete</span>
-        </button>
-      </div>
 
       {picker && (
         <ContextMenu
