@@ -235,9 +235,12 @@ async function composeMoodBoard(saves, outputPath) {
   }
   const sharp = require('sharp');
 
-  const COL_WIDTH = 500;
-  const GAP = 16;
-  const PADDING = 32;
+  // Column width drives the resolution of every tile — wider columns mean
+  // less downscaling for source images (most are already > 1200px), and
+  // a print-quality canvas. 3 cols × 1200 ≈ 4900px wide, retina-friendly.
+  const COL_WIDTH = 1200;
+  const GAP = 32;
+  const PADDING = 64;
   const BG = { r: 250, g: 250, b: 249, alpha: 1 }; // #FAFAF9 — match the app surface
 
   const columns = Math.min(
