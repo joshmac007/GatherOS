@@ -122,8 +122,24 @@
     inset 0 -0.5px 0 rgba(0, 0, 0, 0.03),
     0 4px 14px rgba(0, 0, 0, 0.05),
     0 12px 32px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   animation: float 4.2s ease-in-out infinite;
   will-change: transform;
+}
+
+.glassStar {
+  width: 38px;
+  height: 38px;
+  filter: drop-shadow(0 2px 6px rgba(255, 149, 0, 0.35));
+  animation: starPulse 3.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes starPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
 }
 
 .cardA .glassCard {
@@ -147,7 +163,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .blobA, .blobB, .blobC, .glassCard {
+  .blobA, .blobB, .blobC, .glassCard, .glassStar {
     animation: none;
   }
 }
