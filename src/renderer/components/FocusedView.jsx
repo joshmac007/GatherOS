@@ -109,25 +109,12 @@ export default function FocusedView({
           </div>
         )}
 
-        {zoom <= 1 && hasPrev && (
-          <button
-            type="button"
-            className={`${styles.navBtn} ${styles.navPrev}`}
-            onClick={onPrev}
-            title="Previous (←)"
-          >
-            ‹
-          </button>
-        )}
-        {zoom <= 1 && hasNext && (
-          <button
-            type="button"
-            className={`${styles.navBtn} ${styles.navNext}`}
-            onClick={onNext}
-            title="Next (→)"
-          >
-            ›
-          </button>
+        {(hasPrev || hasNext) && zoom <= 1 && (
+          <div className={styles.navHint}>
+            <kbd className={styles.kbd}>←</kbd>
+            <kbd className={styles.kbd}>→</kbd>
+            <span>to navigate</span>
+          </div>
         )}
       </div>
     </div>
