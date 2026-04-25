@@ -69,7 +69,6 @@ export default function ImageCard({
         >
           {selected && <CheckIcon />}
         </span>
-        {record.favorited ? <div className={styles.star}>★</div> : null}
       </div>
       {record.title && <div className={styles.title}>{record.title}</div>}
     </button>

@@ -44,15 +44,6 @@
   display: block;
 }
 
-.star {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  color: var(--icon-orange);
-  font-size: 13px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-}
-
 .checkbox {
   position: absolute;
   top: 8px;
