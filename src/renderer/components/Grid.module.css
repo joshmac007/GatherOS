@@ -150,8 +150,40 @@
   50%      { transform: translateY(-7px); }
 }
 
+/* Heart-shaped glass — same liquid-glass aesthetic as .glassCard, but
+   masked to a heart silhouette via clip-path. Outer drop-shadow lives on
+   the wrapper because filter on the same element conflicts with
+   backdrop-filter's stacking context. */
+
+.heartShadow {
+  width: 96px;
+  height: 88px;
+  filter:
+    drop-shadow(0 4px 12px rgba(0, 0, 0, 0.06))
+    drop-shadow(0 10px 24px rgba(0, 0, 0, 0.05));
+  animation: float 4.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+.cardA .heartShadow { animation-delay: 0s; }
+.cardB .heartShadow { animation-delay: 0.45s; }
+.cardC .heartShadow { animation-delay: 0.9s; }
+
+.cardA .heartShadow > .glassHeart { opacity: 0.55; }
+.cardB .heartShadow > .glassHeart { opacity: 0.75; }
+.cardC .heartShadow > .glassHeart { opacity: 0.95; }
+
+.glassHeart {
+  width: 96px;
+  height: 88px;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  clip-path: path('M 48 84 C 18 60, 4 40, 4 22 C 4 10, 14 4, 28 4 C 38 4, 45 10, 48 18 C 51 10, 58 4, 68 4 C 82 4, 92 10, 92 22 C 92 40, 78 60, 48 84 Z');
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .blobA, .blobB, .blobC, .glassCard {
+  .blobA, .blobB, .blobC, .glassCard, .heartShadow {
     animation: none;
   }
 }

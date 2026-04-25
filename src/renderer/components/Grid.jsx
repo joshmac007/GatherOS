@@ -31,7 +31,7 @@ export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu,
 
     return (
       <div className={styles.state}>
-        {(isCollection || isFavorites) && (
+        {isCollection && (
           <div className={styles.emptyGraphic} aria-hidden="true">
             <div className={styles.blobs}>
               <div className={styles.blobA} />
@@ -46,6 +46,30 @@ export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu,
             </div>
             <div className={`${styles.glassCardWrap} ${styles.cardC}`}>
               <div className={styles.glassCard} />
+            </div>
+          </div>
+        )}
+        {isFavorites && (
+          <div className={styles.emptyGraphic} aria-hidden="true">
+            <div className={styles.blobs}>
+              <div className={styles.blobA} />
+              <div className={styles.blobB} />
+              <div className={styles.blobC} />
+            </div>
+            <div className={`${styles.glassCardWrap} ${styles.cardA}`}>
+              <div className={styles.heartShadow}>
+                <div className={styles.glassHeart} />
+              </div>
+            </div>
+            <div className={`${styles.glassCardWrap} ${styles.cardB}`}>
+              <div className={styles.heartShadow}>
+                <div className={styles.glassHeart} />
+              </div>
+            </div>
+            <div className={`${styles.glassCardWrap} ${styles.cardC}`}>
+              <div className={styles.heartShadow}>
+                <div className={styles.glassHeart} />
+              </div>
             </div>
           </div>
         )}
