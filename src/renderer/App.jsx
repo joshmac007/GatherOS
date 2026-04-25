@@ -495,10 +495,10 @@ export default function App() {
               type="button"
               className="selection-btn"
               onClick={handleBulkExportBoard}
-              title="Compose selected images into a single PNG"
+              title="Compose selected images into a single moodboard PNG"
             >
               <span className="selection-btn-icon"><BoardExportIcon /></span>
-              Export as Image
+              Export as Moodboard
             </button>
           )}
           <button
