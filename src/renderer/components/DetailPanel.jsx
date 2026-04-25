@@ -1,18 +1,10 @@
 import React from 'react';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
-import { sourceName } from '../lib/sourceName.js';
-
-function getDomain(url) {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return null;
-  }
-}
+import { sourceName, faviconHost } from '../lib/sourceName.js';
 
 function faviconFor(url) {
-  const host = getDomain(url);
+  const host = faviconHost(url);
   if (!host) return null;
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
 }
