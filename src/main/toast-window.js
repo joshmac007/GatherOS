@@ -4,8 +4,8 @@ const path = require('node:path');
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:5173';
 
-const TOAST_WIDTH = 280;
-const TOAST_HEIGHT = 320;
+const TOAST_WIDTH = 300;
+const TOAST_HEIGHT = 340;
 const EDGE_INSET = 20;
 
 let toastWin = null;
@@ -30,7 +30,6 @@ function ensureToastWindow() {
     movable: false,
     minimizable: false,
     maximizable: false,
-    closable: false,
     skipTaskbar: true,
     focusable: false,
     hasShadow: false,
@@ -46,12 +45,15 @@ function ensureToastWindow() {
 
   toastWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   toastWin.setAlwaysOnTop(true, 'floating');
+  // Start click-through; enabled only when there's a toast to interact with.
   toastWin.setIgnoreMouseEvents(true, { forward: true });
 
   toastWin.webContents.once('did-finish-load', () => {
     ready = true;
-    for (const p of pending) toastWin.webContents.send('toast:show', p);
+    const items = pending;
     pending = [];
+    for (const p of items) toastWin.webContents.send('toast:show', p);
+    if (items.length > 0 && !toastWin.isVisible()) toastWin.showInactive();
   });
 
   toastWin.on('closed', () => {
@@ -72,17 +74,11 @@ function ensureToastWindow() {
 
 function showToast(record) {
   const win = ensureToastWindow();
-  if (!win.isVisible()) win.showInactive();
   if (ready) {
     win.webContents.send('toast:show', record);
+    if (!win.isVisible()) win.showInactive();
   } else {
     pending.push(record);
-  }
-}
-
-function hideToastWindow() {
-  if (toastWin && !toastWin.isDestroyed() && toastWin.isVisible()) {
-    toastWin.hide();
   }
 }
 
@@ -100,9 +96,16 @@ function setToastInteractive(interactive) {
   toastWin.setIgnoreMouseEvents(!interactive, { forward: true });
 }
 
+// Called by the renderer once every toast has been dismissed. Dropping
+// interactive mouse handling is enough — we leave the window visible
+// (and transparent) so the next save can draw into it immediately.
+function onToastsEmpty() {
+  setToastInteractive(false);
+}
+
 module.exports = {
   showToast,
-  hideToastWindow,
   destroyToastWindow,
   setToastInteractive,
+  onToastsEmpty,
 };

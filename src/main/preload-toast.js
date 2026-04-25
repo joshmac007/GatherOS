@@ -1,10 +1,18 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+let listener = null;
+const buffer = [];
+
+ipcRenderer.on('toast:show', (_e, record) => {
+  if (listener) listener(record);
+  else buffer.push(record);
+});
+
 contextBridge.exposeInMainWorld('toast', {
-  onShow: (listener) => {
-    const wrapped = (_e, record) => listener(record);
-    ipcRenderer.on('toast:show', wrapped);
-    return () => ipcRenderer.removeListener('toast:show', wrapped);
+  onShow: (fn) => {
+    listener = fn;
+    while (buffer.length) fn(buffer.shift());
+    return () => { listener = null; };
   },
   setInteractive: (interactive) => ipcRenderer.send('toast:set-interactive', !!interactive),
   empty: () => ipcRenderer.send('toast:empty'),

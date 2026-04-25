@@ -7,7 +7,7 @@ const {
   startScreenshotCapture,
 } = require('./capture');
 const { notifySaved } = require('./notify');
-const { setToastInteractive, hideToastWindow } = require('./toast-window');
+const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 
 function registerIpcHandlers() {
   ipcMain.handle('saves:get-all', (_e, opts) => getAllSaves(opts));
@@ -56,8 +56,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.on('toast:empty', () => {
-    setToastInteractive(false);
-    hideToastWindow();
+    onToastsEmpty();
   });
 }
 
