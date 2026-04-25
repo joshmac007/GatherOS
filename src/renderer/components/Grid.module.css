@@ -2,8 +2,15 @@
   display: grid;
   gap: 16px;
   padding: 20px;
-  grid-auto-rows: max-content;
+  align-items: start;
   background: var(--content-bg);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 
 .state {
