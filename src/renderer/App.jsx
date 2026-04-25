@@ -246,6 +246,23 @@ export default function App() {
       return;
     }
 
+    // Diagnostic dump: log every dataTransfer type and its raw value so we
+    // can see whether the page URL is hiding behind a non-standard type.
+    console.groupCollapsed('[drop] dataTransfer dump');
+    console.log('types:', [...e.dataTransfer.types]);
+    for (const t of e.dataTransfer.types) {
+      try {
+        console.log(`▸ ${t}:`, e.dataTransfer.getData(t));
+      } catch (err) {
+        console.log(`▸ ${t}: <error: ${err.message}>`);
+      }
+    }
+    console.log(
+      'files:',
+      [...e.dataTransfer.files].map((f) => ({ name: f.name, type: f.type, size: f.size })),
+    );
+    console.groupEnd();
+
     const { candidates, sourceUrl } = extractDropImageUrls(e.dataTransfer);
     if (candidates.length === 0) return;
 
