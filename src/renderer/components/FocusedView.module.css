@@ -130,6 +130,15 @@
   justify-content: flex-start;
 }
 
+.imageWrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: width 80ms ease-out, height 80ms ease-out;
+  margin: auto;
+}
+
 .image {
   max-width: 100%;
   max-height: 100%;
@@ -138,15 +147,6 @@
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
-  transition: transform 80ms ease-out;
-  transform-origin: center center;
-}
-
-.imageZoomed {
-  max-width: none;
-  max-height: none;
-  margin: auto;
-  flex-shrink: 0;
 }
 
 .navBtn {

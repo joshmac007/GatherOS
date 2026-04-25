@@ -42,7 +42,6 @@ export default function FocusedView({
   }, [onBack, onPrev, onNext, hasPrev, hasNext]);
 
   const src = fileUrl(record.file_path);
-  const isZoomed = Math.abs(zoom - 1) > 0.001;
 
   return (
     <div className={styles.focused}>
@@ -82,18 +81,22 @@ export default function FocusedView({
         </div>
       </div>
 
-      <div className={`${styles.stage} ${isZoomed ? styles.stageScroll : ''}`}>
+      <div className={`${styles.stage} ${zoom > 1 ? styles.stageScroll : ''}`}>
         {src && (
-          <img
-            src={src}
-            className={`${styles.image} ${isZoomed ? styles.imageZoomed : ''}`}
-            style={isZoomed ? { transform: `scale(${zoom})` } : undefined}
-            alt={record.title || ''}
-            draggable={false}
-          />
+          <div
+            className={styles.imageWrap}
+            style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
+          >
+            <img
+              src={src}
+              className={styles.image}
+              alt={record.title || ''}
+              draggable={false}
+            />
+          </div>
         )}
 
-        {!isZoomed && hasPrev && (
+        {zoom <= 1 && hasPrev && (
           <button
             type="button"
             className={`${styles.navBtn} ${styles.navPrev}`}
@@ -103,7 +106,7 @@ export default function FocusedView({
             ‹
           </button>
         )}
-        {!isZoomed && hasNext && (
+        {zoom <= 1 && hasNext && (
           <button
             type="button"
             className={`${styles.navBtn} ${styles.navNext}`}
