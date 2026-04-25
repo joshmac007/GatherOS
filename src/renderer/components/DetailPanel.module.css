@@ -91,6 +91,10 @@
 }
 
 .actionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
@@ -98,7 +102,13 @@
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
-  text-align: left;
+  text-align: center;
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .actionBtn:hover {
