@@ -2,13 +2,10 @@ import React, { useMemo } from 'react';
 import ImageCard from './ImageCard.jsx';
 import styles from './Grid.module.css';
 
-function StarGlyph() {
+function HeartGlyph() {
   return (
-    <svg className={styles.glassStar} viewBox="0 0 32 32" aria-hidden="true">
-      <polygon
-        points="16,3.4 19.8,12.4 29.5,13.4 22.2,20 24.5,29.6 16,24.5 7.5,29.6 9.8,20 2.5,13.4 12.2,12.4"
-        fill="#ff9500"
-      />
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
     </svg>
   );
 }
@@ -29,7 +26,6 @@ export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu,
   if (saves.length === 0) {
     const isCollection = view?.type === 'collection';
     const isFavorites = view?.type === 'favorites';
-    const showGraphic = isCollection || isFavorites;
 
     let title = 'Nothing saved yet';
     let hint = 'Press ⌘⇧S to screenshot, or drag images into this window';
@@ -38,12 +34,12 @@ export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu,
       hint = 'Right-click any image and choose "Add to Collection"';
     } else if (isFavorites) {
       title = 'No favorites yet';
-      hint = 'Click the star on any image to favorite it';
+      hint = 'Click the heart on any image to favorite it';
     }
 
     return (
       <div className={styles.state}>
-        {showGraphic && (
+        {isCollection && (
           <div className={styles.emptyGraphic} aria-hidden="true">
             <div className={styles.blobs}>
               <div className={styles.blobA} />
@@ -57,10 +53,18 @@ export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu,
               <div className={styles.glassCard} />
             </div>
             <div className={`${styles.glassCardWrap} ${styles.cardC}`}>
-              <div className={styles.glassCard}>
-                {isFavorites && <StarGlyph />}
-              </div>
+              <div className={styles.glassCard} />
             </div>
+          </div>
+        )}
+        {isFavorites && (
+          <div className={styles.heartScene} aria-hidden="true">
+            <span className={`${styles.ripple} ${styles.rippleA}`} />
+            <span className={`${styles.ripple} ${styles.rippleB}`} />
+            <span className={`${styles.ripple} ${styles.rippleC}`} />
+            <span className={styles.heartCore}>
+              <HeartGlyph />
+            </span>
           </div>
         )}
         <div className={styles.emptyTitle}>{title}</div>

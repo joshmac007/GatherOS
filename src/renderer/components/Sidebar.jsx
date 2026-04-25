@@ -22,10 +22,10 @@ function CollapseSidebarIcon() {
   );
 }
 
-function StarIcon() {
+function HeartIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M8 1.6l1.96 4.05 4.46.59-3.27 3.1.83 4.42L8 11.65l-3.98 2.11.83-4.42L1.58 6.24l4.46-.59z" />
+      <path d="M8 14.4l-0.97-0.88C3.6 10.24 1.33 8.19 1.33 5.67 1.33 3.61 2.95 2 5 2c1.16 0 2.27 0.54 3 1.39C8.73 2.54 9.84 2 11 2c2.05 0 3.67 1.61 3.67 3.67 0 2.52-2.27 4.57-5.7 7.86L8 14.4z" />
     </svg>
   );
 }
@@ -51,7 +51,7 @@ export function CollectionIcon() {
 
 const SMART_VIEWS = [
   { id: 'all', label: 'All Saves', color: 'var(--icon-blue)', Icon: GridIcon },
-  { id: 'favorites', label: 'Favorites', color: 'var(--icon-orange)', Icon: StarIcon },
+  { id: 'favorites', label: 'Favorites', color: 'var(--icon-pink)', Icon: HeartIcon },
   { id: 'recent', label: 'Recent', color: 'var(--icon-yellow)', Icon: ClockIcon },
 ];
 

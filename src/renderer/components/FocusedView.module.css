@@ -72,7 +72,7 @@
 
 .iconBtnFavorited,
 .iconBtnFavorited:hover {
-  color: #ff9f0a;
+  color: var(--icon-pink);
 }
 
 .iconBtnDanger:hover {

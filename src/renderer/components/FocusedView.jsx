@@ -15,17 +15,17 @@ function SidebarIcon() {
   );
 }
 
-function StarIcon({ filled }) {
+function HeartIcon({ filled }) {
   return (
     <svg
       viewBox="0 0 16 16"
       fill={filled ? 'currentColor' : 'none'}
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.4"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <polygon points="8,1.7 10,6 14.5,6.5 11,9.5 12,14 8,11.7 4,14 5,9.5 1.5,6.5 6,6" />
+      <path d="M8 14.4l-0.97-0.88C3.6 10.24 1.33 8.19 1.33 5.67 1.33 3.61 2.95 2 5 2c1.16 0 2.27 0.54 3 1.39C8.73 2.54 9.84 2 11 2c2.05 0 3.67 1.61 3.67 3.67 0 2.52-2.27 4.57-5.7 7.86L8 14.4z" />
     </svg>
   );
 }
@@ -208,7 +208,7 @@ export default function FocusedView({
             onClick={() => onToggleFavorite(record.id, !favorited)}
             aria-pressed={favorited}
           >
-            <StarIcon filled={favorited} />
+            <HeartIcon filled={favorited} />
           </button>
 
           <button
