@@ -8,6 +8,10 @@
   border-radius: 22px;
   overflow-y: auto;
   position: relative;
+  /* Float above .main-col so the soft halo isn't clipped by the sibling's
+     opaque background — without this the shadow seams against main-col's
+     surface and the two halves look like separate panels. */
+  z-index: 2;
   -webkit-app-region: drag;
   background: #FAFAF9;
   box-shadow: 0 4px 34px 20px rgba(0, 0, 0, 0.02), 0 0 1px 1px #FFF inset;
