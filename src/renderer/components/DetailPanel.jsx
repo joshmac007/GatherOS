@@ -171,15 +171,14 @@ export default function DetailPanel({
             <button
               key={color}
               type="button"
-              className={`${styles.swatch} ${copiedColor === color ? styles.swatchCopied : ''}`}
+              className={styles.swatch}
               style={{ background: color }}
               onClick={() => copyColor(color)}
-              title={copiedColor === color ? `Copied ${color}` : `Click to copy ${color}`}
               aria-label={`Copy ${color}`}
             >
-              <span className={styles.swatchHex}>
-                {copiedColor === color ? 'Copied' : color.toUpperCase()}
-              </span>
+              {copiedColor === color && (
+                <span className={styles.swatchTooltip}>Copied {color.toUpperCase()}</span>
+              )}
             </button>
           ))}
         </div>
