@@ -112,13 +112,20 @@ export default function App() {
   }
 
   const handleSelect = useCallback((id, additive) => {
-    setSelected((prev) => {
-      const next = new Set(additive ? prev : []);
-      if (additive && next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-    if (!additive) setFocusedId(id);
+    if (additive) {
+      // ⌘-click / checkbox toggle: pure multi-select, no focus change.
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      return;
+    }
+    // Plain click on the card body: focus it, drop any prior selection so
+    // the grid is "clean" when the user backs out.
+    setSelected(new Set());
+    setFocusedId(id);
   }, []);
 
   const handleOpenInPreview = useCallback((filePath) => {
