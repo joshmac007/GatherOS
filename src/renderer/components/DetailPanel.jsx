@@ -43,6 +43,21 @@ function fileTypeLabel(filePath) {
   return ext === 'JPG' ? 'JPEG' : ext;
 }
 
+// Permissive: accepts "x.com", "www.x.com", "https://x.com" — basically
+// anything with a dot, no spaces, and a non-empty piece on each side.
+function looksLikeUrl(input) {
+  const s = (input || '').trim();
+  if (!s || /\s/.test(s)) return false;
+  if (/^https?:\/\/.+/i.test(s)) return true;
+  return /^[^.\s][^\s]*\.[^\s.]+/i.test(s);
+}
+
+function normalizeUrl(input) {
+  const s = (input || '').trim();
+  if (!s) return '';
+  return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
+
 function ExternalLinkIcon() {
   return (
     <svg
@@ -82,7 +97,7 @@ export default function DetailPanel({
   }, [record.id, record.title, record.source_url]);
 
   const persistedUrl = (record.source_url || '').trim();
-  const canOpenUrl = /^https?:\/\//i.test(persistedUrl);
+  const canOpenUrl = looksLikeUrl(persistedUrl);
 
   function commitName() {
     const next = nameDraft.trim();
@@ -283,7 +298,7 @@ export default function DetailPanel({
               type="button"
               className={styles.openLinkBtn}
               disabled={!canOpenUrl}
-              onClick={() => window.moodmark.shell.openUrl(persistedUrl)}
+              onClick={() => window.moodmark.shell.openUrl(normalizeUrl(persistedUrl))}
               title={canOpenUrl ? 'Open in browser' : 'Add a URL first'}
             >
               <ExternalLinkIcon />

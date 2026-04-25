@@ -6,6 +6,15 @@ const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.05;
 
+function SidebarIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <rect x="2" y="3" width="12" height="10" rx="1.6" />
+      <line x1="6" y1="3" x2="6" y2="13" />
+    </svg>
+  );
+}
+
 function StarIcon({ filled }) {
   return (
     <svg
@@ -94,6 +103,7 @@ export default function FocusedView({
   onToggleFavorite,
   onOpenInPreview,
   onDelete,
+  onToggleSidebar,
 }) {
   const [zoom, setZoom] = useState(1);
   const stageRef = useRef(null);
@@ -141,6 +151,16 @@ export default function FocusedView({
   return (
     <div className={styles.focused}>
       <div className={styles.topBar}>
+        {onToggleSidebar && (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={onToggleSidebar}
+            title="Toggle sidebar"
+          >
+            <SidebarIcon />
+          </button>
+        )}
         <button
           className={styles.backBtn}
           onClick={onBack}

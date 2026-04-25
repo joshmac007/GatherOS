@@ -88,6 +88,11 @@ export default function App() {
   const [gridColumns, setGridColumns] = useState(3);
   const [focusedId, setFocusedId] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((c) => !c);
+  }, []);
 
   // Collections state
   const [collections, setCollections] = useState([]);
@@ -333,15 +338,17 @@ export default function App() {
       onDrop={onDrop}
     >
       <div className="layout">
-        <Sidebar
-          view={view}
-          onViewChange={handleViewChange}
-          collections={collections}
-          onCreateCollection={handleCreateCollection}
-          onRenameCollection={handleRenameCollection}
-          onDeleteCollection={handleDeleteCollection}
-          onReorderCollections={handleReorderCollections}
-        />
+        {!sidebarCollapsed && (
+          <Sidebar
+            view={view}
+            onViewChange={handleViewChange}
+            collections={collections}
+            onCreateCollection={handleCreateCollection}
+            onRenameCollection={handleRenameCollection}
+            onDeleteCollection={handleDeleteCollection}
+            onReorderCollections={handleReorderCollections}
+          />
+        )}
 
         <div className="main-col">
           {focused ? (
@@ -357,6 +364,7 @@ export default function App() {
               onToggleFavorite={toggleFavorite}
               onOpenInPreview={handleOpenInPreview}
               onDelete={handleDelete}
+              onToggleSidebar={toggleSidebar}
             />
           ) : (
             <>
@@ -366,6 +374,7 @@ export default function App() {
                 columns={gridColumns}
                 onColumnsChange={setGridColumns}
                 count={saves.length}
+                onToggleSidebar={toggleSidebar}
               />
               <div className="grid-scroll">
                 <Grid
