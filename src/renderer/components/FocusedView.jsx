@@ -132,6 +132,7 @@ export default function FocusedView({
   }, [onBack, onPrev, onNext, hasPrev, hasNext]);
 
   const src = fileUrl(record.file_path);
+  const zoomFillPct = ((zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN)) * 100;
 
   const handleExport = () => {
     window.moodmark.image.export(record.file_path, defaultExportName(record));
@@ -173,6 +174,7 @@ export default function FocusedView({
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
               className={styles.slider}
+              style={{ '--zoom-fill': `${zoomFillPct}%` }}
               aria-label="Zoom"
             />
           </div>

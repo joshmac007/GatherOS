@@ -156,12 +156,20 @@ export default function App() {
     loadCollections();
   }, [loadCollections]);
 
+  // Sidebar nav also drops focus + selection so users land on the masonry grid
+  // instead of staying inside the FocusedView.
+  const handleViewChange = useCallback((newView) => {
+    setView(newView);
+    setFocusedId(null);
+    setSelected(new Set());
+  }, [setView]);
+
   const handleDeleteCollection = useCallback(async (id) => {
     await window.moodmark.collections.delete(id);
     // If we were viewing the deleted collection, go back to All
-    if (view.type === 'collection' && view.id === id) setView({ type: 'all' });
+    if (view.type === 'collection' && view.id === id) handleViewChange({ type: 'all' });
     loadCollections();
-  }, [view, setView, loadCollections]);
+  }, [view, handleViewChange, loadCollections]);
 
   const handleReorderCollections = useCallback(async (orderedIds) => {
     // Optimistic local reorder so the sidebar doesn't flash back to old order.
@@ -326,7 +334,7 @@ export default function App() {
       <div className="layout">
         <Sidebar
           view={view}
-          onViewChange={setView}
+          onViewChange={handleViewChange}
           collections={collections}
           onCreateCollection={handleCreateCollection}
           onRenameCollection={handleRenameCollection}

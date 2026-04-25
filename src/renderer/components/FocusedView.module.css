@@ -135,8 +135,12 @@
 
 .slider::-webkit-slider-runnable-track {
   height: 3px;
-  background: rgba(0, 0, 0, 0.15);
   border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--zoom-fill, 0%),
+    rgba(0, 0, 0, 0.15) var(--zoom-fill, 0%)
+  );
 }
 
 .slider::-webkit-slider-thumb {
