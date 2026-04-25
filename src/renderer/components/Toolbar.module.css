@@ -92,8 +92,9 @@
 .search:focus {
   background: #ffffff;
   border-color: var(--accent);
+  /* Inset ring so focus doesn't expand the visual width of the field. */
   box-shadow:
-    0 0 0 3px rgba(10, 132, 255, 0.18),
+    inset 0 0 0 1px var(--accent),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
