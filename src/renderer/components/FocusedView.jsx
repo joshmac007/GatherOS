@@ -184,7 +184,7 @@ export default function FocusedView({
           <button
             type="button"
             className={[styles.iconBtn, favorited && styles.iconBtnFavorited].filter(Boolean).join(' ')}
-            data-tooltip={favorited ? 'Favorited' : 'Favorite'}
+            title={favorited ? 'Favorited' : 'Favorite'}
             onClick={() => onToggleFavorite(record.id, !favorited)}
             aria-pressed={favorited}
           >
@@ -194,7 +194,7 @@ export default function FocusedView({
           <button
             type="button"
             className={styles.iconBtn}
-            data-tooltip="Open in Preview"
+            title="Open in Preview"
             onClick={() => onOpenInPreview(record.file_path)}
           >
             <PreviewIcon />
@@ -203,7 +203,7 @@ export default function FocusedView({
           <button
             type="button"
             className={styles.iconBtn}
-            data-tooltip="Export…"
+            title="Export…"
             onClick={handleExport}
           >
             <ExportIcon />
@@ -212,7 +212,7 @@ export default function FocusedView({
           <button
             type="button"
             className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-            data-tooltip="Delete"
+            title="Delete"
             onClick={() => onDelete(record.id)}
           >
             <TrashIcon />
