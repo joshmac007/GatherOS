@@ -337,7 +337,7 @@ export default function App() {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <div className="layout">
+      <div className={`layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {!sidebarCollapsed && (
           <Sidebar
             view={view}

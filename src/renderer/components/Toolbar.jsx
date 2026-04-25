@@ -7,7 +7,7 @@ function SearchIcon() {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.9"
       strokeLinecap="round"
       aria-hidden="true"
     >

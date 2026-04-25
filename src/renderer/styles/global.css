@@ -43,6 +43,13 @@ button {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  /* Default left padding for top bars; bumped when the sidebar is hidden
+     so toggle buttons / titles clear the macOS traffic lights. */
+  --titlebar-left-pad: 16px;
+}
+
+.layout.sidebar-collapsed {
+  --titlebar-left-pad: 84px;
 }
 
 .main-col {
