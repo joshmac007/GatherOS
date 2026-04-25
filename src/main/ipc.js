@@ -57,17 +57,13 @@ function registerIpcHandlers() {
       : Array.isArray(payload)
         ? payload
         : [typeof payload === 'string' ? payload : payload?.url].filter(Boolean);
-    const referer = payload?.sourceUrl || null;
     if (candidates.length === 0) throw new Error('drop-url called without any URLs');
 
     const errors = [];
     for (const url of candidates) {
       try {
-        const imgData = await saveImageFromUrl(url, { referer });
-        const record = insertSave({
-          ...imgData,
-          sourceUrl: referer || url,
-        });
+        const imgData = await saveImageFromUrl(url);
+        const record = insertSave(imgData);
         notifySaved(record);
         return record;
       } catch (err) {
@@ -98,13 +94,6 @@ function registerIpcHandlers() {
 
   ipcMain.handle('image:open-in-preview', (_e, filePath) => {
     shell.openPath(filePath);
-    return { ok: true };
-  });
-
-  ipcMain.handle('shell:open-external', (_e, url) => {
-    if (typeof url !== 'string') return { ok: false };
-    if (!/^https?:\/\//i.test(url)) return { ok: false, reason: 'invalid-protocol' };
-    shell.openExternal(url);
     return { ok: true };
   });
 

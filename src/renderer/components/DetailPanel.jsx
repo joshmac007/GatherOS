@@ -1,33 +1,6 @@
 import React from 'react';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
-import { sourceName, faviconHost } from '../lib/sourceName.js';
-
-function faviconFor(url) {
-  const host = faviconHost(url);
-  if (!host) return null;
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
-}
-
-function ExternalLinkIcon() {
-  return (
-    <svg
-      className={styles.miniIcon}
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8.5 2h3.5v3.5" />
-      <path d="M12 2L7 7" />
-      <path d="M11.5 8.5V11.5a0.5 0.5 0 0 1 -0.5 0.5H3a0.5 0.5 0 0 1 -0.5 -0.5V3.5a0.5 0.5 0 0 1 0.5 -0.5H5.5" />
-    </svg>
-  );
-}
-
 
 function StarIcon({ filled }) {
   return (
@@ -143,14 +116,9 @@ export default function DetailPanel({
   const src = fileUrl(record.file_path);
   const favorited = !!record.favorited;
   const typeLabel = fileTypeLabel(record.file_path);
-  const favicon = record.source_url ? faviconFor(record.source_url) : null;
 
   const handleExport = () => {
     window.moodmark.image.export(record.file_path, defaultExportName(record));
-  };
-
-  const openSource = () => {
-    if (record.source_url) window.moodmark.shell.openExternal(record.source_url);
   };
 
   return (
@@ -197,33 +165,6 @@ export default function DetailPanel({
           <>
             <dt>Size</dt>
             <dd>{formatBytes(record.file_size)}</dd>
-          </>
-        ) : null}
-        {record.source_url ? (
-          <>
-            <dt>Source</dt>
-            <dd className={styles.sourceCell}>
-              <button
-                type="button"
-                className={styles.sourceLink}
-                onClick={openSource}
-                title={record.source_url}
-              >
-                {favicon && (
-                  <img
-                    src={favicon}
-                    className={styles.favicon}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                )}
-                <span className={styles.sourceName}>
-                  {sourceName(record.source_url)}
-                </span>
-                <ExternalLinkIcon />
-              </button>
-            </dd>
           </>
         ) : null}
       </dl>

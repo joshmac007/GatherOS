@@ -65,7 +65,7 @@ function extFromUrl(url) {
   }
 }
 
-async function saveImageFromUrl(url, opts = {}) {
+async function saveImageFromUrl(url) {
   const sharp = require('sharp');
 
   if (url.startsWith('data:')) {
@@ -75,15 +75,14 @@ async function saveImageFromUrl(url, opts = {}) {
     throw new Error('Blob URLs only exist inside the browser; drag the image directly instead.');
   }
 
-  const headers = {
-    'User-Agent':
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
-    Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-  };
-  if (opts.referer) headers.Referer = opts.referer;
-
-  console.log('[drop-url] fetching:', url, opts.referer ? `(ref: ${opts.referer})` : '');
-  const res = await fetch(url, { redirect: 'follow', headers });
+  const res = await fetch(url, {
+    redirect: 'follow',
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+    },
+  });
   if (!res.ok) {
     throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`);
   }

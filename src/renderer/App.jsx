@@ -27,52 +27,23 @@ function pickLargestFromSrcset(srcset) {
   return best;
 }
 
-function looksLikeImageUrl(url) {
-  if (!url) return false;
-  try {
-    const u = new URL(url);
-    if (/\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|#|$)/i.test(u.pathname)) return true;
-    // Common image CDN hosts that aren't the user-facing page.
-    const cdnHosts = [
-      'pbs.twimg.com', 'i.pinimg.com', 'i.imgur.com', 'i.redd.it',
-      'preview.redd.it', 'media.tumblr.com', 'cdninstagram.com',
-      'cdn.dribbble.com', 'mir-s3-cdn-cf.behance.net', 'images.unsplash.com',
-      'cdn-images-1.medium.com', 'substackcdn.com', 'fbcdn.net',
-    ];
-    return cdnHosts.some((h) => u.hostname === h || u.hostname.endsWith('.' + h));
-  } catch {
-    return false;
-  }
-}
-
 function extractDropImageUrls(dataTransfer) {
   const seen = new Set();
   const candidates = [];
   const add = (url) => {
     if (!url) return;
-    let u = url.trim();
+    const u = url.trim();
     if (!u || seen.has(u)) return;
     if (!/^(https?:|data:)/i.test(u)) return;
     seen.add(u);
     candidates.push(u);
   };
 
-  let pageUrl = null;
-
-  // 1. text/html — collect every <img> we can find AND look for an <a>
-  //    that wraps the image; that link's href is almost always the page
-  //    URL the user was on (Pinterest pin, Tumblr post, Reddit thread, etc.).
+  // text/html — collect every <img src/srcset/data-src> we can find.
   const html = dataTransfer.getData('text/html');
   if (html) {
     try {
       const doc = new DOMParser().parseFromString(html, 'text/html');
-      const anchor = doc.querySelector('a[href]');
-      if (anchor) {
-        const href = anchor.getAttribute('href');
-        if (href && /^https?:\/\//i.test(href) && !looksLikeImageUrl(href)) {
-          pageUrl = href;
-        }
-      }
       for (const img of doc.querySelectorAll('img')) {
         add(pickLargestFromSrcset(img.getAttribute('srcset')));
         add(img.getAttribute('src'));
@@ -85,7 +56,7 @@ function extractDropImageUrls(dataTransfer) {
     }
   }
 
-  // 2. text/uri-list — first non-comment line is the dragged URL.
+  // text/uri-list — first non-comment line is usually the dragged URL.
   const uriList = dataTransfer.getData('text/uri-list');
   if (uriList) {
     for (const line of uriList.split(/\r?\n/)) {
@@ -94,23 +65,11 @@ function extractDropImageUrls(dataTransfer) {
     }
   }
 
-  // 3. text/plain fallback.
+  // text/plain fallback.
   const text = dataTransfer.getData('text/plain');
   if (text) add(text);
 
-  // 4. If the HTML fragment didn't give us a page URL, fall back to the
-  //    uri-list — but only if it doesn't itself look like an image URL.
-  if (!pageUrl && uriList) {
-    const firstUri = uriList
-      .split(/\r?\n/)
-      .find((l) => l && !l.startsWith('#'))
-      ?.trim();
-    if (firstUri && !looksLikeImageUrl(firstUri) && firstUri !== candidates[0]) {
-      pageUrl = firstUri;
-    }
-  }
-
-  return { candidates, sourceUrl: pageUrl };
+  return candidates;
 }
 
 export default function App() {
@@ -246,29 +205,11 @@ export default function App() {
       return;
     }
 
-    // Diagnostic dump: log every dataTransfer type and its raw value so we
-    // can see whether the page URL is hiding behind a non-standard type.
-    console.groupCollapsed('[drop] dataTransfer dump');
-    console.log('types:', [...e.dataTransfer.types]);
-    for (const t of e.dataTransfer.types) {
-      try {
-        console.log(`▸ ${t}:`, e.dataTransfer.getData(t));
-      } catch (err) {
-        console.log(`▸ ${t}: <error: ${err.message}>`);
-      }
-    }
-    console.log(
-      'files:',
-      [...e.dataTransfer.files].map((f) => ({ name: f.name, type: f.type, size: f.size })),
-    );
-    console.groupEnd();
-
-    const { candidates, sourceUrl } = extractDropImageUrls(e.dataTransfer);
+    const candidates = extractDropImageUrls(e.dataTransfer);
     if (candidates.length === 0) return;
 
-    console.log('[drop] candidates:', candidates, 'referer:', sourceUrl);
     try {
-      await window.moodmark.saves.dropUrl(candidates, sourceUrl);
+      await window.moodmark.saves.dropUrl(candidates);
     } catch (err) {
       console.error('URL drop failed:', err);
     }

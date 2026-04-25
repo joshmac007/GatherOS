@@ -13,10 +13,9 @@ contextBridge.exposeInMainWorld('moodmark', {
       if (!filePath) return Promise.reject(new Error('No filesystem path on dropped file'));
       return ipcRenderer.invoke('saves:drop-file', filePath);
     },
-    dropUrl: (urls, sourceUrl) =>
+    dropUrl: (urls) =>
       ipcRenderer.invoke('saves:drop-url', {
         urls: Array.isArray(urls) ? urls : [urls],
-        sourceUrl,
       }),
   },
   collections: {
@@ -31,9 +30,6 @@ contextBridge.exposeInMainWorld('moodmark', {
     openInPreview: (filePath) => ipcRenderer.invoke('image:open-in-preview', filePath),
     export: (filePath, defaultName) =>
       ipcRenderer.invoke('image:export', { filePath, defaultName }),
-  },
-  shell: {
-    openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
   },
   on: (channel, listener) => {
     const allowed = new Set(['save:created', 'update-ready']);
