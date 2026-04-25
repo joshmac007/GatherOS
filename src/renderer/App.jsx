@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import Grid from './components/Grid.jsx';
 import DetailPanel from './components/DetailPanel.jsx';
+import FocusedView from './components/FocusedView.jsx';
 import { useLibrary } from './hooks/useLibrary.js';
 
 export default function App() {
@@ -19,13 +20,19 @@ export default function App() {
 
   const [selected, setSelected] = useState(() => new Set());
   const [density, setDensity] = useState(4);
-  const [detailId, setDetailId] = useState(null);
+  const [focusedId, setFocusedId] = useState(null);
   const [dragging, setDragging] = useState(false);
 
-  const detail = useMemo(
-    () => saves.find((s) => s.id === detailId) || null,
-    [saves, detailId],
+  const focusedIndex = useMemo(
+    () => (focusedId ? saves.findIndex((s) => s.id === focusedId) : -1),
+    [saves, focusedId],
   );
+  const focused = focusedIndex >= 0 ? saves[focusedIndex] : null;
+
+  // If the focused record disappears (deleted, filtered out), drop focus.
+  if (focusedId && !focused) {
+    setFocusedId(null);
+  }
 
   const handleSelect = useCallback((id, additive) => {
     setSelected((prev) => {
@@ -34,25 +41,43 @@ export default function App() {
       else next.add(id);
       return next;
     });
-    if (!additive) setDetailId(id);
+    if (!additive) setFocusedId(id);
   }, []);
 
-  const handleOpen = useCallback((record) => {
-    window.moodmark.image.openInPreview(record.file_path);
+  const handleOpenInPreview = useCallback((filePath) => {
+    window.moodmark.image.openInPreview(filePath);
   }, []);
+
+  const handleOpenFromCard = useCallback(
+    (record) => {
+      // Double-click bypasses the focused view and goes straight to Preview.app.
+      handleOpenInPreview(record.file_path);
+    },
+    [handleOpenInPreview],
+  );
 
   const handleDelete = useCallback(
     async (id) => {
       await deleteSave(id);
-      if (detailId === id) setDetailId(null);
+      if (focusedId === id) setFocusedId(null);
       setSelected((prev) => {
         const next = new Set(prev);
         next.delete(id);
         return next;
       });
     },
-    [deleteSave, detailId],
+    [deleteSave, focusedId],
   );
+
+  const goPrev = useCallback(() => {
+    if (focusedIndex > 0) setFocusedId(saves[focusedIndex - 1].id);
+  }, [focusedIndex, saves]);
+
+  const goNext = useCallback(() => {
+    if (focusedIndex >= 0 && focusedIndex < saves.length - 1) {
+      setFocusedId(saves[focusedIndex + 1].id);
+    }
+  }, [focusedIndex, saves]);
 
   const onDragOver = useCallback((e) => {
     e.preventDefault();
@@ -94,32 +119,47 @@ export default function App() {
         <Sidebar view={view} onViewChange={setView} />
 
         <div className="main-col">
-          <Toolbar
-            search={search}
-            onSearchChange={setSearch}
-            density={density}
-            onDensityChange={setDensity}
-            count={saves.length}
-          />
-          <div className="grid-scroll">
-            <Grid
-              saves={saves}
-              selected={selected}
-              onSelect={handleSelect}
-              onOpen={handleOpen}
-              density={density}
-              loading={loading}
+          {focused ? (
+            <FocusedView
+              record={focused}
+              index={focusedIndex}
+              total={saves.length}
+              onBack={() => setFocusedId(null)}
+              onPrev={goPrev}
+              onNext={goNext}
+              hasPrev={focusedIndex > 0}
+              hasNext={focusedIndex < saves.length - 1}
             />
-          </div>
+          ) : (
+            <>
+              <Toolbar
+                search={search}
+                onSearchChange={setSearch}
+                density={density}
+                onDensityChange={setDensity}
+                count={saves.length}
+              />
+              <div className="grid-scroll">
+                <Grid
+                  saves={saves}
+                  selected={selected}
+                  onSelect={handleSelect}
+                  onOpen={handleOpenFromCard}
+                  density={density}
+                  loading={loading}
+                />
+              </div>
+            </>
+          )}
         </div>
 
-        {detail && (
+        {focused && (
           <DetailPanel
-            record={detail}
-            onClose={() => setDetailId(null)}
+            record={focused}
+            onClose={() => setFocusedId(null)}
             onToggleFavorite={toggleFavorite}
             onDelete={handleDelete}
-            onOpenInPreview={(p) => window.moodmark.image.openInPreview(p)}
+            onOpenInPreview={handleOpenInPreview}
           />
         )}
       </div>
