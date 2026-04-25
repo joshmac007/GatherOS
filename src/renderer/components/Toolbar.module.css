@@ -38,14 +38,25 @@
   color: var(--text-primary);
 }
 
+/* Three-column flex: equal-flex gutters on either side so the centered
+   search slot stays put even when the right-side count text shrinks
+   from "120 saves" → "5 saves" as the user types. */
+.left,
+.right {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.right {
+  justify-content: flex-end;
+}
+
 .searchWrap {
   position: relative;
-  /* Fixed 380px when there's room; shrinks (never grows) when the
-     window narrows. Prevents the field from widening as siblings like
-     "120 saves" → "5 saves" change width while the user types. */
   flex: 0 1 380px;
-  margin-left: auto;
-  margin-right: auto;
   -webkit-app-region: no-drag;
 }
 

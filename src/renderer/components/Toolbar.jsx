@@ -68,16 +68,19 @@ export default function Toolbar({
   const sliderValue = COLS_MAX + COLS_MIN - columns;
   return (
     <div className={styles.toolbar}>
-      {onToggleSidebar && (
-        <button
-          type="button"
-          className={styles.iconBtn}
-          onClick={onToggleSidebar}
-          title="Toggle sidebar"
-        >
-          <SidebarIcon />
-        </button>
-      )}
+      <div className={styles.left}>
+        {onToggleSidebar && (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={onToggleSidebar}
+            title="Toggle sidebar"
+          >
+            <SidebarIcon />
+          </button>
+        )}
+      </div>
+
       <div className={styles.searchWrap}>
         <span className={styles.searchIcon}><SearchIcon /></span>
         <input
@@ -89,27 +92,29 @@ export default function Toolbar({
         />
       </div>
 
-      {count != null && (
-        <span className={styles.count}>
-          {count} {count === 1 ? 'save' : 'saves'}
-        </span>
-      )}
+      <div className={styles.right}>
+        {count != null && (
+          <span className={styles.count}>
+            {count} {count === 1 ? 'save' : 'saves'}
+          </span>
+        )}
 
-      <div className={styles.zoom} title="Card size">
-        <GridSmallIcon />
-        <input
-          type="range"
-          min={COLS_MIN}
-          max={COLS_MAX}
-          step={1}
-          value={sliderValue}
-          onChange={(e) =>
-            onColumnsChange(COLS_MAX + COLS_MIN - Number(e.target.value))
-          }
-          className={styles.slider}
-          aria-label="Card size"
-        />
-        <GridLargeIcon />
+        <div className={styles.zoom} title="Card size">
+          <GridSmallIcon />
+          <input
+            type="range"
+            min={COLS_MIN}
+            max={COLS_MAX}
+            step={1}
+            value={sliderValue}
+            onChange={(e) =>
+              onColumnsChange(COLS_MAX + COLS_MIN - Number(e.target.value))
+            }
+            className={styles.slider}
+            aria-label="Card size"
+          />
+          <GridLargeIcon />
+        </div>
       </div>
     </div>
   );
