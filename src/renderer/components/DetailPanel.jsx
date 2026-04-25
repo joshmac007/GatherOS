@@ -351,7 +351,7 @@ export default function DetailPanel({
               onChange={(e) => setTagDraft(e.target.value)}
               onKeyDown={handleTagKeyDown}
               onBlur={handleTagBlur}
-              placeholder="tag name"
+              placeholder="tag"
             />
           ) : (
             <button
