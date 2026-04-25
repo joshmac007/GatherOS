@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import styles from './FocusedView.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 
@@ -17,11 +17,21 @@ export default function FocusedView({
   hasNext,
 }) {
   const [zoom, setZoom] = useState(1);
+  const stageRef = useRef(null);
 
   // Reset zoom whenever the user moves to a different image.
   useEffect(() => {
     setZoom(1);
   }, [record.id]);
+
+  // Re-center the scroll position whenever the wrapper size changes,
+  // so zooming feels like it pivots around the middle of the image.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    stage.scrollLeft = Math.max(0, (stage.scrollWidth - stage.clientWidth) / 2);
+    stage.scrollTop = Math.max(0, (stage.scrollHeight - stage.clientHeight) / 2);
+  }, [zoom, record.id]);
 
   useEffect(() => {
     function onKey(e) {
@@ -81,7 +91,10 @@ export default function FocusedView({
         </div>
       </div>
 
-      <div className={`${styles.stage} ${zoom > 1 ? styles.stageScroll : ''}`}>
+      <div
+        ref={stageRef}
+        className={`${styles.stage} ${zoom > 1 ? styles.stageScroll : ''}`}
+      >
         {src && (
           <div
             className={styles.imageWrap}
