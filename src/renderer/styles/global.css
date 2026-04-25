@@ -11,7 +11,7 @@ body,
 }
 
 body {
-  background: var(--content-bg);
+  background: transparent;
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: 13px;
@@ -28,6 +28,7 @@ textarea,
 
 button {
   font-family: inherit;
+  color: inherit;
 }
 
 .app-shell {
@@ -48,6 +49,7 @@ button {
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
+  background: var(--content-bg);
 }
 
 .grid-scroll {
@@ -63,7 +65,7 @@ button {
   inset: 12px;
   border: 2px dashed var(--accent);
   border-radius: 12px;
-  background: rgba(83, 74, 183, 0.18);
+  background: rgba(10, 132, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -72,7 +74,7 @@ button {
 }
 
 .drop-message {
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--accent);
   font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.01em;

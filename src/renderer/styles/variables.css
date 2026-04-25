@@ -1,12 +1,39 @@
 :root {
-  --sidebar-bg: rgba(28, 28, 30, 0.72);
-  --content-bg: #1c1c1e;
-  --border: rgba(255, 255, 255, 0.08);
-  --accent: #534AB7;
-  --text-primary: rgba(255, 255, 255, 0.9);
-  --text-secondary: rgba(255, 255, 255, 0.45);
-  --text-tertiary: rgba(255, 255, 255, 0.25);
-  --titlebar-height: 36px;
-  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: light;
+
+  /* Surfaces */
+  --sidebar-bg: rgba(244, 244, 246, 0.78);
+  --content-bg: #ffffff;
+  --titlebar-bg: rgba(255, 255, 255, 0.7);
+
+  /* Borders */
+  --border: rgba(0, 0, 0, 0.07);
+  --border-strong: rgba(0, 0, 0, 0.12);
+
+  /* Text */
+  --text-primary: rgba(0, 0, 0, 0.85);
+  --text-secondary: rgba(0, 0, 0, 0.55);
+  --text-tertiary: rgba(0, 0, 0, 0.4);
+  --text-on-accent: #ffffff;
+
+  /* Accent (macOS system blue) */
+  --accent: #0a84ff;
+  --accent-hover: #0070e8;
+
+  /* Hover/active states */
+  --hover-bg: rgba(0, 0, 0, 0.05);
+  --active-bg: rgba(0, 0, 0, 0.08);
+
+  /* Sidebar icon palette (matches Finder's section colors) */
+  --icon-blue: #007aff;
+  --icon-yellow: #ffcc00;
+  --icon-orange: #ff9500;
+  --icon-red: #ff3b30;
+  --icon-green: #34c759;
+  --icon-purple: #af52de;
+  --icon-pink: #ff2d55;
+
+  --titlebar-height: 44px;
+  --font-ui: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 }

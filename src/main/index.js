@@ -4,6 +4,7 @@ const {
   Tray,
   Menu,
   nativeImage,
+  nativeTheme,
   protocol,
 } = require('electron');
 const fs = require('node:fs');
@@ -91,7 +92,7 @@ function createMainWindow() {
     frame: false,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 14 },
-    backgroundColor: '#1c1c1e',
+    backgroundColor: '#ffffff',
     vibrancy: process.platform === 'darwin' ? 'sidebar' : undefined,
     visualEffectState: 'active',
     webPreferences: {
@@ -161,6 +162,7 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin') nativeTheme.themeSource = 'light';
   setSaveNotifier(notifySaved);
   registerMoodmarkFileProtocol();
   ensureStorageDirs();

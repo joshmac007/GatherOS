@@ -1,17 +1,39 @@
 import React from 'react';
 import styles from './Sidebar.module.css';
 
-const SMART_VIEWS = [
-  { id: 'all', label: 'All Saves' },
-  { id: 'favorites', label: 'Favorites' },
-  { id: 'recent', label: 'Recent' },
-];
-
-function SmartIcon({ id }) {
-  if (id === 'favorites') return <span className={styles.icon}>★</span>;
-  if (id === 'recent') return <span className={styles.icon}>◴</span>;
-  return <span className={styles.icon}>▤</span>;
+function GridIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <rect x="2" y="2" width="5.5" height="5.5" rx="1.2" />
+      <rect x="8.5" y="2" width="5.5" height="5.5" rx="1.2" />
+      <rect x="2" y="8.5" width="5.5" height="5.5" rx="1.2" />
+      <rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1.2" />
+    </svg>
+  );
 }
+
+function StarIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M8 1.6l1.96 4.05 4.46.59-3.27 3.1.83 4.42L8 11.65l-3.98 2.11.83-4.42L1.58 6.24l4.46-.59z" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M8 1.5a6.5 6.5 0 1 0 0 13A6.5 6.5 0 0 0 8 1.5zm0 1.4a5.1 5.1 0 1 1 0 10.2A5.1 5.1 0 0 1 8 2.9z" />
+      <path d="M7.3 4.4h1.4v3.9l2.7 1.55-.7 1.2-3.4-1.97V4.4z" />
+    </svg>
+  );
+}
+
+const SMART_VIEWS = [
+  { id: 'all', label: 'All Saves', color: 'var(--icon-blue)', Icon: GridIcon },
+  { id: 'favorites', label: 'Favorites', color: 'var(--icon-orange)', Icon: StarIcon },
+  { id: 'recent', label: 'Recent', color: 'var(--icon-yellow)', Icon: ClockIcon },
+];
 
 export default function Sidebar({ view, onViewChange, collections = [], counts = {} }) {
   return (
@@ -19,19 +41,22 @@ export default function Sidebar({ view, onViewChange, collections = [], counts =
       <div className={styles.brand}>Moodmark</div>
 
       <nav className={styles.section}>
-        {SMART_VIEWS.map((v) => {
-          const active = view.type === v.id;
+        {SMART_VIEWS.map(({ id, label, color, Icon }) => {
+          const active = view.type === id;
           return (
             <button
-              key={v.id}
+              key={id}
               className={`${styles.item} ${active ? styles.active : ''}`}
-              onClick={() => onViewChange({ type: v.id })}
+              onClick={() => onViewChange({ type: id })}
             >
-              <SmartIcon id={v.id} />
-              <span className={styles.label}>{v.label}</span>
-              {counts[v.id] != null && (
-                <span className={styles.count}>{counts[v.id]}</span>
-              )}
+              <span
+                className={styles.icon}
+                style={{ color: active ? '#fff' : color }}
+              >
+                <Icon />
+              </span>
+              <span className={styles.label}>{label}</span>
+              {counts[id] != null && <span className={styles.count}>{counts[id]}</span>}
             </button>
           );
         })}
