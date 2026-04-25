@@ -135,7 +135,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: width 80ms ease-out, height 80ms ease-out;
   margin: auto;
 }
 
