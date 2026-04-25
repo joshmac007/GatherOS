@@ -2,7 +2,11 @@ const { ipcMain, shell, dialog, BrowserWindow } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { getAllSaves, deleteSave, updateSave, insertSave } = require('./db');
-const { deleteImageFiles, saveImageFromFile } = require('./storage');
+const {
+  deleteImageFiles,
+  saveImageFromFile,
+  saveImageFromUrl,
+} = require('./storage');
 const {
   handleOverlayComplete,
   handleOverlayCancel,
@@ -25,6 +29,16 @@ function registerIpcHandlers() {
   ipcMain.handle('saves:drop-file', async (_e, filePath) => {
     const imgData = await saveImageFromFile(filePath);
     const record = insertSave(imgData);
+    notifySaved(record);
+    return record;
+  });
+
+  ipcMain.handle('saves:drop-url', async (_e, payload) => {
+    const url = typeof payload === 'string' ? payload : payload?.url;
+    const sourceUrl = typeof payload === 'object' ? payload?.sourceUrl : null;
+    if (!url) throw new Error('drop-url called without a URL');
+    const imgData = await saveImageFromUrl(url);
+    const record = insertSave({ ...imgData, sourceUrl: sourceUrl || url });
     notifySaved(record);
     return record;
   });

@@ -39,6 +39,60 @@ async function saveImageFromBuffer(buffer, ext = 'png') {
   return _writeImageFiles(buffer, ext, sharp);
 }
 
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp']);
+
+function extFromMime(mime) {
+  if (!mime) return null;
+  const m = mime.toLowerCase().match(/^image\/([\w+.-]+)/);
+  if (!m) return null;
+  let ext = m[1];
+  if (ext === 'jpeg') ext = 'jpg';
+  if (ext.includes('+')) ext = ext.split('+')[0];
+  return IMAGE_EXTS.has(ext) ? ext : null;
+}
+
+function extFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split('/').pop() || '';
+    const dot = last.lastIndexOf('.');
+    if (dot < 0) return null;
+    let ext = last.slice(dot + 1).toLowerCase();
+    if (ext === 'jpeg') ext = 'jpg';
+    return IMAGE_EXTS.has(ext) ? ext : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveImageFromUrl(url) {
+  const sharp = require('sharp');
+
+  if (url.startsWith('data:')) {
+    return saveImageFromBase64(url);
+  }
+  if (url.startsWith('blob:')) {
+    throw new Error('Blob URLs only exist inside the browser; drag the image directly instead.');
+  }
+
+  const res = await fetch(url, {
+    redirect: 'follow',
+    headers: {
+      // Some hosts (e.g. Twitter) reject the default Node UA.
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Moodmark/1.0',
+      Accept: 'image/*,*/*;q=0.8',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`);
+  }
+  const contentType = res.headers.get('content-type') || '';
+  const ext = extFromMime(contentType) || extFromUrl(url) || 'png';
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return _writeImageFiles(buffer, ext, sharp);
+}
+
 async function _writeImageFiles(buffer, ext, sharp) {
   const id = crypto.randomUUID();
   const filePath = path.join(getImagesDir(), `${id}.${ext}`);
@@ -74,5 +128,6 @@ module.exports = {
   saveImageFromBase64,
   saveImageFromFile,
   saveImageFromBuffer,
+  saveImageFromUrl,
   deleteImageFiles,
 };

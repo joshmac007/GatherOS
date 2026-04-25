@@ -82,10 +82,14 @@ export default function App() {
   const onDragOver = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    const hasImage = [...e.dataTransfer.items].some(
-      (i) => i.kind === 'file' && i.type.startsWith('image/'),
+    const items = [...e.dataTransfer.items];
+    const couldBeImage = items.some(
+      (i) =>
+        (i.kind === 'file' && i.type.startsWith('image/')) ||
+        (i.kind === 'string' &&
+          (i.type === 'text/uri-list' || i.type === 'text/html')),
     );
-    if (hasImage) setDragging(true);
+    if (couldBeImage) setDragging(true);
   }, []);
 
   const onDragLeave = useCallback((e) => {
@@ -96,14 +100,56 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
     setDragging(false);
+
+    // Files dragged from Finder, browser-downloaded images, etc.
     const files = [...e.dataTransfer.files].filter((f) =>
       f.type.startsWith('image/'),
     );
-    for (const file of files) {
+    if (files.length > 0) {
+      for (const file of files) {
+        try {
+          await window.moodmark.saves.dropFile(file);
+        } catch (err) {
+          console.error('Drop failed:', err);
+        }
+      }
+      return;
+    }
+
+    // No files — likely a drag from a webpage. Try to recover an image URL.
+    const html = e.dataTransfer.getData('text/html');
+    const uriList = e.dataTransfer.getData('text/uri-list');
+    const text = e.dataTransfer.getData('text/plain');
+
+    let imageUrl = null;
+    let sourceUrl = null;
+
+    if (html) {
+      const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+      if (m) imageUrl = m[1];
+    }
+    if (!imageUrl && uriList) {
+      imageUrl = uriList
+        .split(/\r?\n/)
+        .find((l) => l && !l.startsWith('#'))
+        ?.trim() || null;
+    }
+    if (!imageUrl && text && /^https?:\/\//i.test(text.trim())) {
+      imageUrl = text.trim();
+    }
+    if (uriList && uriList !== imageUrl) {
+      const candidate = uriList
+        .split(/\r?\n/)
+        .find((l) => l && !l.startsWith('#'))
+        ?.trim();
+      if (candidate && candidate !== imageUrl) sourceUrl = candidate;
+    }
+
+    if (imageUrl) {
       try {
-        await window.moodmark.saves.dropFile(file);
+        await window.moodmark.saves.dropUrl(imageUrl, sourceUrl);
       } catch (err) {
-        console.error('Drop failed:', err);
+        console.error('URL drop failed:', err);
       }
     }
   }, []);
