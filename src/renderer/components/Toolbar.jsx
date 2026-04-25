@@ -1,6 +1,22 @@
 import React from 'react';
 import styles from './Toolbar.module.css';
 
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="7" cy="7" r="4.5" />
+      <line x1="10.4" y1="10.4" x2="13.5" y2="13.5" />
+    </svg>
+  );
+}
+
 function SidebarIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -63,7 +79,7 @@ export default function Toolbar({
         </button>
       )}
       <div className={styles.searchWrap}>
-        <span className={styles.searchIcon}>⌕</span>
+        <span className={styles.searchIcon}><SearchIcon /></span>
         <input
           className={styles.search}
           type="search"

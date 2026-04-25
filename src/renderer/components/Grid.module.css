@@ -1,6 +1,6 @@
 .grid {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   padding: 20px;
   align-items: start;
   background: var(--content-bg);
@@ -9,7 +9,7 @@
 .column {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 

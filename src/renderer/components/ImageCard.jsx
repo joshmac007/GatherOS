@@ -70,7 +70,6 @@ export default function ImageCard({
           {selected && <CheckIcon />}
         </span>
       </div>
-      {record.title && <div className={styles.title}>{record.title}</div>}
     </button>
   );
 }
