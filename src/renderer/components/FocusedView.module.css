@@ -137,7 +137,7 @@
   height: auto;
   object-fit: contain;
   border-radius: 6px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
   transition: transform 80ms ease-out;
   transform-origin: center center;
 }
