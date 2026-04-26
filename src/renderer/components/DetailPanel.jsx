@@ -106,6 +106,9 @@ export default function DetailPanel({
   const [copiedColor, setCopiedColor] = useState(null);
   const [autoTagging, setAutoTagging] = useState(false);
   const [autoTagError, setAutoTagError] = useState('');
+  const [promptGenerating, setPromptGenerating] = useState(false);
+  const [promptError, setPromptError] = useState('');
+  const [promptCopied, setPromptCopied] = useState(false);
 
   const [nameDraft, setNameDraft] = useState(record.title || '');
   const [urlDraft, setUrlDraft] = useState(record.source_url || '');
@@ -222,6 +225,40 @@ export default function DetailPanel({
       setTimeout(() => setAutoTagError(''), 3500);
     } finally {
       setAutoTagging(false);
+    }
+  }
+
+  async function handleGeneratePrompt() {
+    if (promptGenerating) return;
+    if (!aiConfigured) {
+      onOpenSettings?.();
+      return;
+    }
+    setPromptGenerating(true);
+    setPromptError('');
+    try {
+      const result = await window.moodmark.ai.generatePrompt(record.id);
+      if (!result?.ok) {
+        setPromptError(result?.detail || 'Could not generate prompt');
+        setTimeout(() => setPromptError(''), 3500);
+      }
+      // Successful path: save:updated event already patches record.ai_prompt.
+    } catch (err) {
+      setPromptError(err.message || 'Could not generate prompt');
+      setTimeout(() => setPromptError(''), 3500);
+    } finally {
+      setPromptGenerating(false);
+    }
+  }
+
+  async function handleCopyPrompt() {
+    if (!record.ai_prompt) return;
+    try {
+      await navigator.clipboard.writeText(record.ai_prompt);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 1400);
+    } catch (err) {
+      console.error('Copy prompt failed:', err);
     }
   }
 
@@ -429,6 +466,54 @@ export default function DetailPanel({
             )}
           </div>
         </label>
+      </div>
+
+      <div className={styles.promptSection}>
+        <div className={styles.promptHeader}>
+          <span className={styles.sectionLabelIcon}><SparkleIcon /></span>
+          <span className={styles.promptLabel}>Generation Prompt</span>
+          {record.ai_prompt && (
+            <div className={styles.promptHeaderActions}>
+              <button
+                type="button"
+                className={styles.promptIconBtn}
+                onClick={handleCopyPrompt}
+                title="Copy prompt"
+              >
+                {promptCopied ? '✓' : 'Copy'}
+              </button>
+              <button
+                type="button"
+                className={styles.promptIconBtn}
+                onClick={handleGeneratePrompt}
+                disabled={promptGenerating}
+                title="Regenerate"
+              >
+                ↻
+              </button>
+            </div>
+          )}
+        </div>
+        {record.ai_prompt ? (
+          <div className={styles.promptBody}>{record.ai_prompt}</div>
+        ) : (
+          <button
+            type="button"
+            className={[
+              styles.autoTagBtn,
+              promptGenerating && styles.autoTagBtnLoading,
+            ].filter(Boolean).join(' ')}
+            onClick={handleGeneratePrompt}
+            disabled={promptGenerating}
+            title={aiConfigured ? 'Generate an image-generation prompt' : 'Configure OpenAI key to enable'}
+          >
+            <span className={styles.autoTagIcon}><SparkleIcon /></span>
+            {promptGenerating ? 'Generating…' : 'Generate prompt'}
+          </button>
+        )}
+        {promptError && (
+          <div className={styles.autoTagError}>{promptError}</div>
+        )}
       </div>
 
       {palette.length > 0 && (

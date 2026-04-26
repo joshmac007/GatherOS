@@ -334,6 +334,83 @@ async function rerankCandidates(apiKey, query, candidates) {
   }
 }
 
+// Generate an image-generation prompt that recreates the visual style
+// and content of the input image. Designed to be model-agnostic — works
+// for Midjourney, DALL-E, Stable Diffusion, etc. — so we don't include
+// tool-specific parameter syntax (--ar, /imagine, etc.). Returns a
+// single descriptive paragraph the user can paste into any of them.
+async function generateImagePrompt(apiKey, filePath) {
+  if (!apiKey) throw new Error('Missing OpenAI key');
+  if (!filePath || !fs.existsSync(filePath)) {
+    throw new Error('Image file not found');
+  }
+
+  const sharp = require('sharp');
+  const resized = await sharp(filePath)
+    .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+  const dataUrl = `data:image/jpeg;base64,${resized.toString('base64')}`;
+
+  const body = {
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You write image-generation prompts that recreate the visual ' +
+          'style and content of a reference image. The prompts are used ' +
+          'with Midjourney, DALL-E, Stable Diffusion, and similar tools.\n\n' +
+          'Return JSON: {"prompt": "..."}.\n\n' +
+          'The prompt must:\n' +
+          '- Be a single paragraph, 35-75 words\n' +
+          '- Describe subjects, composition, camera framing, lighting, ' +
+          'color palette, texture, style/medium, and mood\n' +
+          '- Use flowing natural language, not comma-stuffed keyword lists\n' +
+          '- Not include tool-specific parameter syntax (--ar, --v, /imagine)\n' +
+          '- Not name copyrighted characters, real people, or real brands\n' +
+          '- Not start with "An image of" or "A picture of" — describe directly',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Write a prompt that recreates this image.' },
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
+        ],
+      },
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: 280,
+  };
+
+  const res = await fetch(`${API_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    if (res.status === 401) throw new Error('Invalid OpenAI key');
+    throw new Error(`OpenAI API ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('No content in OpenAI response');
+
+  let parsed;
+  try { parsed = JSON.parse(content); }
+  catch { throw new Error('OpenAI response was not valid JSON'); }
+
+  const prompt = typeof parsed.prompt === 'string'
+    ? parsed.prompt.trim().replace(/^["'`]+|["'`]+$/g, '')
+    : '';
+  return prompt || null;
+}
+
 module.exports = {
-  testApiKey, autoTagImage, analyzeImage, embedText, expandQuery, rerankCandidates,
+  testApiKey, autoTagImage, analyzeImage, embedText, expandQuery,
+  rerankCandidates, generateImagePrompt,
 };

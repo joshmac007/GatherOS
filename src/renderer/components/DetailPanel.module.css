@@ -261,6 +261,71 @@
   color: var(--accent);
 }
 
+.promptSection {
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.promptHeader {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.promptLabel {
+  flex: 1 1 auto;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.promptHeaderActions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.promptIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  background: transparent;
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.promptIconBtn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-primary);
+}
+
+.promptIconBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.promptBody {
+  padding: 10px 12px;
+  background: rgba(108, 99, 255, 0.05);
+  border: 0.5px solid rgba(108, 99, 255, 0.18);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
 /* Three-dot loading indicator inside the Name input while the AI
    pipeline is naming a freshly-saved image. Pointer-events: none so
    it doesn't block clicks into the field if the user wants to type

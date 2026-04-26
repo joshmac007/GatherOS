@@ -23,7 +23,9 @@ const {
 const { notifySaved } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
-const { testApiKey, autoTagImage, analyzeImage, embedText } = require('./openai');
+const {
+  testApiKey, autoTagImage, analyzeImage, embedText, generateImagePrompt,
+} = require('./openai');
 const { detectColorName } = require('./colorNames');
 
 // Cosine similarity over Float32 BLOBs from SQLite. ~1 ms per save at
@@ -406,6 +408,31 @@ function registerIpcHandlers() {
       });
     }
     return { ok: true, processed, failed, total };
+  });
+
+  // Generate an image-generation prompt (Midjourney / DALL-E / SD)
+  // that recreates the focused save. Persists onto saves.ai_prompt and
+  // emits save:updated so the renderer's local copy patches in place.
+  ipcMain.handle('ai:generate-prompt', async (event, saveId) => {
+    if (!saveId) return { ok: false, reason: 'no-save-id' };
+    if (!settings.hasOpenAIKey()) return { ok: false, reason: 'no-key' };
+    const save = getSave(saveId);
+    if (!save) return { ok: false, reason: 'save-not-found' };
+
+    event.sender.send('save:indexing-start', saveId);
+    try {
+      const prompt = await generateImagePrompt(settings.getOpenAIKey(), save.file_path);
+      if (!prompt) return { ok: false, reason: 'empty-response' };
+      updateSave({ id: saveId, aiPrompt: prompt });
+      const updated = getSave(saveId);
+      event.sender.send('save:updated', updated);
+      return { ok: true, prompt };
+    } catch (err) {
+      console.error('Generate prompt failed:', err.message);
+      return { ok: false, reason: 'api-error', detail: err.message };
+    } finally {
+      event.sender.send('save:indexing-end', saveId);
+    }
   });
 
   ipcMain.handle('ai:auto-tag', async (_e, saveId) => {

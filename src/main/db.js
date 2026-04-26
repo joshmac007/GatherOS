@@ -84,6 +84,9 @@ function migrate() {
   if (!saveCols.find((c) => c.name === 'ocr_text')) {
     db.exec('ALTER TABLE saves ADD COLUMN ocr_text TEXT');
   }
+  if (!saveCols.find((c) => c.name === 'ai_prompt')) {
+    db.exec('ALTER TABLE saves ADD COLUMN ai_prompt TEXT');
+  }
 }
 
 function getDatabase() {
@@ -247,7 +250,7 @@ function deleteSave(id) {
   return { ok: true, filePath: save.file_path, thumbPath: save.thumb_path };
 }
 
-function updateSave({ id, title, favorited, sourceUrl, aiDescription, ocrText, embedding } = {}) {
+function updateSave({ id, title, favorited, sourceUrl, aiDescription, ocrText, aiPrompt, embedding } = {}) {
   const db = getDatabase();
   const fields = [];
   const params = [];
@@ -256,6 +259,7 @@ function updateSave({ id, title, favorited, sourceUrl, aiDescription, ocrText, e
   if (sourceUrl !== undefined) { fields.push('source_url = ?'); params.push(sourceUrl); }
   if (aiDescription !== undefined) { fields.push('ai_description = ?'); params.push(aiDescription); }
   if (ocrText !== undefined) { fields.push('ocr_text = ?'); params.push(ocrText); }
+  if (aiPrompt !== undefined) { fields.push('ai_prompt = ?'); params.push(aiPrompt); }
   if (embedding !== undefined) { fields.push('embedding = ?'); params.push(embedding); }
   if (!fields.length) return { ok: true };
   params.push(id);

@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('moodmark', {
   },
   ai: {
     autoTag: (saveId) => ipcRenderer.invoke('ai:auto-tag', saveId),
+    generatePrompt: (saveId) => ipcRenderer.invoke('ai:generate-prompt', saveId),
     unindexedCount: () => ipcRenderer.invoke('ai:unindexed-count'),
     reindexLibrary: () => ipcRenderer.invoke('ai:reindex-library'),
   },
