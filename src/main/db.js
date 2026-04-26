@@ -177,7 +177,12 @@ function hexToLab(hex) {
 
 // Returns id only — palette filter runs in JS over the parsed swatches,
 // applied as a post-filter on top of the SQL conditions below.
-function filterByColor(saves, hex, threshold = 22) {
+//
+// `paletteLimit` is for the color-name search path (e.g. "blue") where
+// we want strict "this image is dominated by that color" semantics —
+// not "there's some near-grey in a shadow that happens to be near
+// blue". Defaults to null = check every swatch (chip-click filter).
+function filterByColor(saves, hex, threshold = 22, paletteLimit = null) {
   const target = hexToLab(hex);
   if (!target) return saves;
   return saves.filter((s) => {
@@ -185,7 +190,8 @@ function filterByColor(saves, hex, threshold = 22) {
     let palette;
     try { palette = JSON.parse(s.palette); } catch { return false; }
     if (!Array.isArray(palette)) return false;
-    return palette.some((c) => {
+    const swatches = paletteLimit ? palette.slice(0, paletteLimit) : palette;
+    return swatches.some((c) => {
       const lab = hexToLab(c);
       return lab && deltaE76(target, lab) <= threshold;
     });

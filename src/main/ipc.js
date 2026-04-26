@@ -63,7 +63,11 @@ function registerIpcHandlers() {
       collectionId: opts.collectionId,
       colorHex: opts.colorHex || undefined,
     });
-    const colorMatches = filterByColor(filteredSet, detectedHex, 20);
+    // Strict: ΔE 16 ("clearly the same color") + only the top 3 most
+    // vibrant swatches per save (Vibrant / LightVibrant / DarkVibrant
+    // from node-vibrant) so a stray dark-blue shadow on a red image
+    // doesn't surface as a "blue" match.
+    const colorMatches = filterByColor(filteredSet, detectedHex, 16, 3);
     if (colorMatches.length === 0) return results;
     const seen = new Set(results.map((s) => s.id));
     const merged = [...results];
