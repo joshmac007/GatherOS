@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import styles from './Sidebar.module.css';
 import ContextMenu from './ContextMenu.jsx';
 
@@ -27,6 +27,21 @@ function SettingsGearIcon() {
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true">
       <circle cx="8" cy="8" r="2.2" />
       <path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4" />
+    </svg>
+  );
+}
+
+function KeyboardIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="1.6" y="4.4" width="12.8" height="7.2" rx="1.4" />
+      <line x1="3.6" y1="6.7" x2="3.7" y2="6.7" />
+      <line x1="6" y1="6.7" x2="6.1" y2="6.7" />
+      <line x1="8.4" y1="6.7" x2="8.5" y2="6.7" />
+      <line x1="10.8" y1="6.7" x2="10.9" y2="6.7" />
+      <line x1="3.6" y1="9" x2="3.7" y2="9" />
+      <line x1="12.4" y1="9" x2="12.5" y2="9" />
+      <line x1="5.2" y1="9.6" x2="10.8" y2="9.6" />
     </svg>
   );
 }
@@ -75,6 +90,8 @@ export default function Sidebar({
   onToggleCollapse,
   onUpload,
   onOpenSettings,
+  onOpenShortcuts,
+  createCollectionSignal,
 }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -95,6 +112,15 @@ export default function Sidebar({
     setNewName('');
     requestAnimationFrame(() => createInputRef.current?.focus());
   }
+
+  // Bumped signal counter from App when ⌘N fires; trigger the inline
+  // creation flow whenever the value changes (skipping the initial
+  // mount value).
+  useEffect(() => {
+    if (createCollectionSignal === undefined || createCollectionSignal === 0) return;
+    startCreating();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createCollectionSignal]);
 
   function cancelCreating() {
     setCreating(false);
@@ -320,17 +346,30 @@ export default function Sidebar({
         )}
       </nav>
 
-      {onOpenSettings && (
+      {(onOpenSettings || onOpenShortcuts) && (
         <div className={styles.footer}>
-          <button
-            type="button"
-            className={styles.footerBtn}
-            onClick={onOpenSettings}
-            title="Settings"
-          >
-            <span className={styles.footerIcon}><SettingsGearIcon /></span>
-            <span className={styles.footerLabel}>Settings</span>
-          </button>
+          {onOpenSettings && (
+            <button
+              type="button"
+              className={styles.footerBtn}
+              onClick={onOpenSettings}
+              title="Settings"
+            >
+              <span className={styles.footerIcon}><SettingsGearIcon /></span>
+              <span className={styles.footerLabel}>Settings</span>
+            </button>
+          )}
+          {onOpenShortcuts && (
+            <button
+              type="button"
+              className={styles.footerBtn}
+              onClick={onOpenShortcuts}
+              title="Keyboard shortcuts"
+            >
+              <span className={styles.footerIcon}><KeyboardIcon /></span>
+              <span className={styles.footerLabel}>Shortcuts</span>
+            </button>
+          )}
         </div>
       )}
 

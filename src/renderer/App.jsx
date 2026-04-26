@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar, { CollectionIcon } from './components/Sidebar.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
+import ShortcutsModal from './components/ShortcutsModal.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import Grid from './components/Grid.jsx';
 import DetailPanel from './components/DetailPanel.jsx';
@@ -138,8 +139,16 @@ export default function App() {
   // once on mount and is updated whenever the user saves/clears via
   // SettingsModal's onConfiguredChange callback.
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, semanticSearch: false });
+
+  // Imperative handles for the global keyboard shortcuts.
+  const searchInputRef = useRef(null);
+  // Counter rather than boolean — Sidebar's effect listens for any
+  // change so the same shortcut can fire repeatedly (close + reopen
+  // the inline form).
+  const [createCollectionSignal, setCreateCollectionSignal] = useState(0);
   useEffect(() => {
     window.moodmark.settings.hasOpenAIKey().then(setAiConfigured);
     window.moodmark.settings.getPrefs().then(setPrefs);
@@ -419,6 +428,62 @@ export default function App() {
     }
   }, [focusedIndex, saves]);
 
+  // ── Global keyboard shortcuts ──────────────────────────────────────────
+  // ⌘F focus search · ⌘N new collection · Delete on selection ·
+  // J/K next/prev in focused view. The handler bails when the user is
+  // typing in an input so app-level keys never steal a keystroke.
+  useEffect(() => {
+    function isTypingTarget(el) {
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+    }
+
+    function onKey(e) {
+      const cmd = e.metaKey || e.ctrlKey;
+      const typing = isTypingTarget(e.target);
+
+      // Cmd/Ctrl combos always claim the key, even from inputs — these
+      // are global app commands.
+      if (cmd && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select?.();
+        return;
+      }
+      if (cmd && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        setCreateCollectionSignal((s) => s + 1);
+        return;
+      }
+
+      // Single-key shortcuts: skip when typing so we don't eat real input.
+      if (typing) return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selected.size > 0 && !focusedId) {
+          e.preventDefault();
+          handleDeleteSelected();
+        }
+        return;
+      }
+
+      // J / K aliases for next / prev in the focused view.
+      if (focusedId) {
+        if (e.key === 'j' || e.key === 'J') {
+          e.preventDefault();
+          goNext();
+        } else if (e.key === 'k' || e.key === 'K') {
+          e.preventDefault();
+          goPrev();
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusedId, selected, handleDeleteSelected, goNext, goPrev]);
+
   const onDragOver = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -546,6 +611,8 @@ export default function App() {
             onToggleCollapse={toggleSidebar}
             onUpload={handleUploadClick}
             onOpenSettings={() => setSettingsOpen(true)}
+            onOpenShortcuts={() => setShortcutsOpen(true)}
+            createCollectionSignal={createCollectionSignal}
           />
         )}
 
@@ -577,6 +644,7 @@ export default function App() {
                 semanticSearchActive={semanticSearchActive}
                 colorFilter={colorFilter}
                 onClearColorFilter={() => setColorFilter(null)}
+                searchInputRef={searchInputRef}
               />
               <div className="grid-scroll">
                 <Grid
@@ -692,6 +760,11 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onConfiguredChange={setAiConfigured}
         onPrefsChange={setPrefs}
+      />
+
+      <ShortcutsModal
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
       />
     </div>
   );

@@ -75,6 +75,7 @@ export default function Toolbar({
   semanticSearchActive = false,
   colorFilter = null,
   onClearColorFilter,
+  searchInputRef,
 }) {
   // Slider is inverted so dragging right = bigger cards = fewer columns.
   const sliderValue = COLS_MAX + COLS_MIN - columns;
@@ -103,6 +104,7 @@ export default function Toolbar({
           {semanticSearchActive ? <SearchSparkleIcon /> : <SearchIcon />}
         </span>
         <input
+          ref={searchInputRef}
           className={styles.search}
           type="search"
           placeholder={semanticSearchActive ? 'Describe what you’re looking for…' : 'Search by title or tag'}
