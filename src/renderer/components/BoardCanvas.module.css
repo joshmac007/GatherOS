@@ -147,9 +147,14 @@
   position: relative;
   flex: 1 1 auto;
   overflow: hidden;
-  background:
-    radial-gradient(circle, rgba(0, 0, 0, 0.06) 1px, transparent 1px) 0 0 / 24px 24px,
-    var(--content-bg);
+  background-color: var(--content-bg);
+  background-image:
+    radial-gradient(circle,
+      rgba(0, 0, 0, 0.06) calc(1px * var(--zoom, 1)),
+      transparent calc(1px * var(--zoom, 1)));
+  background-size:
+    calc(24px * var(--zoom, 1)) calc(24px * var(--zoom, 1));
+  background-position: var(--pan-x, 0) var(--pan-y, 0);
   cursor: grab;
   user-select: none;
 }
@@ -157,9 +162,11 @@
 .viewport:active { cursor: grabbing; }
 
 .viewport.viewportDropOver {
-  background:
-    radial-gradient(circle, rgba(10, 132, 255, 0.18) 1.4px, transparent 1.4px) 0 0 / 24px 24px,
-    rgba(10, 132, 255, 0.04);
+  background-color: rgba(10, 132, 255, 0.04);
+  background-image:
+    radial-gradient(circle,
+      rgba(10, 132, 255, 0.18) calc(1.4px * var(--zoom, 1)),
+      transparent calc(1.4px * var(--zoom, 1)));
   outline: 2px dashed var(--accent);
   outline-offset: -8px;
 }
@@ -213,8 +220,8 @@
 .item:active { cursor: grabbing; }
 
 .item.itemSelected {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: calc(2px / var(--zoom, 1)) solid var(--accent);
+  outline-offset: calc(1px / var(--zoom, 1));
 }
 
 .item img {
@@ -251,14 +258,14 @@
 .textItem:active { cursor: grabbing; }
 
 .textItem.textItemSelected {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: calc(2px / var(--zoom, 1)) solid var(--accent);
+  outline-offset: calc(2px / var(--zoom, 1));
 }
 
 .textItem.textItemEditing {
   cursor: text;
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: calc(2px / var(--zoom, 1)) solid var(--accent);
+  outline-offset: calc(2px / var(--zoom, 1));
 }
 
 .textDisplay {
@@ -305,18 +312,19 @@
 
 .resizeHandle {
   position: absolute;
-  width: 6px;
-  height: 6px;
+  width: calc(10px / var(--zoom, 1));
+  height: calc(10px / var(--zoom, 1));
   background: #fff;
-  border: 1px solid var(--accent);
-  border-radius: 1px;
+  border: calc(1.5px / var(--zoom, 1)) solid var(--accent);
+  border-radius: calc(2px / var(--zoom, 1));
   z-index: 2;
+  box-shadow: 0 calc(1px / var(--zoom, 1)) calc(2px / var(--zoom, 1)) rgba(0, 0, 0, 0.15);
 }
 
-.handle_tl { top: -4px; left: -4px;    cursor: nwse-resize; }
-.handle_tr { top: -4px; right: -4px;   cursor: nesw-resize; }
-.handle_bl { bottom: -4px; left: -4px; cursor: nesw-resize; }
-.handle_br { bottom: -4px; right: -4px; cursor: nwse-resize; }
+.handle_tl { top: calc(-6px / var(--zoom, 1)); left: calc(-6px / var(--zoom, 1));    cursor: nwse-resize; }
+.handle_tr { top: calc(-6px / var(--zoom, 1)); right: calc(-6px / var(--zoom, 1));   cursor: nesw-resize; }
+.handle_bl { bottom: calc(-6px / var(--zoom, 1)); left: calc(-6px / var(--zoom, 1)); cursor: nesw-resize; }
+.handle_br { bottom: calc(-6px / var(--zoom, 1)); right: calc(-6px / var(--zoom, 1)); cursor: nwse-resize; }
 
 /* ── Text formatting toolbar ──────────────────────────────────────────── */
 

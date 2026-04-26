@@ -458,6 +458,11 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
         <div
           ref={viewportRef}
           className={viewportClass}
+          style={{
+            '--zoom': viewport.z,
+            '--pan-x': `${viewport.x}px`,
+            '--pan-y': `${viewport.y}px`,
+          }}
           onPointerDown={handleViewportPointerDown}
           onPointerMove={handleViewportPointerMove}
           onPointerUp={handleViewportPointerUp}
@@ -470,6 +475,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
             className={styles.world}
             style={{
               transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.z})`,
+              '--zoom': viewport.z,
             }}
           >
             {sortedItems.map((item) => (
