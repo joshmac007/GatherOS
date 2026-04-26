@@ -192,6 +192,22 @@ export default function App() {
     setCardCtx({ saveId, x, y, items });
   }, [buildCardMenuItems]);
 
+  // Drag-out: hand the selected files (or just the dragged card if it
+  // isn't part of the selection) over to the OS via Electron's
+  // webContents.startDrag so the user can drop into Figma / Slack /
+  // Mail / Finder / etc.
+  const handleCardDragStart = useCallback((record) => {
+    const dragSet = selected.has(record.id) && selected.size > 1
+      ? saves.filter((s) => selected.has(s.id))
+      : [record];
+    const files = dragSet.map((s) => s.file_path).filter(Boolean);
+    if (files.length === 0) return;
+    window.moodmark.drag.start({
+      files,
+      thumbPath: record.thumb_path || record.file_path,
+    });
+  }, [selected, saves]);
+
   const handleCreateCollection = useCallback(async (payload) => {
     await window.moodmark.collections.create(payload);
     loadCollections();
@@ -500,6 +516,7 @@ export default function App() {
                   onSelect={handleSelect}
                   onOpen={handleOpenFromCard}
                   onContextMenu={handleCardContextMenu}
+                  onDragStart={handleCardDragStart}
                   columns={gridColumns}
                   loading={loading}
                   view={view}

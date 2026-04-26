@@ -24,6 +24,7 @@ export default function ImageCard({
   onSelect,
   onOpen,
   onContextMenu,
+  onDragStart,
 }) {
   const src = fileUrl(record.file_path);
   const aspect =
@@ -32,6 +33,7 @@ export default function ImageCard({
   return (
     <button
       type="button"
+      draggable={!!onDragStart}
       className={[
         styles.card,
         selected && styles.selected,
@@ -44,6 +46,13 @@ export default function ImageCard({
           e.preventDefault();
           onContextMenu(record.id, e.clientX, e.clientY);
         }
+      }}
+      onDragStart={(e) => {
+        if (!onDragStart) return;
+        // Suppress the browser's HTML5 drag image — Electron's
+        // startDrag in main paints its own native drag preview.
+        e.preventDefault();
+        onDragStart(record);
       }}
     >
       <div className={styles.frame} style={{ aspectRatio: aspect }}>

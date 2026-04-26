@@ -1,4 +1,4 @@
-const { ipcMain, shell, dialog, BrowserWindow } = require('electron');
+const { ipcMain, shell, dialog, BrowserWindow, nativeImage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
@@ -161,6 +161,41 @@ function registerIpcHandlers() {
     } catch (err) {
       console.error('Board export failed:', err);
       return { ok: false, error: err.message };
+    }
+  });
+
+  // Drag-out: forwards from a renderer dragstart into the OS drag layer
+  // via webContents.startDrag. macOS requires a non-empty icon, so we
+  // build one from the thumb (or fall back to the source file) and
+  // resize it to a reasonable drag-icon size.
+  ipcMain.on('drag:start', (event, payload = {}) => {
+    const files = Array.isArray(payload.files) ? payload.files.filter(Boolean) : [];
+    if (files.length === 0) return;
+
+    let icon = null;
+    try {
+      const iconSource = payload.thumbPath || files[0];
+      const img = nativeImage.createFromPath(iconSource);
+      if (!img.isEmpty()) {
+        icon = img.resize({ width: 80, quality: 'best' });
+      } else {
+        // Thumb missing/unreadable — fall back to the original file.
+        const fallback = nativeImage.createFromPath(files[0]);
+        if (!fallback.isEmpty()) icon = fallback.resize({ width: 80, quality: 'best' });
+      }
+    } catch (err) {
+      console.error('Drag icon load failed:', err);
+    }
+    if (!icon) icon = nativeImage.createEmpty();
+
+    try {
+      if (files.length === 1) {
+        event.sender.startDrag({ file: files[0], icon });
+      } else {
+        event.sender.startDrag({ files, icon });
+      }
+    } catch (err) {
+      console.error('startDrag failed:', err);
     }
   });
 

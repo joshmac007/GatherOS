@@ -48,6 +48,11 @@ contextBridge.exposeInMainWorld('moodmark', {
   shell: {
     openUrl: (url) => ipcRenderer.invoke('shell:open-url', url),
   },
+  drag: {
+    // Fire-and-forget IPC because webContents.startDrag must run
+    // synchronously off the renderer's dragstart event.
+    start: (payload) => ipcRenderer.send('drag:start', payload),
+  },
   on: (channel, listener) => {
     const allowed = new Set(['save:created', 'update-ready']);
     if (!allowed.has(channel)) return () => {};
