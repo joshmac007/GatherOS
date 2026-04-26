@@ -10,11 +10,10 @@ const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
 const DEFAULT_IMG_WIDTH = 220;
-const STICKY_DEFAULT = { width: 200, height: 140 };
 
-function MIME_BOARD_DRAG() { return 'application/x-moodmark-save'; }
+const MIME_BOARD_DRAG = 'application/x-moodmark-save';
 
-export default function BoardCanvas({ board, allSaves }) {
+export default function BoardCanvas({ board, allSaves, collections = [] }) {
   const [items, setItems] = useState([]);
   const [viewport, setViewport] = useState({
     x: board.viewport_x ?? 0,
@@ -70,7 +69,6 @@ export default function BoardCanvas({ board, allSaves }) {
   // ── Pan ────────────────────────────────────────────────────────────────
   const panState = useRef(null);
   const handleViewportPointerDown = useCallback((e) => {
-    // Only pan on plain left-click on the empty viewport (not on items).
     if (e.button !== 0) return;
     if (e.target !== viewportRef.current && !e.target.classList?.contains(styles.world)) {
       // Click landed on an item — let the item's own handler take over.
@@ -105,7 +103,7 @@ export default function BoardCanvas({ board, allSaves }) {
 
   // ── Zoom ───────────────────────────────────────────────────────────────
   const handleWheel = useCallback((e) => {
-    if (!e.ctrlKey && !e.metaKey) return; // require modifier so trackpad scrolls don't fight pan
+    if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const rect = viewportRef.current.getBoundingClientRect();
     const cx = e.clientX - rect.left;
@@ -113,8 +111,6 @@ export default function BoardCanvas({ board, allSaves }) {
     setViewport((v) => {
       const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
       const newZ = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.z + delta));
-      // Anchor zoom around the cursor so the world point under the
-      // cursor stays under the cursor.
       const wx = (cx - v.x) / v.z;
       const wy = (cy - v.y) / v.z;
       return {
@@ -141,7 +137,6 @@ export default function BoardCanvas({ board, allSaves }) {
       moved: false,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
-    // Bring to front by bumping z_index locally; persist on drag end.
     setItems((prev) => {
       const max = prev.reduce((m, it) => Math.max(m, it.z_index || 0), 0);
       return prev.map((it) =>
@@ -179,7 +174,7 @@ export default function BoardCanvas({ board, allSaves }) {
 
   // ── Drop from library drawer ───────────────────────────────────────────
   const handleDragOver = useCallback((e) => {
-    if (e.dataTransfer.types.includes(MIME_BOARD_DRAG())) {
+    if (e.dataTransfer.types.includes(MIME_BOARD_DRAG)) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       setDropOver(true);
@@ -192,7 +187,7 @@ export default function BoardCanvas({ board, allSaves }) {
 
   const handleDrop = useCallback(async (e) => {
     setDropOver(false);
-    const saveId = e.dataTransfer.getData(MIME_BOARD_DRAG());
+    const saveId = e.dataTransfer.getData(MIME_BOARD_DRAG);
     if (!saveId) return;
     e.preventDefault();
     const save = allSaves.find((s) => s.id === saveId);
@@ -211,8 +206,6 @@ export default function BoardCanvas({ board, allSaves }) {
       height,
     });
     if (created) {
-      // Server returns the row without join fields — patch in the save's
-      // file_path so the renderer can show it immediately.
       setItems((prev) => [
         ...prev,
         { ...created, save_file_path: save.file_path, save_thumb_path: save.thumb_path },
@@ -220,27 +213,10 @@ export default function BoardCanvas({ board, allSaves }) {
     }
   }, [allSaves, board.id, screenToWorld]);
 
-  // ── Sticky note creation ───────────────────────────────────────────────
-  const addSticky = useCallback(async () => {
-    const rect = viewportRef.current.getBoundingClientRect();
-    const center = screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
-    const created = await window.moodmark.boards.createItem({
-      boardId: board.id,
-      type: 'sticky',
-      x: center.x - STICKY_DEFAULT.width / 2,
-      y: center.y - STICKY_DEFAULT.height / 2,
-      width: STICKY_DEFAULT.width,
-      height: STICKY_DEFAULT.height,
-      text: '',
-      color: '#fff5b1',
-    });
-    if (created) setItems((prev) => [...prev, created]);
-  }, [board.id, screenToWorld]);
-
   // ── Delete ─────────────────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e) {
-      if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA') return;
+      if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'SELECT') return;
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.size > 0) {
         e.preventDefault();
         const ids = [...selectedIds];
@@ -254,14 +230,6 @@ export default function BoardCanvas({ board, allSaves }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedIds]);
 
-  const handleStickyTextChange = useCallback((id, text) => {
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, text } : it)));
-  }, []);
-
-  const handleStickyTextCommit = useCallback((id, text) => {
-    window.moodmark.boards.updateItem({ id, text });
-  }, []);
-
   const sortedItems = [...items].sort(
     (a, b) => (a.z_index || 0) - (b.z_index || 0),
   );
@@ -271,14 +239,6 @@ export default function BoardCanvas({ board, allSaves }) {
       <div className={styles.toolbar}>
         <div className={styles.toolbarTitle}>{board.name}</div>
         <div className={styles.toolbarActions}>
-          <button
-            type="button"
-            className={styles.toolbarBtn}
-            onClick={addSticky}
-            title="Add sticky note"
-          >
-            + Sticky
-          </button>
           <span className={styles.zoomLabel}>{Math.round(viewport.z * 100)}%</span>
           <button
             type="button"
@@ -292,7 +252,7 @@ export default function BoardCanvas({ board, allSaves }) {
       </div>
 
       <div className={styles.body}>
-        <LibraryDrawer saves={allSaves} />
+        <LibraryDrawer allSaves={allSaves} collections={collections} />
 
         <div
           ref={viewportRef}
@@ -321,13 +281,11 @@ export default function BoardCanvas({ board, allSaves }) {
                 onPointerDown={handleItemPointerDown}
                 onPointerMove={handleItemPointerMove}
                 onPointerUp={handleItemPointerUp}
-                onTextChange={handleStickyTextChange}
-                onTextCommit={handleStickyTextCommit}
               />
             ))}
             {items.length === 0 && (
               <div className={styles.emptyHint}>
-                Drag images from the library on the left, or click + Sticky.
+                Drag images from the library on the left.
               </div>
             )}
           </div>
@@ -337,7 +295,8 @@ export default function BoardCanvas({ board, allSaves }) {
   );
 }
 
-function BoardItem({ item, selected, onPointerDown, onPointerMove, onPointerUp, onTextChange, onTextCommit }) {
+function BoardItem({ item, selected, onPointerDown, onPointerMove, onPointerUp }) {
+  if (item.type !== 'image') return null;
   const style = {
     transform: `translate(${item.x}px, ${item.y}px)`,
     width: `${item.width}px`,
@@ -345,68 +304,86 @@ function BoardItem({ item, selected, onPointerDown, onPointerMove, onPointerUp, 
     zIndex: item.z_index || 0,
   };
   const cls = [styles.item, selected && styles.itemSelected].filter(Boolean).join(' ');
-
-  if (item.type === 'image') {
-    const src = item.save_file_path ? fileUrl(item.save_file_path) : null;
-    return (
-      <div
-        className={cls}
-        style={style}
-        onPointerDown={(e) => onPointerDown(e, item)}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        {src ? (
-          <img src={src} alt={item.save_title || ''} draggable={false} />
-        ) : (
-          <div className={styles.itemPlaceholder}>image deleted</div>
-        )}
-      </div>
-    );
-  }
-
-  if (item.type === 'sticky') {
-    return (
-      <div
-        className={cls}
-        style={{ ...style, background: item.color || '#fff5b1' }}
-        onPointerDown={(e) => onPointerDown(e, item)}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        <textarea
-          className={styles.stickyText}
-          value={item.text || ''}
-          onChange={(e) => onTextChange(item.id, e.target.value)}
-          onBlur={(e) => onTextCommit(item.id, e.target.value)}
-          onPointerDown={(e) => e.stopPropagation()}
-          placeholder="Type a note…"
-        />
-      </div>
-    );
-  }
-
-  return null;
+  const src = item.save_file_path ? fileUrl(item.save_file_path) : null;
+  return (
+    <div
+      className={cls}
+      style={style}
+      onPointerDown={(e) => onPointerDown(e, item)}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      {src ? (
+        <img src={src} alt={item.save_title || ''} draggable={false} />
+      ) : (
+        <div className={styles.itemPlaceholder}>image deleted</div>
+      )}
+    </div>
+  );
 }
 
-// Slim fixed-width drawer of library thumbnails the user can drag onto
-// the canvas. HTML5 drag — sets a custom MIME so the canvas's drop
-// handler can recognize Moodmark saves vs Finder file drops.
-function LibraryDrawer({ saves }) {
+// Slim drawer of library thumbnails the user can drag onto the canvas.
+// Top-of-drawer dropdown filters which saves are shown (All / Favorites
+// / Recent / each Collection). HTML5 drag with a custom MIME so the
+// canvas's drop handler distinguishes Moodmark drops from Finder drops.
+function LibraryDrawer({ allSaves, collections }) {
+  const [filterValue, setFilterValue] = useState('all');
+  const [filteredSaves, setFilteredSaves] = useState(allSaves);
+
+  // Re-derive the visible list whenever the filter or the source list
+  // changes. For non-"all" filters we hit the backend so collection
+  // membership / favorites / recent semantics match the rest of the
+  // app exactly, with no client-side reimplementation.
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      if (filterValue === 'all') {
+        if (!cancelled) setFilteredSaves(allSaves);
+        return;
+      }
+      const opts = {};
+      if (filterValue === 'favorites' || filterValue === 'recent') {
+        opts.filter = filterValue;
+      } else {
+        opts.collectionId = filterValue;
+      }
+      const data = await window.moodmark.saves.getAll(opts);
+      if (!cancelled) setFilteredSaves(data || []);
+    }
+    run();
+    return () => { cancelled = true; };
+  }, [filterValue, allSaves]);
+
   return (
     <aside className={styles.drawer}>
-      <div className={styles.drawerHeader}>Library</div>
+      <div className={styles.drawerHeader}>
+        <select
+          className={styles.drawerSelect}
+          value={filterValue}
+          onChange={(e) => setFilterValue(e.target.value)}
+        >
+          <option value="all">All</option>
+          <option value="favorites">Favorites</option>
+          <option value="recent">Recent</option>
+          {collections.length > 0 && (
+            <optgroup label="Collections">
+              {collections.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+      </div>
       <div className={styles.drawerList}>
-        {saves.map((save) => (
+        {filteredSaves.map((save) => (
           <div
             key={save.id}
             className={styles.drawerItem}
             draggable
             onDragStart={(e) => {
               e.dataTransfer.effectAllowed = 'copy';
-              e.dataTransfer.setData(MIME_BOARD_DRAG(), save.id);
+              e.dataTransfer.setData(MIME_BOARD_DRAG, save.id);
             }}
             title={save.title || 'Drag onto board'}
           >
@@ -417,8 +394,8 @@ function LibraryDrawer({ saves }) {
             />
           </div>
         ))}
-        {saves.length === 0 && (
-          <div className={styles.drawerEmpty}>No saves yet.</div>
+        {filteredSaves.length === 0 && (
+          <div className={styles.drawerEmpty}>Nothing here.</div>
         )}
       </div>
     </aside>

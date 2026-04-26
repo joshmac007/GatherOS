@@ -682,7 +682,7 @@ export default function App() {
 
         <div className="main-col">
           {view.type === 'board' && activeBoard ? (
-            <BoardCanvas board={activeBoard} allSaves={allSaves} />
+            <BoardCanvas board={activeBoard} allSaves={allSaves} collections={collections} />
           ) : focused ? (
             <FocusedView
               record={focused}

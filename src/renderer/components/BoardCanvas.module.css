@@ -63,7 +63,7 @@
 /* ── Library drawer ───────────────────────────────────────────────────── */
 
 .drawer {
-  flex: 0 0 96px;
+  flex: 0 0 120px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
@@ -73,12 +73,30 @@
 
 .drawerHeader {
   padding: 8px 10px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-tertiary);
   border-bottom: 1px solid var(--border);
+}
+
+.drawerSelect {
+  width: 100%;
+  padding: 4px 6px;
+  background: var(--content-bg);
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: 5px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23999' d='M0 0l5 6 5-6z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 20px;
+}
+
+.drawerSelect:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .drawerList {
@@ -207,24 +225,3 @@
   font-family: var(--font-mono);
 }
 
-/* ── Sticky note ──────────────────────────────────────────────────────── */
-
-.stickyText {
-  flex: 1 1 auto;
-  width: 100%;
-  height: 100%;
-  padding: 12px;
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: none;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 1.4;
-  color: rgba(0, 0, 0, 0.78);
-  box-sizing: border-box;
-}
-
-.stickyText::placeholder {
-  color: rgba(0, 0, 0, 0.35);
-}
