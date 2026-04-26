@@ -50,7 +50,7 @@ export function CollectionIcon() {
 }
 
 const SMART_VIEWS = [
-  { id: 'all', label: 'All Saves', color: 'var(--icon-blue)', Icon: GridIcon },
+  { id: 'all', label: 'All', color: 'var(--icon-blue)', Icon: GridIcon },
   { id: 'favorites', label: 'Favorites', color: 'var(--icon-pink)', Icon: HeartIcon },
   { id: 'recent', label: 'Recent', color: 'var(--icon-yellow)', Icon: ClockIcon },
 ];
@@ -180,35 +180,37 @@ export default function Sidebar({
           <CollapseSidebarIcon />
         </button>
       )}
+      <div className={styles.sectionHeaderRow}>
+        <span className={styles.sectionHeaderLabel}>Library</span>
+        {onUpload && (
+          <button
+            type="button"
+            className={styles.addBtn}
+            onClick={onUpload}
+            title="Upload image"
+          >
+            +
+          </button>
+        )}
+      </div>
+
       <nav className={styles.section}>
         {SMART_VIEWS.map(({ id, label, Icon }) => {
           const active = view.type === id;
-          const showUpload = id === 'all' && onUpload;
           return (
-            <div key={id} className={styles.smartViewRow}>
-              <button
-                className={`${styles.item} ${active ? styles.active : ''}`}
-                onClick={() => onViewChange({ type: id })}
+            <button
+              key={id}
+              className={`${styles.item} ${active ? styles.active : ''}`}
+              onClick={() => onViewChange({ type: id })}
+            >
+              <span
+                className={styles.icon}
+                style={{ color: active ? '#fff' : 'var(--text-secondary)' }}
               >
-                <span
-                  className={styles.icon}
-                  style={{ color: active ? '#fff' : 'var(--text-secondary)' }}
-                >
-                  <Icon />
-                </span>
-                <span className={styles.label}>{label}</span>
-              </button>
-              {showUpload && (
-                <button
-                  type="button"
-                  className={styles.addBtn}
-                  onClick={onUpload}
-                  title="Upload image"
-                >
-                  +
-                </button>
-              )}
-            </div>
+                <Icon />
+              </span>
+              <span className={styles.label}>{label}</span>
+            </button>
           );
         })}
       </nav>
