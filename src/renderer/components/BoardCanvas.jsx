@@ -222,6 +222,59 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     }
   }, [items]);
 
+  // ── Text resize (corner handles on selected text items) ───────────────
+  // Dragging a corner scales the box AND the font_size proportionally
+  // (so the text actually gets bigger, not just the wrap width). The
+  // opposite-side edge stays anchored — drag right grows from the left,
+  // drag left from the right. Vertical drag is ignored; height is auto.
+  const resizeState = useRef(null);
+
+  const handleResizeStart = useCallback((e, corner, item) => {
+    e.stopPropagation();
+    e.preventDefault();
+    resizeState.current = {
+      itemId: item.id,
+      corner, // 'tl' | 'tr' | 'bl' | 'br'
+      startMouseX: e.clientX,
+      startX: item.x,
+      startWidth: item.width,
+      startFontSize: item.font_size || 16,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, []);
+
+  const handleResizeMove = useCallback((e) => {
+    const s = resizeState.current;
+    if (!s) return;
+    const dx = (e.clientX - s.startMouseX) / viewport.z;
+    const dirX = s.corner.includes('r') ? 1 : -1;
+    const newWidth = Math.max(40, s.startWidth + dx * dirX);
+    const scale = newWidth / s.startWidth;
+    const newFontSize = Math.max(6, Math.min(240, s.startFontSize * scale));
+    // Left-corner drags: keep the right edge anchored.
+    const newX = dirX < 0 ? s.startX + (s.startWidth - newWidth) : s.startX;
+    setItems((prev) => prev.map((it) =>
+      it.id === s.itemId
+        ? { ...it, width: newWidth, font_size: newFontSize, x: newX }
+        : it,
+    ));
+  }, [viewport.z]);
+
+  const handleResizeEnd = useCallback(async (e) => {
+    const s = resizeState.current;
+    if (!s) return;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    resizeState.current = null;
+    const item = items.find((it) => it.id === s.itemId);
+    if (!item) return;
+    await window.moodmark.boards.updateItem({
+      id: item.id,
+      x: item.x,
+      width: item.width,
+      fontSize: item.font_size,
+    });
+  }, [items]);
+
   // ── Text edit ──────────────────────────────────────────────────────────
   const handleItemDoubleClick = useCallback((item) => {
     if (item.type !== 'text') return;
@@ -426,6 +479,9 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
                 onDoubleClick={handleItemDoubleClick}
                 onTextChange={handleTextChange}
                 onTextCommit={handleTextCommit}
+                onResizeStart={handleResizeStart}
+                onResizeMove={handleResizeMove}
+                onResizeEnd={handleResizeEnd}
               />
             ))}
             {items.length === 0 && (
@@ -452,6 +508,7 @@ function BoardItem({
   item, selected, editing,
   onPointerDown, onPointerMove, onPointerUp,
   onDoubleClick, onTextChange, onTextCommit,
+  onResizeStart, onResizeMove, onResizeEnd,
 }) {
   if (item.type === 'image') {
     const style = {
@@ -492,6 +549,9 @@ function BoardItem({
         onDoubleClick={onDoubleClick}
         onTextChange={onTextChange}
         onTextCommit={onTextCommit}
+        onResizeStart={onResizeStart}
+        onResizeMove={onResizeMove}
+        onResizeEnd={onResizeEnd}
       />
     );
   }
@@ -503,6 +563,7 @@ function TextItem({
   item, selected, editing,
   onPointerDown, onPointerMove, onPointerUp,
   onDoubleClick, onTextChange, onTextCommit,
+  onResizeStart, onResizeMove, onResizeEnd,
 }) {
   const textareaRef = useRef(null);
 
@@ -578,6 +639,20 @@ function TextItem({
             : <span className={styles.textPlaceholder}>Add Text</span>}
         </div>
       )}
+      {selected && !editing && (
+        <>
+          {['tl', 'tr', 'bl', 'br'].map((corner) => (
+            <div
+              key={corner}
+              className={[styles.resizeHandle, styles[`handle_${corner}`]].join(' ')}
+              onPointerDown={(e) => onResizeStart(e, corner, item)}
+              onPointerMove={onResizeMove}
+              onPointerUp={onResizeEnd}
+              onPointerCancel={onResizeEnd}
+            />
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -587,10 +662,10 @@ function TextItem({
 // Positioned in screen space (sibling of the world container) so it
 // doesn't scale with zoom and stays at a fixed visual size.
 const SIZE_PRESETS = [
-  { label: 'Small',  value: 14 },
+  { label: 'Small',  value: 10 },
   { label: 'Medium', value: 18 },
-  { label: 'Large',  value: 28 },
-  { label: 'Huge',   value: 44 },
+  { label: 'Large',  value: 36 },
+  { label: 'Huge',   value: 64 },
 ];
 const COLOR_SWATCHES = [
   '#1c1c1e', '#8e8e93', '#ff3b30', '#ff9500',
