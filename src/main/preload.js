@@ -64,9 +64,11 @@ contextBridge.exposeInMainWorld('moodmark', {
   },
   ai: {
     autoTag: (saveId) => ipcRenderer.invoke('ai:auto-tag', saveId),
+    unindexedCount: () => ipcRenderer.invoke('ai:unindexed-count'),
+    reindexLibrary: () => ipcRenderer.invoke('ai:reindex-library'),
   },
   on: (channel, listener) => {
-    const allowed = new Set(['save:created', 'save:updated', 'update-ready']);
+    const allowed = new Set(['save:created', 'save:updated', 'update-ready', 'ai:reindex-progress']);
     if (!allowed.has(channel)) return () => {};
     const wrapped = (_event, ...args) => listener(...args);
     ipcRenderer.on(channel, wrapped);

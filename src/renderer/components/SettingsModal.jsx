@@ -13,6 +13,8 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [status, setStatus] = useState(STATUS_IDLE);
   const [errorMessage, setErrorMessage] = useState('');
   const [prefs, setPrefs] = useState({ autoNameOnSave: true });
+  const [unindexed, setUnindexed] = useState(0);
+  const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -21,10 +23,12 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
     Promise.all([
       window.moodmark.settings.hasOpenAIKey(),
       window.moodmark.settings.getPrefs(),
-    ]).then(([keyExists, p]) => {
+      window.moodmark.ai.unindexedCount(),
+    ]).then(([keyExists, p, count]) => {
       if (cancelled) return;
       setHasKey(!!keyExists);
       setPrefs(p);
+      setUnindexed(count || 0);
     });
     setDraft('');
     setStatus(STATUS_IDLE);
@@ -32,6 +36,27 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
     requestAnimationFrame(() => inputRef.current?.focus());
     return () => { cancelled = true; };
   }, [open]);
+
+  // Progress stream from main while ai:reindex-library runs.
+  useEffect(() => {
+    if (!open) return;
+    return window.moodmark.on('ai:reindex-progress', ({ processed, total }) => {
+      setReindexState((s) => ({ ...s, processed, total }));
+    });
+  }, [open]);
+
+  async function handleReindex() {
+    if (reindexState.running || unindexed === 0) return;
+    setReindexState({ running: true, processed: 0, total: unindexed });
+    const result = await window.moodmark.ai.reindexLibrary();
+    setReindexState({
+      running: false,
+      processed: result?.processed || 0,
+      total: result?.total || 0,
+    });
+    const fresh = await window.moodmark.ai.unindexedCount();
+    setUnindexed(fresh || 0);
+  }
 
   async function togglePref(name) {
     const next = !prefs[name];
@@ -225,10 +250,40 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
             <span className={styles.toggleText}>
               <span className={styles.toggleLabel}>Semantic search</span>
               <span className={styles.toggleSub}>
-                Index new saves with vector embeddings so the search bar matches by meaning ("dark moody UI") instead of exact words. Existing saves before this is enabled won't appear in semantic results.
+                Index new saves with vector embeddings so the search bar matches by meaning ("dark moody UI") instead of exact words.
               </span>
             </span>
           </label>
+
+          {hasKey && (unindexed > 0 || reindexState.running) && (
+            <div className={styles.reindexBox}>
+              <div className={styles.reindexCopy}>
+                {reindexState.running ? (
+                  <>
+                    <strong>Indexing {reindexState.processed} of {reindexState.total}…</strong>
+                    <span className={styles.toggleSub}>
+                      Each save runs one vision call + one embedding (~$0.001 each). You can keep using the app.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <strong>{unindexed} {unindexed === 1 ? 'save needs' : 'saves need'} indexing</strong>
+                    <span className={styles.toggleSub}>
+                      Older saves won't appear in semantic results until they're processed. Roughly ${(unindexed * 0.001).toFixed(3)} of API usage.
+                    </span>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                onClick={handleReindex}
+                disabled={reindexState.running || unindexed === 0}
+              >
+                {reindexState.running ? 'Indexing…' : 'Index now'}
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </div>,

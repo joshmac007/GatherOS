@@ -201,6 +201,20 @@ function getSavesByIds(ids) {
     .all(...ids);
 }
 
+// Saves that haven't been through the AI pipeline yet — used by the
+// "Re-index library" button in Settings to backfill old uploads.
+function getUnindexedSaves() {
+  return getDatabase()
+    .prepare('SELECT id, file_path, title FROM saves WHERE embedding IS NULL ORDER BY created_at DESC')
+    .all();
+}
+
+function getUnindexedCount() {
+  return getDatabase()
+    .prepare('SELECT COUNT(*) AS c FROM saves WHERE embedding IS NULL')
+    .get().c;
+}
+
 // ── Collections ────────────────────────────────────────────────────────────
 
 function getAllCollections() {
@@ -334,6 +348,8 @@ module.exports = {
   updateSave,
   getSaveEmbeddings,
   getSavesByIds,
+  getUnindexedSaves,
+  getUnindexedCount,
   getAllCollections,
   getCollectionsForSave,
   createCollection,

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   getAllSaves, getSave, deleteSave, updateSave, insertSave,
-  getSaveEmbeddings, getSavesByIds,
+  getSaveEmbeddings, getSavesByIds, getUnindexedSaves, getUnindexedCount,
   getAllCollections, getCollectionsForSave, createCollection, renameCollection,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
   getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
@@ -22,7 +22,7 @@ const {
 const { notifySaved } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
-const { testApiKey, autoTagImage, embedText } = require('./openai');
+const { testApiKey, autoTagImage, analyzeImage, embedText } = require('./openai');
 
 // Cosine similarity over Float32 BLOBs from SQLite. ~1 ms per save at
 // 1536 dims; fine up to a few thousand records before we'd want a
@@ -61,11 +61,11 @@ function registerIpcHandlers() {
       const queryF32 = new Float32Array(queryVec);
       const dim = queryF32.length;
 
-      // Cosine threshold tuned for text-embedding-3-small with the
-      // image-description prompts produced by analyzeImage. Below ~0.30
-      // results read as "noise" — keeps the search bar from returning
-      // every embedded save when the query only matches a handful well.
-      const MIN_SCORE = 0.3;
+      // Cosine threshold tuned for text-embedding-3-small over the
+      // analyzeImage description format. Below ~0.26 results start to
+      // read as noise. The hybrid LIKE pass below picks up literal
+      // keyword matches that fall under this floor.
+      const MIN_SCORE = 0.26;
       // Plus a relative cap: drop anything below 55% of the top score so
       // a strong match doesn't drag along marginal ones.
       const RELATIVE_CUTOFF = 0.55;
@@ -300,6 +300,55 @@ function registerIpcHandlers() {
   });
 
   // ── AI: auto-tag a save ─────────────────────────────────────────────────
+  ipcMain.handle('ai:unindexed-count', () => getUnindexedCount());
+
+  // Backfill: process every save that has no embedding yet through the
+  // analyze + embed pipeline. Emits ai:reindex-progress events so the
+  // UI can show "Indexing N of M" in real time. Sequential to keep
+  // memory bounded and to be polite to the API.
+  ipcMain.handle('ai:reindex-library', async (event) => {
+    if (!settings.hasOpenAIKey()) return { ok: false, reason: 'no-key' };
+    const key = settings.getOpenAIKey();
+    const targets = getUnindexedSaves();
+    const total = targets.length;
+
+    let processed = 0;
+    let failed = 0;
+    for (let i = 0; i < targets.length; i += 1) {
+      const row = targets[i];
+      try {
+        const { title, description } = await analyzeImage(key, row.file_path);
+        const updates = { id: row.id };
+        if (description) updates.aiDescription = description;
+        // Don't overwrite a title the user already supplied.
+        if (title && !row.title) updates.title = title;
+
+        const tags = getTagsForSave(row.id).map((t) => t.name).join(', ');
+        const embedSource = [title, description, tags].filter(Boolean).join('. ');
+        if (embedSource) {
+          const vec = await embedText(key, embedSource);
+          updates.embedding = Buffer.from(new Float32Array(vec).buffer);
+        }
+
+        if (Object.keys(updates).length > 1) {
+          updateSave(updates);
+          const updated = getSave(row.id);
+          event.sender.send('save:updated', updated);
+        }
+        processed += 1;
+      } catch (err) {
+        console.error('Reindex failed for save', row.id, '-', err.message);
+        failed += 1;
+      }
+      event.sender.send('ai:reindex-progress', {
+        processed: i + 1,
+        total,
+        failed,
+      });
+    }
+    return { ok: true, processed, failed, total };
+  });
+
   ipcMain.handle('ai:auto-tag', async (_e, saveId) => {
     if (!saveId) return { ok: false, reason: 'no-save-id' };
     const key = settings.getOpenAIKey();

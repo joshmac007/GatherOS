@@ -242,6 +242,32 @@
   line-height: 1.4;
 }
 
+.reindexBox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  background: rgba(108, 99, 255, 0.06);
+  border: 0.5px solid rgba(108, 99, 255, 0.18);
+  border-radius: 8px;
+}
+
+.reindexCopy {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.reindexCopy strong {
+  font-weight: 600;
+  font-size: 12px;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }

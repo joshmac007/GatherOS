@@ -120,9 +120,14 @@ async function analyzeImage(apiKey, filePath) {
           'You write designer-friendly metadata for visual inspiration. ' +
           'Return JSON: {"title": "...", "description": "..."}. ' +
           'title: 2-6 words, Title Case, capture subject/style/mood. ' +
-          'description: one factual sentence covering the visual content, ' +
-          'style, mood, color palette, and likely use case (e.g. "landing page", ' +
-          '"poster", "UI screenshot"). No quotes, no emoji.',
+          'description: ONE sentence packed with concrete searchable nouns ' +
+          'and adjectives. Cover (a) every notable object or subject visible ' +
+          '(e.g. statue, mountain, person, button, logo, sky, clouds, water, ' +
+          'building, chart), (b) the visual style or art movement (e.g. ' +
+          'minimalist, brutalist, Renaissance, illustration, photograph, 3D ' +
+          'render, vaporwave), (c) the dominant colors, (d) the mood, and ' +
+          '(e) the likely use case ("landing page", "poster", "UI screenshot"). ' +
+          'Prefer concrete nouns over abstract framing. No quotes, no emoji.',
       },
       {
         role: 'user',
@@ -133,7 +138,7 @@ async function analyzeImage(apiKey, filePath) {
       },
     ],
     response_format: { type: 'json_object' },
-    max_tokens: 200,
+    max_tokens: 280,
   };
 
   const res = await fetch(`${API_BASE}/chat/completions`, {
