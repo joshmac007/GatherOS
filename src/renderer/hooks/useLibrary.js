@@ -6,7 +6,7 @@ function filterFor(view) {
   return 'all';
 }
 
-const SEARCH_DEBOUNCE_MS = 280;
+const SEARCH_DEBOUNCE_MS = 180;
 
 export function useLibrary() {
   const [saves, setSaves] = useState([]);

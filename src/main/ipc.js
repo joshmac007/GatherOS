@@ -24,7 +24,7 @@ const { notifySaved } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
 const {
-  testApiKey, autoTagImage, analyzeImage, embedText, expandQuery, rerankCandidates,
+  testApiKey, autoTagImage, analyzeImage, embedText,
 } = require('./openai');
 
 // Cosine similarity over Float32 BLOBs from SQLite. ~1 ms per save at
@@ -61,11 +61,13 @@ function registerIpcHandlers() {
 
     try {
       const apiKey = settings.getOpenAIKey();
-      // Stage 1 — expand the query before embedding so single nouns
-      // ("mountain") cover their natural family ("peaks, alpine, hiking").
-      // Falls back to the original query on any failure.
-      const expandedQuery = await expandQuery(apiKey, queryText);
-      const queryVec = await embedText(apiKey, expandedQuery);
+      // Single embedding call drives the cosine ranker. Query
+      // expansion + LLM rerank were tried but each added 500-1500 ms
+      // of latency to a search bar that needs to feel near-instant.
+      // The hybrid LIKE pass below is the recall safety net for
+      // narrow queries; threshold + relative cap below is the
+      // precision filter.
+      const queryVec = await embedText(apiKey, queryText);
       const queryF32 = new Float32Array(queryVec);
       const dim = queryF32.length;
 
@@ -140,14 +142,7 @@ function registerIpcHandlers() {
       if (opts.colorHex) {
         filtered = filterByColor(filtered, opts.colorHex);
       }
-
-      // Stage 2 — LLM reranker. Sees title/description/OCR for each
-      // candidate and decides whether it's actually relevant to the
-      // *original* query (not the expanded version). Drops tangential
-      // hits that the cosine ranker couldn't reason about.
-      if (filtered.length <= 1) return filtered;
-      const reranked = await rerankCandidates(apiKey, queryText, filtered);
-      return reranked;
+      return filtered;
     } catch (err) {
       console.error('Semantic search failed, falling back to LIKE:', err.message);
       return getAllSaves(opts);
