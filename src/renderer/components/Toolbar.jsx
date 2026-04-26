@@ -99,7 +99,7 @@ export default function Toolbar({
           className={[styles.searchIcon, semanticSearchActive && styles.searchIconAi]
             .filter(Boolean)
             .join(' ')}
-          title={semanticSearchActive ? 'Semantic search (AI)' : undefined}
+          title={semanticSearchActive ? 'Visual search (AI)' : undefined}
         >
           {semanticSearchActive ? <SearchSparkleIcon /> : <SearchIcon />}
         </span>

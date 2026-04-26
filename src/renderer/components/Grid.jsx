@@ -26,7 +26,7 @@ export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu,
       // Active search: distinguish "no matches" from "empty library".
       title = `No matches for "${trimmedSearch}"`;
       hint = semanticSearchActive
-        ? 'Try a different description, or turn off Semantic search to fall back to keyword matching.'
+        ? 'Try a different description, or turn off Visual search to fall back to keyword matching.'
         : 'Try a different keyword.';
     } else if (colorFilter) {
       title = 'No saves match that color';

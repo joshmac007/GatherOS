@@ -258,7 +258,7 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           </label>
           <label className={styles.toggleRow}>
             <span className={styles.toggleText}>
-              <span className={styles.toggleLabel}>Semantic search</span>
+              <span className={styles.toggleLabel}>Visual search</span>
               <span className={styles.toggleSub}>
                 Index new saves with vector embeddings so the search bar matches by meaning ("dark moody UI") instead of exact words.
               </span>
