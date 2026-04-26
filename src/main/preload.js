@@ -28,6 +28,18 @@ contextBridge.exposeInMainWorld('moodmark', {
     addSave: (payload) => ipcRenderer.invoke('collections:add-save', payload),
     removeSave: (payload) => ipcRenderer.invoke('collections:remove-save', payload),
   },
+  boards: {
+    getAll: () => ipcRenderer.invoke('boards:get-all'),
+    get: (id) => ipcRenderer.invoke('boards:get', id),
+    create: (payload) => ipcRenderer.invoke('boards:create', payload),
+    rename: (payload) => ipcRenderer.invoke('boards:rename', payload),
+    delete: (id) => ipcRenderer.invoke('boards:delete', id),
+    updateViewport: (payload) => ipcRenderer.invoke('boards:update-viewport', payload),
+    getItems: (boardId) => ipcRenderer.invoke('boards:get-items', boardId),
+    createItem: (payload) => ipcRenderer.invoke('boards:create-item', payload),
+    updateItem: (payload) => ipcRenderer.invoke('boards:update-item', payload),
+    deleteItem: (id) => ipcRenderer.invoke('boards:delete-item', id),
+  },
   tags: {
     getAll: () => ipcRenderer.invoke('tags:get-all'),
     getForSave: (saveId) => ipcRenderer.invoke('tags:get-for-save', saveId),

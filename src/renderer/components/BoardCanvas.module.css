@@ -1,0 +1,230 @@
+.canvas {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--titlebar-bg);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.toolbarTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.toolbarActions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbarBtn {
+  padding: 5px 11px;
+  background: transparent;
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.toolbarBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.zoomLabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  min-width: 36px;
+  text-align: right;
+}
+
+.body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+/* ── Library drawer ───────────────────────────────────────────────────── */
+
+.drawer {
+  flex: 0 0 96px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--content-bg);
+  overflow: hidden;
+}
+
+.drawerHeader {
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+
+.drawerList {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+
+.drawerItem {
+  width: 80px;
+  height: 60px;
+  border-radius: 5px;
+  overflow: hidden;
+  cursor: grab;
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+}
+
+.drawerItem:active { cursor: grabbing; }
+
+.drawerItem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.drawerEmpty {
+  padding: 14px 10px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* ── Canvas viewport ──────────────────────────────────────────────────── */
+
+.viewport {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background:
+    radial-gradient(circle, rgba(0, 0, 0, 0.06) 1px, transparent 1px) 0 0 / 24px 24px,
+    var(--content-bg);
+  cursor: grab;
+  user-select: none;
+}
+
+.viewport:active { cursor: grabbing; }
+
+.viewport.viewportDropOver {
+  background:
+    radial-gradient(circle, rgba(10, 132, 255, 0.18) 1.4px, transparent 1.4px) 0 0 / 24px 24px,
+    rgba(10, 132, 255, 0.04);
+  outline: 2px dashed var(--accent);
+  outline-offset: -8px;
+}
+
+.world {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  pointer-events: none; /* world itself is invisible; items take pointer events */
+}
+
+.world > * {
+  pointer-events: auto;
+}
+
+.emptyHint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* ── Items ────────────────────────────────────────────────────────────── */
+
+.item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 6px 18px rgba(0, 0, 0, 0.10);
+  cursor: grab;
+  transition: box-shadow 120ms ease;
+}
+
+.item:active { cursor: grabbing; }
+
+.item.itemSelected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.itemPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+/* ── Sticky note ──────────────────────────────────────────────────────── */
+
+.stickyText {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.78);
+  box-sizing: border-box;
+}
+
+.stickyText::placeholder {
+  color: rgba(0, 0, 0, 0.35);
+}
