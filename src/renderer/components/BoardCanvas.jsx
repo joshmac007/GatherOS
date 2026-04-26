@@ -232,30 +232,36 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
   const handleResizeStart = useCallback((e, corner, item) => {
     e.stopPropagation();
     e.preventDefault();
+    // Text items auto-size to content, so we measure the rendered
+    // width at drag-start instead of trusting item.width.
+    const itemEl = e.currentTarget.parentElement;
+    const rect = itemEl.getBoundingClientRect();
+    const renderedWidth = rect.width / viewport.z;
     resizeState.current = {
       itemId: item.id,
       corner, // 'tl' | 'tr' | 'bl' | 'br'
       startMouseX: e.clientX,
       startX: item.x,
-      startWidth: item.width,
+      startWidth: renderedWidth,
       startFontSize: item.font_size || 16,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
-  }, []);
+  }, [viewport.z]);
 
   const handleResizeMove = useCallback((e) => {
     const s = resizeState.current;
     if (!s) return;
     const dx = (e.clientX - s.startMouseX) / viewport.z;
     const dirX = s.corner.includes('r') ? 1 : -1;
-    const newWidth = Math.max(40, s.startWidth + dx * dirX);
+    const newWidth = Math.max(20, s.startWidth + dx * dirX);
     const scale = newWidth / s.startWidth;
     const newFontSize = Math.max(6, Math.min(240, s.startFontSize * scale));
-    // Left-corner drags: keep the right edge anchored.
-    const newX = dirX < 0 ? s.startX + (s.startWidth - newWidth) : s.startX;
+    // Left-corner drags: keep the right edge anchored. Text auto-sizes
+    // so we shift x by the width delta instead of writing a width.
+    const newX = dirX < 0 ? s.startX - (newWidth - s.startWidth) : s.startX;
     setItems((prev) => prev.map((it) =>
       it.id === s.itemId
-        ? { ...it, width: newWidth, font_size: newFontSize, x: newX }
+        ? { ...it, font_size: newFontSize, x: newX }
         : it,
     ));
   }, [viewport.z]);
@@ -270,7 +276,6 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     await window.moodmark.boards.updateItem({
       id: item.id,
       x: item.x,
-      width: item.width,
       fontSize: item.font_size,
     });
   }, [items]);
@@ -567,21 +572,18 @@ function TextItem({
 }) {
   const textareaRef = useRef(null);
 
-  // Autofocus + select all when entering edit mode.
+  // Autofocus + select all when entering edit mode. CSS handles sizing
+  // (textarea uses `field-sizing: content`).
   useEffect(() => {
     if (editing && textareaRef.current) {
       textareaRef.current.focus();
       textareaRef.current.select();
-      // Fit height to content.
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [editing]);
 
+  // No width/height in style — the box auto-sizes to its text content.
   const style = {
     transform: `translate(${item.x}px, ${item.y}px)`,
-    width: `${item.width}px`,
-    minHeight: `${item.height}px`,
     zIndex: item.z_index || 0,
   };
   const cls = [
@@ -616,11 +618,7 @@ function TextItem({
           style={textStyle}
           value={item.text || ''}
           placeholder="Add Text"
-          onChange={(e) => {
-            onTextChange(item.id, e.target.value);
-            e.target.style.height = 'auto';
-            e.target.style.height = `${e.target.scrollHeight}px`;
-          }}
+          onChange={(e) => onTextChange(item.id, e.target.value)}
           onBlur={() => onTextCommit(item.id)}
           onKeyDown={(e) => {
             e.stopPropagation();
