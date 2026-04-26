@@ -139,12 +139,12 @@ function getAllSaves({ search = '', filter = 'all', sort = 'newest', collectionI
     params.push(collectionId);
   }
   if (search) {
-    conditions.push(`(title LIKE ? OR id IN (
+    conditions.push(`(title LIKE ? OR ai_description LIKE ? OR id IN (
       SELECT save_id FROM save_tags
       JOIN tags ON save_tags.tag_id = tags.id
       WHERE tags.name LIKE ?
     ))`);
-    params.push(`%${search}%`, `%${search}%`);
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
   }
   if (filter === 'favorites') conditions.push('favorited = 1');
   if (filter === 'recent') {

@@ -79,18 +79,35 @@ function registerIpcHandlers() {
         .filter((r) => r.score >= MIN_SCORE)
         .sort((a, b) => b.score - a.score);
 
-      if (scored.length === 0) return [];
+      let candidates = [];
+      if (scored.length > 0) {
+        const relativeFloor = scored[0].score * RELATIVE_CUTOFF;
+        const ranked = scored.filter((r) => r.score >= relativeFloor);
+        const topIds = ranked.slice(0, 80).map((r) => r.id);
+        candidates = getSavesByIds(topIds);
+        const orderById = new Map(topIds.map((id, i) => [id, i]));
+        candidates.sort((a, b) => orderById.get(a.id) - orderById.get(b.id));
+      }
 
-      const relativeFloor = scored[0].score * RELATIVE_CUTOFF;
-      const ranked = scored.filter((r) => r.score >= relativeFloor);
-
-      const topIds = ranked.slice(0, 80).map((r) => r.id);
-      const candidates = getSavesByIds(topIds);
-      const orderById = new Map(topIds.map((id, i) => [id, i]));
-      candidates.sort((a, b) => orderById.get(a.id) - orderById.get(b.id));
+      // Hybrid pass: also pull the substring-LIKE matches against
+      // title / ai_description / tag names. This catches the mountain
+      // vs mountains case where a single character shifts the cosine
+      // just under the threshold but the word actually appears in the
+      // description. Semantic results lead, then any LIKE-only matches
+      // append in their natural recency order.
+      const likeMatches = getAllSaves(opts);
+      const seen = new Set(candidates.map((s) => s.id));
+      const merged = [...candidates];
+      for (const s of likeMatches) {
+        if (!seen.has(s.id)) {
+          merged.push(s);
+          seen.add(s.id);
+        }
+      }
 
       // Apply the same filters as the LIKE path so view/collection
-      // toggles still work in semantic mode.
+      // toggles still work in semantic mode. (LIKE matches are already
+      // filtered, but semantic candidates aren't.)
       const filter = opts.filter || 'all';
       const collectionId = opts.collectionId || null;
       const collectionMembers = collectionId
@@ -100,7 +117,7 @@ function registerIpcHandlers() {
         : null;
       const recentCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-      return candidates.filter((s) => {
+      return merged.filter((s) => {
         if (filter === 'favorites' && !s.favorited) return false;
         if (filter === 'recent' && s.created_at <= recentCutoff) return false;
         if (collectionId && !collectionMembers.has(s.id)) return false;
