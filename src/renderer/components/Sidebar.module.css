@@ -284,6 +284,11 @@
 }
 
 .count {
+  /* Same footprint as .addBtn (20px) so the count digit sits dead
+     center under the section's "+" button instead of drifting right. */
+  display: inline-block;
+  width: 20px;
+  text-align: center;
   font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
