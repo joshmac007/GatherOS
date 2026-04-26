@@ -22,6 +22,15 @@ function CollapseSidebarIcon() {
   );
 }
 
+function SettingsGearIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="8" r="2.2" />
+      <path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4" />
+    </svg>
+  );
+}
+
 function HeartIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -65,6 +74,7 @@ export default function Sidebar({
   onReorderCollections,
   onToggleCollapse,
   onUpload,
+  onOpenSettings,
 }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -309,6 +319,20 @@ export default function Sidebar({
           })
         )}
       </nav>
+
+      {onOpenSettings && (
+        <div className={styles.footer}>
+          <button
+            type="button"
+            className={styles.footerBtn}
+            onClick={onOpenSettings}
+            title="Settings"
+          >
+            <span className={styles.footerIcon}><SettingsGearIcon /></span>
+            <span className={styles.footerLabel}>Settings</span>
+          </button>
+        </div>
+      )}
 
       {ctxMenu && (
         <ContextMenu

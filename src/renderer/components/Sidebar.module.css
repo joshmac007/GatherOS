@@ -55,6 +55,54 @@
   -webkit-app-region: no-drag;
 }
 
+/* Pinned to the bottom of the sidebar via margin-top: auto so it
+   sits flush with the bottom even when the collections list is short. */
+.footer {
+  margin-top: auto;
+  padding-top: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.footerBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.footerBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-primary);
+}
+
+.footerIcon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.footerIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.footerLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .sectionHeader {
   padding: 6px 8px 4px;
   font-size: 10.5px;

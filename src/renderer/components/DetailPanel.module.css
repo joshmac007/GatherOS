@@ -369,6 +369,64 @@
   color: var(--accent);
 }
 
+.autoTagBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px 3px 7px;
+  background:
+    linear-gradient(180deg, rgba(108, 99, 255, 0.12), rgba(255, 108, 222, 0.12));
+  border: 0.5px solid rgba(108, 99, 255, 0.25);
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: #6c63ff;
+  cursor: pointer;
+  transition: background 100ms ease, transform 80ms ease;
+}
+
+.autoTagBtn:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(108, 99, 255, 0.18), rgba(255, 108, 222, 0.18));
+  border-color: rgba(108, 99, 255, 0.4);
+}
+
+.autoTagBtn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.autoTagBtn:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.autoTagBtnLoading {
+  animation: autoTagPulse 1.4s ease-in-out infinite;
+}
+
+.autoTagIcon {
+  display: inline-flex;
+  width: 11px;
+  height: 11px;
+  color: #6c63ff;
+}
+
+.autoTagIcon svg {
+  width: 11px;
+  height: 11px;
+}
+
+.autoTagError {
+  font-size: 11px;
+  color: #c1322a;
+  margin-top: 6px;
+}
+
+@keyframes autoTagPulse {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+
 .collectionsEmpty {
   font-size: 12px;
   color: var(--text-tertiary);

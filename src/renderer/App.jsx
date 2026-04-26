@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar, { CollectionIcon } from './components/Sidebar.jsx';
+import SettingsModal from './components/SettingsModal.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import Grid from './components/Grid.jsx';
 import DetailPanel from './components/DetailPanel.jsx';
@@ -124,6 +125,15 @@ export default function App() {
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((c) => !c);
+  }, []);
+
+  // Settings modal + AI configured-state. The hasOpenAIKey check runs
+  // once on mount and is updated whenever the user saves/clears via
+  // SettingsModal's onConfiguredChange callback.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState(false);
+  useEffect(() => {
+    window.moodmark.settings.hasOpenAIKey().then(setAiConfigured);
   }, []);
 
   // Collections state
@@ -499,6 +509,7 @@ export default function App() {
             onReorderCollections={handleReorderCollections}
             onToggleCollapse={toggleSidebar}
             onUpload={handleUploadClick}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
 
@@ -550,10 +561,12 @@ export default function App() {
             record={focused}
             allCollections={collections}
             allTags={allTags}
+            aiConfigured={aiConfigured}
             onClose={() => setFocusedId(null)}
             onCollectionsChanged={loadCollections}
             onTagsChanged={loadAllTags}
             onUpdateMeta={updateSaveMeta}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
       </div>
@@ -629,6 +642,12 @@ export default function App() {
           onClose={() => setBulkPicker(null)}
         />
       )}
+
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onConfiguredChange={setAiConfigured}
+      />
     </div>
   );
 }

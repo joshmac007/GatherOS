@@ -20,6 +20,8 @@ const {
 } = require('./capture');
 const { notifySaved } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
+const settings = require('./settings');
+const { testApiKey, autoTagImage } = require('./openai');
 
 function registerIpcHandlers() {
   ipcMain.handle('saves:get-all', (_e, opts) => getAllSaves(opts));
@@ -161,6 +163,52 @@ function registerIpcHandlers() {
     } catch (err) {
       console.error('Board export failed:', err);
       return { ok: false, error: err.message };
+    }
+  });
+
+  // ── Settings: BYOK OpenAI key ──────────────────────────────────────────
+  // The plaintext key never crosses IPC outbound — the renderer can only
+  // ask whether one is configured, set a new one, clear it, or test it.
+  ipcMain.handle('settings:has-openai-key', () => settings.hasOpenAIKey());
+
+  ipcMain.handle('settings:set-openai-key', async (_e, key) => {
+    if (typeof key !== 'string' || !/^sk-/.test(key.trim())) {
+      return { ok: false, reason: 'invalid-format' };
+    }
+    // Test before persisting — refuse a key that doesn't authenticate.
+    const test = await testApiKey(key.trim());
+    if (!test.ok) return { ok: false, reason: test.reason || 'test-failed' };
+    return settings.setOpenAIKey(key);
+  });
+
+  ipcMain.handle('settings:clear-openai-key', () => settings.clearOpenAIKey());
+
+  ipcMain.handle('settings:test-openai-key', async () => {
+    const key = settings.getOpenAIKey();
+    if (!key) return { ok: false, reason: 'no-key' };
+    return testApiKey(key);
+  });
+
+  // ── AI: auto-tag a save ─────────────────────────────────────────────────
+  ipcMain.handle('ai:auto-tag', async (_e, saveId) => {
+    if (!saveId) return { ok: false, reason: 'no-save-id' };
+    const key = settings.getOpenAIKey();
+    if (!key) return { ok: false, reason: 'no-key' };
+    const save = getSave(saveId);
+    if (!save) return { ok: false, reason: 'save-not-found' };
+    try {
+      const tags = await autoTagImage(key, save.file_path);
+      // Persist via the existing tag pipeline so dedupe + creation
+      // semantics match the manual flow.
+      const added = [];
+      for (const name of tags) {
+        const result = addTagToSave({ saveId, name });
+        if (result.ok && result.tag) added.push(result.tag);
+      }
+      return { ok: true, tags: added };
+    } catch (err) {
+      console.error('Auto-tag failed:', err.message);
+      return { ok: false, reason: 'api-error', detail: err.message };
     }
   });
 

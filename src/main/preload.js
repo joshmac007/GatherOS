@@ -53,6 +53,16 @@ contextBridge.exposeInMainWorld('moodmark', {
     // synchronously off the renderer's dragstart event.
     start: (payload) => ipcRenderer.send('drag:start', payload),
   },
+  settings: {
+    hasOpenAIKey: () => ipcRenderer.invoke('settings:has-openai-key'),
+    // Note: getter for the key itself is intentionally NOT exposed.
+    setOpenAIKey: (key) => ipcRenderer.invoke('settings:set-openai-key', key),
+    clearOpenAIKey: () => ipcRenderer.invoke('settings:clear-openai-key'),
+    testOpenAIKey: () => ipcRenderer.invoke('settings:test-openai-key'),
+  },
+  ai: {
+    autoTag: (saveId) => ipcRenderer.invoke('ai:auto-tag', saveId),
+  },
   on: (channel, listener) => {
     const allowed = new Set(['save:created', 'update-ready']);
     if (!allowed.has(channel)) return () => {};

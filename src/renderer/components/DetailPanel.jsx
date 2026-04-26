@@ -7,6 +7,15 @@ import { CollectionIcon } from './Sidebar.jsx';
 
 const SUGGESTION_LIMIT = 6;
 
+function SparkleIcon() {
+  return (
+    <svg viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+      <path d="M7 1l1.1 3 3 1.1-3 1.1L7 9.2 5.9 6.2 2.9 5.1l3-1.1z" />
+      <path d="M11.5 8.5l0.55 1.5 1.45 0.55-1.45 0.55L11.5 12.6l-0.55-1.5L9.5 10.55l1.45-0.55z" opacity="0.7" />
+    </svg>
+  );
+}
+
 function TagIcon() {
   return (
     <svg
@@ -83,14 +92,18 @@ export default function DetailPanel({
   record,
   allCollections = [],
   allTags = [],
+  aiConfigured = false,
   onClose,
   onCollectionsChanged,
   onTagsChanged,
   onUpdateMeta,
+  onOpenSettings,
 }) {
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
   const [copiedColor, setCopiedColor] = useState(null);
+  const [autoTagging, setAutoTagging] = useState(false);
+  const [autoTagError, setAutoTagError] = useState('');
 
   const [nameDraft, setNameDraft] = useState(record.title || '');
   const [urlDraft, setUrlDraft] = useState(record.source_url || '');
@@ -182,6 +195,32 @@ export default function DetailPanel({
   async function refreshTags() {
     const rows = await window.moodmark.tags.getForSave(record.id);
     setTags(rows);
+  }
+
+  async function handleAutoTag() {
+    if (autoTagging) return;
+    if (!aiConfigured) {
+      onOpenSettings?.();
+      return;
+    }
+    setAutoTagging(true);
+    setAutoTagError('');
+    try {
+      const result = await window.moodmark.ai.autoTag(record.id);
+      if (result?.ok) {
+        refreshTags();
+        onTagsChanged?.();
+      } else {
+        setAutoTagError(result?.detail || 'Could not generate tags');
+        // Auto-clear error after a few seconds
+        setTimeout(() => setAutoTagError(''), 3500);
+      }
+    } catch (err) {
+      setAutoTagError(err.message || 'Could not generate tags');
+      setTimeout(() => setAutoTagError(''), 3500);
+    } finally {
+      setAutoTagging(false);
+    }
   }
 
   async function addTagByName(name, { keepOpen = false } = {}) {
@@ -485,7 +524,20 @@ export default function DetailPanel({
               + Add
             </button>
           )}
+          <button
+            type="button"
+            className={[styles.autoTagBtn, autoTagging && styles.autoTagBtnLoading].filter(Boolean).join(' ')}
+            onClick={handleAutoTag}
+            disabled={autoTagging}
+            title={aiConfigured ? 'Auto-tag with AI' : 'Configure OpenAI key to enable'}
+          >
+            <span className={styles.autoTagIcon}><SparkleIcon /></span>
+            {autoTagging ? 'Tagging…' : 'Auto-tag'}
+          </button>
         </div>
+        {autoTagError && (
+          <div className={styles.autoTagError}>{autoTagError}</div>
+        )}
       </div>
 
       <dl className={styles.meta}>
