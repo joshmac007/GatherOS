@@ -30,7 +30,11 @@ function animateOne({ saveId, collectionId, imageSrc, fallbackBg }) {
     borderRadius: '8px',
     boxShadow: '0 8px 28px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)',
     pointerEvents: 'none',
-    zIndex: '10000',
+    // Max 32-bit signed int — guarantees the ghost wins against the
+    // sidebar (z-index: 2), the ContextMenu portal (z-index: 9999),
+    // selection bar, etc., regardless of any parent stacking context.
+    zIndex: '2147483647',
+    isolation: 'isolate',
     willChange: 'transform, opacity',
     backgroundColor: fallbackBg || '#FAFAF9',
     backgroundSize: 'cover',
