@@ -73,6 +73,8 @@ export default function Toolbar({
   count,
   onToggleSidebar,
   semanticSearchActive = false,
+  colorFilter = null,
+  onClearColorFilter,
 }) {
   // Slider is inverted so dragging right = bigger cards = fewer columns.
   const sliderValue = COLS_MAX + COLS_MIN - columns;
@@ -110,6 +112,18 @@ export default function Toolbar({
       </div>
 
       <div className={styles.right}>
+        {colorFilter && (
+          <button
+            type="button"
+            className={styles.colorChip}
+            onClick={onClearColorFilter}
+            title="Clear color filter"
+          >
+            <span className={styles.colorChipDot} style={{ background: colorFilter }} />
+            <span className={styles.colorChipLabel}>{colorFilter.toUpperCase()}</span>
+            <span className={styles.colorChipX} aria-hidden="true">×</span>
+          </button>
+        )}
         {count != null && (
           <span className={styles.count}>
             {count} {count === 1 ? 'save' : 'saves'}

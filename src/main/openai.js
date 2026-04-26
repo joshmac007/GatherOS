@@ -221,4 +221,119 @@ async function embedText(apiKey, text) {
   return vec;
 }
 
-module.exports = { testApiKey, autoTagImage, analyzeImage, embedText };
+// Cheap LLM-driven query expansion. Turns "mountain" into
+// "mountain, mountains, peaks, summit, alpine, hiking, landscape"
+// before the embedding lookup, which dramatically improves recall on
+// short single-noun queries. Original wording is preserved so literal
+// matches still rank high. Caller falls back to the raw query on any
+// failure.
+async function expandQuery(apiKey, query) {
+  const trimmed = (query || '').trim();
+  // Skip expansion for very short or very long queries — short ones are
+  // commonly already exact (e.g. brand names), long ones don't need it.
+  if (!apiKey || trimmed.length < 2 || trimmed.length > 60) return trimmed;
+
+  try {
+    const res = await fetch(`${API_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You expand short visual-search queries with closely-related ' +
+              'concepts and synonyms to improve embedding recall. Return ' +
+              'JSON: {"expanded": "..."}. Comma-separated, 5-8 related ' +
+              'terms. Keep it tight — only terms a designer would consider ' +
+              'genuinely related to the query. No quotes around items.',
+          },
+          { role: 'user', content: trimmed },
+        ],
+        response_format: { type: 'json_object' },
+        max_tokens: 80,
+      }),
+    });
+    if (!res.ok) return trimmed;
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return trimmed;
+    const parsed = JSON.parse(content);
+    const expanded = (parsed.expanded || '').trim();
+    if (!expanded) return trimmed;
+    // Original query stays at the front so its embedding gets the most
+    // weight when text-embedding-3-small averages the tokens.
+    return `${trimmed}, ${expanded}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+// LLM-based reranker over the cosine-ranked candidate set. The cosine
+// pass produces a relevance-ordered list, but it can't actually reason
+// — the reranker reads each candidate's title/description/OCR and
+// drops anything tangential, then orders the survivors by judgment.
+// This is what fixes the "semantic-near but actually-unrelated" cases.
+async function rerankCandidates(apiKey, query, candidates) {
+  if (!apiKey || candidates.length <= 1) return candidates;
+
+  // Compact each candidate to keep the rerank prompt small and fast.
+  const items = candidates.slice(0, 30).map((c, i) => {
+    const title = (c.title || '').slice(0, 80);
+    const desc = (c.ai_description || '').slice(0, 250);
+    const ocr = (c.ocr_text || '').slice(0, 150);
+    return `[${i}] title: ${title} | desc: ${desc}${ocr ? ` | text: ${ocr}` : ''}`;
+  });
+
+  try {
+    const res = await fetch(`${API_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You rerank visual-search candidates by genuine relevance to ' +
+              'the user query. Return JSON: {"ids": [n, n, ...]}. The "ids" ' +
+              'array contains the [n] indexes of candidates that are ' +
+              'actually relevant, ordered most-relevant first. Drop ' +
+              'candidates that are tangential, off-topic, or share only ' +
+              'incidental visual elements. Be inclusive about loosely ' +
+              'related matches; be strict about unrelated ones.',
+          },
+          {
+            role: 'user',
+            content: `Query: ${query}\n\nCandidates:\n${items.join('\n')}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        max_tokens: 200,
+      }),
+    });
+    if (!res.ok) return candidates;
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return candidates;
+    const parsed = JSON.parse(content);
+    const orderedIds = Array.isArray(parsed.ids) ? parsed.ids : [];
+    if (orderedIds.length === 0) return candidates;
+    return orderedIds
+      .map((n) => candidates[n])
+      .filter(Boolean);
+  } catch {
+    return candidates;
+  }
+}
+
+module.exports = {
+  testApiKey, autoTagImage, analyzeImage, embedText, expandQuery, rerankCandidates,
+};

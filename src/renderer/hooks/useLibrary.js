@@ -11,6 +11,9 @@ export function useLibrary() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState({ type: 'all' });
   const [search, setSearch] = useState('');
+  // Active color filter — set by clicking a palette swatch in the
+  // DetailPanel. Cleared via the toolbar chip.
+  const [colorFilter, setColorFilter] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -20,12 +23,13 @@ export function useLibrary() {
         filter: filterFor(view),
         sort: 'newest',
         collectionId: view.type === 'collection' ? view.id : undefined,
+        colorHex: colorFilter || undefined,
       });
       setSaves(data);
     } finally {
       setLoading(false);
     }
-  }, [search, view]);
+  }, [search, view, colorFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -78,6 +82,8 @@ export function useLibrary() {
     setView,
     search,
     setSearch,
+    colorFilter,
+    setColorFilter,
     reload: load,
     toggleFavorite,
     deleteSave,

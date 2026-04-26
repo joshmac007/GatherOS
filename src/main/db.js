@@ -132,7 +132,67 @@ function insertSave({
   return record;
 }
 
-function getAllSaves({ search = '', filter = 'all', sort = 'newest', collectionId = null } = {}) {
+// ── Color search helpers ──────────────────────────────────────────────────
+// Convert sRGB hex → CIELAB so we can measure perceptual distance.
+// "Looks similar" in screen colors maps poorly to RGB Manhattan; LAB
+// matches what designers mean when they say "find me anything in this
+// red".
+
+function hexToRgb(hex) {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex);
+  if (!m) return null;
+  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
+function srgbToLinear(c) {
+  const v = c / 255;
+  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+}
+
+function rgbToLab(r, g, b) {
+  const lr = srgbToLinear(r);
+  const lg = srgbToLinear(g);
+  const lb = srgbToLinear(b);
+  // sRGB → XYZ (D65)
+  const x = (lr * 0.4124564 + lg * 0.3575761 + lb * 0.1804375) / 0.95047;
+  const y = (lr * 0.2126729 + lg * 0.7151522 + lb * 0.0721750) / 1.00000;
+  const z = (lr * 0.0193339 + lg * 0.1191920 + lb * 0.9503041) / 1.08883;
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const fx = f(x);
+  const fy = f(y);
+  const fz = f(z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+function deltaE76(a, b) {
+  return Math.sqrt(
+    (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2,
+  );
+}
+
+function hexToLab(hex) {
+  const rgb = hexToRgb(hex);
+  return rgb ? rgbToLab(rgb[0], rgb[1], rgb[2]) : null;
+}
+
+// Returns id only — palette filter runs in JS over the parsed swatches,
+// applied as a post-filter on top of the SQL conditions below.
+function filterByColor(saves, hex, threshold = 22) {
+  const target = hexToLab(hex);
+  if (!target) return saves;
+  return saves.filter((s) => {
+    if (!s.palette) return false;
+    let palette;
+    try { palette = JSON.parse(s.palette); } catch { return false; }
+    if (!Array.isArray(palette)) return false;
+    return palette.some((c) => {
+      const lab = hexToLab(c);
+      return lab && deltaE76(target, lab) <= threshold;
+    });
+  });
+}
+
+function getAllSaves({ search = '', filter = 'all', sort = 'newest', collectionId = null, colorHex = null } = {}) {
   const db = getDatabase();
   const conditions = [];
   const params = [];
@@ -162,7 +222,11 @@ function getAllSaves({ search = '', filter = 'all', sort = 'newest', collectionI
 
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
   const order = sort === 'oldest' ? ' ORDER BY created_at ASC' : ' ORDER BY created_at DESC';
-  return db.prepare(`SELECT * FROM saves${where}${order}`).all(...params);
+  const rows = db.prepare(`SELECT * FROM saves${where}${order}`).all(...params);
+  // Color filter: requested hex matched against each save's stored
+  // palette in LAB space. Done in JS because SQLite doesn't have the
+  // math we need; tractable up to a few thousand saves.
+  return colorHex ? filterByColor(rows, colorHex) : rows;
 }
 
 function getSave(id) {
@@ -365,6 +429,7 @@ module.exports = {
   getSavesByIds,
   getUnindexedSaves,
   getUnindexedCount,
+  filterByColor,
   getAllCollections,
   getCollectionsForSave,
   createCollection,

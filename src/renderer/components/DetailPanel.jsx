@@ -98,6 +98,7 @@ export default function DetailPanel({
   onTagsChanged,
   onUpdateMeta,
   onOpenSettings,
+  onColorFilter,
 }) {
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
@@ -425,8 +426,14 @@ export default function DetailPanel({
               type="button"
               className={styles.swatch}
               style={{ background: color }}
-              onClick={() => copyColor(color)}
-              aria-label={`Copy ${color}`}
+              onClick={(e) => {
+                // Option/Alt-click copies the hex; plain click filters
+                // the grid by visually-similar palettes.
+                if (e.altKey) copyColor(color);
+                else onColorFilter?.(color);
+              }}
+              title={`Filter by ${color.toUpperCase()} · ⌥-click to copy hex`}
+              aria-label={`Filter by ${color}, option-click to copy hex`}
             >
               {copiedColor === color && (
                 <span className={styles.swatchTooltip}>Copied {color.toUpperCase()}</span>

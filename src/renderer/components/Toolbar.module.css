@@ -79,6 +79,53 @@
   color: #6c63ff;
 }
 
+.colorChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 6px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.colorChip:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-primary);
+}
+
+.colorChipDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.colorChipLabel {
+  font-variant-numeric: tabular-nums;
+}
+
+.colorChipX {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-tertiary);
+}
+
+.colorChip:hover .colorChipX {
+  color: var(--text-primary);
+}
+
 .searchIcon svg {
   width: 14px;
   height: 14px;

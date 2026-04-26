@@ -4,6 +4,7 @@ const path = require('node:path');
 const {
   getAllSaves, getSave, deleteSave, updateSave, insertSave,
   getSaveEmbeddings, getSavesByIds, getUnindexedSaves, getUnindexedCount,
+  filterByColor,
   getAllCollections, getCollectionsForSave, createCollection, renameCollection,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
   getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
@@ -22,7 +23,9 @@ const {
 const { notifySaved } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
-const { testApiKey, autoTagImage, analyzeImage, embedText } = require('./openai');
+const {
+  testApiKey, autoTagImage, analyzeImage, embedText, expandQuery, rerankCandidates,
+} = require('./openai');
 
 // Cosine similarity over Float32 BLOBs from SQLite. ~1 ms per save at
 // 1536 dims; fine up to a few thousand records before we'd want a
@@ -57,7 +60,12 @@ function registerIpcHandlers() {
     }
 
     try {
-      const queryVec = await embedText(settings.getOpenAIKey(), queryText);
+      const apiKey = settings.getOpenAIKey();
+      // Stage 1 — expand the query before embedding so single nouns
+      // ("mountain") cover their natural family ("peaks, alpine, hiking").
+      // Falls back to the original query on any failure.
+      const expandedQuery = await expandQuery(apiKey, queryText);
+      const queryVec = await embedText(apiKey, expandedQuery);
       const queryF32 = new Float32Array(queryVec);
       const dim = queryF32.length;
 
@@ -120,12 +128,26 @@ function registerIpcHandlers() {
         : null;
       const recentCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-      return merged.filter((s) => {
+      let filtered = merged.filter((s) => {
         if (filter === 'favorites' && !s.favorited) return false;
         if (filter === 'recent' && s.created_at <= recentCutoff) return false;
         if (collectionId && !collectionMembers.has(s.id)) return false;
         return true;
       });
+      // Apply the color filter to semantic candidates too — getAllSaves
+      // already handled it for the LIKE matches, but the embedding-only
+      // hits never went through it.
+      if (opts.colorHex) {
+        filtered = filterByColor(filtered, opts.colorHex);
+      }
+
+      // Stage 2 — LLM reranker. Sees title/description/OCR for each
+      // candidate and decides whether it's actually relevant to the
+      // *original* query (not the expanded version). Drops tangential
+      // hits that the cosine ranker couldn't reason about.
+      if (filtered.length <= 1) return filtered;
+      const reranked = await rerankCandidates(apiKey, queryText, filtered);
+      return reranked;
     } catch (err) {
       console.error('Semantic search failed, falling back to LIKE:', err.message);
       return getAllSaves(opts);

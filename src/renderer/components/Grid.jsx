@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import ImageCard from './ImageCard.jsx';
 import styles from './Grid.module.css';
 
-export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu, onDragStart, columns, loading, view, search, semanticSearchActive }) {
+export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu, onDragStart, columns, loading, view, search, semanticSearchActive, colorFilter }) {
   const columnBuckets = useMemo(() => {
     const buckets = Array.from({ length: columns }, () => []);
     saves.forEach((save, i) => {
@@ -28,6 +28,9 @@ export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu,
       hint = semanticSearchActive
         ? 'Try a different description, or turn off Semantic search to fall back to keyword matching.'
         : 'Try a different keyword.';
+    } else if (colorFilter) {
+      title = 'No saves match that color';
+      hint = 'Click the chip in the toolbar to clear the filter.';
     } else if (isCollection) {
       title = 'Collection is empty';
       hint = 'Right-click any image and choose "Add to Collection"';

@@ -111,11 +111,18 @@ export default function App() {
     setView,
     search,
     setSearch,
+    colorFilter,
+    setColorFilter,
     reload,
     toggleFavorite,
     deleteSave,
     updateSaveMeta,
   } = useLibrary();
+
+  const handleColorFilter = useCallback((hex) => {
+    setColorFilter(hex);
+    setFocusedId(null); // back to the grid so the filtered set is visible
+  }, [setColorFilter]);
 
   const [selected, setSelected] = useState(() => new Set());
   const [gridColumns, setGridColumns] = useState(3);
@@ -544,6 +551,8 @@ export default function App() {
                 count={saves.length}
                 onToggleSidebar={sidebarCollapsed ? toggleSidebar : null}
                 semanticSearchActive={semanticSearchActive}
+                colorFilter={colorFilter}
+                onClearColorFilter={() => setColorFilter(null)}
               />
               <div className="grid-scroll">
                 <Grid
@@ -558,6 +567,7 @@ export default function App() {
                   view={view}
                   search={search}
                   semanticSearchActive={semanticSearchActive}
+                  colorFilter={colorFilter}
                 />
               </div>
             </>
@@ -575,6 +585,7 @@ export default function App() {
             onTagsChanged={loadAllTags}
             onUpdateMeta={updateSaveMeta}
             onOpenSettings={() => setSettingsOpen(true)}
+            onColorFilter={handleColorFilter}
           />
         )}
       </div>
