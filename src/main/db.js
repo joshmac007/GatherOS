@@ -139,12 +139,16 @@ function getAllSaves({ search = '', filter = 'all', sort = 'newest', collectionI
     params.push(collectionId);
   }
   if (search) {
-    conditions.push(`(title LIKE ? OR ai_description LIKE ? OR id IN (
+    // Substring match against title + tags only. ai_description is
+    // intentionally excluded — descriptions enumerate every visible
+    // object so substring-matching them turns "sky" into a 50% hit
+    // rate. The semantic ranker handles ai_description-style recall.
+    conditions.push(`(title LIKE ? OR id IN (
       SELECT save_id FROM save_tags
       JOIN tags ON save_tags.tag_id = tags.id
       WHERE tags.name LIKE ?
     ))`);
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    params.push(`%${search}%`, `%${search}%`);
   }
   if (filter === 'favorites') conditions.push('favorited = 1');
   if (filter === 'recent') {

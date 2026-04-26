@@ -62,13 +62,16 @@ function registerIpcHandlers() {
       const dim = queryF32.length;
 
       // Cosine threshold tuned for text-embedding-3-small over the
-      // analyzeImage description format. Below ~0.26 results start to
-      // read as noise. The hybrid LIKE pass below picks up literal
-      // keyword matches that fall under this floor.
+      // analyzeImage description format. Below ~0.26 reads as noise;
+      // the hybrid LIKE pass over title + tags catches literal keyword
+      // matches as a safety net.
       const MIN_SCORE = 0.26;
-      // Plus a relative cap: drop anything below 55% of the top score so
-      // a strong match doesn't drag along marginal ones.
-      const RELATIVE_CUTOFF = 0.55;
+      // Tighter relative cap so marginal matches don't ride along with
+      // a strong top result. With ~rich descriptions the model groups
+      // many images at moderate similarity, and 0.55 was lenient
+      // enough to drag most of them in. 0.72 keeps only the genuinely
+      // close cluster around the top.
+      const RELATIVE_CUTOFF = 0.72;
 
       const rows = getSaveEmbeddings();
       const scored = rows
