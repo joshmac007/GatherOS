@@ -280,7 +280,7 @@
 }
 
 .switch input:checked ~ .switchTrack {
-  background: #34c759;
+  background: var(--accent);
 }
 
 .switch input:checked ~ .switchTrack .switchKnob {
@@ -288,7 +288,7 @@
 }
 
 .switch input:focus-visible ~ .switchTrack {
-  box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.25);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
 }
 
 .reindexBox {
