@@ -222,46 +222,43 @@
 }
 
 .metaInputRow {
-  display: flex;
-  gap: 6px;
-  align-items: stretch;
+  position: relative;
 }
 
+/* Reserve room on the right for the inset open-link button so the
+   user's typed URL doesn't slide under it. */
 .metaInputRow .metaInput {
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 100%;
+  padding-right: 30px;
 }
 
 .openLinkBtn {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.025);
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
-  border-radius: 6px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  transition: background 100ms ease, color 100ms ease;
 }
 
 .openLinkBtn svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
-.openLinkBtn:hover:not(:disabled) {
-  background: rgba(0, 122, 255, 0.08);
-  border-color: var(--accent);
+.openLinkBtn:hover {
+  background: rgba(0, 122, 255, 0.10);
   color: var(--accent);
-}
-
-.openLinkBtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .collectionsSection {

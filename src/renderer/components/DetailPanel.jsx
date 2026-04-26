@@ -405,15 +405,16 @@ export default function DetailPanel({
               }}
               placeholder="https://…"
             />
-            <button
-              type="button"
-              className={styles.openLinkBtn}
-              disabled={!canOpenUrl}
-              onClick={() => window.moodmark.shell.openUrl(normalizeUrl(persistedUrl))}
-              title={canOpenUrl ? 'Open in browser' : 'Add a URL first'}
-            >
-              <ExternalLinkIcon />
-            </button>
+            {canOpenUrl && (
+              <button
+                type="button"
+                className={styles.openLinkBtn}
+                onClick={() => window.moodmark.shell.openUrl(normalizeUrl(persistedUrl))}
+                title="Open in browser"
+              >
+                <ExternalLinkIcon />
+              </button>
+            )}
           </div>
         </label>
       </div>
