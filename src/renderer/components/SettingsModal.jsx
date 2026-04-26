@@ -142,9 +142,22 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
             Image data goes directly from your machine to OpenAI — never through anyone else.
           </p>
 
-          <label className={styles.fieldLabel} htmlFor="openai-key-input">
-            API Key
-          </label>
+          <div className={styles.fieldLabelRow}>
+            <label className={styles.fieldLabel} htmlFor="openai-key-input">
+              API Key
+            </label>
+            <button
+              type="button"
+              className={styles.helpLink}
+              onClick={() =>
+                window.moodmark.shell.openUrl(
+                  'https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key',
+                )
+              }
+            >
+              Where do I find this? ↗
+            </button>
+          </div>
           <input
             id="openai-key-input"
             ref={inputRef}
