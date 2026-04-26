@@ -209,7 +209,8 @@
   align-items: stretch;
   justify-content: stretch;
   border-radius: 6px;
-  overflow: hidden;
+  /* No overflow:hidden — child img/placeholder carry the rounding so the
+     resize handles can sit outside the item box without being clipped. */
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.06),
     0 6px 18px rgba(0, 0, 0, 0.10);
@@ -229,6 +230,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  border-radius: inherit;
 }
 
 .itemPlaceholder {
@@ -241,6 +243,7 @@
   color: var(--text-tertiary);
   font-size: 11px;
   font-family: var(--font-mono);
+  border-radius: inherit;
 }
 
 /* ── Text labels ──────────────────────────────────────────────────────── */

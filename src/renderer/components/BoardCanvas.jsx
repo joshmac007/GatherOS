@@ -232,17 +232,21 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
   const handleResizeStart = useCallback((e, corner, item) => {
     e.stopPropagation();
     e.preventDefault();
-    // Text items auto-size to content, so we measure the rendered
-    // width at drag-start instead of trusting item.width.
+    // Measure the rendered box at drag-start. Text items auto-size to
+    // content so the stored width isn't authoritative; for images it
+    // matches but reading from the DOM is uniform either way.
     const itemEl = e.currentTarget.parentElement;
     const rect = itemEl.getBoundingClientRect();
-    const renderedWidth = rect.width / viewport.z;
     resizeState.current = {
       itemId: item.id,
+      type: item.type,
       corner, // 'tl' | 'tr' | 'bl' | 'br'
       startMouseX: e.clientX,
+      startMouseY: e.clientY,
       startX: item.x,
-      startWidth: renderedWidth,
+      startY: item.y,
+      startWidth: rect.width / viewport.z,
+      startHeight: rect.height / viewport.z,
       startFontSize: item.font_size || 16,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -253,17 +257,29 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     if (!s) return;
     const dx = (e.clientX - s.startMouseX) / viewport.z;
     const dirX = s.corner.includes('r') ? 1 : -1;
+    const dirY = s.corner.includes('b') ? 1 : -1;
     const newWidth = Math.max(20, s.startWidth + dx * dirX);
     const scale = newWidth / s.startWidth;
-    const newFontSize = Math.max(6, Math.min(240, s.startFontSize * scale));
-    // Left-corner drags: keep the right edge anchored. Text auto-sizes
-    // so we shift x by the width delta instead of writing a width.
-    const newX = dirX < 0 ? s.startX - (newWidth - s.startWidth) : s.startX;
-    setItems((prev) => prev.map((it) =>
-      it.id === s.itemId
-        ? { ...it, font_size: newFontSize, x: newX }
-        : it,
-    ));
+
+    if (s.type === 'text') {
+      const newFontSize = Math.max(6, Math.min(240, s.startFontSize * scale));
+      // Text auto-sizes; we shift x for left-corner drags so the right
+      // edge stays anchored.
+      const newX = dirX < 0 ? s.startX - (newWidth - s.startWidth) : s.startX;
+      setItems((prev) => prev.map((it) =>
+        it.id === s.itemId ? { ...it, font_size: newFontSize, x: newX } : it,
+      ));
+    } else {
+      // Images keep aspect ratio: width and height scale together.
+      const newHeight = Math.max(20, s.startHeight * scale);
+      const newX = dirX < 0 ? s.startX - (newWidth - s.startWidth) : s.startX;
+      const newY = dirY < 0 ? s.startY - (newHeight - s.startHeight) : s.startY;
+      setItems((prev) => prev.map((it) =>
+        it.id === s.itemId
+          ? { ...it, width: newWidth, height: newHeight, x: newX, y: newY }
+          : it,
+      ));
+    }
   }, [viewport.z]);
 
   const handleResizeEnd = useCallback(async (e) => {
@@ -273,11 +289,15 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     resizeState.current = null;
     const item = items.find((it) => it.id === s.itemId);
     if (!item) return;
-    await window.moodmark.boards.updateItem({
-      id: item.id,
-      x: item.x,
-      fontSize: item.font_size,
-    });
+    if (item.type === 'text') {
+      await window.moodmark.boards.updateItem({
+        id: item.id, x: item.x, fontSize: item.font_size,
+      });
+    } else {
+      await window.moodmark.boards.updateItem({
+        id: item.id, x: item.x, y: item.y, width: item.width, height: item.height,
+      });
+    }
   }, [items]);
 
   // ── Text edit ──────────────────────────────────────────────────────────
@@ -543,6 +563,20 @@ function BoardItem({
           <img src={src} alt={item.save_title || ''} draggable={false} />
         ) : (
           <div className={styles.itemPlaceholder}>image deleted</div>
+        )}
+        {selected && (
+          <>
+            {['tl', 'tr', 'bl', 'br'].map((corner) => (
+              <div
+                key={corner}
+                className={[styles.resizeHandle, styles[`handle_${corner}`]].join(' ')}
+                onPointerDown={(e) => onResizeStart(e, corner, item)}
+                onPointerMove={onResizeMove}
+                onPointerUp={onResizeEnd}
+                onPointerCancel={onResizeEnd}
+              />
+            ))}
+          </>
         )}
       </div>
     );
