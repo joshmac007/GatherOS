@@ -418,10 +418,49 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
   }, [allSaves, board.id, screenToWorld]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────
+  const zoomBy = useCallback((delta) => {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Anchor zoom on the viewport center for keyboard shortcuts.
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    setViewport((v) => {
+      const newZ = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.z + delta));
+      if (newZ === v.z) return v;
+      const wx = (cx - v.x) / v.z;
+      const wy = (cy - v.y) / v.z;
+      return {
+        z: newZ,
+        x: cx - wx * newZ,
+        y: cy - wy * newZ,
+      };
+    });
+  }, []);
+
   useEffect(() => {
     function onKey(e) {
       const tag = e.target?.tagName;
       const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+      // Zoom shortcuts work everywhere on the canvas, even while
+      // editing text — they're modifier combos, not typeable keys.
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === '+' || e.key === '=') {
+          e.preventDefault();
+          zoomBy(0.2);
+          return;
+        }
+        if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          zoomBy(-0.2);
+          return;
+        }
+        if (e.key === '0') {
+          e.preventDefault();
+          setViewport({ x: 0, y: 0, z: 1 });
+          return;
+        }
+      }
 
       if (e.key === 'Escape') {
         // Escape exits the text tool and ends any in-progress text edit.
@@ -453,7 +492,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedIds, editingTextId]);
+  }, [selectedIds, editingTextId, zoomBy]);
 
   const sortedItems = [...items].sort(
     (a, b) => (a.z_index || 0) - (b.z_index || 0),
