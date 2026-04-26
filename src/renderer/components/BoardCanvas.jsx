@@ -9,7 +9,7 @@ import { fileUrl } from '../lib/fileUrl.js';
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
-const DEFAULT_IMG_WIDTH = 220;
+const DEFAULT_IMG_WIDTH = 320;
 const DEFAULT_TEXT_WIDTH = 200;
 const DEFAULT_TEXT_HEIGHT = 40;
 
