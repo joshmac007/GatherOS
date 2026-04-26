@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 function filterFor(view) {
   if (view.type === 'favorites') return 'favorites';
@@ -6,30 +6,47 @@ function filterFor(view) {
   return 'all';
 }
 
+const SEARCH_DEBOUNCE_MS = 280;
+
 export function useLibrary() {
   const [saves, setSaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState({ type: 'all' });
   const [search, setSearch] = useState('');
-  // Active color filter — set by clicking a palette swatch in the
-  // DetailPanel. Cleared via the toolbar chip.
+  // Debounced shadow of `search`. Typing updates `search` immediately so
+  // the input stays responsive, but the IPC only fires off this value
+  // after the user pauses — avoids spawning N parallel searches that
+  // race each other and flicker through 3-4 result sets.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [colorFilter, setColorFilter] = useState(null);
 
+  // Monotonic counter that's bumped on every new load(). When a request
+  // resolves we check it's still the latest before committing — late
+  // arrivals from prior queries are dropped on the floor.
+  const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const load = useCallback(async () => {
+    const myId = ++requestIdRef.current;
     setLoading(true);
     try {
       const data = await window.moodmark.saves.getAll({
-        search,
+        search: debouncedSearch,
         filter: filterFor(view),
         sort: 'newest',
         collectionId: view.type === 'collection' ? view.id : undefined,
         colorHex: colorFilter || undefined,
       });
+      if (requestIdRef.current !== myId) return; // stale, ignore
       setSaves(data);
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === myId) setLoading(false);
     }
-  }, [search, view, colorFilter]);
+  }, [debouncedSearch, view, colorFilter]);
 
   useEffect(() => { load(); }, [load]);
 
