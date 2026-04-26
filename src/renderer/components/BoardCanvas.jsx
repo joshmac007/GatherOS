@@ -10,6 +10,8 @@ const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
 const DEFAULT_IMG_WIDTH = 220;
+const DEFAULT_TEXT_WIDTH = 200;
+const DEFAULT_TEXT_HEIGHT = 40;
 
 const MIME_BOARD_DRAG = 'application/x-moodmark-save';
 
@@ -22,6 +24,8 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
   });
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [dropOver, setDropOver] = useState(false);
+  const [tool, setTool] = useState('select'); // 'select' | 'text'
+  const [editingTextId, setEditingTextId] = useState(null);
 
   const viewportRef = useRef(null);
   // Throttle viewport persistence — many micro-updates while panning.
@@ -34,6 +38,8 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
       if (!cancelled) setItems(rows || []);
     });
     setSelectedIds(new Set());
+    setEditingTextId(null);
+    setTool('select');
     setViewport({
       x: board.viewport_x ?? 0,
       y: board.viewport_y ?? 0,
@@ -66,16 +72,40 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     };
   }, [viewport]);
 
-  // ── Pan ────────────────────────────────────────────────────────────────
+  // ── Pan / click-to-place text ──────────────────────────────────────────
   const panState = useRef(null);
-  const handleViewportPointerDown = useCallback((e) => {
+  const handleViewportPointerDown = useCallback(async (e) => {
     if (e.button !== 0) return;
     if (e.target !== viewportRef.current && !e.target.classList?.contains(styles.world)) {
       // Click landed on an item — let the item's own handler take over.
       return;
     }
     e.preventDefault();
+
+    if (tool === 'text') {
+      // Drop a fresh text label at the click point and immediately
+      // enter edit mode so the user can start typing.
+      const { x, y } = screenToWorld(e.clientX, e.clientY);
+      const created = await window.moodmark.boards.createItem({
+        boardId: board.id,
+        type: 'text',
+        x: x - 10,
+        y: y - 10,
+        width: DEFAULT_TEXT_WIDTH,
+        height: DEFAULT_TEXT_HEIGHT,
+        text: '',
+      });
+      if (created) {
+        setItems((prev) => [...prev, created]);
+        setSelectedIds(new Set([created.id]));
+        setEditingTextId(created.id);
+      }
+      setTool('select');
+      return;
+    }
+
     setSelectedIds(new Set());
+    setEditingTextId(null);
     panState.current = {
       startScreenX: e.clientX,
       startScreenY: e.clientY,
@@ -83,7 +113,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
       startVy: viewport.y,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
-  }, [viewport]);
+  }, [tool, viewport, board.id, screenToWorld]);
 
   const handleViewportPointerMove = useCallback((e) => {
     if (!panState.current) return;
@@ -126,8 +156,10 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
 
   const handleItemPointerDown = useCallback((e, item) => {
     if (e.button !== 0) return;
+    if (editingTextId === item.id) return; // don't drag the item being edited
     e.stopPropagation();
     setSelectedIds(new Set([item.id]));
+    setEditingTextId(null);
     itemDragState.current = {
       itemId: item.id,
       startScreenX: e.clientX,
@@ -143,7 +175,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
         it.id === item.id ? { ...it, z_index: max + 1 } : it,
       );
     });
-  }, []);
+  }, [editingTextId]);
 
   const handleItemPointerMove = useCallback((e) => {
     const s = itemDragState.current;
@@ -170,6 +202,36 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
         id: moved.id, x: moved.x, y: moved.y, zIndex: moved.z_index,
       });
     }
+  }, [items]);
+
+  // ── Text edit ──────────────────────────────────────────────────────────
+  const handleItemDoubleClick = useCallback((item) => {
+    if (item.type !== 'text') return;
+    setEditingTextId(item.id);
+    setSelectedIds(new Set([item.id]));
+  }, []);
+
+  const handleTextChange = useCallback((id, value) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, text: value } : it)));
+  }, []);
+
+  const handleTextCommit = useCallback(async (id) => {
+    setEditingTextId((curr) => (curr === id ? null : curr));
+    const item = items.find((it) => it.id === id);
+    if (!item) return;
+    const trimmed = (item.text || '').trim();
+    if (!trimmed) {
+      // Empty text labels would just be dead placeholders; delete instead.
+      await window.moodmark.boards.deleteItem(id);
+      setItems((prev) => prev.filter((it) => it.id !== id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      return;
+    }
+    await window.moodmark.boards.updateItem({ id, text: item.text });
   }, [items]);
 
   // ── Drop from library drawer ───────────────────────────────────────────
@@ -213,10 +275,31 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     }
   }, [allSaves, board.id, screenToWorld]);
 
-  // ── Delete ─────────────────────────────────────────────────────────────
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e) {
-      if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'SELECT') return;
+      const tag = e.target?.tagName;
+      const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+      if (e.key === 'Escape') {
+        // Escape exits the text tool and ends any in-progress text edit.
+        if (editingTextId) {
+          // Let the textarea's own onBlur fire so we hit the commit path.
+          e.target?.blur?.();
+          return;
+        }
+        setTool('select');
+        return;
+      }
+
+      if (inField) return;
+
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        setTool((t) => (t === 'text' ? 'select' : 'text'));
+        return;
+      }
+
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.size > 0) {
         e.preventDefault();
         const ids = [...selectedIds];
@@ -228,17 +311,32 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedIds]);
+  }, [selectedIds, editingTextId]);
 
   const sortedItems = [...items].sort(
     (a, b) => (a.z_index || 0) - (b.z_index || 0),
   );
+
+  const viewportClass = [
+    styles.viewport,
+    dropOver && styles.viewportDropOver,
+    tool === 'text' && styles.viewportText,
+  ].filter(Boolean).join(' ');
 
   return (
     <div className={styles.canvas}>
       <div className={styles.toolbar}>
         <div className={styles.toolbarTitle}>{board.name}</div>
         <div className={styles.toolbarActions}>
+          <button
+            type="button"
+            className={[styles.toolbarBtn, tool === 'text' && styles.toolbarBtnActive]
+              .filter(Boolean).join(' ')}
+            onClick={() => setTool((t) => (t === 'text' ? 'select' : 'text'))}
+            title="Add text (T)"
+          >
+            T
+          </button>
           <span className={styles.zoomLabel}>{Math.round(viewport.z * 100)}%</span>
           <button
             type="button"
@@ -256,8 +354,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
 
         <div
           ref={viewportRef}
-          className={[styles.viewport, dropOver && styles.viewportDropOver]
-            .filter(Boolean).join(' ')}
+          className={viewportClass}
           onPointerDown={handleViewportPointerDown}
           onPointerMove={handleViewportPointerMove}
           onPointerUp={handleViewportPointerUp}
@@ -278,14 +375,18 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
                 key={item.id}
                 item={item}
                 selected={selectedIds.has(item.id)}
+                editing={editingTextId === item.id}
                 onPointerDown={handleItemPointerDown}
                 onPointerMove={handleItemPointerMove}
                 onPointerUp={handleItemPointerUp}
+                onDoubleClick={handleItemDoubleClick}
+                onTextChange={handleTextChange}
+                onTextCommit={handleTextCommit}
               />
             ))}
             {items.length === 0 && (
               <div className={styles.emptyHint}>
-                Drag images from the library on the left.
+                Drag images from the library on the left, or press T to add text.
               </div>
             )}
           </div>
@@ -295,29 +396,125 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
   );
 }
 
-function BoardItem({ item, selected, onPointerDown, onPointerMove, onPointerUp }) {
-  if (item.type !== 'image') return null;
+function BoardItem({
+  item, selected, editing,
+  onPointerDown, onPointerMove, onPointerUp,
+  onDoubleClick, onTextChange, onTextCommit,
+}) {
+  if (item.type === 'image') {
+    const style = {
+      transform: `translate(${item.x}px, ${item.y}px)`,
+      width: `${item.width}px`,
+      height: `${item.height}px`,
+      zIndex: item.z_index || 0,
+    };
+    const cls = [styles.item, selected && styles.itemSelected].filter(Boolean).join(' ');
+    const src = item.save_file_path ? fileUrl(item.save_file_path) : null;
+    return (
+      <div
+        className={cls}
+        style={style}
+        onPointerDown={(e) => onPointerDown(e, item)}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        {src ? (
+          <img src={src} alt={item.save_title || ''} draggable={false} />
+        ) : (
+          <div className={styles.itemPlaceholder}>image deleted</div>
+        )}
+      </div>
+    );
+  }
+
+  if (item.type === 'text') {
+    return (
+      <TextItem
+        item={item}
+        selected={selected}
+        editing={editing}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onDoubleClick={onDoubleClick}
+        onTextChange={onTextChange}
+        onTextCommit={onTextCommit}
+      />
+    );
+  }
+
+  return null;
+}
+
+function TextItem({
+  item, selected, editing,
+  onPointerDown, onPointerMove, onPointerUp,
+  onDoubleClick, onTextChange, onTextCommit,
+}) {
+  const textareaRef = useRef(null);
+
+  // Autofocus + select all when entering edit mode.
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.select();
+      // Fit height to content.
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [editing]);
+
   const style = {
     transform: `translate(${item.x}px, ${item.y}px)`,
     width: `${item.width}px`,
-    height: `${item.height}px`,
+    minHeight: `${item.height}px`,
     zIndex: item.z_index || 0,
   };
-  const cls = [styles.item, selected && styles.itemSelected].filter(Boolean).join(' ');
-  const src = item.save_file_path ? fileUrl(item.save_file_path) : null;
+  const cls = [
+    styles.textItem,
+    selected && styles.textItemSelected,
+    editing && styles.textItemEditing,
+  ].filter(Boolean).join(' ');
+
   return (
     <div
       className={cls}
       style={style}
-      onPointerDown={(e) => onPointerDown(e, item)}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerDown={(e) => { if (!editing) onPointerDown(e, item); }}
+      onPointerMove={(e) => { if (!editing) onPointerMove(e); }}
+      onPointerUp={(e) => { if (!editing) onPointerUp(e); }}
+      onPointerCancel={(e) => { if (!editing) onPointerUp(e); }}
+      onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(item); }}
     >
-      {src ? (
-        <img src={src} alt={item.save_title || ''} draggable={false} />
+      {editing ? (
+        <textarea
+          ref={textareaRef}
+          className={styles.textInput}
+          value={item.text || ''}
+          placeholder="Add Text"
+          onChange={(e) => {
+            onTextChange(item.id, e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = `${e.target.scrollHeight}px`;
+          }}
+          onBlur={() => onTextCommit(item.id)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              e.target.blur();
+            }
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        />
       ) : (
-        <div className={styles.itemPlaceholder}>image deleted</div>
+        <div className={styles.textDisplay}>
+          {item.text
+            ? item.text
+            : <span className={styles.textPlaceholder}>Add Text</span>}
+        </div>
       )}
     </div>
   );
