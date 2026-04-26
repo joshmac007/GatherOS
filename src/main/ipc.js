@@ -189,6 +189,13 @@ function registerIpcHandlers() {
     return testApiKey(key);
   });
 
+  ipcMain.handle('settings:get-prefs', () => settings.getPrefs());
+
+  ipcMain.handle('settings:set-pref', (_e, payload = {}) => {
+    if (!payload.name) return { ok: false, reason: 'no-name' };
+    return settings.setPref(payload.name, payload.value);
+  });
+
   // ── AI: auto-tag a save ─────────────────────────────────────────────────
   ipcMain.handle('ai:auto-tag', async (_e, saveId) => {
     if (!saveId) return { ok: false, reason: 'no-save-id' };

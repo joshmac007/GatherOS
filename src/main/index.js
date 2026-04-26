@@ -11,7 +11,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 
-const { initDatabase, closeDatabase, insertSave } = require('./db');
+const { initDatabase, closeDatabase, insertSave, getSave, updateSave } = require('./db');
+const { hasOpenAIKey, getOpenAIKey, getPref } = require('./settings');
+const { autoNameImage } = require('./openai');
 const { ensureStorageDirs, saveImageFromFile } = require('./storage');
 const { registerIpcHandlers } = require('./ipc');
 const {
@@ -80,6 +82,30 @@ function notifySaved(record) {
     mainWindow.webContents.send('save:created', record);
   }
   showToast(record);
+  // Background AI pipeline — runs only if the user opted in and a key is
+  // configured. Errors are swallowed so the save flow never blocks on it.
+  maybeAutoNameInBackground(record);
+}
+
+async function maybeAutoNameInBackground(record) {
+  if (!record?.id || !record.file_path) return;
+  // Skip if the user already supplied a title via the original save flow.
+  if (record.title && record.title.trim()) return;
+  if (!getPref('autoNameOnSave', true)) return;
+  if (!hasOpenAIKey()) return;
+  const key = getOpenAIKey();
+  if (!key) return;
+  try {
+    const title = await autoNameImage(key, record.file_path);
+    if (!title) return;
+    updateSave({ id: record.id, title });
+    const updated = getSave(record.id);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('save:updated', updated);
+    }
+  } catch (err) {
+    console.error('Auto-name failed:', err.message);
+  }
 }
 
 function createMainWindow() {

@@ -7,9 +7,18 @@ const path = require('node:path');
 const { app, safeStorage } = require('electron');
 
 const FILE_NAME = 'openai-key.bin';
+const PREFS_FILE = 'prefs.json';
+
+const DEFAULT_PREFS = {
+  autoNameOnSave: true,
+};
 
 function keyFilePath() {
   return path.join(app.getPath('userData'), FILE_NAME);
+}
+
+function prefsFilePath() {
+  return path.join(app.getPath('userData'), PREFS_FILE);
 }
 
 function hasOpenAIKey() {
@@ -56,9 +65,41 @@ function clearOpenAIKey() {
   }
 }
 
+// ── Prefs (plain JSON) ─────────────────────────────────────────────────────
+
+function getPrefs() {
+  try {
+    if (!fs.existsSync(prefsFilePath())) return { ...DEFAULT_PREFS };
+    const raw = fs.readFileSync(prefsFilePath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_PREFS, ...parsed };
+  } catch {
+    return { ...DEFAULT_PREFS };
+  }
+}
+
+function getPref(name, fallback) {
+  const prefs = getPrefs();
+  return prefs[name] !== undefined ? prefs[name] : (fallback ?? DEFAULT_PREFS[name]);
+}
+
+function setPref(name, value) {
+  const prefs = getPrefs();
+  prefs[name] = value;
+  try {
+    fs.writeFileSync(prefsFilePath(), JSON.stringify(prefs, null, 2));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  }
+}
+
 module.exports = {
   hasOpenAIKey,
   getOpenAIKey,
   setOpenAIKey,
   clearOpenAIKey,
+  getPrefs,
+  getPref,
+  setPref,
 };

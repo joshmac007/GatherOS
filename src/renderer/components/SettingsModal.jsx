@@ -12,14 +12,19 @@ export default function SettingsModal({ open, onClose, onConfiguredChange }) {
   const [draft, setDraft] = useState('');
   const [status, setStatus] = useState(STATUS_IDLE);
   const [errorMessage, setErrorMessage] = useState('');
+  const [prefs, setPrefs] = useState({ autoNameOnSave: true });
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    window.moodmark.settings.hasOpenAIKey().then((v) => {
+    Promise.all([
+      window.moodmark.settings.hasOpenAIKey(),
+      window.moodmark.settings.getPrefs(),
+    ]).then(([keyExists, p]) => {
       if (cancelled) return;
-      setHasKey(!!v);
+      setHasKey(!!keyExists);
+      setPrefs(p);
     });
     setDraft('');
     setStatus(STATUS_IDLE);
@@ -27,6 +32,12 @@ export default function SettingsModal({ open, onClose, onConfiguredChange }) {
     requestAnimationFrame(() => inputRef.current?.focus());
     return () => { cancelled = true; };
   }, [open]);
+
+  async function togglePref(name) {
+    const next = !prefs[name];
+    setPrefs((p) => ({ ...p, [name]: next }));
+    await window.moodmark.settings.setPref(name, next);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -179,6 +190,28 @@ export default function SettingsModal({ open, onClose, onConfiguredChange }) {
               {hasKey ? 'Replace key' : 'Save key'}
             </button>
           </div>
+        </section>
+
+        <section className={styles.section}>
+          <div className={styles.sectionTitle}>AI Features</div>
+          <p className={styles.sectionHint}>
+            Each new upload runs once. Disable any feature you don't want billed against your key.
+          </p>
+          <label className={styles.toggleRow}>
+            <input
+              type="checkbox"
+              className={styles.toggleInput}
+              checked={!!prefs.autoNameOnSave}
+              onChange={() => togglePref('autoNameOnSave')}
+              disabled={!hasKey}
+            />
+            <span className={styles.toggleText}>
+              <span className={styles.toggleLabel}>Auto-name new uploads</span>
+              <span className={styles.toggleSub}>
+                Generate a short title for each image you save. Runs in the background.
+              </span>
+            </span>
+          </label>
         </section>
       </div>
     </div>,

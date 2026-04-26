@@ -95,4 +95,73 @@ async function autoTagImage(apiKey, filePath) {
     .slice(0, 6);
 }
 
-module.exports = { testApiKey, autoTagImage };
+// Auto-name a save's image with a short, descriptive title (2-6 words).
+// Same pipeline shape as autoTagImage — resize → JSON-mode chat call.
+async function autoNameImage(apiKey, filePath) {
+  if (!apiKey) throw new Error('Missing OpenAI key');
+  if (!filePath || !fs.existsSync(filePath)) {
+    throw new Error('Image file not found');
+  }
+
+  const sharp = require('sharp');
+  const resized = await sharp(filePath)
+    .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+  const dataUrl = `data:image/jpeg;base64,${resized.toString('base64')}`;
+
+  const body = {
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You write short, useful titles for visual inspiration. ' +
+          'Return JSON only: {"title": "..."}. The title must be 2-6 words, ' +
+          'use Title Case, capture the subject / style / mood, and read like a ' +
+          'designer\'s label. No quotes, no trailing punctuation, no emoji.',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Title this image.' },
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
+        ],
+      },
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: 60,
+  };
+
+  const res = await fetch(`${API_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    if (res.status === 401) throw new Error('Invalid OpenAI key');
+    throw new Error(`OpenAI API ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('No content in OpenAI response');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error('OpenAI response was not valid JSON');
+  }
+
+  const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+  // Strip wrapping quotes the model sometimes adds despite instructions.
+  return title.replace(/^["'`]+|["'`]+$/g, '').slice(0, 80) || null;
+}
+
+module.exports = { testApiKey, autoTagImage, autoNameImage };

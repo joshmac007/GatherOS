@@ -59,12 +59,14 @@ contextBridge.exposeInMainWorld('moodmark', {
     setOpenAIKey: (key) => ipcRenderer.invoke('settings:set-openai-key', key),
     clearOpenAIKey: () => ipcRenderer.invoke('settings:clear-openai-key'),
     testOpenAIKey: () => ipcRenderer.invoke('settings:test-openai-key'),
+    getPrefs: () => ipcRenderer.invoke('settings:get-prefs'),
+    setPref: (name, value) => ipcRenderer.invoke('settings:set-pref', { name, value }),
   },
   ai: {
     autoTag: (saveId) => ipcRenderer.invoke('ai:auto-tag', saveId),
   },
   on: (channel, listener) => {
-    const allowed = new Set(['save:created', 'update-ready']);
+    const allowed = new Set(['save:created', 'save:updated', 'update-ready']);
     if (!allowed.has(channel)) return () => {};
     const wrapped = (_event, ...args) => listener(...args);
     ipcRenderer.on(channel, wrapped);

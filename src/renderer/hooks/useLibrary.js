@@ -32,6 +32,16 @@ export function useLibrary() {
   // Refresh when main process fires save:created (any capture method).
   useEffect(() => window.moodmark.on('save:created', load), [load]);
 
+  // save:updated fires when the background AI pipeline writes a new title
+  // (or any future field) onto an existing record. Patch in place rather
+  // than reloading the whole list.
+  useEffect(() =>
+    window.moodmark.on('save:updated', (record) => {
+      if (!record?.id) return;
+      setSaves((prev) => prev.map((s) => (s.id === record.id ? { ...s, ...record } : s)));
+    }),
+  []);
+
   const toggleFavorite = useCallback(async (id, favorited) => {
     await window.moodmark.saves.update({ id, favorited });
     // Optimistic local update so the star flips instantly.
