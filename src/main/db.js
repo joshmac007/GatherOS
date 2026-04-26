@@ -73,6 +73,14 @@ function migrate() {
     const stmt = db.prepare('UPDATE collections SET order_index = ? WHERE id = ?');
     rows.forEach((r, i) => stmt.run(i, r.id));
   }
+
+  const saveCols = db.prepare("PRAGMA table_info(saves)").all();
+  if (!saveCols.find((c) => c.name === 'ai_description')) {
+    db.exec('ALTER TABLE saves ADD COLUMN ai_description TEXT');
+  }
+  if (!saveCols.find((c) => c.name === 'embedding')) {
+    db.exec('ALTER TABLE saves ADD COLUMN embedding BLOB');
+  }
 }
 
 function getDatabase() {
@@ -161,17 +169,36 @@ function deleteSave(id) {
   return { ok: true, filePath: save.file_path, thumbPath: save.thumb_path };
 }
 
-function updateSave({ id, title, favorited, sourceUrl } = {}) {
+function updateSave({ id, title, favorited, sourceUrl, aiDescription, embedding } = {}) {
   const db = getDatabase();
   const fields = [];
   const params = [];
   if (title !== undefined) { fields.push('title = ?'); params.push(title); }
   if (favorited !== undefined) { fields.push('favorited = ?'); params.push(favorited ? 1 : 0); }
   if (sourceUrl !== undefined) { fields.push('source_url = ?'); params.push(sourceUrl); }
+  if (aiDescription !== undefined) { fields.push('ai_description = ?'); params.push(aiDescription); }
+  if (embedding !== undefined) { fields.push('embedding = ?'); params.push(embedding); }
   if (!fields.length) return { ok: true };
   params.push(id);
   db.prepare(`UPDATE saves SET ${fields.join(', ')} WHERE id = ?`).run(...params);
   return { ok: true };
+}
+
+// Returns id + embedding (BLOB) for every save that has one. Used by
+// the semantic-search ranker to compute cosine sim in JS — fine up to
+// a few thousand saves; revisit if that scales out.
+function getSaveEmbeddings() {
+  return getDatabase()
+    .prepare('SELECT id, embedding FROM saves WHERE embedding IS NOT NULL')
+    .all();
+}
+
+function getSavesByIds(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  return getDatabase()
+    .prepare(`SELECT * FROM saves WHERE id IN (${placeholders})`)
+    .all(...ids);
 }
 
 // ── Collections ────────────────────────────────────────────────────────────
@@ -305,6 +332,8 @@ module.exports = {
   getSave,
   deleteSave,
   updateSave,
+  getSaveEmbeddings,
+  getSavesByIds,
   getAllCollections,
   getCollectionsForSave,
   createCollection,

@@ -17,6 +17,15 @@ function SearchIcon() {
   );
 }
 
+function SearchSparkleIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M8 1.5l1.2 3.3L12.5 6 9.2 7.2 8 10.5 6.8 7.2 3.5 6l3.3-1.2z" />
+      <path d="M12.8 9.4l0.55 1.5 1.45 0.55-1.45 0.55-0.55 1.5-0.55-1.5-1.45-0.55 1.45-0.55z" opacity="0.7" />
+    </svg>
+  );
+}
+
 function SidebarIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -63,6 +72,7 @@ export default function Toolbar({
   onColumnsChange,
   count,
   onToggleSidebar,
+  semanticSearchActive = false,
 }) {
   // Slider is inverted so dragging right = bigger cards = fewer columns.
   const sliderValue = COLS_MAX + COLS_MIN - columns;
@@ -82,11 +92,18 @@ export default function Toolbar({
       </div>
 
       <div className={styles.searchWrap}>
-        <span className={styles.searchIcon}><SearchIcon /></span>
+        <span
+          className={[styles.searchIcon, semanticSearchActive && styles.searchIconAi]
+            .filter(Boolean)
+            .join(' ')}
+          title={semanticSearchActive ? 'Semantic search (AI)' : undefined}
+        >
+          {semanticSearchActive ? <SearchSparkleIcon /> : <SearchIcon />}
+        </span>
         <input
           className={styles.search}
           type="search"
-          placeholder="Search by title or tag"
+          placeholder={semanticSearchActive ? 'Describe what you’re looking for…' : 'Search by title or tag'}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
         />

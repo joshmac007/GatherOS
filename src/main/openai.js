@@ -95,9 +95,10 @@ async function autoTagImage(apiKey, filePath) {
     .slice(0, 6);
 }
 
-// Auto-name a save's image with a short, descriptive title (2-6 words).
-// Same pipeline shape as autoTagImage — resize → JSON-mode chat call.
-async function autoNameImage(apiKey, filePath) {
+// Auto-analyze a save's image — title + 1-sentence description in one
+// vision call. The description feeds the embedding, so semantic search
+// has richer signal than tags alone.
+async function analyzeImage(apiKey, filePath) {
   if (!apiKey) throw new Error('Missing OpenAI key');
   if (!filePath || !fs.existsSync(filePath)) {
     throw new Error('Image file not found');
@@ -116,21 +117,23 @@ async function autoNameImage(apiKey, filePath) {
       {
         role: 'system',
         content:
-          'You write short, useful titles for visual inspiration. ' +
-          'Return JSON only: {"title": "..."}. The title must be 2-6 words, ' +
-          'use Title Case, capture the subject / style / mood, and read like a ' +
-          'designer\'s label. No quotes, no trailing punctuation, no emoji.',
+          'You write designer-friendly metadata for visual inspiration. ' +
+          'Return JSON: {"title": "...", "description": "..."}. ' +
+          'title: 2-6 words, Title Case, capture subject/style/mood. ' +
+          'description: one factual sentence covering the visual content, ' +
+          'style, mood, color palette, and likely use case (e.g. "landing page", ' +
+          '"poster", "UI screenshot"). No quotes, no emoji.',
       },
       {
         role: 'user',
         content: [
-          { type: 'text', text: 'Title this image.' },
+          { type: 'text', text: 'Analyze this image.' },
           { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
         ],
       },
     ],
     response_format: { type: 'json_object' },
-    max_tokens: 60,
+    max_tokens: 200,
   };
 
   const res = await fetch(`${API_BASE}/chat/completions`, {
@@ -159,9 +162,44 @@ async function autoNameImage(apiKey, filePath) {
     throw new Error('OpenAI response was not valid JSON');
   }
 
-  const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
-  // Strip wrapping quotes the model sometimes adds despite instructions.
-  return title.replace(/^["'`]+|["'`]+$/g, '').slice(0, 80) || null;
+  const title = typeof parsed.title === 'string'
+    ? parsed.title.trim().replace(/^["'`]+|["'`]+$/g, '').slice(0, 80)
+    : '';
+  const description = typeof parsed.description === 'string'
+    ? parsed.description.trim().replace(/^["'`]+|["'`]+$/g, '').slice(0, 600)
+    : '';
+  return { title: title || null, description: description || null };
 }
 
-module.exports = { testApiKey, autoTagImage, autoNameImage };
+// text-embedding-3-small returns a 1536-dim Float32 vector. Returns
+// the raw array; caller is responsible for serializing to a Buffer.
+async function embedText(apiKey, text) {
+  if (!apiKey) throw new Error('Missing OpenAI key');
+  const trimmed = (text || '').trim();
+  if (!trimmed) throw new Error('Cannot embed empty text');
+
+  const res = await fetch(`${API_BASE}/embeddings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'text-embedding-3-small',
+      input: trimmed.slice(0, 8000),
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    if (res.status === 401) throw new Error('Invalid OpenAI key');
+    throw new Error(`OpenAI embed ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const vec = data.data?.[0]?.embedding;
+  if (!Array.isArray(vec)) throw new Error('No embedding in response');
+  return vec;
+}
+
+module.exports = { testApiKey, autoTagImage, analyzeImage, embedText };

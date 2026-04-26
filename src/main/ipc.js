@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   getAllSaves, getSave, deleteSave, updateSave, insertSave,
+  getSaveEmbeddings, getSavesByIds,
   getAllCollections, getCollectionsForSave, createCollection, renameCollection,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
   getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
@@ -21,10 +22,81 @@ const {
 const { notifySaved } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
-const { testApiKey, autoTagImage } = require('./openai');
+const { testApiKey, autoTagImage, embedText } = require('./openai');
+
+// Cosine similarity over Float32 BLOBs from SQLite. ~1 ms per save at
+// 1536 dims; fine up to a few thousand records before we'd want a
+// proper vector index.
+function cosineSim(a, b, len) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < len; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    dot += x * y;
+    na += x * x;
+    nb += y * y;
+  }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+}
+
+function bufferToFloat32(buf) {
+  // SQLite returns a Buffer; reinterpret as Float32Array without copying.
+  return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+}
 
 function registerIpcHandlers() {
-  ipcMain.handle('saves:get-all', (_e, opts) => getAllSaves(opts));
+  ipcMain.handle('saves:get-all', async (_e, opts = {}) => {
+    const semanticEnabled = settings.getPref('semanticSearch', false);
+    const haveKey = settings.hasOpenAIKey();
+    const queryText = (opts.search || '').trim();
+
+    // Falls back to the regular LIKE path if semantic search isn't
+    // configured, isn't on, or there's no actual query to embed.
+    if (!semanticEnabled || !haveKey || !queryText) {
+      return getAllSaves(opts);
+    }
+
+    try {
+      const queryVec = await embedText(settings.getOpenAIKey(), queryText);
+      const queryF32 = new Float32Array(queryVec);
+      const dim = queryF32.length;
+
+      const rows = getSaveEmbeddings();
+      const ranked = rows.map((row) => {
+        const v = bufferToFloat32(row.embedding);
+        return { id: row.id, score: cosineSim(queryF32, v, dim) };
+      });
+      ranked.sort((a, b) => b.score - a.score);
+
+      // Pull a generous candidate set and let the LIKE path handle the
+      // remaining filters (favorites, recent, collection) as a post-pass.
+      const topIds = ranked.slice(0, 80).map((r) => r.id);
+      const candidates = getSavesByIds(topIds);
+      const orderById = new Map(topIds.map((id, i) => [id, i]));
+      candidates.sort((a, b) => orderById.get(a.id) - orderById.get(b.id));
+
+      // Apply the same filters as the LIKE path so view/collection
+      // toggles still work in semantic mode.
+      const filter = opts.filter || 'all';
+      const collectionId = opts.collectionId || null;
+      const collectionMembers = collectionId
+        ? new Set(
+            getAllSaves({ collectionId }).map((s) => s.id),
+          )
+        : null;
+      const recentCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+      return candidates.filter((s) => {
+        if (filter === 'favorites' && !s.favorited) return false;
+        if (filter === 'recent' && s.created_at <= recentCutoff) return false;
+        if (collectionId && !collectionMembers.has(s.id)) return false;
+        return true;
+      });
+    } catch (err) {
+      console.error('Semantic search failed, falling back to LIKE:', err.message);
+      return getAllSaves(opts);
+    }
+  });
 
   ipcMain.handle('saves:delete', (_e, id) => {
     const result = deleteSave(id);

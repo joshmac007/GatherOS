@@ -7,7 +7,7 @@ const STATUS_TESTING = 'testing';
 const STATUS_OK = 'ok';
 const STATUS_ERROR = 'error';
 
-export default function SettingsModal({ open, onClose, onConfiguredChange }) {
+export default function SettingsModal({ open, onClose, onConfiguredChange, onPrefsChange }) {
   const [hasKey, setHasKey] = useState(false);
   const [draft, setDraft] = useState('');
   const [status, setStatus] = useState(STATUS_IDLE);
@@ -35,8 +35,10 @@ export default function SettingsModal({ open, onClose, onConfiguredChange }) {
 
   async function togglePref(name) {
     const next = !prefs[name];
-    setPrefs((p) => ({ ...p, [name]: next }));
+    const updated = { ...prefs, [name]: next };
+    setPrefs(updated);
     await window.moodmark.settings.setPref(name, next);
+    onPrefsChange?.(updated);
   }
 
   useEffect(() => {
@@ -209,6 +211,21 @@ export default function SettingsModal({ open, onClose, onConfiguredChange }) {
               <span className={styles.toggleLabel}>Auto-name new uploads</span>
               <span className={styles.toggleSub}>
                 Generate a short title for each image you save. Runs in the background.
+              </span>
+            </span>
+          </label>
+          <label className={styles.toggleRow}>
+            <input
+              type="checkbox"
+              className={styles.toggleInput}
+              checked={!!prefs.semanticSearch}
+              onChange={() => togglePref('semanticSearch')}
+              disabled={!hasKey}
+            />
+            <span className={styles.toggleText}>
+              <span className={styles.toggleLabel}>Semantic search</span>
+              <span className={styles.toggleSub}>
+                Index new saves with vector embeddings so the search bar matches by meaning ("dark moody UI") instead of exact words. Existing saves before this is enabled won't appear in semantic results.
               </span>
             </span>
           </label>

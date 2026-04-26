@@ -75,6 +75,10 @@
   z-index: 1;
 }
 
+.searchIconAi {
+  color: #6c63ff;
+}
+
 .searchIcon svg {
   width: 14px;
   height: 14px;

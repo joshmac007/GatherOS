@@ -132,9 +132,14 @@ export default function App() {
   // SettingsModal's onConfiguredChange callback.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
+  const [prefs, setPrefs] = useState({ autoNameOnSave: true, semanticSearch: false });
   useEffect(() => {
     window.moodmark.settings.hasOpenAIKey().then(setAiConfigured);
+    window.moodmark.settings.getPrefs().then(setPrefs);
   }, []);
+  // True when both the toggle is on AND a key is configured — search will
+  // route through embeddings rather than LIKE.
+  const semanticSearchActive = aiConfigured && !!prefs.semanticSearch;
 
   // Collections state
   const [collections, setCollections] = useState([]);
@@ -538,6 +543,7 @@ export default function App() {
                 onColumnsChange={setGridColumns}
                 count={saves.length}
                 onToggleSidebar={sidebarCollapsed ? toggleSidebar : null}
+                semanticSearchActive={semanticSearchActive}
               />
               <div className="grid-scroll">
                 <Grid
@@ -647,6 +653,7 @@ export default function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onConfiguredChange={setAiConfigured}
+        onPrefsChange={setPrefs}
       />
     </div>
   );

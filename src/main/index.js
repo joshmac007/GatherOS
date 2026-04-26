@@ -11,9 +11,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 
-const { initDatabase, closeDatabase, insertSave, getSave, updateSave } = require('./db');
+const {
+  initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
+} = require('./db');
 const { hasOpenAIKey, getOpenAIKey, getPref } = require('./settings');
-const { autoNameImage } = require('./openai');
+const { analyzeImage, embedText } = require('./openai');
+
+// Float32Array <-> Buffer plumbing for storing embeddings as SQLite BLOBs.
+function vectorToBuffer(arr) {
+  return Buffer.from(new Float32Array(arr).buffer);
+}
 const { ensureStorageDirs, saveImageFromFile } = require('./storage');
 const { registerIpcHandlers } = require('./ipc');
 const {
@@ -82,29 +89,55 @@ function notifySaved(record) {
     mainWindow.webContents.send('save:created', record);
   }
   showToast(record);
-  // Background AI pipeline — runs only if the user opted in and a key is
-  // configured. Errors are swallowed so the save flow never blocks on it.
-  maybeAutoNameInBackground(record);
+  // Background AI pipeline — runs only if the user opted in to at least
+  // one feature and a key is configured. Errors are swallowed so the
+  // save flow never blocks on it.
+  maybeAIIndexInBackground(record);
 }
 
-async function maybeAutoNameInBackground(record) {
+// One vision call yields title + description. The description (plus
+// title and any tags) feeds a single embedding call. Whichever fields
+// the user opted into get persisted; the rest are skipped to save cost.
+async function maybeAIIndexInBackground(record) {
   if (!record?.id || !record.file_path) return;
-  // Skip if the user already supplied a title via the original save flow.
-  if (record.title && record.title.trim()) return;
-  if (!getPref('autoNameOnSave', true)) return;
   if (!hasOpenAIKey()) return;
+
+  const wantName = getPref('autoNameOnSave', true) && !(record.title && record.title.trim());
+  const wantSemantic = getPref('semanticSearch', false);
+  if (!wantName && !wantSemantic) return;
+
   const key = getOpenAIKey();
   if (!key) return;
+
   try {
-    const title = await autoNameImage(key, record.file_path);
-    if (!title) return;
-    updateSave({ id: record.id, title });
-    const updated = getSave(record.id);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('save:updated', updated);
+    const { title, description } = await analyzeImage(key, record.file_path);
+
+    const updates = { id: record.id };
+    if (wantName && title) updates.title = title;
+    if (wantSemantic && description) updates.aiDescription = description;
+
+    if (wantSemantic) {
+      const tags = getTagsForSave(record.id).map((t) => t.name).join(', ');
+      const embedSource = [title, description, tags].filter(Boolean).join('. ');
+      if (embedSource) {
+        try {
+          const vec = await embedText(key, embedSource);
+          updates.embedding = vectorToBuffer(vec);
+        } catch (err) {
+          console.error('Embed failed:', err.message);
+        }
+      }
+    }
+
+    if (Object.keys(updates).length > 1) {
+      updateSave(updates);
+      const updated = getSave(record.id);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('save:updated', updated);
+      }
     }
   } catch (err) {
-    console.error('Auto-name failed:', err.message);
+    console.error('AI index failed:', err.message);
   }
 }
 
