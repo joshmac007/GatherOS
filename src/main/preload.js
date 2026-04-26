@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('moodmark', {
     createItem: (payload) => ipcRenderer.invoke('boards:create-item', payload),
     updateItem: (payload) => ipcRenderer.invoke('boards:update-item', payload),
     deleteItem: (id) => ipcRenderer.invoke('boards:delete-item', id),
+    // Composite-PNG export of selected saves into a moodboard image
+    // (used by the multi-select bar's "Export as Moodboard" button).
+    export: (saveIds) => ipcRenderer.invoke('boards:export', saveIds),
   },
   tags: {
     getAll: () => ipcRenderer.invoke('tags:get-all'),
@@ -53,9 +56,6 @@ contextBridge.exposeInMainWorld('moodmark', {
     openInPreview: (filePath) => ipcRenderer.invoke('image:open-in-preview', filePath),
     export: (filePath, defaultName) =>
       ipcRenderer.invoke('image:export', { filePath, defaultName }),
-  },
-  boards: {
-    export: (saveIds) => ipcRenderer.invoke('boards:export', saveIds),
   },
   shell: {
     openUrl: (url) => ipcRenderer.invoke('shell:open-url', url),
