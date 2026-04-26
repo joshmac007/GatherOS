@@ -153,10 +153,12 @@
    centered tooltip would extend past the panel's left edge and get clipped
    (overflow-y: auto forces overflow-x: auto per CSS spec). Anchor the
    tooltip's left edge to the swatch's left and shift the arrow to keep it
-   pointed at the swatch's center. */
+   pointed at the swatch's center. Use a dedicated keyframe so the
+   intro animation doesn't briefly snap to the centered position. */
 .swatch:first-child .swatchTooltip {
   left: 0;
   transform: translateX(0);
+  animation: tooltipInLeft 120ms ease;
 }
 
 .swatch:first-child .swatchTooltip::after {
@@ -166,6 +168,11 @@
 @keyframes tooltipIn {
   from { opacity: 0; transform: translate(-50%, 4px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes tooltipInLeft {
+  from { opacity: 0; transform: translate(0, 4px); }
+  to   { opacity: 1; transform: translate(0, 0); }
 }
 
 .metaEditSection {
