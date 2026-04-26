@@ -63,7 +63,7 @@ function registerIpcHandlers() {
       collectionId: opts.collectionId,
       colorHex: opts.colorHex || undefined,
     });
-    const colorMatches = filterByColor(filteredSet, detectedHex, 30);
+    const colorMatches = filterByColor(filteredSet, detectedHex, 20);
     if (colorMatches.length === 0) return results;
     const seen = new Set(results.map((s) => s.id));
     const merged = [...results];
