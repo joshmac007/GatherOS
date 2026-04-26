@@ -131,24 +131,42 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
   }, []);
 
-  // ── Zoom ───────────────────────────────────────────────────────────────
-  const handleWheel = useCallback((e) => {
-    if (!e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-    const rect = viewportRef.current.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-    setViewport((v) => {
-      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      const newZ = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.z + delta));
-      const wx = (cx - v.x) / v.z;
-      const wy = (cy - v.y) / v.z;
-      return {
-        z: newZ,
-        x: cx - wx * newZ,
-        y: cy - wy * newZ,
-      };
-    });
+  // ── Wheel: pan (no modifier) / zoom (cmd or ctrl) ──────────────────────
+  // Magic Mouse + trackpad two-finger gestures fire wheel events with
+  // deltaX/deltaY, so plain wheel pans the canvas. Pinch-to-zoom on
+  // macOS arrives as ctrl+wheel, which we treat the same as cmd+wheel.
+  // Has to be a native non-passive listener — React 17+ wheel handlers
+  // are passive by default, so preventDefault would silently fail.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    function onWheel(e) {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const rect = el.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        setViewport((v) => {
+          const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+          const newZ = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.z + delta));
+          const wx = (cx - v.x) / v.z;
+          const wy = (cy - v.y) / v.z;
+          return {
+            z: newZ,
+            x: cx - wx * newZ,
+            y: cy - wy * newZ,
+          };
+        });
+      } else {
+        setViewport((v) => ({
+          ...v,
+          x: v.x - e.deltaX,
+          y: v.y - e.deltaY,
+        }));
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
   // ── Item drag ──────────────────────────────────────────────────────────
@@ -213,6 +231,20 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
 
   const handleTextChange = useCallback((id, value) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, text: value } : it)));
+  }, []);
+
+  const handleStyleChange = useCallback((id, patch) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+    // Persist immediately — formatting toggles are discrete clicks, not
+    // a stream like text typing, so debouncing buys nothing.
+    const ipcPatch = { id };
+    if ('font_size' in patch) ipcPatch.fontSize = patch.font_size;
+    if ('bold' in patch)      ipcPatch.bold = patch.bold;
+    if ('italic' in patch)    ipcPatch.italic = patch.italic;
+    if ('strike' in patch)    ipcPatch.strike = patch.strike;
+    if ('align' in patch)     ipcPatch.align = patch.align;
+    if ('color' in patch)     ipcPatch.color = patch.color;
+    window.moodmark.boards.updateItem(ipcPatch);
   }, []);
 
   const handleTextCommit = useCallback(async (id) => {
@@ -323,6 +355,19 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     tool === 'text' && styles.viewportText,
   ].filter(Boolean).join(' ');
 
+  // The text-formatting toolbar follows whichever text item is active —
+  // either being edited, or selected on its own. Positioned in screen
+  // space so it stays a fixed size regardless of zoom.
+  const activeTextItem = (() => {
+    if (editingTextId) return items.find((it) => it.id === editingTextId);
+    if (selectedIds.size === 1) {
+      const id = [...selectedIds][0];
+      const it = items.find((x) => x.id === id);
+      if (it && it.type === 'text') return it;
+    }
+    return null;
+  })();
+
   return (
     <div className={styles.canvas}>
       <div className={styles.toolbar}>
@@ -359,7 +404,6 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
           onPointerMove={handleViewportPointerMove}
           onPointerUp={handleViewportPointerUp}
           onPointerCancel={handleViewportPointerUp}
-          onWheel={handleWheel}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -390,6 +434,14 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
               </div>
             )}
           </div>
+
+          {activeTextItem && (
+            <TextFormatToolbar
+              item={activeTextItem}
+              viewport={viewport}
+              onChange={(patch) => handleStyleChange(activeTextItem.id, patch)}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -477,6 +529,15 @@ function TextItem({
     editing && styles.textItemEditing,
   ].filter(Boolean).join(' ');
 
+  const textStyle = {
+    fontSize: `${item.font_size || 16}px`,
+    fontWeight: item.bold ? 700 : 400,
+    fontStyle: item.italic ? 'italic' : 'normal',
+    textDecoration: item.strike ? 'line-through' : 'none',
+    textAlign: item.align || 'left',
+    color: item.color || undefined,
+  };
+
   return (
     <div
       className={cls}
@@ -491,6 +552,7 @@ function TextItem({
         <textarea
           ref={textareaRef}
           className={styles.textInput}
+          style={textStyle}
           value={item.text || ''}
           placeholder="Add Text"
           onChange={(e) => {
@@ -510,13 +572,195 @@ function TextItem({
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <div className={styles.textDisplay}>
+        <div className={styles.textDisplay} style={textStyle}>
           {item.text
             ? item.text
             : <span className={styles.textPlaceholder}>Add Text</span>}
         </div>
       )}
     </div>
+  );
+}
+
+// Floating toolbar that hovers above the active text item with the
+// formatting controls — color, size, bold/italic/strike, alignment.
+// Positioned in screen space (sibling of the world container) so it
+// doesn't scale with zoom and stays at a fixed visual size.
+const SIZE_PRESETS = [
+  { label: 'Small',  value: 14 },
+  { label: 'Medium', value: 18 },
+  { label: 'Large',  value: 28 },
+  { label: 'Huge',   value: 44 },
+];
+const COLOR_SWATCHES = [
+  '#1c1c1e', '#8e8e93', '#ff3b30', '#ff9500',
+  '#ffcc00', '#34c759', '#0a84ff', '#af52de',
+];
+
+function TextFormatToolbar({ item, viewport, onChange }) {
+  const [colorOpen, setColorOpen] = useState(false);
+  const [sizeOpen, setSizeOpen] = useState(false);
+  const [alignOpen, setAlignOpen] = useState(false);
+
+  // World → screen position. Sit just above the item with a small gap.
+  const screenX = viewport.x + item.x * viewport.z;
+  const screenY = viewport.y + item.y * viewport.z;
+  const style = {
+    left: `${screenX}px`,
+    top: `${screenY - 52}px`,
+  };
+
+  // Stop pointer/mousedown from bubbling so the canvas pan handler and
+  // the textarea's blur both leave us alone while clicking the toolbar.
+  const swallow = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  const currentSize = item.font_size || 16;
+  const currentSizeLabel =
+    SIZE_PRESETS.find((s) => s.value === currentSize)?.label
+    ?? `${Math.round(currentSize)}`;
+  const currentAlign = item.align || 'left';
+
+  return (
+    <div className={styles.fmtToolbar} style={style} onMouseDown={swallow}>
+      <div className={styles.fmtGroup}>
+        <button
+          type="button"
+          className={styles.fmtBtn}
+          onClick={() => { setColorOpen((v) => !v); setSizeOpen(false); setAlignOpen(false); }}
+          title="Text color"
+        >
+          <span
+            className={styles.fmtColorChip}
+            style={{ background: item.color || '#ffffff', borderColor: item.color ? 'transparent' : 'rgba(255,255,255,0.4)' }}
+          />
+          <Chevron />
+        </button>
+        {colorOpen && (
+          <div className={styles.fmtPopover}>
+            {COLOR_SWATCHES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={styles.fmtSwatch}
+                style={{ background: c }}
+                onClick={() => { onChange({ color: c }); setColorOpen(false); }}
+                title={c}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className={styles.fmtDivider} />
+
+      <div className={styles.fmtGroup}>
+        <button
+          type="button"
+          className={styles.fmtBtn}
+          onClick={() => { setSizeOpen((v) => !v); setColorOpen(false); setAlignOpen(false); }}
+          title="Text size"
+        >
+          <span className={styles.fmtSizeLabel}>{currentSizeLabel}</span>
+          <Chevron />
+        </button>
+        {sizeOpen && (
+          <div className={styles.fmtPopoverList}>
+            {SIZE_PRESETS.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                className={[styles.fmtMenuItem, currentSize === s.value && styles.fmtMenuItemActive].filter(Boolean).join(' ')}
+                onClick={() => { onChange({ font_size: s.value }); setSizeOpen(false); }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className={styles.fmtDivider} />
+
+      <button
+        type="button"
+        className={[styles.fmtBtn, item.bold && styles.fmtBtnActive].filter(Boolean).join(' ')}
+        onClick={() => onChange({ bold: !item.bold })}
+        title="Bold"
+      >
+        <span style={{ fontWeight: 700 }}>B</span>
+      </button>
+      <button
+        type="button"
+        className={[styles.fmtBtn, item.italic && styles.fmtBtnActive].filter(Boolean).join(' ')}
+        onClick={() => onChange({ italic: !item.italic })}
+        title="Italic"
+      >
+        <span style={{ fontStyle: 'italic', fontFamily: 'serif' }}>I</span>
+      </button>
+      <button
+        type="button"
+        className={[styles.fmtBtn, item.strike && styles.fmtBtnActive].filter(Boolean).join(' ')}
+        onClick={() => onChange({ strike: !item.strike })}
+        title="Strikethrough"
+      >
+        <span style={{ textDecoration: 'line-through' }}>S</span>
+      </button>
+
+      <div className={styles.fmtDivider} />
+
+      <div className={styles.fmtGroup}>
+        <button
+          type="button"
+          className={styles.fmtBtn}
+          onClick={() => { setAlignOpen((v) => !v); setColorOpen(false); setSizeOpen(false); }}
+          title="Alignment"
+        >
+          <AlignIcon align={currentAlign} />
+          <Chevron />
+        </button>
+        {alignOpen && (
+          <div className={styles.fmtPopoverList}>
+            {['left', 'center', 'right'].map((a) => (
+              <button
+                key={a}
+                type="button"
+                className={[styles.fmtMenuItem, currentAlign === a && styles.fmtMenuItemActive].filter(Boolean).join(' ')}
+                onClick={() => { onChange({ align: a }); setAlignOpen(false); }}
+              >
+                <AlignIcon align={a} />
+                <span style={{ marginLeft: 8, textTransform: 'capitalize' }}>{a}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Chevron() {
+  return (
+    <svg width="8" height="6" viewBox="0 0 8 6" aria-hidden="true">
+      <path d="M0 0l4 6 4-6z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function AlignIcon({ align }) {
+  const lines = {
+    left:   [{ x: 1, w: 12 }, { x: 1, w: 8 }, { x: 1, w: 12 }, { x: 1, w: 6 }],
+    center: [{ x: 2, w: 12 }, { x: 4, w: 8 }, { x: 2, w: 12 }, { x: 5, w: 6 }],
+    right:  [{ x: 3, w: 12 }, { x: 7, w: 8 }, { x: 3, w: 12 }, { x: 9, w: 6 }],
+  }[align] || [];
+  return (
+    <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true">
+      {lines.map((l, i) => (
+        <rect key={i} x={l.x} y={1 + i * 3} width={l.w} height="1.5" rx="0.5" fill="currentColor" />
+      ))}
+    </svg>
   );
 }
 

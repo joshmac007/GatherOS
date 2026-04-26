@@ -115,6 +115,23 @@ function migrate() {
   if (!saveCols.find((c) => c.name === 'ai_prompt')) {
     db.exec('ALTER TABLE saves ADD COLUMN ai_prompt TEXT');
   }
+
+  const boardItemCols = db.prepare("PRAGMA table_info(board_items)").all();
+  if (!boardItemCols.find((c) => c.name === 'font_size')) {
+    db.exec('ALTER TABLE board_items ADD COLUMN font_size REAL DEFAULT 16');
+  }
+  if (!boardItemCols.find((c) => c.name === 'bold')) {
+    db.exec('ALTER TABLE board_items ADD COLUMN bold INTEGER DEFAULT 0');
+  }
+  if (!boardItemCols.find((c) => c.name === 'italic')) {
+    db.exec('ALTER TABLE board_items ADD COLUMN italic INTEGER DEFAULT 0');
+  }
+  if (!boardItemCols.find((c) => c.name === 'strike')) {
+    db.exec('ALTER TABLE board_items ADD COLUMN strike INTEGER DEFAULT 0');
+  }
+  if (!boardItemCols.find((c) => c.name === 'align')) {
+    db.exec("ALTER TABLE board_items ADD COLUMN align TEXT DEFAULT 'left'");
+  }
 }
 
 function getDatabase() {
@@ -489,7 +506,10 @@ function getBoardItems(boardId) {
     .all(boardId);
 }
 
-function createBoardItem({ boardId, type, saveId, x, y, width, height, rotation, zIndex, text, color } = {}) {
+function createBoardItem({
+  boardId, type, saveId, x, y, width, height, rotation, zIndex,
+  text, color, fontSize, bold, italic, strike, align,
+} = {}) {
   if (!boardId || !type) return null;
   const db = getDatabase();
   const record = {
@@ -505,13 +525,20 @@ function createBoardItem({ boardId, type, saveId, x, y, width, height, rotation,
     z_index: zIndex ?? nextZIndexForBoard(boardId),
     text: text || null,
     color: color || null,
+    font_size: fontSize ?? 16,
+    bold: bold ? 1 : 0,
+    italic: italic ? 1 : 0,
+    strike: strike ? 1 : 0,
+    align: align || 'left',
     created_at: Date.now(),
   };
   db.prepare(`
     INSERT INTO board_items
-      (id, board_id, type, save_id, x, y, width, height, rotation, z_index, text, color, created_at)
+      (id, board_id, type, save_id, x, y, width, height, rotation, z_index,
+       text, color, font_size, bold, italic, strike, align, created_at)
     VALUES
-      (@id, @board_id, @type, @save_id, @x, @y, @width, @height, @rotation, @z_index, @text, @color, @created_at)
+      (@id, @board_id, @type, @save_id, @x, @y, @width, @height, @rotation, @z_index,
+       @text, @color, @font_size, @bold, @italic, @strike, @align, @created_at)
   `).run(record);
   return record;
 }
@@ -523,19 +550,27 @@ function nextZIndexForBoard(boardId) {
   return row?.n ?? 1;
 }
 
-function updateBoardItem({ id, x, y, width, height, rotation, zIndex, text, color } = {}) {
+function updateBoardItem({
+  id, x, y, width, height, rotation, zIndex,
+  text, color, fontSize, bold, italic, strike, align,
+} = {}) {
   if (!id) return { ok: false };
   const db = getDatabase();
   const fields = [];
   const params = [];
-  if (x !== undefined)        { fields.push('x = ?');        params.push(x); }
-  if (y !== undefined)        { fields.push('y = ?');        params.push(y); }
-  if (width !== undefined)    { fields.push('width = ?');    params.push(width); }
-  if (height !== undefined)   { fields.push('height = ?');   params.push(height); }
-  if (rotation !== undefined) { fields.push('rotation = ?'); params.push(rotation); }
-  if (zIndex !== undefined)   { fields.push('z_index = ?');  params.push(zIndex); }
-  if (text !== undefined)     { fields.push('text = ?');     params.push(text); }
-  if (color !== undefined)    { fields.push('color = ?');    params.push(color); }
+  if (x !== undefined)        { fields.push('x = ?');         params.push(x); }
+  if (y !== undefined)        { fields.push('y = ?');         params.push(y); }
+  if (width !== undefined)    { fields.push('width = ?');     params.push(width); }
+  if (height !== undefined)   { fields.push('height = ?');    params.push(height); }
+  if (rotation !== undefined) { fields.push('rotation = ?');  params.push(rotation); }
+  if (zIndex !== undefined)   { fields.push('z_index = ?');   params.push(zIndex); }
+  if (text !== undefined)     { fields.push('text = ?');      params.push(text); }
+  if (color !== undefined)    { fields.push('color = ?');     params.push(color); }
+  if (fontSize !== undefined) { fields.push('font_size = ?'); params.push(fontSize); }
+  if (bold !== undefined)     { fields.push('bold = ?');      params.push(bold ? 1 : 0); }
+  if (italic !== undefined)   { fields.push('italic = ?');    params.push(italic ? 1 : 0); }
+  if (strike !== undefined)   { fields.push('strike = ?');    params.push(strike ? 1 : 0); }
+  if (align !== undefined)    { fields.push('align = ?');     params.push(align); }
   if (!fields.length) return { ok: true };
   params.push(id);
   db.prepare(`UPDATE board_items SET ${fields.join(', ')} WHERE id = ?`).run(...params);
