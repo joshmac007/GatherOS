@@ -284,6 +284,7 @@ export default function Sidebar({
             return (
               <button
                 key={c.id}
+                data-collection-id={c.id}
                 className={itemClass}
                 onClick={() => onViewChange({ type: 'collection', id: c.id })}
                 onContextMenu={(e) => handleCollectionContextMenu(e, c)}

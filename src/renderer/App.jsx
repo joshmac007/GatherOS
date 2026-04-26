@@ -6,6 +6,8 @@ import DetailPanel from './components/DetailPanel.jsx';
 import FocusedView from './components/FocusedView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
 import { useLibrary } from './hooks/useLibrary.js';
+import { fileUrl } from './lib/fileUrl.js';
+import { flyToCollection } from './lib/flyToCollection.js';
 
 function BoardExportIcon() {
   return (
@@ -177,6 +179,16 @@ export default function App() {
         items.push({
           label: col.name,
           onClick: async () => {
+            const sourceSave = saves.find((s) => s.id === saveId);
+            flyToCollection({
+              collectionId: col.id,
+              items: [
+                {
+                  saveId,
+                  imageSrc: sourceSave ? fileUrl(sourceSave.file_path) : null,
+                },
+              ],
+            });
             await window.moodmark.collections.addSave({ collectionId: col.id, saveId });
             loadCollections();
           },
@@ -335,6 +347,13 @@ export default function App() {
       ...collections.map((c) => ({
         label: c.name,
         onClick: async () => {
+          flyToCollection({
+            collectionId: c.id,
+            items: ids.map((id) => {
+              const s = saves.find((x) => x.id === id);
+              return { saveId: id, imageSrc: s ? fileUrl(s.file_path) : null };
+            }),
+          });
           for (const saveId of ids) {
             await window.moodmark.collections.addSave({ collectionId: c.id, saveId });
           }
@@ -342,7 +361,7 @@ export default function App() {
         },
       })),
     ];
-  }, [bulkPicker, selected, collections, loadCollections]);
+  }, [bulkPicker, selected, collections, saves, loadCollections]);
 
   const goPrev = useCallback(() => {
     if (focusedIndex > 0) setFocusedId(saves[focusedIndex - 1].id);

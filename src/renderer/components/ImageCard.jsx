@@ -33,6 +33,7 @@ export default function ImageCard({
   return (
     <button
       type="button"
+      data-save-id={record.id}
       draggable={!!onDragStart}
       className={[
         styles.card,
