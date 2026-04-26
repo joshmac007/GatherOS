@@ -253,7 +253,18 @@ export default function FocusedView({
               src={src}
               className={styles.image}
               alt={record.title || ''}
-              draggable={false}
+              draggable
+              onDragStart={(e) => {
+                // Hand the OS the file path via Electron's webContents.startDrag
+                // (same path masonry cards use). preventDefault stops the
+                // browser's default image-drag ghost so only the native
+                // drag preview is shown.
+                e.preventDefault();
+                window.moodmark.drag.start({
+                  files: [record.file_path],
+                  thumbPath: record.thumb_path || record.file_path,
+                });
+              }}
             />
           </div>
         )}
