@@ -15,6 +15,36 @@ const DEFAULT_TEXT_HEIGHT = 40;
 
 const MIME_BOARD_DRAG = 'application/x-moodmark-save';
 
+// Approximate world-space bounds for an item. Images use stored
+// width/height directly; text is estimated from font_size and the
+// longest line — close enough for the union bbox without paying for
+// a DOM measurement round-trip.
+function getItemBounds(item) {
+  if (item.type === 'image') {
+    return { x: item.x, y: item.y, width: item.width, height: item.height };
+  }
+  const fs = item.font_size || 16;
+  const text = item.text || 'Add Text';
+  const lines = text.split('\n');
+  const longest = Math.max(...lines.map((l) => l.length), 1);
+  const width = Math.max(40, longest * fs * 0.55) + 12;
+  const height = lines.length * fs * 1.3 + 8;
+  return { x: item.x, y: item.y, width, height };
+}
+
+function unionBounds(items) {
+  if (!items.length) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const it of items) {
+    const b = getItemBounds(it);
+    if (b.x < minX) minX = b.x;
+    if (b.y < minY) minY = b.y;
+    if (b.x + b.width > maxX) maxX = b.x + b.width;
+    if (b.y + b.height > maxY) maxY = b.y + b.height;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 export default function BoardCanvas({ board, allSaves, collections = [] }) {
   const [items, setItems] = useState([]);
   const [viewport, setViewport] = useState({
@@ -169,31 +199,54 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // ── Item drag ──────────────────────────────────────────────────────────
+  // ── Item drag (single + multi-select) ─────────────────────────────────
   const itemDragState = useRef(null);
 
   const handleItemPointerDown = useCallback((e, item) => {
     if (e.button !== 0) return;
     if (editingTextId === item.id) return; // don't drag the item being edited
     e.stopPropagation();
-    setSelectedIds(new Set([item.id]));
+
+    if (e.shiftKey) {
+      // Toggle this item in the selection; don't begin a drag.
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(item.id)) next.delete(item.id);
+        else next.add(item.id);
+        return next;
+      });
+      setEditingTextId(null);
+      return;
+    }
+
+    // No shift: keep the multi-selection if this item is part of it,
+    // otherwise replace selection with just this item. Drag follows.
+    const inGroup = selectedIds.has(item.id) && selectedIds.size > 1;
+    const dragIds = inGroup ? [...selectedIds] : [item.id];
+    if (!inGroup) setSelectedIds(new Set([item.id]));
     setEditingTextId(null);
+
+    const startPositions = {};
+    for (const it of items) {
+      if (dragIds.includes(it.id)) startPositions[it.id] = { x: it.x, y: it.y };
+    }
+
     itemDragState.current = {
-      itemId: item.id,
+      primaryId: item.id,
       startScreenX: e.clientX,
       startScreenY: e.clientY,
-      startX: item.x,
-      startY: item.y,
+      startPositions,
       moved: false,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
+    // Bump z only on the clicked item, not the whole group.
     setItems((prev) => {
       const max = prev.reduce((m, it) => Math.max(m, it.z_index || 0), 0);
       return prev.map((it) =>
         it.id === item.id ? { ...it, z_index: max + 1 } : it,
       );
     });
-  }, [editingTextId]);
+  }, [editingTextId, selectedIds, items]);
 
   const handleItemPointerMove = useCallback((e) => {
     const s = itemDragState.current;
@@ -201,11 +254,11 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     const dx = (e.clientX - s.startScreenX) / viewport.z;
     const dy = (e.clientY - s.startScreenY) / viewport.z;
     if (Math.abs(dx) + Math.abs(dy) > 1) s.moved = true;
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === s.itemId ? { ...it, x: s.startX + dx, y: s.startY + dy } : it,
-      ),
-    );
+    setItems((prev) => prev.map((it) => {
+      const start = s.startPositions[it.id];
+      if (!start) return it;
+      return { ...it, x: start.x + dx, y: start.y + dy };
+    }));
   }, [viewport.z]);
 
   const handleItemPointerUp = useCallback(async (e) => {
@@ -214,12 +267,15 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     itemDragState.current = null;
     if (!s.moved) return;
-    const moved = items.find((it) => it.id === s.itemId);
-    if (moved) {
+    const moved = items.filter((it) => s.startPositions[it.id]);
+    await Promise.all(moved.map((it) =>
       window.moodmark.boards.updateItem({
-        id: moved.id, x: moved.x, y: moved.y, zIndex: moved.z_index,
-      });
-    }
+        id: it.id,
+        x: it.x,
+        y: it.y,
+        ...(it.id === s.primaryId ? { zIndex: it.z_index } : {}),
+      }),
+    ));
   }, [items]);
 
   // ── Text resize (corner handles on selected text items) ───────────────
@@ -330,6 +386,84 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
         id: item.id, x: item.x, y: item.y, width: item.width, height: item.height,
       });
     }
+  }, [items]);
+
+  // ── Group resize (multi-selection union bbox) ─────────────────────────
+  const groupResizeState = useRef(null);
+
+  const handleGroupResizeStart = useCallback((e, corner) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const selected = items.filter((it) => selectedIds.has(it.id));
+    const u = unionBounds(selected);
+    if (!u) return;
+    groupResizeState.current = {
+      corner,
+      startMouseX: e.clientX,
+      startBox: u,
+      startItems: selected.map((it) => ({
+        id: it.id,
+        type: it.type,
+        x: it.x,
+        y: it.y,
+        width: it.width,
+        height: it.height,
+        font_size: it.font_size || 16,
+      })),
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [items, selectedIds]);
+
+  const handleGroupResizeMove = useCallback((e) => {
+    const s = groupResizeState.current;
+    if (!s) return;
+    const dx = (e.clientX - s.startMouseX) / viewport.z;
+    const dirX = s.corner.includes('r') ? 1 : -1;
+    const dirY = s.corner.includes('b') ? 1 : -1;
+    const newBoxWidth = Math.max(20, s.startBox.width + dx * dirX);
+    const scale = newBoxWidth / s.startBox.width;
+    // Anchor on the opposite corner of the group bbox.
+    const anchorX = dirX > 0 ? s.startBox.x : s.startBox.x + s.startBox.width;
+    const anchorY = dirY > 0 ? s.startBox.y : s.startBox.y + s.startBox.height;
+    const startMap = new Map(s.startItems.map((it) => [it.id, it]));
+    setItems((prev) => prev.map((it) => {
+      const start = startMap.get(it.id);
+      if (!start) return it;
+      const newX = anchorX + (start.x - anchorX) * scale;
+      const newY = anchorY + (start.y - anchorY) * scale;
+      if (start.type === 'image') {
+        return {
+          ...it,
+          x: newX, y: newY,
+          width: Math.max(20, start.width * scale),
+          height: Math.max(20, start.height * scale),
+        };
+      }
+      return {
+        ...it,
+        x: newX, y: newY,
+        font_size: Math.max(6, Math.min(240, start.font_size * scale)),
+      };
+    }));
+  }, [viewport.z]);
+
+  const handleGroupResizeEnd = useCallback(async (e) => {
+    const s = groupResizeState.current;
+    if (!s) return;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    groupResizeState.current = null;
+    const ids = new Set(s.startItems.map((it) => it.id));
+    const toUpdate = items.filter((it) => ids.has(it.id));
+    await Promise.all(toUpdate.map((it) => {
+      if (it.type === 'image') {
+        return window.moodmark.boards.updateItem({
+          id: it.id, x: it.x, y: it.y, width: it.width, height: it.height,
+        });
+      }
+      return window.moodmark.boards.updateItem({
+        id: it.id, x: it.x, y: it.y, fontSize: it.font_size,
+      });
+    }));
   }, [items]);
 
   // ── Text edit ──────────────────────────────────────────────────────────
@@ -574,6 +708,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
                 key={item.id}
                 item={item}
                 selected={selectedIds.has(item.id)}
+                multi={selectedIds.size > 1}
                 editing={editingTextId === item.id}
                 onPointerDown={handleItemPointerDown}
                 onPointerMove={handleItemPointerMove}
@@ -586,6 +721,32 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
                 onResizeEnd={handleResizeEnd}
               />
             ))}
+            {selectedIds.size > 1 && (() => {
+              const sel = items.filter((it) => selectedIds.has(it.id));
+              const u = unionBounds(sel);
+              if (!u) return null;
+              return (
+                <div
+                  className={styles.groupBox}
+                  style={{
+                    transform: `translate(${u.x}px, ${u.y}px)`,
+                    width: `${u.width}px`,
+                    height: `${u.height}px`,
+                  }}
+                >
+                  {['tl', 'tr', 'bl', 'br'].map((corner) => (
+                    <div
+                      key={corner}
+                      className={[styles.resizeHandle, styles[`handle_${corner}`]].join(' ')}
+                      onPointerDown={(e) => handleGroupResizeStart(e, corner)}
+                      onPointerMove={handleGroupResizeMove}
+                      onPointerUp={handleGroupResizeEnd}
+                      onPointerCancel={handleGroupResizeEnd}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
             {items.length === 0 && (
               <div className={styles.emptyHint}>
                 Drag images from the library on the left, or press T to add text.
@@ -607,7 +768,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
 }
 
 function BoardItem({
-  item, selected, editing,
+  item, selected, multi, editing,
   onPointerDown, onPointerMove, onPointerUp,
   onDoubleClick, onTextChange, onTextCommit,
   onResizeStart, onResizeMove, onResizeEnd,
@@ -635,7 +796,7 @@ function BoardItem({
         ) : (
           <div className={styles.itemPlaceholder}>image deleted</div>
         )}
-        {selected && (
+        {selected && !multi && (
           <>
             {['tl', 'tr', 'bl', 'br'].map((corner) => (
               <div
@@ -658,6 +819,7 @@ function BoardItem({
       <TextItem
         item={item}
         selected={selected}
+        multi={multi}
         editing={editing}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -676,7 +838,7 @@ function BoardItem({
 }
 
 function TextItem({
-  item, selected, editing,
+  item, selected, multi, editing,
   onPointerDown, onPointerMove, onPointerUp,
   onDoubleClick, onTextChange, onTextCommit,
   onResizeStart, onResizeMove, onResizeEnd,
@@ -748,7 +910,7 @@ function TextItem({
             : <span className={styles.textPlaceholder}>Add Text</span>}
         </div>
       )}
-      {selected && !editing && (
+      {selected && !editing && !multi && (
         <>
           {['tl', 'tr', 'bl', 'br'].map((corner) => (
             <div

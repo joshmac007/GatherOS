@@ -329,6 +329,21 @@
 .handle_bl { bottom: calc(-6px / var(--zoom, 1)); left: calc(-6px / var(--zoom, 1)); cursor: nesw-resize; }
 .handle_br { bottom: calc(-6px / var(--zoom, 1)); right: calc(-6px / var(--zoom, 1)); cursor: nwse-resize; }
 
+/* Group bounding box for multi-selection. Outline + handles only —
+   the box itself is transparent so items inside still get clicks. */
+.groupBox {
+  position: absolute;
+  top: 0;
+  left: 0;
+  outline: calc(2px / var(--zoom, 1)) solid var(--accent);
+  outline-offset: calc(2px / var(--zoom, 1));
+  pointer-events: none;
+}
+
+.groupBox > .resizeHandle {
+  pointer-events: auto;
+}
+
 /* ── Text formatting toolbar ──────────────────────────────────────────── */
 
 .fmtToolbar {
