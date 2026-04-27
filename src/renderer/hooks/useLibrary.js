@@ -128,6 +128,7 @@ export function useLibrary() {
         if ('title' in patch) next.title = patch.title;
         if ('sourceUrl' in patch) next.source_url = patch.sourceUrl;
         if ('meta' in patch) next.meta = patch.meta; // JSON string
+        if ('notes' in patch) next.notes = patch.notes;
         return next;
       }),
     );

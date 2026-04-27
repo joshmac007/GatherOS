@@ -221,6 +221,55 @@
   box-shadow: 0 0 0 2.5px rgba(0, 122, 255, 0.18);
 }
 
+/* Notes — collapsed-by-default. The "+ Add a note" link is the
+   subtle CTA; click expands into an auto-growing textarea via
+   field-sizing: content. Once notes exist, the textarea is shown
+   directly on subsequent visits. */
+.addNoteBtn {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 6px 2px 0;
+  background: transparent;
+  border: none;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 100ms ease;
+}
+
+.addNoteBtn:hover {
+  color: var(--accent);
+}
+
+.notesInput {
+  width: 100%;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.025);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  outline: none;
+  resize: none;
+  field-sizing: content;
+  min-height: 28px;
+  box-sizing: border-box;
+  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+}
+
+.notesInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.notesInput:focus {
+  background: #ffffff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2.5px rgba(0, 122, 255, 0.18);
+}
+
 .metaInputRow {
   position: relative;
 }

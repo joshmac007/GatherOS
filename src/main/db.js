@@ -95,6 +95,9 @@ function migrate() {
   if (!saveCols.find((c) => c.name === 'meta')) {
     db.exec('ALTER TABLE saves ADD COLUMN meta TEXT');
   }
+  if (!saveCols.find((c) => c.name === 'notes')) {
+    db.exec('ALTER TABLE saves ADD COLUMN notes TEXT');
+  }
 
   // One level of bucket nesting. Top-level buckets have parent_id NULL;
   // a child's parent_id points at a top-level bucket's id. Plain TEXT
@@ -305,7 +308,7 @@ function emptyTrash() {
   };
 }
 
-function updateSave({ id, title, sourceUrl, aiDescription, ocrText, aiPrompt, embedding, meta } = {}) {
+function updateSave({ id, title, sourceUrl, aiDescription, ocrText, aiPrompt, embedding, meta, notes } = {}) {
   const db = getDatabase();
   const fields = [];
   const params = [];
@@ -315,6 +318,7 @@ function updateSave({ id, title, sourceUrl, aiDescription, ocrText, aiPrompt, em
   if (ocrText !== undefined) { fields.push('ocr_text = ?'); params.push(ocrText); }
   if (aiPrompt !== undefined) { fields.push('ai_prompt = ?'); params.push(aiPrompt); }
   if (embedding !== undefined) { fields.push('embedding = ?'); params.push(embedding); }
+  if (notes !== undefined) { fields.push('notes = ?'); params.push(notes); }
   if (meta !== undefined) {
     // Accept either a JSON string or an object — better-sqlite3 only
     // binds primitives, so any object gets serialized here.

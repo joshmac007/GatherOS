@@ -129,6 +129,11 @@ export default function DetailPanel({
 
   const [nameDraft, setNameDraft] = useState(record.title || '');
   const [urlDraft, setUrlDraft] = useState(record.source_url || '');
+  // Notes — a free-text field per save. Hidden behind a small
+  // "+ Add note" link until it has content or the user opts in.
+  const [notesDraft, setNotesDraft] = useState(record.notes || '');
+  const [editingNotes, setEditingNotes] = useState(false);
+  const notesRef = React.useRef(null);
 
   // Per-save metadata blob (JSON in DB). Lives behind tag-specific
   // sections — currently the "font" tag exposes name/designer/buy_url.
@@ -145,7 +150,21 @@ export default function DetailPanel({
   useEffect(() => {
     setNameDraft(record.title || '');
     setUrlDraft(record.source_url || '');
-  }, [record.id, record.title, record.source_url]);
+    setNotesDraft(record.notes || '');
+    setEditingNotes(false);
+  }, [record.id, record.title, record.source_url, record.notes]);
+
+  function commitNotes() {
+    const next = notesDraft;
+    if ((next || '') === (record.notes || '')) {
+      // No change; if the user opened the editor on an empty note
+      // and didn't type anything, collapse back to the link.
+      if (!next) setEditingNotes(false);
+      return;
+    }
+    onUpdateMeta?.(record.id, { notes: next.trim() ? next : null });
+    if (!next.trim()) setEditingNotes(false);
+  }
 
   useEffect(() => {
     setFontNameDraft(fontMeta.name || '');
@@ -514,6 +533,35 @@ export default function DetailPanel({
             )}
           </div>
         </label>
+        {(editingNotes || notesDraft) ? (
+          <textarea
+            ref={notesRef}
+            className={styles.notesInput}
+            value={notesDraft}
+            placeholder="Add a note…"
+            onChange={(e) => setNotesDraft(e.target.value)}
+            onBlur={commitNotes}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setNotesDraft(record.notes || '');
+                setEditingNotes(false);
+                e.currentTarget.blur();
+              }
+            }}
+            rows={1}
+          />
+        ) : (
+          <button
+            type="button"
+            className={styles.addNoteBtn}
+            onClick={() => {
+              setEditingNotes(true);
+              requestAnimationFrame(() => notesRef.current?.focus());
+            }}
+          >
+            + Add a note
+          </button>
+        )}
       </div>
 
       <div className={styles.promptSection}>
