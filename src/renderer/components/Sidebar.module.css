@@ -467,3 +467,17 @@
   color: var(--text-tertiary);
   font-size: 12px;
 }
+
+/* Slide-and-fade applied to count badges when their value changes.
+   Re-keying the element forces a remount so the keyframe runs from
+   the start. Inline-block so the transform actually applies. */
+.countBump {
+  display: inline-block;
+  animation: countBump 360ms cubic-bezier(0.18, 0.7, 0.32, 1);
+}
+
+@keyframes countBump {
+  0%   { transform: translateY(60%); opacity: 0; }
+  55%  { transform: translateY(-10%); opacity: 1; }
+  100% { transform: translateY(0);    opacity: 1; }
+}

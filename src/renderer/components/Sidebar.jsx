@@ -132,6 +132,30 @@ function ConfettiBurst({ anchor, onDone }) {
   );
 }
 
+// Inline count badge that briefly slide-fades on every change. The
+// effect skips the first render — opening the app shouldn't fire a
+// wave of animations on every populated badge in the sidebar. After
+// that, each value bump remounts via a fresh `key` so the CSS
+// keyframe restarts cleanly.
+function AnimatedCount({ value, className }) {
+  const [bumpKey, setBumpKey] = React.useState(null);
+  const prev = React.useRef(value);
+  React.useEffect(() => {
+    if (prev.current !== value) {
+      prev.current = value;
+      setBumpKey((k) => (k == null ? 1 : k + 1));
+    }
+  }, [value]);
+  return (
+    <span
+      key={bumpKey ?? 'init'}
+      className={[className, bumpKey != null && styles.countBump].filter(Boolean).join(' ')}
+    >
+      {value}
+    </span>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -482,7 +506,7 @@ export default function Sidebar({
                   <CheckIcon />
                 </span>
               ) : (
-                <span className={styles.smartCount}>{count}</span>
+                <AnimatedCount value={count} className={styles.smartCount} />
               )}
             </button>
           );
@@ -598,7 +622,7 @@ export default function Sidebar({
                 </span>
                 <span className={styles.label}>{c.name}</span>
                 {c.save_count > 0 && (
-                  <span className={styles.count}>{c.save_count}</span>
+                  <AnimatedCount value={c.save_count} className={styles.count} />
                 )}
               </button>
             );
