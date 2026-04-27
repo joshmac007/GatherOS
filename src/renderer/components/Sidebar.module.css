@@ -244,6 +244,7 @@
   text-align: left;
   cursor: pointer;
   outline: none;
+  position: relative; /* anchor for the absolute disclosure chevron */
   -webkit-app-region: no-drag;
   transition: background 100ms ease, box-shadow 100ms ease;
 }
@@ -258,17 +259,21 @@
   color: var(--text-secondary);
 }
 
-/* Disclosure chevron on top-level buckets that have children. Only
-   rendered when present (no reserved-space placeholder) so buckets
-   without children stay aligned with the smart-view icons above. */
+/* Disclosure chevron — only rendered when a bucket has children.
+   Absolute-positioned so it doesn't take any room in the row layout:
+   every bucket icon sits at the same x position regardless of whether
+   the chevron is there. The chevron itself hangs in the sidebar's
+   left gutter, between the nav container and the bucket button. */
 .bucketChevron {
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translate(0, -50%);
   width: 11px;
   height: 11px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  margin-right: -2px;
   color: var(--text-tertiary);
   opacity: 0.85;
   cursor: pointer;
@@ -281,7 +286,7 @@
 }
 
 .bucketChevron.bucketChevronCollapsed {
-  transform: rotate(-90deg);
+  transform: translate(0, -50%) rotate(-90deg);
 }
 
 .item.active .bucketChevron {
