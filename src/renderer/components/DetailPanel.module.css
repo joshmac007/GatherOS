@@ -638,11 +638,36 @@
 }
 
 .fontSectionLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 11px;
   font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-tertiary);
+}
+
+.fontSectionRemove {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.fontSectionRemove:hover {
+  background: rgba(193, 50, 42, 0.08);
+  color: #c1322a;
 }
 
 .fontField {

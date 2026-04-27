@@ -699,7 +699,27 @@ export default function DetailPanel({
 
       {tags.some((t) => t.name === 'font') && (
         <div className={styles.fontSection}>
-          <div className={styles.fontSectionLabel}>Font</div>
+          <div className={styles.fontSectionLabel}>
+            <span>Font</span>
+            <button
+              type="button"
+              className={styles.fontSectionRemove}
+              onClick={() => {
+                // Wipe the font slot from meta…
+                const merged = { ...recordMeta };
+                delete merged.font;
+                const out = Object.keys(merged).length ? JSON.stringify(merged) : null;
+                onUpdateMeta?.(record.id, { meta: out });
+                // …and drop the tag so the section disappears.
+                const fontTag = tags.find((t) => t.name === 'font');
+                if (fontTag) removeTag(fontTag.id);
+              }}
+              title="Remove font section"
+              aria-label="Remove font section"
+            >
+              ×
+            </button>
+          </div>
           <label className={styles.fontField}>
             <span className={styles.fontFieldLabel}>Name</span>
             <input
