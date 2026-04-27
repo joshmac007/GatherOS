@@ -66,6 +66,12 @@ button {
   -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
+  /* Disable scroll-anchoring. Without this, when the featured-buckets
+     row collapses from cards to pills, the browser tries to preserve
+     the user's visual position by adjusting scrollTop — which pushes
+     the sentinel back into view, re-expanding the row, in a feedback
+     loop that reads as continuous flashing. */
+  overflow-anchor: none;
 }
 
 .drop-overlay {

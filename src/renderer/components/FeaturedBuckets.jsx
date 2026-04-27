@@ -70,7 +70,14 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
       } else {
         collapseTimer = setTimeout(() => setCompact(true), 180);
       }
-    }, { root: sc, threshold: 0 });
+    }, {
+      root: sc,
+      threshold: 0,
+      // Require the sentinel to be at least 24px above the viewport
+      // before counting as "out" — gives a buffer past the threshold
+      // so a slow scroll near the boundary doesn't sit on the edge.
+      rootMargin: '-24px 0px 0px 0px',
+    });
     obs.observe(sentinel);
     return () => {
       obs.disconnect();
