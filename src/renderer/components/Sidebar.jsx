@@ -47,8 +47,8 @@ function KeyboardIcon() {
 }
 
 // Bucket icon — trapezoid pail with a handle. Used for every bucket
-// entry in the sidebar (the colored swatch comes from the bucket's
-// own color setting and tints the icon via currentColor).
+// entry in the sidebar. Tinted blue (var(--icon-blue)) everywhere via
+// currentColor — buckets don't have per-bucket colors anymore.
 export function CollectionIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true">
@@ -446,7 +446,7 @@ export default function Sidebar({
               >
                 <span
                   className={styles.icon}
-                  style={{ color: active ? '#fff' : 'var(--text-tertiary)' }}
+                  style={{ color: active ? '#fff' : 'var(--icon-blue)' }}
                 >
                   <CollectionIcon />
                 </span>

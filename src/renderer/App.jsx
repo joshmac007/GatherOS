@@ -367,7 +367,7 @@ export default function App() {
       const submenu = others.map((col) => ({
         label: col.name,
         icon: (
-          <span style={{ color: col.color || 'var(--text-secondary)', display: 'inline-flex' }}>
+          <span style={{ color: 'var(--icon-blue)', display: 'inline-flex' }}>
             <CollectionIcon />
           </span>
         ),
@@ -696,7 +696,7 @@ export default function App() {
       ...collections.map((c) => ({
         label: c.name,
         icon: (
-          <span style={{ color: c.color || 'var(--text-secondary)', display: 'inline-flex' }}>
+          <span style={{ color: 'var(--icon-blue)', display: 'inline-flex' }}>
             <CollectionIcon />
           </span>
         ),
