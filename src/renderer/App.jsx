@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar, { CollectionIcon } from './components/Sidebar.jsx';
+import QuickSwitcher from './components/QuickSwitcher.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import ShortcutsModal from './components/ShortcutsModal.jsx';
 import Toolbar from './components/Toolbar.jsx';
@@ -165,6 +166,7 @@ export default function App() {
     try { localStorage.setItem('moodmark.gridLayout', gridLayout); } catch {}
   }, [gridLayout]);
   const [focusedId, setFocusedId] = useState(null);
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -785,6 +787,11 @@ export default function App() {
 
       // Cmd/Ctrl combos always claim the key, even from inputs — these
       // are global app commands.
+      if (cmd && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setQuickSwitcherOpen((v) => !v);
+        return;
+      }
       if (cmd && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault();
         searchInputRef.current?.focus();
@@ -1157,6 +1164,26 @@ export default function App() {
           onClose={() => setCardCtx(null)}
         />
       )}
+
+      <QuickSwitcher
+        open={quickSwitcherOpen}
+        onClose={() => setQuickSwitcherOpen(false)}
+        collections={collections}
+        allTags={allTags}
+        onPickBucket={(id) => {
+          setFocusedId(null);
+          setView({ type: 'collection', id });
+        }}
+        onPickTag={(name) => {
+          setFocusedId(null);
+          if (view.type !== 'all') setView({ type: 'all' });
+          setSearch(name);
+          requestAnimationFrame(() => searchInputRef.current?.focus());
+        }}
+        onPickSave={(id) => {
+          setFocusedId(id);
+        }}
+      />
 
       {bulkPicker && (
         <ContextMenu
