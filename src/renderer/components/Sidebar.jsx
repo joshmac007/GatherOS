@@ -108,6 +108,40 @@ export default function Sidebar({
 
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, collection }
 
+  // Inline "add child bucket" form, anchored under a top-level bucket.
+  const [creatingChildOf, setCreatingChildOf] = useState(null); // parent id
+  const [newChildName, setNewChildName] = useState('');
+  const childInputRef = useRef(null);
+
+  function startCreatingChild(parentId) {
+    setCreatingChildOf(parentId);
+    setNewChildName('');
+    requestAnimationFrame(() => childInputRef.current?.focus());
+  }
+
+  function cancelCreatingChild() {
+    setCreatingChildOf(null);
+    setNewChildName('');
+  }
+
+  async function commitCreateChild() {
+    const name = newChildName.trim();
+    const parentId = creatingChildOf;
+    if (!name || !parentId) { cancelCreatingChild(); return; }
+    try {
+      await onCreateCollection({ name, parentId });
+    } catch (err) {
+      console.error('Create child bucket failed:', err);
+    } finally {
+      cancelCreatingChild();
+    }
+  }
+
+  function handleChildKeyDown(e) {
+    if (e.key === 'Enter') { e.preventDefault(); commitCreateChild(); }
+    if (e.key === 'Escape') cancelCreatingChild();
+  }
+
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
 
@@ -206,6 +240,9 @@ export default function Sidebar({
 
   const ctxItems = ctxMenu
     ? [
+        ...(ctxMenu.collection.parent_id
+          ? []
+          : [{ label: 'Add Child Bucket', onClick: () => startCreatingChild(ctxMenu.collection.id) }]),
         { label: 'Rename', onClick: () => startRename(ctxMenu.collection) },
         { label: 'Delete Bucket', danger: true, onClick: () => onDeleteCollection(ctxMenu.collection.id) },
       ]
@@ -292,15 +329,19 @@ export default function Sidebar({
       )}
 
       <nav className={styles.section}>
-        {collections.length === 0 && !creating ? (
-          <div className={styles.empty}>No buckets yet</div>
-        ) : (
-          collections.map((c) => {
+        {(() => {
+          const topLevel = collections.filter((c) => !c.parent_id);
+          const childrenOf = (parentId) => collections.filter((c) => c.parent_id === parentId);
+          if (topLevel.length === 0 && !creating) {
+            return <div className={styles.empty}>No buckets yet</div>;
+          }
+          const renderItem = (c, isChild) => {
             const active = view.type === 'collection' && view.id === c.id;
             const isDragging = draggingId === c.id;
             const isDropTarget = dropTargetId === c.id && draggingId && draggingId !== c.id;
             const itemClass = [
               styles.item,
+              isChild && styles.itemChild,
               active && styles.active,
               isDragging && styles.dragging,
               isDropTarget && styles.dropTarget,
@@ -331,11 +372,11 @@ export default function Sidebar({
                 className={itemClass}
                 onClick={() => onViewChange({ type: 'collection', id: c.id })}
                 onContextMenu={(e) => handleCollectionContextMenu(e, c)}
-                draggable
-                onDragStart={(e) => handleDragStart(e, c.id)}
-                onDragOver={(e) => handleDragOver(e, c.id)}
-                onDragEnd={handleDragEnd}
-                onDrop={(e) => handleDrop(e, c.id)}
+                draggable={!isChild}
+                onDragStart={!isChild ? (e) => handleDragStart(e, c.id) : undefined}
+                onDragOver={!isChild ? (e) => handleDragOver(e, c.id) : undefined}
+                onDragEnd={!isChild ? handleDragEnd : undefined}
+                onDrop={!isChild ? (e) => handleDrop(e, c.id) : undefined}
               >
                 <span
                   className={styles.icon}
@@ -349,8 +390,35 @@ export default function Sidebar({
                 )}
               </button>
             );
-          })
-        )}
+          };
+          return topLevel.map((c) => (
+            <React.Fragment key={c.id}>
+              {renderItem(c, false)}
+              {childrenOf(c.id).map((child) => renderItem(child, true))}
+              {creatingChildOf === c.id && (
+                <div className={`${styles.newCollectionForm} ${styles.newChildForm}`}>
+                  <input
+                    ref={childInputRef}
+                    className={styles.newCollectionInput}
+                    value={newChildName}
+                    onChange={(e) => setNewChildName(e.target.value)}
+                    onKeyDown={handleChildKeyDown}
+                    placeholder="Sub-bucket name"
+                  />
+                  <div className={styles.newCollectionBtns}>
+                    <button className={styles.formBtn} onClick={cancelCreatingChild}>Cancel</button>
+                    <button
+                      className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+                      onClick={commitCreateChild}
+                    >
+                      Create
+                    </button>
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
+          ));
+        })()}
       </nav>
 
       {(onOpenSettings || onOpenShortcuts) && (

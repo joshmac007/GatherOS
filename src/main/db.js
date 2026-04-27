@@ -89,6 +89,15 @@ function migrate() {
   if (!saveCols.find((c) => c.name === 'deleted_at')) {
     db.exec('ALTER TABLE saves ADD COLUMN deleted_at INTEGER');
   }
+
+  // One level of bucket nesting. Top-level buckets have parent_id NULL;
+  // a child's parent_id points at a top-level bucket's id. The 2-level
+  // cap is enforced in the application layer (createCollection rejects
+  // a parent that itself has a parent).
+  const collectionCols = db.prepare("PRAGMA table_info(collections)").all();
+  if (!collectionCols.find((c) => c.name === 'parent_id')) {
+    db.exec('ALTER TABLE collections ADD COLUMN parent_id TEXT REFERENCES collections(id) ON DELETE CASCADE');
+  }
 }
 
 function getDatabase() {
@@ -219,8 +228,15 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   }
 
   if (collectionId) {
-    conditions.push(`id IN (SELECT save_id FROM collection_items WHERE collection_id = ?)`);
-    params.push(collectionId);
+    // Viewing a bucket also rolls up any direct child buckets, so a
+    // parent like "Logos" shows everything tagged in B&W / Colored
+    // sub-buckets too. (Max nesting is 2 levels — see createCollection.)
+    conditions.push(`id IN (
+      SELECT save_id FROM collection_items
+      WHERE collection_id = ?
+         OR collection_id IN (SELECT id FROM collections WHERE parent_id = ?)
+    )`);
+    params.push(collectionId, collectionId);
   }
   if (search) {
     // Substring match against title, tags, and OCR text. ai_description
@@ -363,20 +379,35 @@ function getCollectionsForSave(saveId) {
   `).all(saveId);
 }
 
-function createCollection({ name, color } = {}) {
+function createCollection({ name, color, parentId = null } = {}) {
   const db = getDatabase();
+
+  // Enforce the 2-level cap: a parent must itself be top-level. If
+  // someone tries to nest under a child, silently re-target to the
+  // grandparent (which will be the actual top-level bucket).
+  let resolvedParentId = parentId || null;
+  if (resolvedParentId) {
+    const parent = db.prepare('SELECT id, parent_id FROM collections WHERE id = ?').get(resolvedParentId);
+    if (!parent) resolvedParentId = null;
+    else if (parent.parent_id) resolvedParentId = parent.parent_id;
+  }
+
+  // order_index is per-sibling so children sort independently of
+  // top-level buckets.
   const next = db.prepare(
-    'SELECT COALESCE(MAX(order_index), -1) + 1 AS n FROM collections'
-  ).get();
+    'SELECT COALESCE(MAX(order_index), -1) + 1 AS n FROM collections WHERE COALESCE(parent_id, "") = COALESCE(?, "")'
+  ).get(resolvedParentId);
+
   const record = {
     id: crypto.randomUUID(),
     name: name || 'Untitled',
     color: color || '#007aff',
     created_at: Date.now(),
     order_index: next.n,
+    parent_id: resolvedParentId,
   };
   db.prepare(
-    'INSERT INTO collections (id, name, color, created_at, order_index) VALUES (@id, @name, @color, @created_at, @order_index)'
+    'INSERT INTO collections (id, name, color, created_at, order_index, parent_id) VALUES (@id, @name, @color, @created_at, @order_index, @parent_id)'
   ).run(record);
   return record;
 }
