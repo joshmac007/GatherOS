@@ -564,6 +564,13 @@ export default function Sidebar({
                 data-collection-id={c.id}
                 className={itemClassWithDrop}
                 onClick={() => onViewChange({ type: 'collection', id: c.id })}
+                onDoubleClick={(e) => {
+                  // In-place rename — same flow as Right-click → Rename.
+                  // preventDefault stops the OS text-select that double-
+                  // click usually fires.
+                  e.preventDefault();
+                  startRename(c);
+                }}
                 onContextMenu={(e) => handleCollectionContextMenu(e, c)}
                 onMouseEnter={(e) => scheduleHoverPreview(c.id, e.currentTarget)}
                 onMouseLeave={cancelHoverPreview}
