@@ -244,7 +244,6 @@
   text-align: left;
   cursor: pointer;
   outline: none;
-  position: relative; /* anchor for the absolute disclosure chevron */
   -webkit-app-region: no-drag;
   transition: background 100ms ease, box-shadow 100ms ease;
 }
@@ -257,41 +256,6 @@
   padding-left: 26px;
   font-size: 12.5px;
   color: var(--text-secondary);
-}
-
-/* Disclosure chevron — only rendered when a bucket has children.
-   Absolute-positioned just inside the bucket button's left padding
-   so it doesn't push the bucket icon. Every bucket icon stays at
-   the same x regardless. The chevron sits to the left of the active
-   highlight too (which is now slightly inset), so it reads like an
-   affordance hanging beside the row rather than on top of it. */
-.bucketChevron {
-  position: absolute;
-  left: -2px;
-  top: 50%;
-  transform: translate(0, -50%);
-  width: 10px;
-  height: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  opacity: 0.85;
-  cursor: pointer;
-  transition: transform 150ms ease, color 100ms ease, opacity 100ms ease;
-}
-
-.bucketChevron:hover {
-  color: var(--text-primary);
-  opacity: 1;
-}
-
-.bucketChevron.bucketChevronCollapsed {
-  transform: translate(0, -50%) rotate(-90deg);
-}
-
-.item.active .bucketChevron {
-  color: rgba(255, 255, 255, 0.85);
 }
 
 /* Hover preview — 2×2 mosaic that floats to the right of a bucket
