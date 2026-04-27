@@ -781,27 +781,15 @@ export default function App() {
     if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false);
   }, []);
 
-  // After a successful drop we want to land the user on the new save's
-  // detail view. saves is refreshed asynchronously by the save:created
-  // listener in useLibrary, so we stash the id and let an effect promote
-  // it to focusedId once the list contains it.
-  const [pendingFocusId, setPendingFocusId] = useState(null);
-
-  useEffect(() => {
-    if (!pendingFocusId) return;
-    if (saves.some((s) => s.id === pendingFocusId)) {
-      setFocusedId(pendingFocusId);
-      setPendingFocusId(null);
-    }
-  }, [pendingFocusId, saves]);
-
-  const focusAfterDrop = useCallback((id) => {
-    if (!id) return;
-    // Drops always land in All Saves; bounce out of any filtered view so
-    // the new record is actually reachable when saves reloads.
+  // After a successful drop / paste / upload we used to push the user
+  // straight into the detail view, but that hides the new card behind
+  // the focused-view overlay — including the shimmer animation that
+  // makes new arrivals easy to spot. Now we just make sure the grid
+  // is showing All so the save is visible, and let the user click in
+  // if they want to inspect it.
+  const focusAfterDrop = useCallback(() => {
     if (view.type !== 'all') setView({ type: 'all' });
     setSelected(new Set());
-    setPendingFocusId(id);
   }, [view, setView]);
 
   const onDrop = useCallback(async (e) => {
@@ -822,7 +810,7 @@ export default function App() {
           console.error('Drop failed:', err);
         }
       }
-      if (lastId) focusAfterDrop(lastId);
+      if (lastId) focusAfterDrop();
       return;
     }
 
@@ -831,7 +819,7 @@ export default function App() {
 
     try {
       const record = await window.moodmark.saves.dropUrl(candidates);
-      if (record?.id) focusAfterDrop(record.id);
+      if (record?.id) focusAfterDrop();
     } catch (err) {
       console.error('URL drop failed:', err);
     }
@@ -859,7 +847,7 @@ export default function App() {
         console.error('Upload failed:', err);
       }
     }
-    if (lastId) focusAfterDrop(lastId);
+    if (lastId) focusAfterDrop();
   }, [focusAfterDrop]);
 
   return (
