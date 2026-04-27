@@ -627,6 +627,87 @@
   color: var(--text-tertiary);
 }
 
+/* ── Font section (visible only when the save has the "font" tag) ───── */
+
+.fontSection {
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fontSectionLabel {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.fontField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fontFieldLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.fontInput {
+  width: 100%;
+  padding: 6px 9px;
+  background: var(--content-bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 100ms ease;
+  box-sizing: border-box;
+}
+
+.fontInput:focus {
+  border-color: var(--accent);
+}
+
+.fontInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.fontUrlRow {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.fontUrlRow .fontInput {
+  flex: 1 1 auto;
+}
+
+.fontOpenBtn {
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+
+.fontOpenBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .meta {
   display: grid;
   grid-template-columns: 88px 1fr;

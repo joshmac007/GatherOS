@@ -130,11 +130,42 @@ export default function DetailPanel({
   const [nameDraft, setNameDraft] = useState(record.title || '');
   const [urlDraft, setUrlDraft] = useState(record.source_url || '');
 
+  // Per-save metadata blob (JSON in DB). Lives behind tag-specific
+  // sections — currently the "font" tag exposes name/designer/buy_url.
+  const recordMeta = useMemo(() => {
+    if (!record.meta) return {};
+    try { return JSON.parse(record.meta) || {}; } catch { return {}; }
+  }, [record.meta]);
+  const fontMeta = recordMeta.font || {};
+  const [fontNameDraft, setFontNameDraft] = useState(fontMeta.name || '');
+  const [fontDesignerDraft, setFontDesignerDraft] = useState(fontMeta.designer || '');
+  const [fontBuyUrlDraft, setFontBuyUrlDraft] = useState(fontMeta.buy_url || '');
+
   // Reset drafts whenever the user moves to a different record.
   useEffect(() => {
     setNameDraft(record.title || '');
     setUrlDraft(record.source_url || '');
   }, [record.id, record.title, record.source_url]);
+
+  useEffect(() => {
+    setFontNameDraft(fontMeta.name || '');
+    setFontDesignerDraft(fontMeta.designer || '');
+    setFontBuyUrlDraft(fontMeta.buy_url || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record.id, record.meta]);
+
+  // Persist a font-meta change. Reads the latest record.meta, mutates
+  // the `font` slot, stringifies, and ships through onUpdateMeta.
+  function commitFontMeta(patch) {
+    const merged = { ...recordMeta, font: { ...fontMeta, ...patch } };
+    // If every font field is empty, drop the whole slot to keep the
+    // JSON clean.
+    if (!merged.font.name && !merged.font.designer && !merged.font.buy_url) {
+      delete merged.font;
+    }
+    const out = Object.keys(merged).length ? JSON.stringify(merged) : null;
+    onUpdateMeta?.(record.id, { meta: out });
+  }
 
   const persistedUrl = (record.source_url || '').trim();
   const canOpenUrl = looksLikeUrl(persistedUrl);
@@ -665,6 +696,69 @@ export default function DetailPanel({
           <div className={styles.autoTagError}>{autoTagError}</div>
         )}
       </div>
+
+      {tags.some((t) => t.name === 'font') && (
+        <div className={styles.fontSection}>
+          <div className={styles.fontSectionLabel}>Font</div>
+          <label className={styles.fontField}>
+            <span className={styles.fontFieldLabel}>Name</span>
+            <input
+              type="text"
+              className={styles.fontInput}
+              value={fontNameDraft}
+              onChange={(e) => setFontNameDraft(e.target.value)}
+              onBlur={() => {
+                if ((fontNameDraft || '') !== (fontMeta.name || '')) {
+                  commitFontMeta({ name: fontNameDraft.trim() || undefined });
+                }
+              }}
+              placeholder="e.g. Söhne Buch"
+            />
+          </label>
+          <label className={styles.fontField}>
+            <span className={styles.fontFieldLabel}>Designer / Foundry</span>
+            <input
+              type="text"
+              className={styles.fontInput}
+              value={fontDesignerDraft}
+              onChange={(e) => setFontDesignerDraft(e.target.value)}
+              onBlur={() => {
+                if ((fontDesignerDraft || '') !== (fontMeta.designer || '')) {
+                  commitFontMeta({ designer: fontDesignerDraft.trim() || undefined });
+                }
+              }}
+              placeholder="e.g. Klim Type Foundry"
+            />
+          </label>
+          <label className={styles.fontField}>
+            <span className={styles.fontFieldLabel}>Buy URL</span>
+            <div className={styles.fontUrlRow}>
+              <input
+                type="text"
+                className={styles.fontInput}
+                value={fontBuyUrlDraft}
+                onChange={(e) => setFontBuyUrlDraft(e.target.value)}
+                onBlur={() => {
+                  if ((fontBuyUrlDraft || '') !== (fontMeta.buy_url || '')) {
+                    commitFontMeta({ buy_url: fontBuyUrlDraft.trim() || undefined });
+                  }
+                }}
+                placeholder="https://…"
+              />
+              {looksLikeUrl(fontBuyUrlDraft.trim()) && (
+                <button
+                  type="button"
+                  className={styles.fontOpenBtn}
+                  onClick={() => window.moodmark.shell.openUrl(fontBuyUrlDraft.trim())}
+                  title="Open buy URL"
+                >
+                  Open ↗
+                </button>
+              )}
+            </div>
+          </label>
+        </div>
+      )}
 
       <dl className={styles.meta}>
         <dt>Saved</dt>

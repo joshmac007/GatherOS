@@ -89,6 +89,12 @@ function migrate() {
   if (!saveCols.find((c) => c.name === 'deleted_at')) {
     db.exec('ALTER TABLE saves ADD COLUMN deleted_at INTEGER');
   }
+  // Generic per-save metadata as JSON. Used today for tag-specific
+  // extras (e.g. the "font" tag stores name/designer/buy_url here).
+  // Stored as TEXT — caller is responsible for stringify/parse.
+  if (!saveCols.find((c) => c.name === 'meta')) {
+    db.exec('ALTER TABLE saves ADD COLUMN meta TEXT');
+  }
 
   // One level of bucket nesting. Top-level buckets have parent_id NULL;
   // a child's parent_id points at a top-level bucket's id. Plain TEXT
@@ -306,7 +312,7 @@ function emptyTrash() {
   };
 }
 
-function updateSave({ id, title, sourceUrl, aiDescription, ocrText, aiPrompt, embedding } = {}) {
+function updateSave({ id, title, sourceUrl, aiDescription, ocrText, aiPrompt, embedding, meta } = {}) {
   const db = getDatabase();
   const fields = [];
   const params = [];
@@ -316,6 +322,12 @@ function updateSave({ id, title, sourceUrl, aiDescription, ocrText, aiPrompt, em
   if (ocrText !== undefined) { fields.push('ocr_text = ?'); params.push(ocrText); }
   if (aiPrompt !== undefined) { fields.push('ai_prompt = ?'); params.push(aiPrompt); }
   if (embedding !== undefined) { fields.push('embedding = ?'); params.push(embedding); }
+  if (meta !== undefined) {
+    // Accept either a JSON string or an object — better-sqlite3 only
+    // binds primitives, so any object gets serialized here.
+    const v = meta == null ? null : (typeof meta === 'string' ? meta : JSON.stringify(meta));
+    fields.push('meta = ?'); params.push(v);
+  }
   if (!fields.length) return { ok: true };
   params.push(id);
   db.prepare(`UPDATE saves SET ${fields.join(', ')} WHERE id = ?`).run(...params);
