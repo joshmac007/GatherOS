@@ -836,7 +836,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
             )}
             {items.length === 0 && (
               <div className={styles.emptyHint}>
-                Open the library at the bottom-left, or press T to add text.
+                Open the Library at the top-left, or press T to add text.
               </div>
             )}
           </div>
@@ -1279,6 +1279,16 @@ function LibraryFloater({ allSaves, collections }) {
 
   return (
     <div ref={rootRef} className={styles.libraryFloater}>
+      <button
+        type="button"
+        className={[styles.floaterBtn, open && styles.floaterBtnActive].filter(Boolean).join(' ')}
+        onClick={() => setOpen((v) => !v)}
+        title="Open library"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <LibraryIcon />
+        <span>Library</span>
+      </button>
       {open && (
         <div className={styles.floaterPanel} onPointerDown={(e) => e.stopPropagation()}>
           <div className={styles.floaterSearch}>
@@ -1334,15 +1344,6 @@ function LibraryFloater({ allSaves, collections }) {
           </div>
         </div>
       )}
-      <button
-        type="button"
-        className={[styles.floaterBtn, open && styles.floaterBtnActive].filter(Boolean).join(' ')}
-        onClick={() => setOpen((v) => !v)}
-        title="Library"
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <LibraryIcon />
-      </button>
     </div>
   );
 }
