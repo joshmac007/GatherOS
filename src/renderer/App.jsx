@@ -11,7 +11,6 @@ import ContextMenu from './components/ContextMenu.jsx';
 import { useLibrary } from './hooks/useLibrary.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
-import { playSwoosh } from './lib/sounds.js';
 
 function BoardExportIcon() {
   return (
@@ -413,7 +412,6 @@ export default function App() {
               },
             ],
           });
-          playSwoosh();
           await window.moodmark.collections.addSave({ collectionId: col.id, saveId });
           loadCollections();
           // In Unsorted view the save no longer matches the filter
@@ -574,7 +572,6 @@ export default function App() {
         return { saveId: id, imageSrc: s ? fileUrl(s.file_path) : null };
       }),
     });
-    playSwoosh();
     for (const saveId of saveIds) {
       await window.moodmark.collections.addSave({ collectionId: bucketId, saveId });
     }
@@ -819,7 +816,6 @@ export default function App() {
               return { saveId: id, imageSrc: s ? fileUrl(s.file_path) : null };
             }),
           });
-          playSwoosh();
           for (const saveId of ids) {
             await window.moodmark.collections.addSave({ collectionId: c.id, saveId });
           }
