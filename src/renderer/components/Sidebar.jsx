@@ -215,6 +215,44 @@ export default function Sidebar({
     setCtxMenu({ x: e.clientX, y: e.clientY, collection });
   }
 
+  // ── Parent bucket expansion (click to toggle) ────────────────────────────
+  // A parent's children are hidden until the parent is clicked. Click
+  // again to collapse. We also force-expand whenever the active view
+  // is one of this parent's children, so the active row is never
+  // hidden inside a collapsed parent.
+  const EXPAND_KEY = 'moodmark.sidebar.expandedBuckets';
+  const [expandedBuckets, setExpandedBuckets] = useState(() => {
+    try {
+      const raw = localStorage.getItem(EXPAND_KEY);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch { return new Set(); }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(EXPAND_KEY, JSON.stringify([...expandedBuckets]));
+    } catch {}
+  }, [expandedBuckets]);
+
+  function isParentExpanded(parentId) {
+    if (expandedBuckets.has(parentId)) return true;
+    // Force-expand if a child of this parent is the active view.
+    if (view.type === 'collection') {
+      const child = collections.find((c) => c.id === view.id);
+      if (child?.parent_id === parentId) return true;
+    }
+    return false;
+  }
+
+  function toggleBucketExpansion(id) {
+    setExpandedBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   // ── Hover preview ────────────────────────────────────────────────────────
   // Brief 2×2 mosaic preview when hovering a bucket row. Fetched lazily
   // on hover with a short delay so quick mouse-overs don't fire IPC.
@@ -467,7 +505,14 @@ export default function Sidebar({
                 key={c.id}
                 data-collection-id={c.id}
                 className={itemClassWithDrop}
-                onClick={() => onViewChange({ type: 'collection', id: c.id })}
+                onClick={() => {
+                  // For top-level buckets that have children, the click
+                  // also toggles their expansion (in addition to navigating).
+                  if (!isChild && childrenOf(c.id).length > 0) {
+                    toggleBucketExpansion(c.id);
+                  }
+                  onViewChange({ type: 'collection', id: c.id });
+                }}
                 onContextMenu={(e) => handleCollectionContextMenu(e, c)}
                 onMouseEnter={(e) => scheduleHoverPreview(c.id, e.currentTarget)}
                 onMouseLeave={cancelHoverPreview}
@@ -506,7 +551,7 @@ export default function Sidebar({
           return topLevel.map((c) => (
             <React.Fragment key={c.id}>
               {renderItem(c, false)}
-              {childrenOf(c.id).map((child) => renderItem(child, true))}
+              {isParentExpanded(c.id) && childrenOf(c.id).map((child) => renderItem(child, true))}
               {creatingChildOf === c.id && (
                 <div className={`${styles.newCollectionForm} ${styles.newChildForm}`}>
                   <input
