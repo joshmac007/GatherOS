@@ -22,17 +22,21 @@ export default function ContextMenu({ x, y, items, onClose }) {
   }, [onClose]);
 
   // Clamp into the viewport; flip up if the menu would overflow the bottom.
+  // When flipping, leave a small gap above the cursor so the bottom item
+  // doesn't sit directly over the row that opened the menu — clicks
+  // there can land on the underlying button instead of our item.
   useLayoutEffect(() => {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     const margin = 8;
+    const flipGap = 6;
     let nx = x;
     let ny = y;
     if (nx + rect.width > window.innerWidth - margin) {
       nx = Math.max(margin, window.innerWidth - rect.width - margin);
     }
     if (ny + rect.height > window.innerHeight - margin) {
-      ny = Math.max(margin, y - rect.height);
+      ny = Math.max(margin, y - rect.height - flipGap);
     }
     setPos({ x: nx, y: ny, ready: true });
   }, [x, y, items]);
