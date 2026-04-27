@@ -766,8 +766,6 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
       </div>
 
       <div className={styles.body}>
-        <LibraryDrawer allSaves={allSaves} collections={collections} />
-
         <div
           ref={viewportRef}
           className={viewportClass}
@@ -838,7 +836,7 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
             )}
             {items.length === 0 && (
               <div className={styles.emptyHint}>
-                Drag images from the library on the left, or press T to add text.
+                Open the library at the bottom-left, or press T to add text.
               </div>
             )}
           </div>
@@ -850,6 +848,8 @@ export default function BoardCanvas({ board, allSaves, collections = [] }) {
               onChange={(patch) => handleStyleChange(activeTextItem.id, patch)}
             />
           )}
+
+          <LibraryFloater allSaves={allSaves} collections={collections} />
         </div>
       </div>
     </div>
@@ -1189,81 +1189,160 @@ function AlignIcon({ align }) {
   );
 }
 
-// Slim drawer of library thumbnails the user can drag onto the canvas.
-// Top-of-drawer dropdown filters which saves are shown (All / Favorites
-// / Recent / each Collection). HTML5 drag with a custom MIME so the
-// canvas's drop handler distinguishes Moodmark drops from Finder drops.
-function LibraryDrawer({ allSaves, collections }) {
-  const [filterValue, setFilterValue] = useState('all');
-  const [filteredSaves, setFilteredSaves] = useState(allSaves);
+// Floating library module. A small button at the bottom-left of the
+// canvas opens a compact panel that combines:
+//   - debounced search (substring against title/tag/OCR — same backend
+//     as the masonry grid's search input)
+//   - filter chips for All / Favorites / Recent and each Collection
+//   - a thumbnail grid you can drag onto the canvas
+// HTML5 drag with the custom MIME the canvas drop handler expects.
+function LibraryIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <rect x="2" y="2.5" width="5" height="5" rx="0.8" />
+      <rect x="9" y="2.5" width="5" height="5" rx="0.8" />
+      <rect x="2" y="9"   width="5" height="5" rx="0.8" />
+      <rect x="9" y="9"   width="5" height="5" rx="0.8" />
+    </svg>
+  );
+}
 
-  // Re-derive the visible list whenever the filter or the source list
-  // changes. For non-"all" filters we hit the backend so collection
-  // membership / favorites / recent semantics match the rest of the
-  // app exactly, with no client-side reimplementation.
+function FloaterSearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5" />
+      <line x1="10.4" y1="10.4" x2="13.5" y2="13.5" />
+    </svg>
+  );
+}
+
+function LibraryFloater({ allSaves, collections }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterValue, setFilterValue] = useState('all');
+  const [savesView, setSavesView] = useState(allSaves);
+  const rootRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Re-derive the visible list when filter, search, or source changes.
+  // For "all" with no search we use the cached allSaves prop; any other
+  // combination calls into the backend so membership/favorite/recent
+  // semantics match the rest of the app.
   useEffect(() => {
     let cancelled = false;
+    const trimmed = search.trim();
     async function run() {
-      if (filterValue === 'all') {
-        if (!cancelled) setFilteredSaves(allSaves);
+      if (filterValue === 'all' && !trimmed) {
+        if (!cancelled) setSavesView(allSaves);
         return;
       }
       const opts = {};
       if (filterValue === 'favorites' || filterValue === 'recent') {
         opts.filter = filterValue;
-      } else {
+      } else if (filterValue !== 'all') {
         opts.collectionId = filterValue;
       }
+      if (trimmed) opts.search = trimmed;
       const data = await window.moodmark.saves.getAll(opts);
-      if (!cancelled) setFilteredSaves(data || []);
+      if (!cancelled) setSavesView(data || []);
     }
     run();
     return () => { cancelled = true; };
-  }, [filterValue, allSaves]);
+  }, [filterValue, search, allSaves]);
+
+  // Click outside / Escape closes the panel.
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e) {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    }
+    function onKey(e) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  // When opening, focus the search input so typing is the next motion.
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  const chips = [
+    { id: 'all',        label: 'All' },
+    { id: 'favorites',  label: 'Favorites' },
+    { id: 'recent',     label: 'Recent' },
+    ...collections.map((c) => ({ id: c.id, label: c.name, color: c.color })),
+  ];
 
   return (
-    <aside className={styles.drawer}>
-      <div className={styles.drawerHeader}>
-        <select
-          className={styles.drawerSelect}
-          value={filterValue}
-          onChange={(e) => setFilterValue(e.target.value)}
-        >
-          <option value="all">All</option>
-          <option value="favorites">Favorites</option>
-          <option value="recent">Recent</option>
-          {collections.length > 0 && (
-            <optgroup label="Collections">
-              {collections.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-      </div>
-      <div className={styles.drawerList}>
-        {filteredSaves.map((save) => (
-          <div
-            key={save.id}
-            className={styles.drawerItem}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.effectAllowed = 'copy';
-              e.dataTransfer.setData(MIME_BOARD_DRAG, save.id);
-            }}
-            title={save.title || 'Drag onto board'}
-          >
-            <img
-              src={fileUrl(save.thumb_path || save.file_path)}
-              alt={save.title || ''}
-              draggable={false}
+    <div ref={rootRef} className={styles.libraryFloater}>
+      {open && (
+        <div className={styles.floaterPanel} onPointerDown={(e) => e.stopPropagation()}>
+          <div className={styles.floaterSearch}>
+            <span className={styles.floaterSearchIcon}><FloaterSearchIcon /></span>
+            <input
+              ref={inputRef}
+              className={styles.floaterInput}
+              type="search"
+              placeholder="Search by title or tag"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-        ))}
-        {filteredSaves.length === 0 && (
-          <div className={styles.drawerEmpty}>Nothing here.</div>
-        )}
-      </div>
-    </aside>
+          <div className={styles.floaterChips}>
+            {chips.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                className={[styles.floaterChip, filterValue === chip.id && styles.floaterChipActive]
+                  .filter(Boolean).join(' ')}
+                onClick={() => setFilterValue(chip.id)}
+              >
+                {chip.color && <span className={styles.floaterChipDot} style={{ background: chip.color }} />}
+                {chip.label}
+              </button>
+            ))}
+          </div>
+          <div className={styles.floaterGrid}>
+            {savesView.map((save) => (
+              <div
+                key={save.id}
+                className={styles.floaterThumb}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'copy';
+                  e.dataTransfer.setData(MIME_BOARD_DRAG, save.id);
+                }}
+                title={save.title || 'Drag onto board'}
+              >
+                <img
+                  src={fileUrl(save.thumb_path || save.file_path)}
+                  alt={save.title || ''}
+                  draggable={false}
+                />
+              </div>
+            ))}
+            {savesView.length === 0 && (
+              <div className={styles.floaterEmpty}>Nothing here.</div>
+            )}
+          </div>
+          <div className={styles.floaterFooter}>
+            {savesView.length} {savesView.length === 1 ? 'save' : 'saves'}
+          </div>
+        </div>
+      )}
+      <button
+        type="button"
+        className={[styles.floaterBtn, open && styles.floaterBtnActive].filter(Boolean).join(' ')}
+        onClick={() => setOpen((v) => !v)}
+        title="Library"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <LibraryIcon />
+      </button>
+    </div>
   );
 }
