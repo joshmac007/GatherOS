@@ -4,7 +4,10 @@ import { CollectionIcon } from './Sidebar.jsx';
 import { fileUrl } from '../lib/fileUrl.js';
 
 const PREVIEW_COUNT = 4;
-const COMPACT_SCROLL_PX = 60;
+// Hysteresis so we don't flip back-and-forth right at the threshold
+// when the row's height change feeds back into scrollTop.
+const ENTER_COMPACT_PX = 90;
+const EXIT_COMPACT_PX = 20;
 
 export default function FeaturedBuckets({ collections, onPickBucket }) {
   const [previews, setPreviews] = useState({}); // { bucketId: [save, ...] }
@@ -34,13 +37,17 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
     return () => { cancelled = true; };
   }, [collections]);
 
-  // Watch the grid's scroll container — past a small threshold the
-  // bar collapses into pills.
+  // Watch the grid's scroll container. Two thresholds so the toggle
+  // is hysteretic — once compact, you have to scroll most of the
+  // way back up to expand again. Without this, the row's collapse
+  // shrinks layout under the user's mouse and scrollTop oscillates
+  // around a single threshold, flashing the row back and forth.
   useEffect(() => {
     const sc = document.querySelector('.grid-scroll');
     if (!sc) return;
     function onScroll() {
-      setCompact(sc.scrollTop > COMPACT_SCROLL_PX);
+      const top = sc.scrollTop;
+      setCompact((cur) => (cur ? top > EXIT_COMPACT_PX : top > ENTER_COMPACT_PX));
     }
     onScroll();
     sc.addEventListener('scroll', onScroll, { passive: true });
