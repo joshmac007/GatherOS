@@ -150,7 +150,9 @@ export default function FocusedView({
           aria-label="Back to grid"
           title="Back to grid (Esc)"
         >
-          <span className={styles.chevron}>‹</span>
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M7.5 2.5 L3 6 L7.5 9.5" />
+          </svg>
         </button>
 
         {total > 1 && (
