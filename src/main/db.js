@@ -362,7 +362,7 @@ function getUnindexedCount() {
 // ── Collections ────────────────────────────────────────────────────────────
 
 function getAllCollections() {
-  const rows = getDatabase().prepare(`
+  return getDatabase().prepare(`
     SELECT c.id, c.name, c.color, c.created_at, c.order_index, c.parent_id,
            COUNT(ci.save_id) AS save_count
     FROM collections c
@@ -370,8 +370,6 @@ function getAllCollections() {
     GROUP BY c.id
     ORDER BY c.order_index ASC, c.created_at ASC
   `).all();
-  console.log('[db.getAllCollections]', rows.map((r) => ({ id: r.id, name: r.name, parent_id: r.parent_id })));
-  return rows;
 }
 
 function getCollectionsForSave(saveId) {
@@ -385,7 +383,6 @@ function getCollectionsForSave(saveId) {
 
 function createCollection({ name, color, parentId = null } = {}) {
   const db = getDatabase();
-  console.log('[db.createCollection] called with', { name, color, parentId });
 
   // Enforce the 2-level cap: a parent must itself be top-level. If
   // someone tries to nest under a child, silently re-target to the
@@ -396,12 +393,11 @@ function createCollection({ name, color, parentId = null } = {}) {
     if (!parent) resolvedParentId = null;
     else if (parent.parent_id) resolvedParentId = parent.parent_id;
   }
-  console.log('[db.createCollection] resolvedParentId:', resolvedParentId);
 
   // order_index is per-sibling so children sort independently of
   // top-level buckets.
   const next = db.prepare(
-    'SELECT COALESCE(MAX(order_index), -1) + 1 AS n FROM collections WHERE COALESCE(parent_id, "") = COALESCE(?, "")'
+    "SELECT COALESCE(MAX(order_index), -1) + 1 AS n FROM collections WHERE COALESCE(parent_id, '') = COALESCE(?, '')"
   ).get(resolvedParentId);
 
   const record = {
