@@ -187,14 +187,15 @@
 .floaterChip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex: 0 0 auto;
-  padding: 4px 9px;
+  padding: 6px 14px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1;
   color: var(--text-primary);
   cursor: pointer;
   white-space: nowrap;
