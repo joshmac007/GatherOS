@@ -260,17 +260,18 @@
 }
 
 /* Disclosure chevron — only rendered when a bucket has children.
-   Absolute-positioned so it doesn't take any room in the row layout:
-   every bucket icon sits at the same x position regardless of whether
-   the chevron is there. The chevron itself hangs in the sidebar's
-   left gutter, between the nav container and the bucket button. */
+   Absolute-positioned just inside the bucket button's left padding
+   so it doesn't push the bucket icon. Every bucket icon stays at
+   the same x regardless. The chevron sits to the left of the active
+   highlight too (which is now slightly inset), so it reads like an
+   affordance hanging beside the row rather than on top of it. */
 .bucketChevron {
   position: absolute;
-  left: -10px;
+  left: -2px;
   top: 50%;
   transform: translate(0, -50%);
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
