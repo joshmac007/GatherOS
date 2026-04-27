@@ -1159,7 +1159,7 @@ export default function App() {
               title="Composite the selection into a single moodboard PNG"
             >
               <span className="selection-btn-icon"><BoardExportIcon /></span>
-              <span className="selection-btn-label">Generate Moodboard</span>
+              <span className="selection-btn-label">Make Moodboard</span>
             </button>
           )}
           <button
