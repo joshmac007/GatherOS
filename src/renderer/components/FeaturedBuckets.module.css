@@ -13,12 +13,24 @@
   position: sticky;
   top: 0;
   z-index: 5;
-  padding: 14px 20px 14px;
+  /* Pull the row's bottom up so the scroller's hover-shadow padding
+     (28px) doesn't push the masonry grid down by an extra inch. */
+  padding: 14px 20px 0;
+  margin-bottom: -10px;
   pointer-events: none; /* let drags / clicks pass through gaps */
 }
 
 .row.compact {
-  padding: 6px 20px 6px;
+  padding: 6px 20px 0;
+  margin-bottom: 0;
+}
+
+/* Disable transform transitions briefly while the state is swapping
+   between expanded cards and compact pills. Reapplied after 60ms so
+   hover-fan continues to animate as usual. */
+.row.snap .stack img,
+.row.snap .card {
+  transition: none !important;
 }
 
 .row .scroller,
@@ -30,8 +42,11 @@
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  overflow-y: visible;
-  padding-bottom: 4px;
+  /* overflow-y is coerced by the browser to match overflow-x, so
+     hover-shadow on the cards gets clipped at the scroller's edge.
+     Bump bottom padding (and pull the row's edge back up via the
+     row's own padding) to give the shadow clear room. */
+  padding: 4px 0 28px;
   scroll-behavior: smooth;
   scrollbar-width: none;
 }

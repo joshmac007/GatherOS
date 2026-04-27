@@ -8,8 +8,24 @@ const PREVIEW_COUNT = 4;
 export default function FeaturedBuckets({ collections, onPickBucket }) {
   const [previews, setPreviews] = useState({}); // { bucketId: [save, ...] }
   const [compact, setCompact] = useState(false);
+  // Set briefly when compact toggles so we can disable the stack-img
+  // transform transition for one frame — otherwise the static
+  // rotated transforms in expanded mode tween to/from `none` over
+  // 320ms during the state swap, which reads as a single flash.
+  const [snap, setSnap] = useState(false);
+  const isInitial = useRef(true);
   const containerRef = useRef(null);
   const sentinelRef = useRef(null);
+
+  useEffect(() => {
+    if (isInitial.current) {
+      isInitial.current = false;
+      return;
+    }
+    setSnap(true);
+    const id = setTimeout(() => setSnap(false), 60);
+    return () => clearTimeout(id);
+  }, [compact]);
 
   // Pre-fetch up to N preview images per bucket. One IPC per bucket;
   // fine for sidebars with a handful of buckets, would want a single
@@ -60,7 +76,7 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
       <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
     <div
       ref={containerRef}
-      className={[styles.row, compact && styles.compact].filter(Boolean).join(' ')}
+      className={[styles.row, compact && styles.compact, snap && styles.snap].filter(Boolean).join(' ')}
     >
       <div className={styles.scroller}>
         {collections.map((c) => {
