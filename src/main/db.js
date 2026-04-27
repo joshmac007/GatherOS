@@ -91,12 +91,13 @@ function migrate() {
   }
 
   // One level of bucket nesting. Top-level buckets have parent_id NULL;
-  // a child's parent_id points at a top-level bucket's id. The 2-level
-  // cap is enforced in the application layer (createCollection rejects
-  // a parent that itself has a parent).
+  // a child's parent_id points at a top-level bucket's id. Plain TEXT
+  // (no REFERENCES) because SQLite's ALTER TABLE ADD COLUMN restricts
+  // foreign-key clauses; cascade-on-delete is handled in deleteCollection.
+  // The 2-level cap is enforced in the application layer.
   const collectionCols = db.prepare("PRAGMA table_info(collections)").all();
   if (!collectionCols.find((c) => c.name === 'parent_id')) {
-    db.exec('ALTER TABLE collections ADD COLUMN parent_id TEXT REFERENCES collections(id) ON DELETE CASCADE');
+    db.exec('ALTER TABLE collections ADD COLUMN parent_id TEXT');
   }
 }
 
@@ -362,7 +363,8 @@ function getUnindexedCount() {
 
 function getAllCollections() {
   return getDatabase().prepare(`
-    SELECT c.*, COUNT(ci.save_id) AS save_count
+    SELECT c.id, c.name, c.color, c.created_at, c.order_index, c.parent_id,
+           COUNT(ci.save_id) AS save_count
     FROM collections c
     LEFT JOIN collection_items ci ON ci.collection_id = c.id
     GROUP BY c.id
@@ -476,7 +478,12 @@ function renameCollection({ id, name } = {}) {
 }
 
 function deleteCollection(id) {
-  getDatabase().prepare('DELETE FROM collections WHERE id = ?').run(id);
+  // Cascade child buckets manually since the column is plain TEXT
+  // (SQLite ALTER TABLE doesn't allow attaching foreign keys after
+  // the fact reliably, so we don't rely on ON DELETE CASCADE here).
+  const db = getDatabase();
+  db.prepare('DELETE FROM collections WHERE parent_id = ?').run(id);
+  db.prepare('DELETE FROM collections WHERE id = ?').run(id);
   return { ok: true };
 }
 
