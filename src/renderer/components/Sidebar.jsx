@@ -332,6 +332,8 @@ export default function Sidebar({
         {(() => {
           const topLevel = collections.filter((c) => !c.parent_id);
           const childrenOf = (parentId) => collections.filter((c) => c.parent_id === parentId);
+          console.log('[Sidebar] collections:', collections.map((c) => ({ id: c.id, name: c.name, parent_id: c.parent_id })));
+          console.log('[Sidebar] topLevel ids:', topLevel.map((c) => c.id));
           if (topLevel.length === 0 && !creating) {
             return <div className={styles.empty}>No buckets yet</div>;
           }
