@@ -345,6 +345,18 @@ export default function Sidebar({
   // back to App on drop so the addSave + flyToCollection happens once.
   const SAVE_DROP_MIME = 'application/x-moodmark-save-ids';
   const [saveDropTargetId, setSaveDropTargetId] = useState(null);
+  // Spring-loaded buckets: hover a bucket while dragging a save and
+  // after a beat we switch the active view to that bucket so you
+  // can peek inside before committing to drop.
+  const springTargetRef = useRef(null);
+  const springTimerRef = useRef(null);
+  const SPRING_LOAD_MS = 700;
+
+  function clearSpringLoad() {
+    if (springTimerRef.current) clearTimeout(springTimerRef.current);
+    springTimerRef.current = null;
+    springTargetRef.current = null;
+  }
 
   function isSaveDrag(e) {
     return e.dataTransfer.types.includes(SAVE_DROP_MIME);
@@ -355,12 +367,32 @@ export default function Sidebar({
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     if (saveDropTargetId !== bucketId) setSaveDropTargetId(bucketId);
+
+    // Restart the spring-load timer when we land on a different
+    // bucket. Skip if we're already viewing this bucket — no point
+    // springing into the view we're already on.
+    if (springTargetRef.current !== bucketId) {
+      springTargetRef.current = bucketId;
+      if (springTimerRef.current) clearTimeout(springTimerRef.current);
+      const isAlreadyActive = view.type === 'collection' && view.id === bucketId;
+      if (!isAlreadyActive) {
+        springTimerRef.current = setTimeout(() => {
+          // Re-check via the ref so a quick mouse-out cancels.
+          if (springTargetRef.current === bucketId) {
+            onViewChange?.({ type: 'collection', id: bucketId });
+          }
+        }, SPRING_LOAD_MS);
+      }
+    }
   }
 
   function handleSaveDragLeave(e) {
     // dragleave fires when entering child elements too — only reset if
     // we really left the row.
-    if (!e.currentTarget.contains(e.relatedTarget)) setSaveDropTargetId(null);
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setSaveDropTargetId(null);
+      clearSpringLoad();
+    }
   }
 
   async function handleSaveDrop(e, bucketId) {
@@ -368,12 +400,26 @@ export default function Sidebar({
     e.preventDefault();
     e.stopPropagation();
     setSaveDropTargetId(null);
+    clearSpringLoad();
     let ids;
     try { ids = JSON.parse(e.dataTransfer.getData(SAVE_DROP_MIME) || '[]'); }
     catch { return; }
     if (!Array.isArray(ids) || ids.length === 0) return;
     await onAddSavesToBucket?.(bucketId, ids);
   }
+
+  // Drag-end anywhere should also cancel a pending spring-load — if
+  // the user dropped outside any bucket or hit Escape, we don't want
+  // a stray timer to fire later.
+  useEffect(() => {
+    const onEnd = () => clearSpringLoad();
+    document.addEventListener('dragend', onEnd);
+    document.addEventListener('drop', onEnd);
+    return () => {
+      document.removeEventListener('dragend', onEnd);
+      document.removeEventListener('drop', onEnd);
+    };
+  }, []);
 
   const ctxItems = ctxMenu
     ? [
