@@ -534,22 +534,25 @@ export default function DetailPanel({
           </div>
         </label>
         {(editingNotes || notesDraft) ? (
-          <textarea
-            ref={notesRef}
-            className={styles.notesInput}
-            value={notesDraft}
-            placeholder="Add a note…"
-            onChange={(e) => setNotesDraft(e.target.value)}
-            onBlur={commitNotes}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setNotesDraft(record.notes || '');
-                setEditingNotes(false);
-                e.currentTarget.blur();
-              }
-            }}
-            rows={1}
-          />
+          <label className={styles.metaField}>
+            <span className={styles.metaFieldLabel}>Note</span>
+            <textarea
+              ref={notesRef}
+              className={styles.notesInput}
+              value={notesDraft}
+              placeholder="Add a note…"
+              onChange={(e) => setNotesDraft(e.target.value)}
+              onBlur={commitNotes}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setNotesDraft(record.notes || '');
+                  setEditingNotes(false);
+                  e.currentTarget.blur();
+                }
+              }}
+              rows={1}
+            />
+          </label>
         ) : (
           <button
             type="button"
