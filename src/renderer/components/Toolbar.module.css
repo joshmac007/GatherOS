@@ -216,10 +216,10 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 2px 4px;
+  padding: 2px 5px;
   background: rgba(0, 0, 0, 0.04);
   border: 0.5px solid rgba(0, 0, 0, 0.07);
-  border-radius: 5px;
+  border-radius: 999px;
   cursor: pointer;
   -webkit-app-region: no-drag;
   transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
