@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import styles from './Sidebar.module.css';
 import ContextMenu from './ContextMenu.jsx';
+import { fileUrl } from '../lib/fileUrl.js';
 
 function GridIcon() {
   return (
@@ -211,6 +213,47 @@ export default function Sidebar({
     e.preventDefault();
     setCtxMenu({ x: e.clientX, y: e.clientY, collection });
   }
+
+  // ── Hover preview ────────────────────────────────────────────────────────
+  // Brief 2×2 mosaic preview when hovering a bucket row. Fetched lazily
+  // on hover with a short delay so quick mouse-overs don't fire IPC.
+  const [hoverPreview, setHoverPreview] = useState(null);
+  // { bucketId, saves: [...], x, y } | null
+  const previewTimerRef = useRef(null);
+  // Generation counter so cancelled fetches don't commit late.
+  const previewGenRef = useRef(0);
+
+  function scheduleHoverPreview(bucketId, target) {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    const rect = target.getBoundingClientRect();
+    const gen = ++previewGenRef.current;
+    previewTimerRef.current = setTimeout(async () => {
+      if (gen !== previewGenRef.current) return;
+      let data = [];
+      try {
+        data = await window.moodmark.saves.getAll({ collectionId: bucketId });
+      } catch { return; }
+      if (gen !== previewGenRef.current) return;
+      const slice = (data || []).slice(0, 4);
+      if (slice.length === 0) return;
+      setHoverPreview({
+        bucketId,
+        saves: slice,
+        x: rect.right + 8,
+        y: rect.top + rect.height / 2,
+      });
+    }, 320);
+  }
+
+  function cancelHoverPreview() {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    previewGenRef.current++;
+    setHoverPreview(null);
+  }
+
+  useEffect(() => () => {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+  }, []);
 
   // ── Drag-to-reorder ──────────────────────────────────────────────────────
   function handleDragStart(e, id) {
@@ -425,6 +468,8 @@ export default function Sidebar({
                 className={itemClassWithDrop}
                 onClick={() => onViewChange({ type: 'collection', id: c.id })}
                 onContextMenu={(e) => handleCollectionContextMenu(e, c)}
+                onMouseEnter={(e) => scheduleHoverPreview(c.id, e.currentTarget)}
+                onMouseLeave={cancelHoverPreview}
                 draggable={!isChild}
                 onDragStart={!isChild ? (e) => handleDragStart(e, c.id) : undefined}
                 onDragOver={(e) => {
@@ -521,6 +566,25 @@ export default function Sidebar({
           items={ctxItems}
           onClose={() => setCtxMenu(null)}
         />
+      )}
+      {hoverPreview && ReactDOM.createPortal(
+        <div
+          className={styles.bucketPreview}
+          style={{ left: `${hoverPreview.x}px`, top: `${hoverPreview.y}px` }}
+        >
+          <div className={styles.bucketPreviewGrid}>
+            {hoverPreview.saves.map((s) => (
+              <div key={s.id} className={styles.bucketPreviewCell}>
+                <img
+                  src={fileUrl(s.thumb_path || s.file_path)}
+                  alt=""
+                  draggable={false}
+                />
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body,
       )}
     </aside>
   );
