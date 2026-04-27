@@ -103,9 +103,11 @@
 }
 
 .submenu {
-  position: absolute;
-  top: -4px;
-  left: calc(100% + 4px);
+  /* Portaled to body and positioned via inline top/left from the
+     parent item's bounding rect — that way the submenu has its own
+     stacking context and the backdrop-filter actually blurs the
+     content underneath (a nested .submenu inside .menu would inherit
+     .menu's filter context and end up un-blurred). */
   min-width: 168px;
   max-height: 60vh;
   overflow-y: auto;
@@ -121,7 +123,9 @@
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 12px 32px rgba(0, 0, 0, 0.14),
     0 24px 60px rgba(0, 0, 0, 0.1);
-  z-index: 1;
+  color: var(--text-primary);
+  z-index: 9999;
+  -webkit-app-region: no-drag;
 }
 
 .item:hover {
