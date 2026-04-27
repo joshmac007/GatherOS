@@ -352,7 +352,7 @@ export default function App() {
   // Bulk "Add to Collection" picker, anchored above the selection bar.
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
 
-  const buildCardMenuItems = useCallback((saveId) => {
+  const buildCardMenuItems = useCallback((saveId, memberIds) => {
     const items = [];
     // Trash view gets a different menu — restore / delete forever.
     // No bucket actions, since trashed saves aren't "in the library".
@@ -385,9 +385,13 @@ export default function App() {
         },
       });
     }
-    const others = view.type === 'collection'
+    // Hide buckets the save is already in — adding it again would be
+    // a no-op. memberIds is fetched at menu-open time.
+    const memberSet = memberIds instanceof Set ? memberIds : new Set(memberIds || []);
+    const others = (view.type === 'collection'
       ? collections.filter((c) => c.id !== view.id)
-      : collections;
+      : collections
+    ).filter((c) => !memberSet.has(c.id));
     if (others.length > 0) {
       if (items.length > 0) items.push({ type: 'separator' });
       const submenu = others.map((col) => ({
@@ -442,8 +446,15 @@ export default function App() {
     return items;
   }, [collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves]);
 
-  const handleCardContextMenu = useCallback((saveId, x, y) => {
-    const items = buildCardMenuItems(saveId);
+  const handleCardContextMenu = useCallback(async (saveId, x, y) => {
+    // Fetch the save's current bucket memberships first so the
+    // "Add to Bucket" submenu can hide buckets it's already in.
+    let memberIds = [];
+    try {
+      const rows = await window.moodmark.collections.getForSave(saveId);
+      memberIds = (rows || []).map((r) => r.id);
+    } catch { /* fall through with empty list */ }
+    const items = buildCardMenuItems(saveId, memberIds);
     if (items.length === 0) return;
     setCardCtx({ saveId, x, y, items });
   }, [buildCardMenuItems]);
@@ -694,11 +705,23 @@ export default function App() {
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
-  const openBulkPicker = useCallback((e) => {
+  // Bucket ids that ALL selected saves are already in — the bulk
+  // picker hides these so we don't offer no-op moves.
+  const [bulkAlreadyIn, setBulkAlreadyIn] = useState(new Set());
+  const openBulkPicker = useCallback(async (e) => {
     if (collections.length === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
+    const ids = [...selected];
+    let already = new Set();
+    if (ids.length > 0) {
+      try {
+        const result = await window.moodmark.collections.containingAll(ids);
+        already = new Set(result || []);
+      } catch { /* leave empty on failure */ }
+    }
+    setBulkAlreadyIn(already);
     setBulkPicker({ x: rect.left, y: rect.top - 4 });
-  }, [collections.length]);
+  }, [collections.length, selected]);
 
   const handleBulkExportBoard = useCallback(async () => {
     const ids = [...selected];
@@ -770,9 +793,15 @@ export default function App() {
   const bulkPickerItems = useMemo(() => {
     if (!bulkPicker) return [];
     const ids = [...selected];
+    // Hide buckets every selected save is already a member of —
+    // adding again would be a no-op for all of them.
+    const offer = collections.filter((c) => !bulkAlreadyIn.has(c.id));
+    if (offer.length === 0) {
+      return [{ type: 'header', label: 'Already in every bucket' }];
+    }
     return [
       { type: 'header', label: `Add ${ids.length} to Bucket` },
-      ...collections.map((c) => ({
+      ...offer.map((c) => ({
         label: c.name,
         icon: (
           <span style={{ color: 'var(--icon-blue)', display: 'inline-flex' }}>
@@ -795,7 +824,7 @@ export default function App() {
         },
       })),
     ];
-  }, [bulkPicker, selected, collections, saves, loadCollections, view, reload]);
+  }, [bulkPicker, bulkAlreadyIn, selected, collections, saves, loadCollections, view, reload]);
 
   const goPrev = useCallback(() => {
     if (focusedIndex > 0) setFocusedId(saves[focusedIndex - 1].id);

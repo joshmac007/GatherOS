@@ -410,6 +410,21 @@ function getCollectionsForSave(saveId) {
   `).all(saveId);
 }
 
+// Returns the ids of collections that contain ALL of the given saves.
+// Used to grey out / hide "Add to Bucket" entries that would be a
+// no-op for every selected card.
+function getCollectionsContainingAll(saveIds) {
+  if (!Array.isArray(saveIds) || saveIds.length === 0) return [];
+  const placeholders = saveIds.map(() => '?').join(',');
+  const rows = getDatabase().prepare(`
+    SELECT collection_id AS id FROM collection_items
+    WHERE save_id IN (${placeholders})
+    GROUP BY collection_id
+    HAVING COUNT(DISTINCT save_id) = ?
+  `).all(...saveIds, saveIds.length);
+  return rows.map((r) => r.id);
+}
+
 function createCollection({ name, color } = {}) {
   const db = getDatabase();
   const next = db.prepare(
@@ -531,6 +546,7 @@ module.exports = {
   filterByColor,
   getAllCollections,
   getCollectionsForSave,
+  getCollectionsContainingAll,
   createCollection,
   renameCollection,
   deleteCollection,
