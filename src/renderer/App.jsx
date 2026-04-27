@@ -137,6 +137,7 @@ export default function App() {
     restoreSave,
     hideSavesLocal,
     updateSaveMeta,
+    freshIds,
   } = useLibrary();
 
   const handleColorFilter = useCallback((hex) => {
@@ -947,6 +948,7 @@ export default function App() {
                   search={search}
                   semanticSearchActive={semanticSearchActive}
                   colorFilter={colorFilter}
+                  freshIds={freshIds}
                 />
               </div>
             </>

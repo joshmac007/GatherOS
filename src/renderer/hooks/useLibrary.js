@@ -47,8 +47,35 @@ export function useLibrary() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Track the IDs of just-arrived saves so the grid can briefly
+  // highlight them. Each ID is auto-cleared after the shimmer's
+  // animation duration so subsequent renders don't re-trigger it.
+  const FRESH_MS = 1500;
+  const [freshIds, setFreshIds] = useState(() => new Set());
+
   // Refresh when main process fires save:created (any capture method).
-  useEffect(() => window.moodmark.on('save:created', load), [load]);
+  // The event carries the new record; we pull its id, reload the list,
+  // and mark it fresh for FRESH_MS so the card shimmer fires once.
+  useEffect(() =>
+    window.moodmark.on('save:created', (record) => {
+      load();
+      const id = record?.id;
+      if (!id) return;
+      setFreshIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      setTimeout(() => {
+        setFreshIds((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, FRESH_MS);
+    }),
+  [load]);
 
   // save:updated fires when the background AI pipeline writes a new title
   // (or any future field) onto an existing record. Patch in place rather
@@ -121,5 +148,6 @@ export function useLibrary() {
     emptyTrash,
     hideSavesLocal,
     updateSaveMeta,
+    freshIds,
   };
 }

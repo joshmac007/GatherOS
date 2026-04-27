@@ -25,6 +25,7 @@ export default function ImageCard({
   onOpen,
   onContextMenu,
   onDragStart,
+  fresh,
 }) {
   const src = fileUrl(record.file_path);
   const aspect =
@@ -39,6 +40,7 @@ export default function ImageCard({
         styles.card,
         selected && styles.selected,
         selectionActive && styles.showSelectables,
+        fresh && styles.fresh,
       ].filter(Boolean).join(' ')}
       onClick={(e) => onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey)}
       onDoubleClick={() => onOpen(record)}

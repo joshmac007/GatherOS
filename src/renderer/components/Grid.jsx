@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import ImageCard from './ImageCard.jsx';
 import styles from './Grid.module.css';
 
-export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu, onDragStart, columns, loading, view, search, semanticSearchActive, colorFilter }) {
+export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu, onDragStart, columns, loading, view, search, semanticSearchActive, colorFilter, freshIds }) {
   const columnBuckets = useMemo(() => {
     const buckets = Array.from({ length: columns }, () => []);
     saves.forEach((save, i) => {
@@ -68,6 +68,7 @@ export default function Grid({ saves, selected, onSelect, onOpen, onContextMenu,
               onOpen={onOpen}
               onContextMenu={onContextMenu}
               onDragStart={onDragStart}
+              fresh={freshIds?.has(s.id)}
             />
           ))}
         </div>
