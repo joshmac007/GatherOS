@@ -333,7 +333,7 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
             restore later by replacing the contents of the app's data
             folder with this archive's contents.
           </p>
-          <div className={styles.actions}>
+          <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
             <button
               type="button"
               className={styles.btn}
