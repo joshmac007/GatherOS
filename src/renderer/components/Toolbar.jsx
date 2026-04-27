@@ -91,7 +91,6 @@ export default function Toolbar({
   onSearchChange,
   columns,
   onColumnsChange,
-  count,
   onToggleSidebar,
   semanticSearchActive = false,
   colorFilter = null,
@@ -118,9 +117,6 @@ export default function Toolbar({
         )}
         {viewTitle && (
           <span className={styles.viewTitle} title={viewTitle}>{viewTitle}</span>
-        )}
-        {viewTitle && count != null && (
-          <span className={styles.viewCount}>{count}</span>
         )}
       </div>
 
@@ -155,11 +151,6 @@ export default function Toolbar({
             <span className={styles.colorChipLabel}>{colorFilter.toUpperCase()}</span>
             <span className={styles.colorChipX} aria-hidden="true">×</span>
           </button>
-        )}
-        {count != null && !viewTitle && (
-          <span className={styles.count}>
-            {count} {count === 1 ? 'save' : 'saves'}
-          </span>
         )}
 
         {onLayoutChange && (

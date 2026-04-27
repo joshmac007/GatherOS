@@ -962,7 +962,6 @@ export default function App() {
                 onColumnsChange={setGridColumns}
                 layout={gridLayout}
                 onLayoutChange={setGridLayout}
-                count={saves.length}
                 onToggleSidebar={sidebarCollapsed ? toggleSidebar : null}
                 semanticSearchActive={semanticSearchActive}
                 colorFilter={colorFilter}
