@@ -13,21 +13,22 @@
   position: sticky;
   top: 0;
   z-index: 5;
-  /* Solid background matching the grid container so masonry cards
-     scrolling past behind the sticky row are properly occluded —
-     without this, items would flash through the gaps between
-     pills/cards and read as a glitchy transition. Reads as just
-     "part of the grid" since the color matches. */
-  background: var(--content-bg);
+  background: transparent;
   /* Pull the row's bottom up so the scroller's hover-shadow padding
      (28px) doesn't push the masonry grid down by an extra inch. */
   padding: 14px 20px 0;
   margin-bottom: -10px;
+  pointer-events: none; /* let drags / clicks pass through gaps */
 }
 
 .row.compact {
   padding: 6px 20px 0;
   margin-bottom: 0;
+}
+
+.row .scroller,
+.row .card {
+  pointer-events: auto;
 }
 
 /* Disable transform transitions briefly while the state is swapping
