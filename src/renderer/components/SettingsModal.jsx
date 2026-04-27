@@ -333,14 +333,16 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
             restore later by replacing the contents of the app's data
             folder with this archive's contents.
           </p>
-          <button
-            type="button"
-            className={styles.reindexBtn}
-            onClick={handleExportLibrary}
-            disabled={exportState.running}
-          >
-            {exportState.running ? 'Exporting…' : 'Export Library as Zip'}
-          </button>
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={handleExportLibrary}
+              disabled={exportState.running}
+            >
+              {exportState.running ? 'Exporting…' : 'Export Library as Zip'}
+            </button>
+          </div>
           {exportState.message && (
             <div className={styles.sectionHint} style={{ marginTop: 8 }}>
               {exportState.message}
