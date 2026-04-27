@@ -1,15 +1,15 @@
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.20);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding-top: 18vh;
   z-index: 10000;
-  animation: scrimIn 120ms ease-out;
+  animation: scrimIn 140ms ease-out;
   -webkit-app-region: no-drag;
 }
 
