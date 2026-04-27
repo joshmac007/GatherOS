@@ -82,6 +82,56 @@ function TrashIcon() {
   );
 }
 
+function ConfettiBurst({ anchor, onDone }) {
+  // Pre-roll a fixed set of particle vectors for this burst so the
+  // motion is stable across re-renders within the same animation.
+  const particles = React.useMemo(() => {
+    const COLORS = ['#34c759', '#ffcc00', '#ff9500', '#0a84ff', '#af52de', '#ff3b30', '#5ac8fa'];
+    return Array.from({ length: 22 }, (_, i) => {
+      // Bias the spread upward and to the right (away from the
+      // sidebar's left edge) so most pieces fly toward the canvas.
+      const angle = -110 + Math.random() * 140; // -110° to +30° (mostly up + right)
+      const distance = 28 + Math.random() * 60;
+      return {
+        id: i,
+        dx: Math.cos((angle * Math.PI) / 180) * distance,
+        dy: Math.sin((angle * Math.PI) / 180) * distance,
+        rot: (Math.random() * 540 - 270),
+        delay: Math.random() * 80,
+        size: 4 + Math.random() * 4,
+        color: COLORS[i % COLORS.length],
+      };
+    });
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(onDone, 1500);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
+  if (!anchor) return null;
+  return ReactDOM.createPortal(
+    <div className={styles.confetti} style={{ left: `${anchor.x}px`, top: `${anchor.y}px` }}>
+      {particles.map((p) => (
+        <span
+          key={p.id}
+          className={styles.confettiPiece}
+          style={{
+            '--dx': `${p.dx}px`,
+            '--dy': `${p.dy}px`,
+            '--rot': `${p.rot}deg`,
+            '--delay': `${p.delay}ms`,
+            background: p.color,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+          }}
+        />
+      ))}
+    </div>,
+    document.body,
+  );
+}
+
 function CheckIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -189,6 +239,29 @@ export default function Sidebar({
     e.preventDefault();
     setCtxMenu({ x: e.clientX, y: e.clientY, collection });
   }
+
+  // ── Inbox-zero confetti ───────────────────────────────────────────────
+  // Fire a one-shot burst when unsortedCount transitions from > 0 to 0.
+  // Anchored on the right edge of the Unsorted row so pieces emerge
+  // from where the green check appears.
+  const [confetti, setConfetti] = useState(null); // { id, x, y } | null
+  const prevUnsortedRef = useRef(unsortedCount);
+  useEffect(() => {
+    if (prevUnsortedRef.current > 0 && unsortedCount === 0) {
+      // Defer one frame so the row has rendered with the check visible.
+      requestAnimationFrame(() => {
+        const row = document.querySelector('[data-smart-view="unsorted"]');
+        if (!row) return;
+        const rect = row.getBoundingClientRect();
+        setConfetti({
+          id: Date.now(),
+          x: rect.right - 14,
+          y: rect.top + rect.height / 2,
+        });
+      });
+    }
+    prevUnsortedRef.current = unsortedCount;
+  }, [unsortedCount]);
 
   // ── Hover preview ────────────────────────────────────────────────────────
   // Brief 2×2 mosaic preview when hovering a bucket row. Fetched lazily
@@ -344,6 +417,7 @@ export default function Sidebar({
           return (
             <button
               key={id}
+              data-smart-view={id}
               className={`${styles.item} ${active ? styles.active : ''}`}
               onClick={() => onViewChange({ type: id })}
               title={inboxZero ? 'Inbox zero — every save is in a bucket' : undefined}
@@ -535,6 +609,13 @@ export default function Sidebar({
           </div>
         </div>,
         document.body,
+      )}
+      {confetti && (
+        <ConfettiBurst
+          key={confetti.id}
+          anchor={{ x: confetti.x, y: confetti.y }}
+          onDone={() => setConfetti(null)}
+        />
       )}
     </aside>
   );
