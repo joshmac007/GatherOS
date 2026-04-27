@@ -393,8 +393,26 @@ export default function App() {
         });
       }
     }
+    // Delete: soft-delete with the same undo toast as the bulk path.
+    if (items.length > 0) items.push({ type: 'separator' });
+    items.push({
+      label: 'Delete',
+      icon: <TrashIcon />,
+      danger: true,
+      onClick: async () => {
+        await deleteSave(saveId);
+        setSelected((prev) => {
+          if (!prev.has(saveId)) return prev;
+          const next = new Set(prev);
+          next.delete(saveId);
+          return next;
+        });
+        if (focusedId === saveId) setFocusedId(null);
+        showTrashToast([saveId]);
+      },
+    });
     return items;
-  }, [collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast]);
+  }, [collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves]);
 
   const handleCardContextMenu = useCallback((saveId, x, y) => {
     const items = buildCardMenuItems(saveId);
