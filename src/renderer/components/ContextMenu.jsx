@@ -2,9 +2,21 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './ContextMenu.module.css';
 
+function ChevronRightIcon() {
+  return (
+    <svg width="6" height="10" viewBox="0 0 6 10" aria-hidden="true">
+      <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function ContextMenu({ x, y, items, onClose }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ x, y, ready: false });
+  // Index of the item whose submenu is currently open. Set when the
+  // user hovers a parent item with a submenu; cleared when they hover
+  // a different parent item.
+  const [openSubmenuIdx, setOpenSubmenuIdx] = useState(null);
 
   useEffect(() => {
     function onMouseDown(e) {
@@ -61,17 +73,60 @@ export default function ContextMenu({ x, y, items, onClose }) {
         if (item.type === 'header') {
           return <div key={i} className={styles.header}>{item.label}</div>;
         }
+        const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
+        const isOpen = hasSubmenu && openSubmenuIdx === i;
+        const subHasIcons = hasSubmenu && item.submenu.some((s) => s && s.icon);
         return (
-          <button
+          <div
             key={i}
-            className={[styles.item, item.danger && styles.danger].filter(Boolean).join(' ')}
-            onClick={() => { item.onClick(); onClose(); }}
+            className={styles.itemContainer}
+            onMouseEnter={() => setOpenSubmenuIdx(hasSubmenu ? i : null)}
           >
-            {hasIcons && (
-              <span className={styles.itemIcon}>{item.icon || null}</span>
+            <button
+              className={[
+                styles.item,
+                item.danger && styles.danger,
+                isOpen && styles.itemActive,
+              ].filter(Boolean).join(' ')}
+              onClick={() => {
+                if (hasSubmenu) return; // submenu items handle their own clicks
+                item.onClick();
+                onClose();
+              }}
+            >
+              {hasIcons && (
+                <span className={styles.itemIcon}>{item.icon || null}</span>
+              )}
+              <span className={styles.itemLabel}>{item.label}</span>
+              {hasSubmenu && (
+                <span className={styles.itemChevron}><ChevronRightIcon /></span>
+              )}
+            </button>
+            {isOpen && (
+              <div className={[styles.submenu, subHasIcons && styles.menuWithIcons].filter(Boolean).join(' ')}>
+                {item.submenu.map((sub, j) => {
+                  if (sub.type === 'separator') {
+                    return <div key={j} className={styles.separator} />;
+                  }
+                  if (sub.type === 'header') {
+                    return <div key={j} className={styles.header}>{sub.label}</div>;
+                  }
+                  return (
+                    <button
+                      key={j}
+                      className={[styles.item, sub.danger && styles.danger].filter(Boolean).join(' ')}
+                      onClick={() => { sub.onClick(); onClose(); }}
+                    >
+                      {subHasIcons && (
+                        <span className={styles.itemIcon}>{sub.icon || null}</span>
+                      )}
+                      <span className={styles.itemLabel}>{sub.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             )}
-            <span className={styles.itemLabel}>{item.label}</span>
-          </button>
+          </div>
         );
       })}
     </div>,

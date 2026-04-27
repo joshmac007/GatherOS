@@ -364,34 +364,36 @@ export default function App() {
       : collections;
     if (others.length > 0) {
       if (items.length > 0) items.push({ type: 'separator' });
-      items.push({ type: 'header', label: 'Add to Bucket' });
-      for (const col of others) {
-        items.push({
-          label: col.name,
-          icon: (
-            <span style={{ color: col.color || 'var(--text-secondary)', display: 'inline-flex' }}>
-              <CollectionIcon />
-            </span>
-          ),
-          onClick: async () => {
-            const sourceSave = saves.find((s) => s.id === saveId);
-            flyToCollection({
-              collectionId: col.id,
-              items: [
-                {
-                  saveId,
-                  imageSrc: sourceSave ? fileUrl(sourceSave.file_path) : null,
-                },
-              ],
-            });
-            await window.moodmark.collections.addSave({ collectionId: col.id, saveId });
-            loadCollections();
-            // In Unsorted view the save no longer matches the filter
-            // (it now belongs to a bucket), so refresh to drop it.
-            if (view.type === 'unsorted') reload();
-          },
-        });
-      }
+      const submenu = others.map((col) => ({
+        label: col.name,
+        icon: (
+          <span style={{ color: col.color || 'var(--text-secondary)', display: 'inline-flex' }}>
+            <CollectionIcon />
+          </span>
+        ),
+        onClick: async () => {
+          const sourceSave = saves.find((s) => s.id === saveId);
+          flyToCollection({
+            collectionId: col.id,
+            items: [
+              {
+                saveId,
+                imageSrc: sourceSave ? fileUrl(sourceSave.file_path) : null,
+              },
+            ],
+          });
+          await window.moodmark.collections.addSave({ collectionId: col.id, saveId });
+          loadCollections();
+          // In Unsorted view the save no longer matches the filter
+          // (it now belongs to a bucket), so refresh to drop it.
+          if (view.type === 'unsorted') reload();
+        },
+      }));
+      items.push({
+        label: 'Add to Bucket',
+        icon: <CollectionIcon />,
+        submenu,
+      });
     }
     // Delete: soft-delete with the same undo toast as the bulk path.
     if (items.length > 0) items.push({ type: 'separator' });
