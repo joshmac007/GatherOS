@@ -43,14 +43,19 @@
    from "120 saves" → "5 saves" as the user types. */
 .left,
 .right {
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
+/* margin-left: auto pushes the right cluster to the far edge of the
+   toolbar, leaving the gap between the search bar and the right
+   controls — so the search stays anchored next to the title and
+   never collides with count / layout / slider. */
 .right {
+  margin-left: auto;
   justify-content: flex-end;
 }
 
