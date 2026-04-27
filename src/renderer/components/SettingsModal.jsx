@@ -7,6 +7,14 @@ const STATUS_TESTING = 'testing';
 const STATUS_OK = 'ok';
 const STATUS_ERROR = 'error';
 
+function DrawerChevron() {
+  return (
+    <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
+      <path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function SettingsModal({ open, onClose, onConfiguredChange, onPrefsChange }) {
   const [hasKey, setHasKey] = useState(false);
   const [draft, setDraft] = useState('');
@@ -16,6 +24,8 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [unindexed, setUnindexed] = useState(0);
   const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
   const [exportState, setExportState] = useState({ running: false, message: null });
+  const [aiOpen, setAiOpen] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
   const inputRef = useRef(null);
 
   async function handleExportLibrary() {
@@ -251,7 +261,19 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
         </section>
 
         <section className={styles.section}>
-          <div className={styles.sectionTitle}>AI Features</div>
+          <button
+            type="button"
+            className={styles.drawerHeader}
+            onClick={() => setAiOpen((v) => !v)}
+            aria-expanded={aiOpen}
+          >
+            <span className={styles.sectionTitle}>AI Features</span>
+            <span className={[styles.drawerChevron, aiOpen && styles.drawerChevronOpen].filter(Boolean).join(' ')}>
+              <DrawerChevron />
+            </span>
+          </button>
+          {aiOpen && (
+          <div className={styles.drawerBody}>
           <p className={styles.sectionHint}>
             Each new upload runs once. Disable any feature you don't want billed against your key.
           </p>
@@ -323,10 +345,24 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
               </button>
             </div>
           )}
+          </div>
+          )}
         </section>
 
         <section className={styles.section}>
-          <div className={styles.sectionTitle}>Data</div>
+          <button
+            type="button"
+            className={styles.drawerHeader}
+            onClick={() => setDataOpen((v) => !v)}
+            aria-expanded={dataOpen}
+          >
+            <span className={styles.sectionTitle}>Data</span>
+            <span className={[styles.drawerChevron, dataOpen && styles.drawerChevronOpen].filter(Boolean).join(' ')}>
+              <DrawerChevron />
+            </span>
+          </button>
+          {dataOpen && (
+          <div className={styles.drawerBody}>
           <p className={styles.sectionHint}>
             Export your entire library — the Moodmark database plus every
             saved image and thumbnail — into a single .zip backup. You can
@@ -347,6 +383,8 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
             <div className={styles.sectionHint} style={{ marginTop: 8 }}>
               {exportState.message}
             </div>
+          )}
+          </div>
           )}
         </section>
       </div>

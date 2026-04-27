@@ -76,6 +76,55 @@
   margin-bottom: 6px;
 }
 
+/* Drawer-style section header — clickable row that toggles the
+   section's body. The plain .sectionTitle styling carries the
+   typography; this row adds the chevron + click affordance. */
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 0;
+}
+
+.drawerHeader .sectionTitle {
+  margin-bottom: 0;
+}
+
+.drawerChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+  transition: transform 160ms ease, color 100ms ease;
+  transform: rotate(-90deg);
+}
+
+.drawerChevron.drawerChevronOpen {
+  transform: rotate(0deg);
+}
+
+.drawerHeader:hover .drawerChevron {
+  color: var(--text-primary);
+}
+
+.drawerBody {
+  padding-top: 10px;
+  animation: drawerIn 140ms ease-out;
+}
+
+@keyframes drawerIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+
 .sectionHint {
   font-size: 12px;
   line-height: 1.5;
