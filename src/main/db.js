@@ -268,14 +268,21 @@ function getSave(id) {
   return getDatabase().prepare('SELECT * FROM saves WHERE id = ?').get(id);
 }
 
-// Soft delete: marks the row as trashed. The image and thumbnail
-// files stay on disk until the user permanently deletes from Trash
-// (or empties Trash).
+// Soft delete: marks the row as trashed and severs every bucket
+// membership in the same transaction. The image and thumbnail files
+// stay on disk until the user permanently deletes from Trash (or
+// empties Trash). Restoring from trash brings the save back as a
+// bucket-less item — by design, deleting is treated as "this is no
+// longer part of any collection," not just "hide it temporarily."
 function deleteSave(id) {
   const db = getDatabase();
   const save = db.prepare('SELECT id FROM saves WHERE id = ?').get(id);
   if (!save) return { ok: false };
-  db.prepare('UPDATE saves SET deleted_at = ? WHERE id = ?').run(Date.now(), id);
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE saves SET deleted_at = ? WHERE id = ?').run(Date.now(), id);
+    db.prepare('DELETE FROM collection_items WHERE save_id = ?').run(id);
+  });
+  tx();
   return { ok: true };
 }
 
@@ -302,6 +309,27 @@ function emptyTrash() {
     .all();
   if (rows.length === 0) return { ok: true, files: [] };
   db.prepare('DELETE FROM saves WHERE deleted_at IS NOT NULL').run();
+  return {
+    ok: true,
+    files: rows.map((r) => ({ filePath: r.file_path, thumbPath: r.thumb_path })),
+  };
+}
+
+// Nuclear "Erase Library" — wipes every save (including trashed
+// ones), every bucket, every tag, in one transaction. Returns the
+// list of file paths so ipc.js can unlink them off disk afterward.
+// Caller is responsible for guarding behind a confirmation prompt.
+function wipeLibrary() {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT file_path, thumb_path FROM saves').all();
+  const tx = db.transaction(() => {
+    // collection_items / save_tags / save_embeddings cascade off
+    // saves and collections via the schema's ON DELETE CASCADE.
+    db.prepare('DELETE FROM saves').run();
+    db.prepare('DELETE FROM collections').run();
+    db.prepare('DELETE FROM tags').run();
+  });
+  tx();
   return {
     ok: true,
     files: rows.map((r) => ({ filePath: r.file_path, thumbPath: r.thumb_path })),
@@ -537,6 +565,7 @@ module.exports = {
   restoreSave,
   permanentlyDeleteSave,
   emptyTrash,
+  wipeLibrary,
   updateSave,
   getSaveEmbeddings,
   getSmartViewCounts,

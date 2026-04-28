@@ -285,6 +285,14 @@
   border-color: rgba(193, 50, 42, 0.3);
 }
 
+/* Hairline rule for separating semantically distinct controls
+   inside a single drawer (e.g. Export ↔ Erase). */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0;
+}
+
 .toggleRow {
   display: flex;
   align-items: center;

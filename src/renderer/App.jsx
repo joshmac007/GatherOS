@@ -1390,6 +1390,17 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onConfiguredChange={setAiConfigured}
         onPrefsChange={setPrefs}
+        onLibraryWiped={() => {
+          // Reset focus + selection in case the user was viewing a
+          // save mid-wipe, then re-pull collections/saves so the UI
+          // reflects the now-empty library. The starterInstalled
+          // localStorage flag is set inside SettingsModal before
+          // this callback fires, so the auto-install effect skips.
+          setFocusedId(null);
+          setSelected(new Set());
+          loadCollections();
+          reload();
+        }}
       />
 
       <ShortcutsModal

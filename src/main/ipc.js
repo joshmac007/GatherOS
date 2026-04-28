@@ -4,7 +4,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const {
   getAllSaves, getSave, deleteSave, restoreSave, permanentlyDeleteSave,
-  emptyTrash, updateSave, insertSave,
+  emptyTrash, wipeLibrary, updateSave, insertSave,
   getSaveEmbeddings, getSavesByIds, getUnindexedSaves, getUnindexedCount, getSmartViewCounts,
   filterByColor,
   getAllCollections, getCollectionsForSave, getCollectionsContainingAll, createCollection, renameCollection,
@@ -446,6 +446,26 @@ function registerIpcHandlers() {
       });
       proc.on('error', (err) => resolve({ ok: false, error: err.message }));
     });
+  });
+
+  // Nuclear "Erase Library" — guarded by a native confirm dialog
+  // because there's no undo. Wipes every save / bucket / tag, then
+  // unlinks the underlying image and thumbnail files off disk.
+  ipcMain.handle('library:wipe-all', async (e) => {
+    const owner = BrowserWindow.fromWebContents(e.sender);
+    const dlg = await dialog.showMessageBox(owner ?? undefined, {
+      type: 'warning',
+      buttons: ['Cancel', 'Erase Library'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Erase Library',
+      message: 'Erase your entire library?',
+      detail: 'Every save, bucket, and tag will be permanently deleted. This cannot be undone.',
+    });
+    if (dlg.response !== 1) return { ok: false, canceled: true };
+    const result = wipeLibrary();
+    for (const f of result.files) deleteImageFiles(f.filePath, f.thumbPath);
+    return { ok: true, removed: result.files.length };
   });
 
   // First-launch starter pack: rasterizes 6 bundled SVG cards into

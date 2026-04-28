@@ -15,7 +15,7 @@ function DrawerChevron() {
   );
 }
 
-export default function SettingsModal({ open, onClose, onConfiguredChange, onPrefsChange }) {
+export default function SettingsModal({ open, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped }) {
   const [hasKey, setHasKey] = useState(false);
   const [draft, setDraft] = useState('');
   const [status, setStatus] = useState(STATUS_IDLE);
@@ -24,9 +24,31 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [unindexed, setUnindexed] = useState(0);
   const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
   const [exportState, setExportState] = useState({ running: false, message: null });
+  const [wipeState, setWipeState] = useState({ running: false, message: null });
   const [aiOpen, setAiOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
   const inputRef = useRef(null);
+
+  async function handleWipeLibrary() {
+    if (wipeState.running) return;
+    setWipeState({ running: true, message: null });
+    try {
+      const result = await window.moodmark.library.wipeAll();
+      if (result?.ok) {
+        // Pin starter-pack as already-installed so the auto-install
+        // effect in App.jsx doesn't repopulate after the wipe.
+        try { localStorage.setItem('moodmark.starterInstalled', '1'); } catch {}
+        setWipeState({ running: false, message: `Erased ${result.removed} saves` });
+        onLibraryWiped?.();
+      } else if (result?.canceled) {
+        setWipeState({ running: false, message: null });
+      } else {
+        setWipeState({ running: false, message: result?.error || 'Wipe failed' });
+      }
+    } catch (err) {
+      setWipeState({ running: false, message: err.message || 'Wipe failed' });
+    }
+  }
 
   async function handleExportLibrary() {
     if (exportState.running) return;
@@ -382,6 +404,29 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           {exportState.message && (
             <div className={styles.sectionHint} style={{ marginTop: 8 }}>
               {exportState.message}
+            </div>
+          )}
+
+          <div className={styles.divider} />
+
+          <p className={styles.sectionHint}>
+            Erase your entire library — every save, bucket, and tag. The
+            underlying image files are deleted from disk. This cannot be
+            undone.
+          </p>
+          <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnDanger}`}
+              onClick={handleWipeLibrary}
+              disabled={wipeState.running}
+            >
+              {wipeState.running ? 'Erasing…' : 'Erase Library'}
+            </button>
+          </div>
+          {wipeState.message && (
+            <div className={styles.sectionHint} style={{ marginTop: 8 }}>
+              {wipeState.message}
             </div>
           )}
           </div>
