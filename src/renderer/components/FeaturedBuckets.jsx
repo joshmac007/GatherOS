@@ -7,45 +7,25 @@ const PREVIEW_COUNT = 4;
 
 export default function FeaturedBuckets({ collections, onPickBucket }) {
   const [previews, setPreviews] = useState({}); // { bucketId: [save, ...] }
-
-  // Two-phase compact state for a clean cross-fade between expanded
-  // cards and compact pills:
-  //
-  //   compact         — what the IntersectionObserver wants
-  //   compactApplied  — what's currently rendered to the DOM
-  //   fading          — true while the row is mid-transition
-  //
-  // When compact ≠ compactApplied, we fade the row to opacity 0,
-  // swap the layout under cover, then fade back in. The tween
-  // through ugly intermediate frames (rotated thumbs straightening
-  // while their wrapper shrinks 110px → 22px) happens behind the
-  // opacity:0 curtain, so the user only sees the two clean states
-  // and a soft cross-fade between them.
   const [compact, setCompact] = useState(false);
-  const [compactApplied, setCompactApplied] = useState(false);
-  const [fading, setFading] = useState(false);
+  // Set briefly when compact toggles so we can disable the stack-img
+  // transform transition for one frame — otherwise the static
+  // rotated transforms in expanded mode tween to/from `none` over
+  // 320ms during the state swap, which reads as a single flash.
+  const [snap, setSnap] = useState(false);
   const isInitial = useRef(true);
   const containerRef = useRef(null);
   const sentinelRef = useRef(null);
 
-  // Tuning. 100/100ms total ≈ 200ms — quick enough to feel snappy,
-  // slow enough to read as a deliberate transition rather than a
-  // jump. Adjust both halves equally if you want it softer/snappier.
-  const FADE_OUT_MS = 100;
-  const FADE_IN_MS = 100;
-
   useEffect(() => {
     if (isInitial.current) {
       isInitial.current = false;
-      setCompactApplied(compact);
       return;
     }
-    if (compact === compactApplied) return;
-    setFading(true);
-    const t1 = setTimeout(() => setCompactApplied(compact), FADE_OUT_MS);
-    const t2 = setTimeout(() => setFading(false), FADE_OUT_MS + FADE_IN_MS);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [compact, compactApplied]);
+    setSnap(true);
+    const id = setTimeout(() => setSnap(false), 60);
+    return () => clearTimeout(id);
+  }, [compact]);
 
   // Pre-fetch up to N preview images per bucket. One IPC per bucket;
   // fine for sidebars with a handful of buckets, would want a single
@@ -117,7 +97,7 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
       <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
     <div
       ref={containerRef}
-      className={[styles.row, compactApplied && styles.compact, fading && styles.fading].filter(Boolean).join(' ')}
+      className={[styles.row, compact && styles.compact, snap && styles.snap].filter(Boolean).join(' ')}
     >
       <div className={styles.scroller}>
         {collections.map((c) => {
