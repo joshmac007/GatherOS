@@ -44,10 +44,15 @@ export default function ImageCard({
   const aspect =
     record.width && record.height ? record.width / record.height : 4 / 3;
 
-  // Hover-triggered lightbox preview. Open while either the peek
-  // icon or the lightbox image itself is hovered; a brief grace
-  // window lets the cursor travel between them without dismissing.
+  // Hover-triggered lightbox preview. Open after the user has
+  // intentionally hovered the icon for OPEN_DELAY ms — keeps
+  // accidental cursor passes from popping the lightbox. Once open,
+  // a brief CLOSE_GRACE window lets the cursor travel from the icon
+  // to the image without dismissing.
+  const OPEN_DELAY = 220;
+  const CLOSE_GRACE = 150;
   const [peeking, setPeeking] = useState(false);
+  const openTimerRef = useRef(null);
   const closeTimerRef = useRef(null);
 
   // Cursor-parallax tilt. The frame rotates up to 5° toward the
@@ -98,6 +103,19 @@ export default function ImageCard({
     if (tiltRafRef.current != null) cancelAnimationFrame(tiltRafRef.current);
   }, []);
 
+  const cancelOpen = () => {
+    if (openTimerRef.current) {
+      clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+  };
+  const scheduleOpen = () => {
+    cancelOpen();
+    openTimerRef.current = setTimeout(() => {
+      openTimerRef.current = null;
+      setPeeking(true);
+    }, OPEN_DELAY);
+  };
   const cancelClose = () => {
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
@@ -112,7 +130,7 @@ export default function ImageCard({
     }, delay);
   };
 
-  useEffect(() => () => cancelClose(), []);
+  useEffect(() => () => { cancelOpen(); cancelClose(); }, []);
 
   return (
     <button
@@ -175,8 +193,20 @@ export default function ImageCard({
           title="Peek"
           aria-label="Peek"
           onClick={(e) => e.stopPropagation()}
-          onMouseEnter={() => { cancelClose(); setPeeking(true); }}
-          onMouseLeave={() => scheduleClose(150)}
+          onMouseEnter={() => {
+            cancelClose();
+            // If the lightbox is already open (cursor came back from
+            // the image edge), keep it open instead of waiting again.
+            if (peeking) return;
+            scheduleOpen();
+          }}
+          onMouseLeave={() => {
+            // Cursor left before the open delay elapsed — abort the
+            // pending open. If it's already open, give the cursor a
+            // grace window to reach the image.
+            cancelOpen();
+            if (peeking) scheduleClose(CLOSE_GRACE);
+          }}
         >
           <PeekIcon />
         </span>
