@@ -420,7 +420,7 @@ function registerIpcHandlers() {
     const owner = BrowserWindow.fromWebContents(e.sender);
     const stamp = new Date().toISOString().slice(0, 10);
     const dlg = await dialog.showSaveDialog(owner ?? undefined, {
-      title: 'Export Moodmark library',
+      title: 'Export GatherOS library',
       buttonLabel: 'Export',
       defaultPath: `moodmark-backup-${stamp}.zip`,
       filters: [{ name: 'Zip', extensions: ['zip'] }],

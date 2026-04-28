@@ -60,9 +60,9 @@ async function ensureScreenRecordingPermission() {
     defaultId: 0,
     cancelId: 1,
     title: 'Screen Recording Permission Needed',
-    message: 'Moodmark needs permission to record your screen to capture screenshots.',
+    message: 'GatherOS needs permission to record your screen to capture screenshots.',
     detail:
-      'Click "Open System Settings", enable Screen Recording for Electron, then quit Moodmark (Ctrl+C in Terminal) and run it again with "npm run dev".',
+      'Click "Open System Settings", enable Screen Recording for Electron, then quit GatherOS (Ctrl+C in Terminal) and run it again with "npm run dev".',
   });
   if (res.response === 0) {
     shell.openExternal(

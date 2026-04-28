@@ -216,10 +216,10 @@ function buildTrayIcon() {
 
 function createTray() {
   tray = new Tray(buildTrayIcon());
-  tray.setToolTip('Moodmark');
+  tray.setToolTip('GatherOS');
 
   const menu = Menu.buildFromTemplate([
-    { label: 'Open Moodmark', click: () => {
+    { label: 'Open GatherOS', click: () => {
       if (mainWindow) mainWindow.focus();
       else createMainWindow();
     }},

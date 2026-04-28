@@ -1,5 +1,5 @@
-appId: com.moodmark.app
-productName: Moodmark
+appId: com.gatheros.app
+productName: GatherOS
 directories:
   output: dist/build
   buildResources: build

@@ -1,12 +1,12 @@
 {
   "name": "moodmark",
-  "productName": "Moodmark",
+  "productName": "GatherOS",
   "version": "0.1.0",
   "description": "A local-first macOS app for saving, browsing, and organizing visual inspiration.",
   "private": true,
   "main": "src/main/index.js",
   "author": {
-    "name": "Moodmark"
+    "name": "GatherOS"
   },
   "scripts": {
     "predev": "node -e \"try{require('child_process').execSync('pkill -f \\\"Electron.app/Contents/MacOS/Electron\\\"',{stdio:'ignore'})}catch(e){}\"",

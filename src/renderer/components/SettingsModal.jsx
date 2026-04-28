@@ -398,7 +398,7 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           {dataOpen && (
           <div className={styles.drawerBody}>
           <p className={styles.sectionHint}>
-            Export your entire library — the Moodmark database plus every
+            Export your entire library — the GatherOS database plus every
             saved image and thumbnail — into a single .zip backup. You can
             restore later by replacing the contents of the app's data
             folder with this archive's contents.
