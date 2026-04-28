@@ -456,7 +456,7 @@ function registerIpcHandlers() {
   // unconditionally if invoked, so pair with that flag.
   ipcMain.handle('library:install-starter', async () => {
     const cards = await buildStarterPack();
-    const collection = createCollection({ name: 'Welcome', color: '#af52de' });
+    const collection = createCollection({ name: 'Starter Pack', color: '#af52de' });
     let installed = 0;
     for (const card of cards) {
       try {
