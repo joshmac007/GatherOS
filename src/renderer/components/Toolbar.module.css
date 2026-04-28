@@ -115,7 +115,7 @@
 
 .searchWrap {
   position: relative;
-  flex: 0 1 380px;
+  flex: 0 1 300px;
   -webkit-app-region: no-drag;
 }
 
@@ -254,15 +254,9 @@
 }
 
 .search:focus {
-  /* Soft accent halo around the field on focus — diffuse 4px glow
-     that picks up the same blue as the rest of the focus chrome.
-     Kept the hairline inset border so the field still has a defined
-     edge inside the halo. */
-  box-shadow:
-    inset 0 0 0 1px var(--accent),
-    0 0 0 4px rgba(10, 132, 255, 0.18),
-    0 4px 34px 2px rgba(0, 0, 0, 0.03),
-    0 0 1px 1px #FFF inset;
+  /* No accent halo — just preserve the resting shadow so the field
+     keeps its lift but the focus state doesn't shout. */
+  box-shadow: 0 4px 34px 2px rgba(0, 0, 0, 0.03), 0 0 1px 1px #FFF inset;
 }
 
 /* Hide WebKit's native search ornaments so our custom icon stays visible

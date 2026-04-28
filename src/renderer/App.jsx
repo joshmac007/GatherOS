@@ -190,6 +190,23 @@ export default function App() {
 
   // Imperative handles for the global keyboard shortcuts.
   const searchInputRef = useRef(null);
+
+  // Blur the search field whenever the user clicks anywhere outside
+  // it — clears the focus ring so the bar reads as inactive once the
+  // user's attention moves on. mousedown rather than click so the
+  // blur lands before the target widget tries to refocus itself.
+  useEffect(() => {
+    const onMouseDown = (e) => {
+      const input = searchInputRef.current;
+      if (!input) return;
+      if (document.activeElement !== input) return;
+      if (e.target === input) return;
+      if (e.target instanceof Node && input.parentElement?.contains(e.target)) return;
+      input.blur();
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
   // Counter rather than boolean — Sidebar's effect listens for any
   // change so the same shortcut can fire repeatedly (close + reopen
   // the inline form).
@@ -1082,6 +1099,7 @@ export default function App() {
                   if (view.type === 'trash') return 'Trash';
                   return null;
                 })()}
+                onBackToAll={view.type === 'collection' ? () => handleViewChange({ type: 'all' }) : null}
               />
               <div className="grid-scroll">
                 {view.type === 'all' && collections.length > 0 && (

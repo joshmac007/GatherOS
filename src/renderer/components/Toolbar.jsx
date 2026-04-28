@@ -35,6 +35,16 @@ function SidebarIcon() {
   );
 }
 
+// Tall, narrow chevron — width:height ≈ 1:2 so it doesn't read as
+// horizontally stretched the way the previous flat chevron did.
+function BackChevronIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9.5 3 L4.5 8 L9.5 13" />
+    </svg>
+  );
+}
+
 function GridSmallIcon() {
   return (
     <svg className={styles.zoomIcon} viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
@@ -97,6 +107,7 @@ export default function Toolbar({
   onClearColorFilter,
   searchInputRef,
   viewTitle = null,
+  onBackToAll = null,
   layout = 'masonry',
   onLayoutChange,
   onOpenQuickSwitcher,
@@ -114,6 +125,17 @@ export default function Toolbar({
             title="Toggle sidebar"
           >
             <SidebarIcon />
+          </button>
+        )}
+        {onBackToAll && (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={onBackToAll}
+            title="Back to All"
+            aria-label="Back to All"
+          >
+            <BackChevronIcon />
           </button>
         )}
         {viewTitle && (
@@ -165,6 +187,33 @@ export default function Toolbar({
           </button>
         )}
 
+        {/* Card-size slider always occupies its slot. In list view we
+            keep the layout reserved (visibility: hidden) so the
+            layout toggle to its right stays anchored at the same x
+            position when switching modes. */}
+        <div
+          className={styles.zoom}
+          title="Card size"
+          style={{ visibility: layout === 'masonry' ? 'visible' : 'hidden' }}
+          aria-hidden={layout !== 'masonry'}
+        >
+          <GridSmallIcon />
+          <input
+            type="range"
+            min={COLS_MIN}
+            max={COLS_MAX}
+            step={1}
+            value={sliderValue}
+            onChange={(e) =>
+              onColumnsChange(COLS_MAX + COLS_MIN - Number(e.target.value))
+            }
+            className={styles.slider}
+            aria-label="Card size"
+            tabIndex={layout === 'masonry' ? 0 : -1}
+          />
+          <GridLargeIcon />
+        </div>
+
         {onLayoutChange && (
           <div className={styles.layoutToggle} role="group" aria-label="Layout">
             <button
@@ -187,25 +236,6 @@ export default function Toolbar({
             >
               <ListViewIcon />
             </button>
-          </div>
-        )}
-
-        {layout === 'masonry' && (
-          <div className={styles.zoom} title="Card size">
-            <GridSmallIcon />
-            <input
-              type="range"
-              min={COLS_MIN}
-              max={COLS_MAX}
-              step={1}
-              value={sliderValue}
-              onChange={(e) =>
-                onColumnsChange(COLS_MAX + COLS_MIN - Number(e.target.value))
-              }
-              className={styles.slider}
-              aria-label="Card size"
-            />
-            <GridLargeIcon />
           </div>
         )}
       </div>

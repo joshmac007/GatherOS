@@ -399,9 +399,9 @@
   margin-left: auto;
 }
 
-/* Inbox-zero badge: a small green check that replaces the unsorted
-   count when it hits 0. Subtle, just enough to register without
-   shouting. */
+/* Inbox-zero badge: a small grayscale check that replaces the
+   unsorted count when it hits 0. Picks up the same tertiary text
+   color as the count it replaces so it sits flat with the row. */
 .inboxZero {
   display: inline-flex;
   align-items: center;
@@ -409,7 +409,7 @@
   width: 20px;
   height: 16px;
   margin-left: auto;
-  color: #34c759;
+  color: var(--text-tertiary);
   animation: inboxZeroIn 220ms ease-out;
 }
 
