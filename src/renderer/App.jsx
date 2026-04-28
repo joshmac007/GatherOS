@@ -449,40 +449,60 @@ export default function App() {
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
 
   const buildCardMenuItems = useCallback((saveId, memberIds) => {
+    // If the right-clicked save is part of an active multi-selection,
+    // every menu action operates on the full selection. Otherwise
+    // just the single right-clicked save.
+    const targetIds = (selected.has(saveId) && selected.size > 1)
+      ? Array.from(selected)
+      : [saveId];
+    const isMulti = targetIds.length > 1;
+    const suffix = isMulti ? ` (${targetIds.length})` : '';
+
     const items = [];
     // Trash view gets a different menu — restore / delete forever.
     // No bucket actions, since trashed saves aren't "in the library".
     if (view.type === 'trash') {
       items.push({
-        label: 'Restore',
+        label: `Restore${suffix}`,
         icon: <RestoreIcon />,
         onClick: async () => {
-          await restoreSave(saveId);
-          showRestoreToast([saveId]);
+          for (const id of targetIds) await restoreSave(id);
+          if (isMulti) setSelected(new Set());
+          showRestoreToast(targetIds);
         },
       });
       items.push({
-        label: 'Delete Forever',
+        label: `Delete Forever${suffix}`,
         icon: <TrashIcon />,
         danger: true,
-        onClick: () => showPermanentDeleteToast([saveId]),
+        onClick: () => {
+          if (isMulti) setSelected(new Set());
+          showPermanentDeleteToast(targetIds);
+        },
       });
       return items;
     }
     if (view.type === 'collection') {
       items.push({
-        label: 'Remove from Bucket',
+        label: `Remove from Bucket${suffix}`,
         icon: <MinusCircleIcon />,
         danger: true,
         onClick: async () => {
-          await window.moodmark.collections.removeSave({ collectionId: view.id, saveId });
+          for (const id of targetIds) {
+            await window.moodmark.collections.removeSave({ collectionId: view.id, saveId: id });
+          }
+          if (isMulti) setSelected(new Set());
           reload();
           loadCollections();
         },
       });
     }
-    // Hide buckets the save is already in — adding it again would be
-    // a no-op. memberIds is fetched at menu-open time.
+    // Hide buckets the saves are already in — for single, that's
+    // every bucket the one save belongs to; for multi, only buckets
+    // that contain ALL selected saves (a partial-overlap bucket
+    // should still be available since the OR-IGNORE insert just
+    // dups it for the saves that weren't yet members). memberIds is
+    // resolved at menu-open time accordingly.
     const memberSet = memberIds instanceof Set ? memberIds : new Set(memberIds || []);
     const others = (view.type === 'collection'
       ? collections.filter((c) => c.id !== view.id)
@@ -498,25 +518,22 @@ export default function App() {
           </span>
         ),
         onClick: async () => {
-          const sourceSave = saves.find((s) => s.id === saveId);
-          flyToCollection({
-            collectionId: col.id,
-            items: [
-              {
-                saveId,
-                imageSrc: sourceSave ? fileUrl(sourceSave.file_path) : null,
-              },
-            ],
+          const flyItems = targetIds.map((id) => {
+            const src = saves.find((s) => s.id === id);
+            return { saveId: id, imageSrc: src ? fileUrl(src.file_path) : null };
           });
-          await window.moodmark.collections.addSave({ collectionId: col.id, saveId });
+          flyToCollection({ collectionId: col.id, items: flyItems });
+          for (const id of targetIds) {
+            await window.moodmark.collections.addSave({ collectionId: col.id, saveId: id });
+          }
           loadCollections();
-          // In Unsorted view the save no longer matches the filter
-          // (it now belongs to a bucket), so refresh to drop it.
+          // In Unsorted view the saves no longer match the filter
+          // (they now belong to a bucket), so refresh to drop them.
           if (view.type === 'unsorted') reload();
         },
       }));
       items.push({
-        label: 'Add to Bucket',
+        label: `Add to Bucket${suffix}`,
         icon: <CollectionIcon />,
         submenu,
       });
@@ -524,36 +541,46 @@ export default function App() {
     // Delete: soft-delete with the same undo toast as the bulk path.
     if (items.length > 0) items.push({ type: 'separator' });
     items.push({
-      label: 'Delete',
+      label: `Delete${suffix}`,
       icon: <TrashIcon />,
       danger: true,
       onClick: async () => {
-        await deleteSave(saveId);
+        for (const id of targetIds) await deleteSave(id);
         setSelected((prev) => {
+          if (isMulti) return new Set();
           if (!prev.has(saveId)) return prev;
           const next = new Set(prev);
           next.delete(saveId);
           return next;
         });
-        if (focusedId === saveId) setFocusedId(null);
-        showTrashToast([saveId]);
+        if (focusedId && targetIds.includes(focusedId)) setFocusedId(null);
+        showTrashToast(targetIds);
       },
     });
     return items;
-  }, [collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves]);
+  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves]);
 
   const handleCardContextMenu = useCallback(async (saveId, x, y) => {
-    // Fetch the save's current bucket memberships first so the
-    // "Add to Bucket" submenu can hide buckets it's already in.
+    // Resolve the bucket memberships used to filter the Add-to-Bucket
+    // submenu. For multi-select we hide buckets that contain every
+    // selected save (adding would be a no-op for all); for single,
+    // hide buckets the one save is already in.
+    const isMulti = selected.has(saveId) && selected.size > 1;
+    const targetIds = isMulti ? Array.from(selected) : [saveId];
     let memberIds = [];
     try {
-      const rows = await window.moodmark.collections.getForSave(saveId);
-      memberIds = (rows || []).map((r) => r.id);
+      if (isMulti) {
+        const rows = await window.moodmark.collections.containingAll(targetIds);
+        memberIds = (rows || []).map((r) => r.id ?? r);
+      } else {
+        const rows = await window.moodmark.collections.getForSave(saveId);
+        memberIds = (rows || []).map((r) => r.id);
+      }
     } catch { /* fall through with empty list */ }
     const items = buildCardMenuItems(saveId, memberIds);
     if (items.length === 0) return;
     setCardCtx({ saveId, x, y, items });
-  }, [buildCardMenuItems]);
+  }, [buildCardMenuItems, selected]);
 
   // Drag-out: hand the selected files (or just the dragged card if it
   // Default drag is an in-app HTML5 drag with a custom MIME so sidebar
