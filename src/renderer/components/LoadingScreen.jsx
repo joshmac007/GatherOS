@@ -4,9 +4,13 @@ import { fileUrl } from '../lib/fileUrl.js';
 import { playLoading, stopLoading } from '../lib/sounds.js';
 
 const TARGET_CARDS = 4;
-// ~2.4s feel — matches the time the cards need to settle into their
-// fan and the user's eye to register the count climbing.
-const COUNT_DURATION_MS = 2400;
+// ~3.0s total. The count uses an ease-out curve so it sprints out of
+// the gate and crawls the last 10% — that's where the suspense lives.
+const COUNT_DURATION_MS = 3000;
+// easeOutCubic — fast start, slow finish. At t=0.5 we're already at
+// 87.5%, so the second half of the duration is spent climbing the
+// last twelve digits.
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 // Time the exit animation needs to finish before the overlay unmounts
 // (longest card transition + its delay).
 const EXIT_DURATION_MS = 760;
@@ -58,9 +62,10 @@ export default function LoadingScreen({ onDone }) {
     let raf = 0;
     const tick = (now) => {
       const elapsed = now - startedAt.current;
-      const pct = Math.min(100, Math.round((elapsed / COUNT_DURATION_MS) * 100));
+      const t = Math.min(1, elapsed / COUNT_DURATION_MS);
+      const pct = Math.round(easeOut(t) * 100);
       setPercent(pct);
-      if (pct < 100) {
+      if (t < 1) {
         raf = requestAnimationFrame(tick);
       } else {
         setExiting(true);
