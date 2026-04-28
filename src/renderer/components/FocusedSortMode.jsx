@@ -21,6 +21,14 @@ function CheckIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  );
+}
+
 export default function FocusedSortMode({ saves, collections, onAssign, onClose }) {
   // Snapshot the original list at mount so progress + the "next-up"
   // queue stay stable even though the parent's `saves` prop shrinks
@@ -156,7 +164,9 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
         className={styles.closeBtn}
         onClick={handleClose}
         aria-label="Exit focused sort"
-      >×</button>
+      >
+        <CloseIcon />
+      </button>
 
       {!done && total > 0 && (
         <header className={styles.header}>

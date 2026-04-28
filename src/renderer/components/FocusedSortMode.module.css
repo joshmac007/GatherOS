@@ -79,18 +79,22 @@
   z-index: 2;
   width: 30px;
   height: 30px;
+  padding: 0;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.10);
   border: 0.5px solid rgba(255, 255, 255, 0.18);
   color: rgba(255, 255, 255, 0.85);
-  font-size: 18px;
-  line-height: 1;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: background 100ms ease;
   -webkit-app-region: no-drag;
+}
+
+.closeBtn svg {
+  width: 12px;
+  height: 12px;
 }
 
 .closeBtn:hover { background: rgba(255, 255, 255, 0.18); }

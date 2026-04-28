@@ -227,9 +227,10 @@ button {
   background: rgba(0, 0, 0, 0.06);
 }
 
-/* Floating action — pinned bottom-right, gradient pill that pops
-   in only when the user has unsorted saves to triage. Clear label
-   ("Sort one by one") so the affordance is unambiguous. */
+/* Floating action — pinned bottom-right, liquid-glass pill that
+   pops in only when the user has unsorted saves to triage. Same
+   aesthetic as the multi-select bar (.selection-bar) so the user's
+   eye reads them as the same family of "actions on this view". */
 .sort-fab {
   position: fixed;
   bottom: 24px;
@@ -238,10 +239,13 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  padding: 11px 18px 11px 14px;
-  background: linear-gradient(135deg, #6c63ff 0%, #0a84ff 100%);
-  color: #fff;
-  border: 0.5px solid rgba(0, 0, 0, 0.10);
+  padding: 9px 14px 9px 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.65) 100%);
+  backdrop-filter: blur(40px) saturate(1.9);
+  -webkit-backdrop-filter: blur(40px) saturate(1.9);
+  color: var(--text-primary);
+  border: 0.5px solid rgba(0, 0, 0, 0.07);
   border-radius: 999px;
   font-family: var(--font-ui);
   font-size: 13px;
@@ -249,22 +253,23 @@ button {
   letter-spacing: -0.005em;
   cursor: pointer;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.30),
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    0 12px 28px rgba(108, 99, 255, 0.30),
-    0 24px 60px rgba(108, 99, 255, 0.18);
-  transition: transform 100ms ease, box-shadow 140ms ease, filter 140ms ease;
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 12px 32px rgba(0, 0, 0, 0.14),
+    0 24px 60px rgba(0, 0, 0, 0.10);
+  transition: transform 100ms ease, box-shadow 140ms ease, background 140ms ease;
   animation: sortFabIn 320ms cubic-bezier(0.18, 0.7, 0.32, 1) both;
 }
 
 .sort-fab:hover {
   transform: translateY(-1px);
-  filter: brightness(1.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.75) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    0 14px 34px rgba(108, 99, 255, 0.36),
-    0 28px 70px rgba(108, 99, 255, 0.22);
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 16px 38px rgba(0, 0, 0, 0.16),
+    0 28px 70px rgba(0, 0, 0, 0.12);
 }
 
 .sort-fab:active { transform: translateY(0); }
@@ -275,6 +280,7 @@ button {
   justify-content: center;
   width: 18px;
   height: 18px;
+  color: var(--text-secondary);
 }
 
 .sort-fab-count {
@@ -282,15 +288,16 @@ button {
   align-items: center;
   justify-content: center;
   min-width: 22px;
-  height: 22px;
+  height: 20px;
   padding: 0 6px;
   margin-left: 2px;
-  background: rgba(0, 0, 0, 0.20);
+  background: rgba(0, 0, 0, 0.06);
+  border: 0.5px solid rgba(0, 0, 0, 0.05);
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-secondary);
 }
 
 @keyframes sortFabIn {
