@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styles from './LoadingScreen.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+import { playLoading, stopLoading } from '../lib/sounds.js';
 
 const TARGET_CARDS = 4;
 // ~2.4s feel — matches the time the cards need to settle into their
@@ -41,6 +42,13 @@ export default function LoadingScreen({ onDone }) {
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Splash sound — start on mount, fade out when the component goes
+  // away (whether via the natural exit at 100% or an early unmount).
+  useEffect(() => {
+    playLoading();
+    return () => stopLoading();
   }, []);
 
   // Smooth 0→100 driven by rAF rather than setInterval — keeps the
