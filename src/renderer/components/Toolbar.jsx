@@ -61,17 +61,6 @@ function GridSmallIcon() {
   );
 }
 
-// Crosshair-ish reticle. Reads as "focus on one thing" — used by
-// the Unsorted view's Focused-sort entry button.
-function FocusedSortIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
-      <circle cx="8" cy="8" r="3" />
-      <path d="M8 1 V3 M8 13 V15 M1 8 H3 M13 8 H15" />
-    </svg>
-  );
-}
-
 function MasonryIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -122,7 +111,6 @@ export default function Toolbar({
   layout = 'masonry',
   onLayoutChange,
   onOpenQuickSwitcher,
-  onStartFocusedSort = null,
 }) {
   // Slider is inverted so dragging right = bigger cards = fewer columns.
   const sliderValue = COLS_MAX + COLS_MIN - columns;
@@ -196,17 +184,6 @@ export default function Toolbar({
       </div>
 
       <div className={styles.right}>
-        {onStartFocusedSort && (
-          <button
-            type="button"
-            className={styles.iconBtn}
-            onClick={onStartFocusedSort}
-            data-tooltip="Focused sort"
-            aria-label="Focused sort"
-          >
-            <FocusedSortIcon />
-          </button>
-        )}
         {colorFilter && (
           <button
             type="button"

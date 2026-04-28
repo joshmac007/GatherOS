@@ -74,6 +74,16 @@ function MinusCircleIcon() {
   );
 }
 
+function SortFabIcon() {
+  // Card-with-arrow — reads as "move this card somewhere".
+  return (
+    <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2.5" y="3" width="9" height="11" rx="1.4" />
+      <path d="M11 8.5 H16 M13.5 6 L16 8.5 L13.5 11" />
+    </svg>
+  );
+}
+
 function pickLargestFromSrcset(srcset) {
   if (!srcset) return null;
   let best = null;
@@ -1254,11 +1264,6 @@ export default function App() {
                   return null;
                 })()}
                 onBackToAll={view.type === 'collection' ? () => handleViewChange({ type: 'all' }) : null}
-                onStartFocusedSort={
-                  view.type === 'unsorted' && saves.length > 0 && collections.length > 0
-                    ? () => setFocusedSortOpen(true)
-                    : null
-                }
               />
               <div className="grid-scroll">
                 {view.type === 'all' && collections.length > 0 && !search && (
@@ -1466,6 +1471,27 @@ export default function App() {
           target={compostBurst.target}
           onDone={() => setCompostBurst(null)}
         />
+      )}
+
+      {/* Floating action — pinned bottom-right. Only shows when the
+          user is sitting in Unsorted with stuff to sort and at least
+          one bucket to sort it into. Hidden during the modal itself
+          and during focused detail-view to keep the corner clean. */}
+      {!focused
+        && !focusedSortOpen
+        && view.type === 'unsorted'
+        && saves.length > 0
+        && collections.length > 0 && (
+        <button
+          type="button"
+          className="sort-fab"
+          onClick={() => setFocusedSortOpen(true)}
+          title="Sort each unsorted save one at a time, with keyboard shortcuts"
+        >
+          <span className="sort-fab-icon"><SortFabIcon /></span>
+          <span>Sort one by one</span>
+          <span className="sort-fab-count">{saves.length}</span>
+        </button>
       )}
 
       {focusedSortOpen && (
