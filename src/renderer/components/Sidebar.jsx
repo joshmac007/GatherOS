@@ -670,15 +670,14 @@ export default function Sidebar({
           className={styles.bucketPreview}
           style={{ left: `${hoverPreview.x}px`, top: `${hoverPreview.y}px` }}
         >
-          <div className={styles.bucketPreviewGrid}>
-            {hoverPreview.saves.map((s) => (
-              <div key={s.id} className={styles.bucketPreviewCell}>
-                <img
-                  src={fileUrl(s.thumb_path || s.file_path)}
-                  alt=""
-                  draggable={false}
-                />
-              </div>
+          <div className={styles.bucketPreviewStack}>
+            {hoverPreview.saves.slice(0, 4).map((s) => (
+              <img
+                key={s.id}
+                src={fileUrl(s.thumb_path || s.file_path)}
+                alt=""
+                draggable={false}
+              />
             ))}
           </div>
         </div>,
