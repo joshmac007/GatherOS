@@ -1,7 +1,8 @@
 /* Sticky featured-buckets row at the top of the All grid. Row
    itself is transparent — the cards / pills carry their own
-   surface. Snaps to pill row when scrolled (no morph transition,
-   the in-between frames looked janky). */
+   surface. Cross-fades between expanded cards and compact pills
+   driven by the .fading class (opacity 1 → 0 → 1) so the layout
+   snap happens behind an invisibility curtain.  */
 /* Invisible 1px line that sits above the row in normal flow. The
    IntersectionObserver toggles compact mode based on its visibility
    in the .grid-scroll viewport. */
@@ -19,6 +20,8 @@
   padding: 14px 20px 0;
   margin-bottom: -10px;
   pointer-events: none; /* let drags / clicks pass through gaps */
+  opacity: 1;
+  transition: opacity 100ms ease, padding 100ms ease, margin-bottom 100ms ease;
 }
 
 .row.compact {
@@ -26,17 +29,17 @@
   margin-bottom: 0;
 }
 
+/* Cross-fade curtain. While .fading is set, the row is invisible —
+   compactApplied flips to its new value mid-fade so the layout
+   morph (rotated thumbs straightening, stack shrinking, flex-direction
+   swapping) happens entirely behind opacity 0. */
+.row.fading {
+  opacity: 0;
+}
+
 .row .scroller,
 .row .card {
   pointer-events: auto;
-}
-
-/* Disable transform transitions briefly while the state is swapping
-   between expanded cards and compact pills. Reapplied after 60ms so
-   hover-fan continues to animate as usual. */
-.row.snap .stack img,
-.row.snap .card {
-  transition: none !important;
 }
 
 .scroller {
