@@ -11,6 +11,7 @@ import FocusedView from './components/FocusedView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
 import LoadingScreen from './components/LoadingScreen.jsx';
 import CompostBurst from './components/CompostBurst.jsx';
+import FocusedSortMode from './components/FocusedSortMode.jsx';
 import { useLibrary } from './hooks/useLibrary.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
@@ -798,6 +799,20 @@ export default function App() {
     showPermanentDeleteToast(ids);
   }, [selected, showPermanentDeleteToast]);
 
+  // Focused-sort mode — full-screen triage overlay for the Unsorted
+  // view. Toolbar exposes the entry button only when on Unsorted
+  // and there's at least one save to sort + at least one bucket.
+  const [focusedSortOpen, setFocusedSortOpen] = useState(false);
+
+  const focusedSortAssign = useCallback(async (saveId, collectionId) => {
+    await window.moodmark.collections.addSave({ collectionId, saveId });
+    // The save just became sorted, so the Unsorted view should drop
+    // it. Reload + refresh collection counts so progress stays in
+    // sync with the underlying state.
+    reload();
+    loadCollections();
+  }, [reload, loadCollections]);
+
   // Composting-trash burst state. When the user empties trash we
   // capture each card's on-screen rect + palette swatches, then
   // paint a one-shot canvas overlay where every card erupts into
@@ -1239,6 +1254,11 @@ export default function App() {
                   return null;
                 })()}
                 onBackToAll={view.type === 'collection' ? () => handleViewChange({ type: 'all' }) : null}
+                onStartFocusedSort={
+                  view.type === 'unsorted' && saves.length > 0 && collections.length > 0
+                    ? () => setFocusedSortOpen(true)
+                    : null
+                }
               />
               <div className="grid-scroll">
                 {view.type === 'all' && collections.length > 0 && !search && (
@@ -1445,6 +1465,15 @@ export default function App() {
           sources={compostBurst.sources}
           target={compostBurst.target}
           onDone={() => setCompostBurst(null)}
+        />
+      )}
+
+      {focusedSortOpen && (
+        <FocusedSortMode
+          saves={saves}
+          collections={collections}
+          onAssign={focusedSortAssign}
+          onClose={() => setFocusedSortOpen(false)}
         />
       )}
 
