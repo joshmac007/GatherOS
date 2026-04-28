@@ -116,7 +116,8 @@ export default function LoadingScreen({ onDone }) {
     sphereStartedAt.current = performance.now();
     // Sphere visual radius — anchored at the center of the overlay.
     // Tilt the camera slightly down so we see the top of the globe.
-    const RADIUS = 320;
+    // 480px gives the 36 tiles room to breathe; smaller felt clumped.
+    const RADIUS = 480;
     const CAMERA_TILT = (12 * Math.PI) / 180; // 12° down-tilt
     const cosTilt = Math.cos(CAMERA_TILT);
     const sinTilt = Math.sin(CAMERA_TILT);
