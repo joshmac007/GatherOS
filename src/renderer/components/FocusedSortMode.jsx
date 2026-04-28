@@ -151,20 +151,21 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
         })}
       </div>
 
-      <header className={styles.header}>
-        <button
-          type="button"
-          className={styles.closeBtn}
-          onClick={handleClose}
-          aria-label="Exit focused sort"
-        >×</button>
-        {!done && total > 0 && (
+      <button
+        type="button"
+        className={styles.closeBtn}
+        onClick={handleClose}
+        aria-label="Exit focused sort"
+      >×</button>
+
+      {!done && total > 0 && (
+        <header className={styles.header}>
           <span className={styles.progress}>
             <span className={styles.progressNum}>{Math.min(completed + 1, total)}</span>
             <span className={styles.progressTotal}>/ {total}</span>
           </span>
-        )}
-      </header>
+        </header>
+      )}
 
       {/* ── Empty state ─────────────────────────────────────────── */}
       {total === 0 && (
