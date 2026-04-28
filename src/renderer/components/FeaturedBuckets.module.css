@@ -111,7 +111,6 @@
      Layout properties (width / height / border-radius) flip
      instantly when the row toggles compact, no morph. */
   transition: transform 320ms cubic-bezier(0.18, 0.7, 0.32, 1);
-  will-change: transform;
 }
 
 /* Default stacked-and-tilted positions. nth-child for a static

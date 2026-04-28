@@ -181,7 +181,7 @@ export default function LoadingScreen({ onDone }) {
             {s ? (
               <img
                 className={styles.tileImg}
-                src={fileUrl(s.file_path || s.thumb_path)}
+                src={fileUrl(s.thumb_path || s.file_path)}
                 alt=""
                 draggable={false}
               />

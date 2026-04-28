@@ -96,11 +96,12 @@ function setToastInteractive(interactive) {
   toastWin.setIgnoreMouseEvents(!interactive, { forward: true });
 }
 
-// Called by the renderer once every toast has been dismissed. Dropping
-// interactive mouse handling is enough — we leave the window visible
-// (and transparent) so the next save can draw into it immediately.
+// Called by the renderer once every toast has been dismissed. Hide the
+// window so it doesn't sit as a transparent compositing surface eating
+// GPU. Shown again the next time showToast() fires.
 function onToastsEmpty() {
   setToastInteractive(false);
+  if (toastWin && !toastWin.isDestroyed()) toastWin.hide();
 }
 
 module.exports = {
