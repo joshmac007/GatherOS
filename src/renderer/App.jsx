@@ -11,6 +11,7 @@ import FocusedView from './components/FocusedView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
 import LoadingScreen from './components/LoadingScreen.jsx';
 import MilestoneToast from './components/MilestoneToast.jsx';
+import WelcomeView from './components/WelcomeView.jsx';
 import { useLibrary } from './hooks/useLibrary.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
@@ -282,6 +283,24 @@ export default function App() {
     }
     prevSavesAllRef.current = curr;
   }, [smartCounts.all, MILESTONES]);
+
+  // First-launch welcome view — replaces the empty grid until the
+  // user either saves their first image or hits Skip. Persisted in
+  // localStorage so repeat launches with an empty library don't keep
+  // re-showing it after the user has explicitly dismissed it.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() => {
+    try { return localStorage.getItem('moodmark.welcomeDismissed') === '1'; }
+    catch { return false; }
+  });
+  const dismissWelcome = useCallback(() => {
+    try { localStorage.setItem('moodmark.welcomeDismissed', '1'); } catch {}
+    setWelcomeDismissed(true);
+  }, []);
+  // Auto-dismiss the moment the library has any save — the user has
+  // crossed the onboarding threshold by acting, no need to ask again.
+  useEffect(() => {
+    if (!welcomeDismissed && smartCounts.all > 0) dismissWelcome();
+  }, [smartCounts.all, welcomeDismissed, dismissWelcome]);
 
   // Tags state — used by DetailPanel for autocomplete suggestions.
   const [allTags, setAllTags] = useState([]);
@@ -1120,28 +1139,47 @@ export default function App() {
                 onBackToAll={view.type === 'collection' ? () => handleViewChange({ type: 'all' }) : null}
               />
               <div className="grid-scroll">
-                {view.type === 'all' && collections.length > 0 && !search && (
-                  <FeaturedBuckets
-                    collections={collections}
-                    onPickBucket={(id) => handleViewChange({ type: 'collection', id })}
-                  />
-                )}
-                <Grid
-                  saves={saves}
-                  selected={selected}
-                  onSelect={handleSelect}
-                  onOpen={handleOpenFromCard}
-                  onContextMenu={handleCardContextMenu}
-                  onDragStart={handleCardDragStart}
-                  columns={gridColumns}
-                  loading={loading}
-                  view={view}
-                  search={search}
-                  semanticSearchActive={semanticSearchActive}
-                  colorFilter={colorFilter}
-                  freshIds={freshIds}
-                  layout={gridLayout}
-                />
+                {(() => {
+                  // First-run welcome: empty library, on the All
+                  // view, and the user hasn't dismissed it yet.
+                  const showWelcome = !welcomeDismissed
+                    && view.type === 'all'
+                    && smartCounts.all === 0;
+                  if (showWelcome) {
+                    return (
+                      <WelcomeView
+                        dragging={dragging}
+                        onSkip={dismissWelcome}
+                      />
+                    );
+                  }
+                  return (
+                    <>
+                      {view.type === 'all' && collections.length > 0 && !search && (
+                        <FeaturedBuckets
+                          collections={collections}
+                          onPickBucket={(id) => handleViewChange({ type: 'collection', id })}
+                        />
+                      )}
+                      <Grid
+                        saves={saves}
+                        selected={selected}
+                        onSelect={handleSelect}
+                        onOpen={handleOpenFromCard}
+                        onContextMenu={handleCardContextMenu}
+                        onDragStart={handleCardDragStart}
+                        columns={gridColumns}
+                        loading={loading}
+                        view={view}
+                        search={search}
+                        semanticSearchActive={semanticSearchActive}
+                        colorFilter={colorFilter}
+                        freshIds={freshIds}
+                        layout={gridLayout}
+                      />
+                    </>
+                  );
+                })()}
               </div>
             </>
           )}
