@@ -31,16 +31,26 @@ export default function LoadingScreen({ onDone }) {
   const [exiting, setExiting] = useState(false);
   const startedAt = useRef(performance.now());
 
-  // Pull the four most recent saves to populate the stack. If there
-  // are fewer than 4, we pad with placeholders so the silhouette is
-  // intact.
+  // Pull a fresh random sample on every launch. We pick 4 from the
+  // most recent ~100 saves (Fisher–Yates partial shuffle) — biases
+  // toward stuff the user has been collecting lately, but still
+  // varies the splash each time. If fewer than 4 exist, we pad with
+  // placeholder cards downstream so the silhouette is intact.
   useEffect(() => {
     let cancelled = false;
+    const POOL = 100;
     (async () => {
       try {
         const data = await window.moodmark.saves.getAll({ sort: 'newest', view: 'all' });
         if (cancelled) return;
-        setImages((data || []).slice(0, TARGET_CARDS));
+        const pool = (data || []).slice(0, POOL);
+        const arr = pool.slice();
+        const n = Math.min(TARGET_CARDS, arr.length);
+        for (let i = 0; i < n; i++) {
+          const j = i + Math.floor(Math.random() * (arr.length - i));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        setImages(arr.slice(0, TARGET_CARDS));
       } catch {
         if (!cancelled) setImages([]);
       }
