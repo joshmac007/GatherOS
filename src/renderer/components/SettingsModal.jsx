@@ -178,12 +178,19 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   }
 
   return ReactDOM.createPortal(
-    <div className={styles.backdrop} onMouseDown={onClose}>
+    <div
+      className={styles.backdrop}
+      onClick={(e) => {
+        // Only treat clicks landing directly on the backdrop as a
+        // dismiss — don't catch clicks that started inside the
+        // modal and bubbled up.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         className={styles.modal}
         role="dialog"
         aria-modal="true"
-        onMouseDown={(e) => e.stopPropagation()}
       >
         <header className={styles.header}>
           <h2 className={styles.title}>Settings</h2>
