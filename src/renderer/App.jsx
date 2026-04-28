@@ -267,40 +267,35 @@ export default function App() {
     if (!loading) loadCollections();
   }, [loading, loadCollections]);
 
-  // Save-count milestones — fire a celebratory toast when the total
-  // crosses one of these thresholds going up. Tracks the previous
-  // value in a ref so the very first render (where prev is null)
-  // doesn't fire on app launch with an existing 100+ library.
+  // Save-count milestones + welcome re-arm. Both rely on observing
+  // transitions of smartCounts.all between renders — milestones fire
+  // on upward crossings of [10, 25, 50, 75, 100], and welcome
+  // re-arms whenever the library transitions back to empty so a
+  // user who deletes everything gets the same first-launch flow.
   const MILESTONES = useMemo(() => [10, 25, 50, 75, 100], []);
   const prevSavesAllRef = useRef(null);
   const [milestoneToast, setMilestoneToast] = useState(null);
+
+  // Welcome is session-only state — no localStorage persistence so
+  // an empty library on any future launch (or after a wipe in the
+  // current session) brings the welcome back automatically.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const dismissWelcome = useCallback(() => setWelcomeDismissed(true), []);
+
   useEffect(() => {
     const prev = prevSavesAllRef.current;
     const curr = smartCounts.all;
-    if (prev !== null && curr > prev) {
-      const hit = MILESTONES.find((m) => prev < m && curr >= m);
-      if (hit) setMilestoneToast({ id: Date.now(), count: hit });
+    if (prev !== null) {
+      if (curr > prev) {
+        const hit = MILESTONES.find((m) => prev < m && curr >= m);
+        if (hit) setMilestoneToast({ id: Date.now(), count: hit });
+      }
+      // > 0 → 0 transition — re-arm the welcome so deleting the
+      // last item lands the user back in the onboarding flow.
+      if (prev > 0 && curr === 0) setWelcomeDismissed(false);
     }
     prevSavesAllRef.current = curr;
   }, [smartCounts.all, MILESTONES]);
-
-  // First-launch welcome view — replaces the empty grid until the
-  // user either saves their first image or hits Skip. Persisted in
-  // localStorage so repeat launches with an empty library don't keep
-  // re-showing it after the user has explicitly dismissed it.
-  const [welcomeDismissed, setWelcomeDismissed] = useState(() => {
-    try { return localStorage.getItem('moodmark.welcomeDismissed') === '1'; }
-    catch { return false; }
-  });
-  const dismissWelcome = useCallback(() => {
-    try { localStorage.setItem('moodmark.welcomeDismissed', '1'); } catch {}
-    setWelcomeDismissed(true);
-  }, []);
-  // Auto-dismiss the moment the library has any save — the user has
-  // crossed the onboarding threshold by acting, no need to ask again.
-  useEffect(() => {
-    if (!welcomeDismissed && smartCounts.all > 0) dismissWelcome();
-  }, [smartCounts.all, welcomeDismissed, dismissWelcome]);
 
   // Tags state — used by DetailPanel for autocomplete suggestions.
   const [allTags, setAllTags] = useState([]);
