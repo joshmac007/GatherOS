@@ -1,0 +1,184 @@
+/* Full-screen splash that covers the app while it boots. Counts up
+   0→100, then plays an exit animation that lifts the cards off the
+   top and fades the backdrop, revealing the app underneath. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 56px;
+  background: var(--content-bg);
+  /* Subtle off-white wash so the cards don't sit on a flat slab. */
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 30%, rgba(10, 132, 255, 0.05), transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 80%, rgba(255, 149, 0, 0.04), transparent 70%);
+  -webkit-app-region: drag;
+  user-select: none;
+  animation: overlayIn 240ms ease-out both;
+}
+
+.overlay.exiting {
+  animation: overlayOut 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes overlayOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* ── Stacked card row ───────────────────────────────────────────────── */
+
+.stack {
+  position: relative;
+  width: 720px;
+  height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1200px;
+  -webkit-app-region: no-drag;
+}
+
+.card {
+  position: absolute;
+  width: 220px;
+  height: 264px;
+  border-radius: 22px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 18px 40px rgba(0, 0, 0, 0.16),
+    0 28px 80px rgba(0, 0, 0, 0.10);
+  transform-origin: 50% 90%;
+  transition: transform 360ms cubic-bezier(0.18, 0.7, 0.32, 1);
+  will-change: transform;
+}
+
+.cardImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+/* Empty fallback — used when the user has fewer than 4 saves so the
+   stack still has its full silhouette while we boot. */
+.cardEmpty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(180deg, #f5f5f4 0%, #ebeae8 100%);
+  color: rgba(0, 0, 0, 0.18);
+}
+
+.cardEmpty svg {
+  width: 56px;
+  height: 56px;
+}
+
+/* Resting fan — alternating tilts, slight horizontal stagger, slight
+   vertical stagger so the row reads as a hand of cards rather than a
+   strip. */
+.card:nth-child(1) { transform: translate(-330px, 14px) rotate(-12deg); z-index: 1; }
+.card:nth-child(2) { transform: translate(-110px, -6px) rotate(-4deg);  z-index: 2; }
+.card:nth-child(3) { transform: translate(110px, -6px)  rotate(4deg);   z-index: 3; }
+.card:nth-child(4) { transform: translate(330px, 14px)  rotate(12deg);  z-index: 4; }
+
+/* Hover — each card nudges off its resting tilt a hair. Whole-stack
+   hover so moving across cards stays smooth. */
+.stack:hover .card:nth-child(1) { transform: translate(-340px, 8px)  rotate(-15deg); }
+.stack:hover .card:nth-child(2) { transform: translate(-115px, -12px) rotate(-6deg); }
+.stack:hover .card:nth-child(3) { transform: translate(115px, -12px)  rotate(6deg); }
+.stack:hover .card:nth-child(4) { transform: translate(340px, 8px)   rotate(15deg); }
+
+/* Per-card hover wins over the group nudge so the one under the cursor
+   pops a little further. */
+.card:hover {
+  transform-origin: 50% 90%;
+}
+.card:nth-child(1):hover { transform: translate(-345px, -2px) rotate(-18deg) scale(1.04); }
+.card:nth-child(2):hover { transform: translate(-115px, -22px) rotate(-7deg) scale(1.04); }
+.card:nth-child(3):hover { transform: translate(115px, -22px)  rotate(7deg)  scale(1.04); }
+.card:nth-child(4):hover { transform: translate(345px, -2px)   rotate(18deg) scale(1.04); }
+
+/* Exit animation — each card lifts up and fades out, staggered so the
+   leftmost goes first. */
+.overlay.exiting .card {
+  transition: transform 540ms cubic-bezier(0.4, 0, 0.6, 1), opacity 360ms ease-out;
+}
+.overlay.exiting .card:nth-child(1) { transform: translate(-330px, -640px) rotate(-30deg); opacity: 0; transition-delay: 0ms; }
+.overlay.exiting .card:nth-child(2) { transform: translate(-110px, -640px) rotate(-12deg); opacity: 0; transition-delay: 60ms; }
+.overlay.exiting .card:nth-child(3) { transform: translate(110px, -640px)  rotate(12deg);  opacity: 0; transition-delay: 120ms; }
+.overlay.exiting .card:nth-child(4) { transform: translate(330px, -640px)  rotate(30deg);  opacity: 0; transition-delay: 180ms; }
+
+/* ── Counter ────────────────────────────────────────────────────────── */
+
+.counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  -webkit-app-region: no-drag;
+}
+
+.percent {
+  font-family: var(--font-mono);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.percent .sign {
+  font-size: 20px;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+  vertical-align: 2px;
+}
+
+.bar {
+  width: 240px;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #6c63ff);
+  border-radius: 2px;
+  transition: width 80ms linear;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.overlay.exiting .counter {
+  animation: counterOut 320ms ease-out forwards;
+}
+
+@keyframes counterOut {
+  to { opacity: 0; transform: translateY(8px); }
+}

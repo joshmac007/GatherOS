@@ -9,6 +9,7 @@ import FeaturedBuckets from './components/FeaturedBuckets.jsx';
 import DetailPanel from './components/DetailPanel.jsx';
 import FocusedView from './components/FocusedView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
+import LoadingScreen from './components/LoadingScreen.jsx';
 import { useLibrary } from './hooks/useLibrary.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
@@ -170,6 +171,10 @@ export default function App() {
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Splash that runs once per app launch. The LoadingScreen calls
+  // onDone after its 0→100 count + exit animation completes, at which
+  // point we unmount it for the rest of the session.
+  const [booting, setBooting] = useState(true);
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((c) => !c);
@@ -1009,6 +1014,7 @@ export default function App() {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {booting && <LoadingScreen onDone={() => setBooting(false)} />}
       <input
         ref={fileInputRef}
         type="file"
