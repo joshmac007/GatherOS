@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import styles from './Sidebar.module.css';
 import ContextMenu from './ContextMenu.jsx';
 import { fileUrl } from '../lib/fileUrl.js';
+import sidebarLogoUrl from '../assets/sidebar-logo.svg';
 
 function GridIcon() {
   return (
@@ -615,6 +616,14 @@ export default function Sidebar({
           <CollapseSidebarIcon />
         </button>
       )}
+      <div className={styles.brand}>
+        <img
+          src={sidebarLogoUrl}
+          alt="GatherOS"
+          className={styles.brandLogo}
+          draggable={false}
+        />
+      </div>
       <div className={styles.sectionHeaderRow}>
         <span className={styles.sectionHeaderLabel}>Library</span>
         {onUpload && (
