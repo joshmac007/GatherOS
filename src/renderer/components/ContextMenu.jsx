@@ -17,16 +17,16 @@ export default function ContextMenu({ x, y, items, onClose }) {
   // expanded. Used by the "Add to Bucket" picker to surface nested
   // child buckets only when the user hovers their parent.
   const [hoveredSubIdx, setHoveredSubIdx] = useState(null);
-  // Reset whenever the active submenu changes — opening a different
-  // submenu shouldn't carry a stale expanded child block over.
-  useEffect(() => {
-    setHoveredSubIdx(null);
-  }, [openSubmenu?.idx]);
   const [pos, setPos] = useState({ x, y, ready: false });
   // The currently-open submenu, including its anchor coords (in
   // viewport space — we portal it to body so backdrop-filter isn't
   // suppressed by the parent menu's stacking context).
   const [openSubmenu, setOpenSubmenu] = useState(null); // { idx, x, y } | null
+  // Reset whenever the active submenu changes — opening a different
+  // submenu shouldn't carry a stale expanded child block over.
+  useEffect(() => {
+    setHoveredSubIdx(null);
+  }, [openSubmenu?.idx]);
 
   useEffect(() => {
     function onMouseDown(e) {
