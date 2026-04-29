@@ -60,8 +60,12 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
   return (
     <>
       {/* Sticky pill bar — always rendered, opacity-controlled.
+          The outer slot is sticky+0-height so it doesn't push the
+          card row down with empty space; the inner element overflows
+          downward visually when pills become visible.
           pointer-events flips with visibility so clicks don't fall
           on invisible pills overlaying the masonry. */}
+      <div className={styles.pillBarSlot} aria-hidden="true">
       <div
         className={[styles.pillBar, pillsVisible && styles.pillBarVisible]
           .filter(Boolean)
@@ -108,6 +112,7 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
             );
           })}
         </div>
+      </div>
       </div>
 
       {/* Cards row — normal flow, scrolls with content. */}

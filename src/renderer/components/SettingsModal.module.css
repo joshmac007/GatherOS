@@ -278,6 +278,23 @@
   cursor: not-allowed;
 }
 
+.btnWithIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btnIcon {
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+}
+
+.btnIcon svg {
+  width: 13px;
+  height: 13px;
+}
+
 .btnPrimary {
   background: var(--accent);
   border-color: rgba(0, 80, 200, 0.4);

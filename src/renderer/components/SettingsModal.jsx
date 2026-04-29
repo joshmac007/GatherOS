@@ -15,6 +15,43 @@ function DrawerChevron() {
   );
 }
 
+function ZipIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3.5 2h6.25l3 3v8.5a0.5 0.5 0 0 1-0.5 0.5h-9a0.5 0.5 0 0 1-0.5-0.5v-11a0.5 0.5 0 0 1 0.5-0.5z" />
+      <path d="M9.5 2v3h3" />
+      <path d="M6.25 6h1M7.25 7.5h1M6.25 9h1M7.25 10.5h1" />
+    </svg>
+  );
+}
+
+function EraseIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 4h11" />
+      <path d="M5.5 4V2.5a0.75 0.75 0 0 1 0.75 -0.75h3.5a0.75 0.75 0 0 1 0.75 0.75V4" />
+      <path d="M3.75 4v9a0.75 0.75 0 0 0 0.75 0.75h7a0.75 0.75 0 0 0 0.75 -0.75V4" />
+      <path d="M6.5 7v4M9.5 7v4" />
+    </svg>
+  );
+}
+
 export default function SettingsModal({ open, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped }) {
   const [hasKey, setHasKey] = useState(false);
   const [draft, setDraft] = useState('');
@@ -411,10 +448,11 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
             <button
               type="button"
-              className={styles.btn}
+              className={`${styles.btn} ${styles.btnWithIcon}`}
               onClick={handleExportLibrary}
               disabled={exportState.running}
             >
+              <span className={styles.btnIcon}><ZipIcon /></span>
               {exportState.running ? 'Exporting…' : 'Export Library as Zip'}
             </button>
           </div>
@@ -434,10 +472,11 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
             <button
               type="button"
-              className={`${styles.btn} ${styles.btnDanger}`}
+              className={`${styles.btn} ${styles.btnDanger} ${styles.btnWithIcon}`}
               onClick={handleWipeLibrary}
               disabled={wipeState.running}
             >
+              <span className={styles.btnIcon}><EraseIcon /></span>
               {wipeState.running ? 'Erasing…' : 'Erase Library'}
             </button>
           </div>

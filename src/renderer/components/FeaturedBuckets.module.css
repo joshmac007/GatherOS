@@ -21,10 +21,18 @@
 
 /* ── Pill bar (sticky, fades in once cards scroll past) ─────────────── */
 
-.pillBar {
+/* The slot is what's actually sticky. It's 0-height so it doesn't push
+   the card row below it down with empty whitespace at scroll=0; the
+   inner .pillBar overflows downward visually when pills are visible. */
+.pillBarSlot {
   position: sticky;
   top: 0;
+  height: 0;
   z-index: 5;
+  pointer-events: none;
+}
+
+.pillBar {
   padding: 6px 20px;
   pointer-events: none;
   opacity: 0;
