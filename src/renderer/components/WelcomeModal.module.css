@@ -33,20 +33,19 @@
   text-align: center;
 }
 
-.heroIcon {
-  width: 44px;
-  height: 44px;
-  margin: 0 auto 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-primary);
-  animation: heroPop 420ms cubic-bezier(0.2, 1.4, 0.3, 1) 80ms both;
-}
-
-.heroIcon svg {
-  width: 36px;
-  height: 36px;
+/* Source SVG is 352×429 — extra vertical room is the drop-shadow
+   filter spread, not artwork. We size by width and let the height
+   scale; negative top/bottom margin trims the visible shadow padding
+   so the icon doesn't push the title down further than the spec. */
+.heroImage {
+  display: block;
+  margin: -10px auto -2px;
+  width: 110px;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+  animation: heroPop 480ms cubic-bezier(0.2, 1.2, 0.3, 1) 80ms both;
 }
 
 .title {
@@ -179,7 +178,7 @@
 }
 
 @keyframes heroPop {
-  from { opacity: 0; transform: scale(0.6) rotate(-12deg); }
-  60%  { transform: scale(1.08) rotate(8deg); }
-  to   { opacity: 1; transform: scale(1) rotate(0deg); }
+  from { opacity: 0; transform: scale(0.7); }
+  55%  { transform: scale(1.06); }
+  to   { opacity: 1; transform: scale(1); }
 }

@@ -2,14 +2,7 @@ import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './WelcomeModal.module.css';
 import FeatureCardStack from './FeatureCardStack.jsx';
-
-function WaveIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2c0.55 0 1 0.45 1 1v0.6a4 4 0 0 1 3 3.86V11h.5a2.5 2.5 0 0 1 2.5 2.5v3.36a6.14 6.14 0 0 1-1.6 4.14L16 22.6a1 1 0 0 1-.74.32H9.7a1 1 0 0 1-.86-.5l-2.6-4.45a1.6 1.6 0 0 1 2.62-1.81L10 17.4V8.5A1.5 1.5 0 0 1 11.5 7v-4c0-0.55 0.45-1 1-1z" opacity="0.92" />
-    </svg>
-  );
-}
+import welcomeIconUrl from '../assets/welcome-icon.svg';
 
 function DropIcon() {
   return (
@@ -124,9 +117,12 @@ export default function WelcomeModal({ open, onClose }) {
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className={styles.hero}>
-          <div className={styles.heroIcon}>
-            <WaveIcon />
-          </div>
+          <img
+            src={welcomeIconUrl}
+            alt=""
+            className={styles.heroImage}
+            draggable={false}
+          />
           <h2 className={styles.title}>Welcome to GatherOS</h2>
           <p className={styles.subtitle}>
             We dropped a few starter images in to get you going. Here’s how to add your own.
