@@ -35,11 +35,13 @@
 
 /* Source SVG is 352×429 — extra vertical room is the drop-shadow
    filter spread, not artwork. We size by width and let the height
-   scale; negative top/bottom margin trims the visible shadow padding
-   so the icon doesn't push the title down further than the spec. */
+   scale; positive top margin pushes the visible icon down so it
+   sits centered between the modal top and the title, and the
+   negative bottom margin absorbs the empty drop-shadow space
+   so the title doesn't get pushed further away. */
 .heroImage {
   display: block;
-  margin: -10px auto -2px;
+  margin: 10px auto -22px;
   width: 110px;
   height: auto;
   user-select: none;
