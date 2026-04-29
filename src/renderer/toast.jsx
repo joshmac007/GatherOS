@@ -4,32 +4,37 @@ import Toast from './components/Toast.jsx';
 
 const TOAST_TTL_MS = 2500;
 
+// Single-toast model: while one is on screen, additional saves bump
+// the counter and refresh the TTL instead of stacking another pill.
+// The thumbnail always shows the most recent save so the user sees
+// confirmation of the last thing they did.
 function ToastStack() {
-  const [toasts, setToasts] = useState([]);
-  const seq = useRef(0);
-  const timers = useRef(new Map());
+  const [current, setCurrent] = useState(null); // { record, count } | null
+  const timerRef = useRef(null);
 
   useEffect(() => {
     return window.toast.onShow((record) => {
-      const id = ++seq.current;
-      setToasts((prev) => [...prev, { id, record }]);
-      const t = setTimeout(() => dismiss(id), TOAST_TTL_MS);
-      timers.current.set(id, t);
+      setCurrent((prev) => ({
+        record,
+        count: prev ? prev.count + 1 : 1,
+      }));
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCurrent(null), TOAST_TTL_MS);
     });
   }, []);
 
-  function dismiss(id) {
-    const t = timers.current.get(id);
-    if (t) clearTimeout(t);
-    timers.current.delete(id);
-    setToasts((prev) => prev.filter((x) => x.id !== id));
-  }
-
-  // Let the OS-level window forward mouse events when there's something to click.
+  // Forward mouse events only while there's something to interact with.
   useEffect(() => {
-    window.toast.setInteractive(toasts.length > 0);
-    if (toasts.length === 0) window.toast.empty();
-  }, [toasts.length]);
+    window.toast.setInteractive(!!current);
+    if (!current) window.toast.empty();
+  }, [current]);
+
+  function handleDismiss() {
+    if (!current) return;
+    window.toast.openImage(current.record.file_path);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setCurrent(null);
+  }
 
   return (
     <div
@@ -40,21 +45,16 @@ function ToastStack() {
         right: 0,
         padding: 16,
         display: 'flex',
-        flexDirection: 'column-reverse',
         alignItems: 'flex-start',
-        gap: 8,
       }}
     >
-      {toasts.map((t) => (
+      {current && (
         <Toast
-          key={t.id}
-          record={t.record}
-          onDismiss={() => {
-            window.toast.openImage(t.record.file_path);
-            dismiss(t.id);
-          }}
+          record={current.record}
+          count={current.count}
+          onDismiss={handleDismiss}
         />
-      ))}
+      )}
     </div>
   );
 }
