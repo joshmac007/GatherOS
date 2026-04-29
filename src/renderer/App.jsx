@@ -200,6 +200,19 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiUnlockedOpen, setAiUnlockedOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+
+  // Dev-only console handles for QA. Lets us pop the onboarding /
+  // celebration modals without juggling localStorage flags or wiping
+  // the library. Stripped from production renderer builds anyway by
+  // virtue of being inert (no UI hookups, just window assignments).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.__moodmarkDebug = {
+      showWelcome: () => setWelcomeOpen(true),
+      showAIUnlocked: () => setAiUnlockedOpen(true),
+    };
+    return () => { delete window.__moodmarkDebug; };
+  }, []);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, semanticSearch: false });
