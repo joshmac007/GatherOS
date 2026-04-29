@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './WhatsNewModal.module.css';
-import FeatureCardStack from './FeatureCardStack.jsx';
 
 function SparkleIcon() {
   return (
@@ -43,7 +42,19 @@ export default function WhatsNewModal({ open, onClose, notes }) {
           </p>
         </div>
 
-        <FeatureCardStack features={notes.items} />
+        <ul className={styles.list}>
+          {notes.items.map(({ Icon, title, description }) => (
+            <li key={title} className={styles.row}>
+              <span className={styles.featureIcon}>
+                <Icon />
+              </span>
+              <div className={styles.featureText}>
+                <span className={styles.featureTitle}>{title}</span>
+                <span className={styles.featureDesc}>{description}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
 
         <div className={styles.footer}>
           <button
