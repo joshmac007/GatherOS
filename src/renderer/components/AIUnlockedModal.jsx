@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './AIUnlockedModal.module.css';
+import FeatureCardStack from './FeatureCardStack.jsx';
 
 function SparkleIcon() {
   return (
@@ -134,19 +135,7 @@ export default function AIUnlockedModal({ open, onClose }) {
           </p>
         </div>
 
-        <ul className={styles.list}>
-          {FEATURES.map(({ Icon, title, description }) => (
-            <li key={title} className={styles.row}>
-              <span className={styles.featureIcon}>
-                <Icon />
-              </span>
-              <div className={styles.featureText}>
-                <span className={styles.featureTitle}>{title}</span>
-                <span className={styles.featureDesc}>{description}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <FeatureCardStack features={FEATURES} variant="accent" />
 
         <div className={styles.footer}>
           <button
