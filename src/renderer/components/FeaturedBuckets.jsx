@@ -5,48 +5,17 @@ import { fileUrl } from '../lib/fileUrl.js';
 
 const PREVIEW_COUNT = 4;
 
+// Two-layer layout for the featured buckets:
+//   1. .cardsRow flows with the masonry — when you scroll, the cards
+//      go up and out of view naturally, no sticky positioning.
+//   2. .pillBar is sticky at top: 0, invisible by default. Once the
+//      sentinel at the bottom of .cardsRow leaves the viewport (i.e.
+//      the cards have scrolled past), pillBar fades in. Scroll back
+//      up and it fades out as the cards come back.
 export default function FeaturedBuckets({ collections, onPickBucket }) {
   const [previews, setPreviews] = useState({}); // { bucketId: [save, ...] }
-  const [compact, setCompact] = useState(false);
-  // The layout swap from card-grid to pill-row can't tween cleanly
-  // (flex-direction changes, big size deltas) — instead we mask it
-  // with a quick fade-out → swap → fade-in dance. `renderCompact`
-  // is what's actually shown; `compact` is the target. `phase`
-  // drives the CSS:
-  //   exit  → fade current layout out
-  //   enter → swap to new layout, fade it in (with a tiny stagger
-  //           across cards so it feels like a wave)
-  const [renderCompact, setRenderCompact] = useState(false);
-  const [phase, setPhase] = useState('idle');
-  const isInitial = useRef(true);
-  const containerRef = useRef(null);
+  const [pillsVisible, setPillsVisible] = useState(false);
   const sentinelRef = useRef(null);
-
-  useEffect(() => {
-    if (compact === renderCompact) return;
-    if (isInitial.current) {
-      isInitial.current = false;
-      setRenderCompact(compact);
-      return;
-    }
-    let exitTimer = null;
-    let enterTimer = null;
-    console.log('[FeaturedBuckets] phase: exit (target compact=', compact, ')');
-    setPhase('exit');
-    exitTimer = setTimeout(() => {
-      console.log('[FeaturedBuckets] phase: enter');
-      setRenderCompact(compact);
-      setPhase('enter');
-      enterTimer = setTimeout(() => {
-        console.log('[FeaturedBuckets] phase: idle');
-        setPhase('idle');
-      }, 260);
-    }, 360);
-    return () => {
-      if (exitTimer) clearTimeout(exitTimer);
-      if (enterTimer) clearTimeout(enterTimer);
-    };
-  }, [compact, renderCompact]);
 
   // Pre-fetch up to N preview images per bucket. One IPC per bucket;
   // fine for sidebars with a handful of buckets, would want a single
@@ -71,102 +40,122 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
     return () => { cancelled = true; };
   }, [collections]);
 
-  // Toggle compact based on whether a 1px sentinel sitting above the
-  // row is visible inside the scroll container. The collapse → pill
-  // direction is debounced ~180ms so a quick scroll-and-back near
-  // the threshold doesn't flicker; expand is immediate so the cards
-  // come back the instant you scroll up to the top.
+  // Sentinel at the bottom of .cardsRow. While it's in the scroll
+  // viewport, cards are still at least partially visible — keep
+  // pills hidden. Once it scrolls out the top, cards have fully
+  // gone behind the title bar — fade pills in.
   useEffect(() => {
     const sc = document.querySelector('.grid-scroll');
     const sentinel = sentinelRef.current;
     if (!sc || !sentinel || typeof IntersectionObserver === 'undefined') return;
-    let collapseTimer = null;
     const obs = new IntersectionObserver(([entry]) => {
-      if (collapseTimer) {
-        clearTimeout(collapseTimer);
-        collapseTimer = null;
-      }
-      if (entry.isIntersecting) {
-        setCompact(false);
-      } else {
-        collapseTimer = setTimeout(() => setCompact(true), 180);
-      }
-    }, {
-      root: sc,
-      threshold: 0,
-      // No rootMargin — the sentinel sits at the very top of the
-      // scroll content, so at scrollTop=0 it's intersecting and we
-      // start in expanded-cards mode. (A negative top margin here
-      // would shrink the root from the top and make the sentinel
-      // "out" on initial load — kept the cards from ever rendering
-      // their stacked thumbnails.) The 180ms debounce below is
-      // enough buffer for slow-scroll near the edge.
-    });
+      setPillsVisible(!entry.isIntersecting);
+    }, { root: sc, threshold: 0 });
     obs.observe(sentinel);
-    return () => {
-      obs.disconnect();
-      if (collapseTimer) clearTimeout(collapseTimer);
-    };
+    return () => obs.disconnect();
   }, []);
 
   if (!collections || collections.length === 0) return null;
 
   return (
     <>
-      {/* IntersectionObserver target — when this 1px line above the
-          row scrolls out of view, the row collapses. */}
-      <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
-    <div
-      ref={containerRef}
-      className={[
-        styles.row,
-        renderCompact && styles.compact,
-        phase === 'exit' && styles.exit,
-        phase === 'enter' && styles.enter,
-      ].filter(Boolean).join(' ')}
-    >
-      <div className={styles.scroller}>
-        {collections.map((c, idx) => {
-          const items = previews[c.id] || [];
-          return (
-            <button
-              key={c.id}
-              type="button"
-              className={styles.card}
-              style={{ '--idx': idx }}
-              onClick={() => onPickBucket?.(c.id)}
-              title={c.name}
-            >
-              <div className={styles.stack}>
-                {items.length === 0 ? (
-                  <div className={styles.stackEmpty}>
-                    <span className={styles.stackEmptyIcon}>
-                      <CollectionIcon />
-                    </span>
-                  </div>
-                ) : (
-                  items.slice(0, PREVIEW_COUNT).map((s) => (
-                    <img
-                      key={s.id}
-                      src={fileUrl(s.thumb_path || s.file_path)}
-                      alt=""
-                      draggable={false}
-                    />
-                  ))
-                )}
-              </div>
-              <div className={styles.meta}>
-                <span className={styles.name}>{c.name}</span>
-                <span className={styles.count}>
-                  <span className={styles.countNum}>{c.save_count}</span>
-                  <span className={styles.countLabel}> {c.save_count === 1 ? 'save' : 'saves'}</span>
-                </span>
-              </div>
-            </button>
-          );
-        })}
+      {/* Sticky pill bar — always rendered, opacity-controlled.
+          pointer-events flips with visibility so clicks don't fall
+          on invisible pills overlaying the masonry. */}
+      <div
+        className={[styles.pillBar, pillsVisible && styles.pillBarVisible]
+          .filter(Boolean)
+          .join(' ')}
+        aria-hidden={!pillsVisible}
+      >
+        <div className={styles.scroller}>
+          {collections.map((c) => {
+            const items = previews[c.id] || [];
+            return (
+              <button
+                key={`pill-${c.id}`}
+                type="button"
+                className={[styles.card, styles.pillCard].join(' ')}
+                onClick={() => onPickBucket?.(c.id)}
+                title={c.name}
+                tabIndex={pillsVisible ? 0 : -1}
+              >
+                <div className={styles.stack}>
+                  {items.length === 0 ? (
+                    <div className={styles.stackEmpty}>
+                      <span className={styles.stackEmptyIcon}>
+                        <CollectionIcon />
+                      </span>
+                    </div>
+                  ) : (
+                    items.slice(0, 1).map((s) => (
+                      <img
+                        key={s.id}
+                        src={fileUrl(s.thumb_path || s.file_path)}
+                        alt=""
+                        draggable={false}
+                      />
+                    ))
+                  )}
+                </div>
+                <div className={styles.meta}>
+                  <span className={styles.name}>{c.name}</span>
+                  <span className={styles.count}>
+                    <span className={styles.countNum}>{c.save_count}</span>
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      {/* Cards row — normal flow, scrolls with content. */}
+      <div className={styles.cardsRow}>
+        <div className={styles.scroller}>
+          {collections.map((c) => {
+            const items = previews[c.id] || [];
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className={styles.card}
+                onClick={() => onPickBucket?.(c.id)}
+                title={c.name}
+              >
+                <div className={styles.stack}>
+                  {items.length === 0 ? (
+                    <div className={styles.stackEmpty}>
+                      <span className={styles.stackEmptyIcon}>
+                        <CollectionIcon />
+                      </span>
+                    </div>
+                  ) : (
+                    items.slice(0, PREVIEW_COUNT).map((s) => (
+                      <img
+                        key={s.id}
+                        src={fileUrl(s.thumb_path || s.file_path)}
+                        alt=""
+                        draggable={false}
+                      />
+                    ))
+                  )}
+                </div>
+                <div className={styles.meta}>
+                  <span className={styles.name}>{c.name}</span>
+                  <span className={styles.count}>
+                    <span className={styles.countNum}>{c.save_count}</span>
+                    <span className={styles.countLabel}> {c.save_count === 1 ? 'save' : 'saves'}</span>
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Sentinel at bottom of cards row — drives pillBar visibility. */}
+      <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
     </>
   );
 }
