@@ -35,8 +35,8 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
     exitTimer = setTimeout(() => {
       setRenderCompact(compact);
       setPhase('enter');
-      enterTimer = setTimeout(() => setPhase('idle'), 240);
-    }, 260);
+      enterTimer = setTimeout(() => setPhase('idle'), 260);
+    }, 360);
     return () => {
       if (exitTimer) clearTimeout(exitTimer);
       if (enterTimer) clearTimeout(enterTimer);

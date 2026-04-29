@@ -46,16 +46,12 @@
    bits (flex-direction, big size deltas) stay hidden. */
 
 .row.exit .card {
-  opacity: 0;
-  transform: translateY(-28px);
-  transition:
-    opacity 220ms cubic-bezier(0.5, 0, 0.75, 0),
-    transform 260ms cubic-bezier(0.5, 0, 0.75, 0);
-  transition-delay: calc(var(--idx, 0) * 10ms);
+  animation: fbCardExit 360ms cubic-bezier(0.4, 0, 0.7, 0.2) both;
+  animation-delay: calc(var(--idx, 0) * 12ms);
 }
 
 .row.enter .card {
-  animation: fbCardEnter 240ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: fbCardEnter 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
   animation-delay: calc(var(--idx, 0) * 14ms);
 }
 
@@ -66,6 +62,12 @@
 .row.exit .stack img,
 .row.enter .stack img {
   transition: none;
+}
+
+@keyframes fbCardExit {
+  0%   { opacity: 1; transform: translateY(0); }
+  55%  { opacity: 1; transform: translateY(-18px); }
+  100% { opacity: 0; transform: translateY(-72px); }
 }
 
 @keyframes fbCardEnter {
