@@ -12,6 +12,7 @@ files:
 asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/sharp/**/*
+  - node_modules/@img/**/*
 mac:
   category: public.app-category.productivity
   target:
