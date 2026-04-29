@@ -1379,6 +1379,8 @@ export default function App() {
                   <FeaturedBuckets
                     collections={collections}
                     onPickBucket={(id) => handleViewChange({ type: 'collection', id })}
+                    onRenameCollection={handleRenameCollection}
+                    onDeleteCollection={handleDeleteCollection}
                   />
                 )}
                 <Grid

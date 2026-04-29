@@ -189,6 +189,30 @@
   text-overflow: ellipsis;
 }
 
+/* Inline rename input — matches the .name typography exactly so the
+   visual swap from label to input is barely perceptible. */
+.cardRenameInput {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  font-family: inherit;
+  background: rgba(0, 0, 0, 0.04);
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: 5px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  width: 100%;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.cardRenameInput:focus {
+  background: #ffffff;
+  border-color: rgba(10, 132, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.18);
+}
+
 .count {
   font-family: var(--font-mono);
   font-size: 10.5px;
