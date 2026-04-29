@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './SettingsModal.module.css';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
+import PrivacyModal from './PrivacyModal.jsx';
+
+const SUPPORT_EMAIL = 'hello@designjoy.co';
 
 const STATUS_IDLE = 'idle';
 const STATUS_TESTING = 'testing';
@@ -67,6 +70,7 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [dataOpen, setDataOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [acksOpen, setAcksOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const appVersion = window.moodmark?.app?.version || '';
   const inputRef = useRef(null);
 
@@ -528,6 +532,26 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
               </span>
             </div>
             <div className={styles.aboutRow}>
+              <span className={styles.aboutLabel}>Privacy</span>
+              <button
+                type="button"
+                className={styles.aboutLink}
+                onClick={() => setPrivacyOpen(true)}
+              >
+                View policy
+              </button>
+            </div>
+            <div className={styles.aboutRow}>
+              <span className={styles.aboutLabel}>Support</span>
+              <button
+                type="button"
+                className={styles.aboutLink}
+                onClick={() => window.moodmark.shell.openUrl(`mailto:${SUPPORT_EMAIL}`)}
+              >
+                {SUPPORT_EMAIL}
+              </button>
+            </div>
+            <div className={styles.aboutRow}>
               <span className={styles.aboutLabel}>Open source</span>
               <button
                 type="button"
@@ -545,6 +569,11 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
       <AcknowledgmentsModal
         open={acksOpen}
         onClose={() => setAcksOpen(false)}
+      />
+
+      <PrivacyModal
+        open={privacyOpen}
+        onClose={() => setPrivacyOpen(false)}
       />
     </div>,
     document.body,
