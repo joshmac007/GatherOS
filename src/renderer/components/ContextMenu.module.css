@@ -38,6 +38,16 @@
   padding: 6px 10px 6px 8px;
 }
 
+/* Nested submenu item (e.g. a child bucket under its parent in the
+   "Add to Bucket" menu). Indents to mirror the sidebar's tree. */
+.itemIndent {
+  padding-left: 26px;
+}
+
+.menuWithIcons .item.itemIndent {
+  padding-left: 24px;
+}
+
 .itemIcon {
   display: inline-flex;
   align-items: center;

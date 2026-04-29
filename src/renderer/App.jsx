@@ -610,8 +610,32 @@ export default function App() {
     ).filter((c) => !memberSet.has(c.id));
     if (others.length > 0) {
       if (items.length > 0) items.push({ type: 'separator' });
-      const submenu = others.map((col) => ({
+      // Mirror the sidebar's parent → child ordering. Children whose
+      // parent is missing from `others` (e.g. the save is already in
+      // the parent, so the parent was filtered out) are promoted to
+      // top-level so they don't disappear.
+      const otherIds = new Set(others.map((c) => c.id));
+      const childrenByParent = new Map();
+      const tops = [];
+      for (const c of others) {
+        if (c.parent_id && otherIds.has(c.parent_id)) {
+          const arr = childrenByParent.get(c.parent_id) || [];
+          arr.push(c);
+          childrenByParent.set(c.parent_id, arr);
+        } else {
+          tops.push(c);
+        }
+      }
+      const orderedOthers = [];
+      for (const t of tops) {
+        orderedOthers.push({ col: t, depth: 0 });
+        for (const k of (childrenByParent.get(t.id) || [])) {
+          orderedOthers.push({ col: k, depth: 1 });
+        }
+      }
+      const submenu = orderedOthers.map(({ col, depth }) => ({
         label: col.name,
+        depth,
         icon: (
           <span style={{ color: 'var(--icon-blue)', display: 'inline-flex' }}>
             <CollectionIcon />

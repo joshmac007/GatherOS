@@ -172,7 +172,11 @@ export default function ContextMenu({ x, y, items, onClose }) {
             return (
               <button
                 key={j}
-                className={[styles.item, sub.danger && styles.danger].filter(Boolean).join(' ')}
+                className={[
+                  styles.item,
+                  sub.danger && styles.danger,
+                  sub.depth > 0 && styles.itemIndent,
+                ].filter(Boolean).join(' ')}
                 onClick={() => { sub.onClick(); onClose(); }}
               >
                 {subHasIcons && (
