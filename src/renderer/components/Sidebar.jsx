@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './Sidebar.module.css';
 import ContextMenu from './ContextMenu.jsx';
@@ -297,6 +297,17 @@ export default function Sidebar({
       );
     } catch {}
   }, [expandedBuckets]);
+
+  // Whether any visible bucket has a child. Drives whether *every*
+  // row reserves a disclosure column on its left — when there's no
+  // nesting, labels can sit flush-left without an empty spacer.
+  // Includes the in-progress child-create case so the column
+  // appears the instant the user starts typing a child name.
+  const showDisclosureColumn = useMemo(() => {
+    const ids = new Set(collections.map((c) => c.id));
+    const hasNested = collections.some((c) => c.parent_id && ids.has(c.parent_id));
+    return hasNested || !!creatingForParent;
+  }, [collections, creatingForParent]);
 
   function toggleBucketExpanded(id) {
     setExpandedBuckets((prev) => {
@@ -621,7 +632,9 @@ export default function Sidebar({
               onClick={() => onViewChange({ type: id })}
               title={inboxZero ? 'Inbox zero — every save is in a bucket' : undefined}
             >
-              <span className={styles.disclosureSpacer} aria-hidden="true" />
+              {showDisclosureColumn && (
+                <span className={styles.disclosureSpacer} aria-hidden="true" />
+              )}
               <span
                 className={styles.icon}
                 style={{ color: active ? '#fff' : 'var(--text-secondary)' }}
@@ -726,7 +739,9 @@ export default function Sidebar({
             if (renamingId === c.id) {
               return (
                 <div key={c.id} className={itemClass}>
-                  <span className={styles.disclosureSpacer} aria-hidden="true" />
+                  {showDisclosureColumn && (
+                    <span className={styles.disclosureSpacer} aria-hidden="true" />
+                  )}
                   <span className={styles.icon}>
                     <CollectionIcon />
                   </span>
@@ -787,26 +802,28 @@ export default function Sidebar({
                   }
                 }}
               >
-                {entry.depth === 0 && entry.hasChildren ? (
-                  <span
-                    className={styles.disclosure}
-                    role="button"
-                    aria-label={entry.isExpanded ? 'Collapse' : 'Expand'}
-                    aria-expanded={entry.isExpanded}
-                    onMouseDown={(e) => {
-                      // Stop the parent button from receiving focus /
-                      // firing its onClick when the chevron is hit.
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleBucketExpanded(c.id);
-                    }}
-                  >
-                    <DisclosureChevron expanded={entry.isExpanded} />
-                  </span>
-                ) : (
-                  <span className={styles.disclosureSpacer} aria-hidden="true" />
+                {showDisclosureColumn && (
+                  entry.depth === 0 && entry.hasChildren ? (
+                    <span
+                      className={styles.disclosure}
+                      role="button"
+                      aria-label={entry.isExpanded ? 'Collapse' : 'Expand'}
+                      aria-expanded={entry.isExpanded}
+                      onMouseDown={(e) => {
+                        // Stop the parent button from receiving focus /
+                        // firing its onClick when the chevron is hit.
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleBucketExpanded(c.id);
+                      }}
+                    >
+                      <DisclosureChevron expanded={entry.isExpanded} />
+                    </span>
+                  ) : (
+                    <span className={styles.disclosureSpacer} aria-hidden="true" />
+                  )
                 )}
                 <span
                   className={styles.icon}
