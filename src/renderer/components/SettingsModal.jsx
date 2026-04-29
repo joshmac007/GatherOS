@@ -179,6 +179,16 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
       setStatus(STATUS_OK);
       setHasKey(true);
       setDraft('');
+      // Auto-enable both AI features now that a key is configured.
+      // Toggles render as off whenever !hasKey, so the user expects
+      // them to flip on the moment the key is saved.
+      const enabled = { ...prefs, autoNameOnSave: true, semanticSearch: true };
+      setPrefs(enabled);
+      await Promise.all([
+        window.moodmark.settings.setPref('autoNameOnSave', true),
+        window.moodmark.settings.setPref('semanticSearch', true),
+      ]);
+      onPrefsChange?.(enabled);
       onConfiguredChange?.(true);
       // Brief success state then close
       setTimeout(() => {
@@ -363,7 +373,7 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
             <span className={styles.switch}>
               <input
                 type="checkbox"
-                checked={!!prefs.autoNameOnSave}
+                checked={hasKey && !!prefs.autoNameOnSave}
                 onChange={() => togglePref('autoNameOnSave')}
                 disabled={!hasKey}
               />
@@ -382,7 +392,7 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
             <span className={styles.switch}>
               <input
                 type="checkbox"
-                checked={!!prefs.semanticSearch}
+                checked={hasKey && !!prefs.semanticSearch}
                 onChange={() => togglePref('semanticSearch')}
                 disabled={!hasKey}
               />
