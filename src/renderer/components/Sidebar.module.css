@@ -312,6 +312,23 @@
   margin-left: 28px;
 }
 
+/* Tail dropzone — only mounted while a bucket is being dragged.
+   Always reserves a small click target below the last item so the
+   user can drop "into empty space" to mean "send to end". The
+   active state surfaces a subtle highlight so the target is
+   visible during the drag. */
+.tailDropzone {
+  height: 18px;
+  border-radius: 6px;
+  margin-top: 2px;
+  transition: background 100ms ease;
+}
+
+.tailDropzoneActive {
+  background: rgba(10, 132, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.35);
+}
+
 .item:hover {
   background: rgba(0, 0, 0, 0.04);
 }

@@ -846,6 +846,39 @@ export default function Sidebar({
             );
           })
         )}
+        {/* Tail dropzone — captures drops in the empty space below the
+            last bucket so users can "send to end" by dragging past
+            the list. Visible only while a bucket is being dragged
+            (the per-row drop handlers cover dropping onto an
+            existing row). */}
+        {draggingId && collections.length > 0 && (
+          <div
+            className={[
+              styles.tailDropzone,
+              dropTargetId === '__end__' && styles.tailDropzoneActive,
+            ].filter(Boolean).join(' ')}
+            onDragOver={(e) => {
+              if (!draggingId) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (dropTargetId !== '__end__') setDropTargetId('__end__');
+            }}
+            onDragLeave={() => {
+              if (dropTargetId === '__end__') setDropTargetId(null);
+            }}
+            onDrop={(e) => {
+              if (!draggingId || isSaveDrag(e)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const fromId = draggingId;
+              handleDragEnd();
+              const ids = collections.map((c) => c.id).filter((id) => id !== fromId);
+              ids.push(fromId);
+              onReorderCollections?.(ids);
+            }}
+            aria-hidden="true"
+          />
+        )}
       </nav>
 
       {(onOpenSettings || onOpenShortcuts) && (
