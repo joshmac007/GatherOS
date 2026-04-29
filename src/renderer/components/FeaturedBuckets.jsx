@@ -8,24 +8,40 @@ const PREVIEW_COUNT = 4;
 export default function FeaturedBuckets({ collections, onPickBucket }) {
   const [previews, setPreviews] = useState({}); // { bucketId: [save, ...] }
   const [compact, setCompact] = useState(false);
-  // Set briefly when compact toggles so we can disable the stack-img
-  // transform transition for one frame — otherwise the static
-  // rotated transforms in expanded mode tween to/from `none` over
-  // 320ms during the state swap, which reads as a single flash.
-  const [snap, setSnap] = useState(false);
+  // The layout swap from card-grid to pill-row can't tween cleanly
+  // (flex-direction changes, big size deltas) — instead we mask it
+  // with a quick fade-out → swap → fade-in dance. `renderCompact`
+  // is what's actually shown; `compact` is the target. `phase`
+  // drives the CSS:
+  //   exit  → fade current layout out
+  //   enter → swap to new layout, fade it in (with a tiny stagger
+  //           across cards so it feels like a wave)
+  const [renderCompact, setRenderCompact] = useState(false);
+  const [phase, setPhase] = useState('idle');
   const isInitial = useRef(true);
   const containerRef = useRef(null);
   const sentinelRef = useRef(null);
 
   useEffect(() => {
+    if (compact === renderCompact) return;
     if (isInitial.current) {
       isInitial.current = false;
+      setRenderCompact(compact);
       return;
     }
-    setSnap(true);
-    const id = setTimeout(() => setSnap(false), 60);
-    return () => clearTimeout(id);
-  }, [compact]);
+    let exitTimer = null;
+    let enterTimer = null;
+    setPhase('exit');
+    exitTimer = setTimeout(() => {
+      setRenderCompact(compact);
+      setPhase('enter');
+      enterTimer = setTimeout(() => setPhase('idle'), 320);
+    }, 160);
+    return () => {
+      if (exitTimer) clearTimeout(exitTimer);
+      if (enterTimer) clearTimeout(enterTimer);
+    };
+  }, [compact, renderCompact]);
 
   // Pre-fetch up to N preview images per bucket. One IPC per bucket;
   // fine for sidebars with a handful of buckets, would want a single
@@ -97,16 +113,22 @@ export default function FeaturedBuckets({ collections, onPickBucket }) {
       <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
     <div
       ref={containerRef}
-      className={[styles.row, compact && styles.compact, snap && styles.snap].filter(Boolean).join(' ')}
+      className={[
+        styles.row,
+        renderCompact && styles.compact,
+        phase === 'exit' && styles.exit,
+        phase === 'enter' && styles.enter,
+      ].filter(Boolean).join(' ')}
     >
       <div className={styles.scroller}>
-        {collections.map((c) => {
+        {collections.map((c, idx) => {
           const items = previews[c.id] || [];
           return (
             <button
               key={c.id}
               type="button"
               className={styles.card}
+              style={{ '--idx': idx }}
               onClick={() => onPickBucket?.(c.id)}
               title={c.name}
             >

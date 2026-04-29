@@ -26,17 +26,51 @@
   margin-bottom: 0;
 }
 
+/* Smooth the row's own padding/margin shift so the masonry below
+   doesn't visibly jolt during the card → pill swap. */
+.row {
+  transition:
+    padding 280ms cubic-bezier(0.32, 0.72, 0, 1),
+    margin-bottom 280ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 .row .scroller,
 .row .card {
   pointer-events: auto;
 }
 
-/* Disable transform transitions briefly while the state is swapping
-   between expanded cards and compact pills. Reapplied after 60ms so
-   hover-fan continues to animate as usual. */
-.row.snap .stack img,
-.row.snap .card {
-  transition: none !important;
+/* ── Phase transitions ────────────────────────────────────────────────
+   The layout swap (flex-direction / big size deltas) can't tween, so
+   instead we mask it: cards fade out, the layout flips while invisible,
+   new cards fade in with a tiny stagger so it reads as a wave. */
+
+.row.exit .card {
+  opacity: 0;
+  transform: translateY(-3px) scale(0.97);
+  transition:
+    opacity 150ms cubic-bezier(0.4, 0, 1, 1),
+    transform 150ms cubic-bezier(0.4, 0, 1, 1);
+  transition-delay: calc(var(--idx, 0) * 18ms);
+}
+
+.row.enter .card {
+  animation: fbCardEnter 320ms cubic-bezier(0.2, 0.85, 0.3, 1.05) both;
+  animation-delay: calc(var(--idx, 0) * 22ms);
+}
+
+/* Suppress the .stack img transform transitions while phasing —
+   without this, the static rotated thumbnails would tween from
+   their old transforms to the new ones during the swap, creating
+   a brief skew at the edge of visibility. */
+.row.exit .stack img,
+.row.enter .stack img {
+  transition: none;
+}
+
+@keyframes fbCardEnter {
+  0%   { opacity: 0; transform: translateY(4px) scale(0.96); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .scroller {
