@@ -308,9 +308,6 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           </button>
           {aiOpen && (
           <div className={styles.drawerBody}>
-          <p className={styles.sectionHint}>
-            Each new upload runs once. Disable any feature you don't want billed against your key.
-          </p>
           <label className={styles.toggleRow}>
             <span className={styles.toggleText}>
               <span className={styles.toggleLabel}>Auto-name new uploads</span>

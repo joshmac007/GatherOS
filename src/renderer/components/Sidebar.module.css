@@ -5,7 +5,7 @@
   flex-direction: column;
   padding: 50px 10px 16px;
   margin: 10px;
-  border-radius: 22px;
+  border-radius: 12px;
   overflow-y: auto;
   position: relative;
   /* Float above .main-col so the soft halo isn't clipped by the sibling's
