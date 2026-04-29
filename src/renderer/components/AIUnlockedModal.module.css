@@ -29,7 +29,7 @@
 /* ── Hero ────────────────────────────────────────────────────────────── */
 
 .hero {
-  padding: 28px 28px 14px;
+  padding: 28px 28px 8px;
   text-align: center;
 }
 
@@ -60,8 +60,10 @@
 .subtitle {
   font-size: 13px;
   color: var(--text-secondary);
-  margin: 6px 0 0;
+  margin: 6px auto 0;
   line-height: 1.45;
+  max-width: 360px;
+  text-wrap: pretty;
 }
 
 /* ── Feature list ────────────────────────────────────────────────────── */

@@ -1,5 +1,5 @@
 .wrap {
-  padding: 6px 24px 14px;
+  padding: 0 24px 8px;
   --chip-bg: rgba(0, 0, 0, 0.05);
   --chip-color: var(--text-primary);
 }
@@ -15,7 +15,7 @@
   position: relative;
   width: 280px;
   height: 200px;
-  margin: 16px auto 22px;
+  margin: 14px auto 18px;
 }
 
 .card {
@@ -104,12 +104,14 @@
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
+  text-wrap: balance;
 }
 
 .cardDesc {
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-secondary);
+  text-wrap: pretty;
 }
 
 /* ── Dot indicator ──────────────────────────────────────────────────── */
