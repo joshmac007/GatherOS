@@ -161,6 +161,11 @@
   transform: scale(0.98);
 }
 
+.gotItBtn:focus,
+.gotItBtn:focus-visible {
+  outline: none;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
