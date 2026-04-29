@@ -5,32 +5,29 @@ const POSITION_CLASSES = ['pos0', 'pos1', 'pos2', 'pos3', 'pos4'];
 
 // Auto-rotating stack of feature cards. Each card gets its turn at
 // the front for `intervalMs`; cards behind fan out at gentle tilts
-// to suggest "there's more". The user can also click a back card
-// or a dot to jump to that one — auto-rotation pauses while hovered
-// so they have time to read.
+// to suggest "there's more". Rotation never pauses — having cursor
+// position silently halt the carousel was confusing across modals.
+// Users can still click a back card or a dot to jump.
 export default function FeatureCardStack({
   features,
   intervalMs = 3800,
   variant = 'default',
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    if (paused || features.length <= 1) return undefined;
+    if (features.length <= 1) return undefined;
     const id = setInterval(() => {
       setActiveIndex((i) => (i + 1) % features.length);
     }, intervalMs);
     return () => clearInterval(id);
-  }, [features.length, intervalMs, paused]);
+  }, [features.length, intervalMs]);
 
   return (
     <div
       className={[styles.wrap, variant === 'accent' && styles.wrapAccent]
         .filter(Boolean)
         .join(' ')}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
     >
       <div className={styles.stack} role="list" aria-live="polite">
         {features.map((f, i) => {
