@@ -530,20 +530,32 @@ function getCollectionsContainingAll(saveIds) {
   return rows.map((r) => r.id);
 }
 
-function createCollection({ name, color } = {}) {
+function createCollection({ name, color, parentId } = {}) {
   const db = getDatabase();
   const next = db.prepare(
     'SELECT COALESCE(MAX(order_index), -1) + 1 AS n FROM collections'
   ).get();
+  // Resolve / validate the parent. We only allow one level of nesting,
+  // so a parent that's itself a child is rejected (silently flattened
+  // to top-level rather than rejected outright — this is forgiving for
+  // future callers and keeps the constraint enforced server-side).
+  let parent_id = null;
+  if (parentId) {
+    const parent = db.prepare(
+      'SELECT id, parent_id FROM collections WHERE id = ?'
+    ).get(parentId);
+    if (parent && !parent.parent_id) parent_id = parent.id;
+  }
   const record = {
     id: crypto.randomUUID(),
     name: name || 'Untitled',
     color: color || '#007aff',
     created_at: Date.now(),
     order_index: next.n,
+    parent_id,
   };
   db.prepare(
-    'INSERT INTO collections (id, name, color, created_at, order_index) VALUES (@id, @name, @color, @created_at, @order_index)'
+    'INSERT INTO collections (id, name, color, created_at, order_index, parent_id) VALUES (@id, @name, @color, @created_at, @order_index, @parent_id)'
   ).run(record);
   return record;
 }
@@ -612,7 +624,13 @@ function renameCollection({ id, name } = {}) {
 }
 
 function deleteCollection(id) {
-  getDatabase().prepare('DELETE FROM collections WHERE id = ?').run(id);
+  const db = getDatabase();
+  // Promote any children to top-level rather than cascading the
+  // delete. Less destructive — users who accidentally delete a parent
+  // can still find the children in the sidebar afterward, with all
+  // their saves intact.
+  db.prepare('UPDATE collections SET parent_id = NULL WHERE parent_id = ?').run(id);
+  db.prepare('DELETE FROM collections WHERE id = ?').run(id);
   return { ok: true };
 }
 

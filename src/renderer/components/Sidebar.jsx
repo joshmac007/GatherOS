@@ -180,6 +180,40 @@ const SMART_VIEWS = [
   { id: 'trash',    label: 'Trash',    color: 'var(--text-tertiary)', Icon: TrashIcon },
 ];
 
+// Walk the (already order_index-sorted) collections list and emit a
+// flat render queue: each top-level bucket immediately followed by its
+// children. Orphaned children (parent_id pointing at a deleted bucket)
+// are promoted to top-level so they don't disappear from the sidebar.
+// `creatingForParent`, when set, injects a `newChild` sentinel after
+// that parent's children block — that's where the inline child-create
+// input renders.
+function flattenCollections(collections, creatingForParent) {
+  const ids = new Set(collections.map((c) => c.id));
+  const childrenByParent = new Map();
+  const tops = [];
+  for (const c of collections) {
+    if (c.parent_id && ids.has(c.parent_id)) {
+      const arr = childrenByParent.get(c.parent_id) || [];
+      arr.push(c);
+      childrenByParent.set(c.parent_id, arr);
+    } else {
+      tops.push(c);
+    }
+  }
+  const out = [];
+  for (const t of tops) {
+    out.push({ kind: 'collection', collection: t, depth: 0 });
+    const kids = childrenByParent.get(t.id) || [];
+    for (const k of kids) {
+      out.push({ kind: 'collection', collection: k, depth: 1 });
+    }
+    if (creatingForParent === t.id) {
+      out.push({ kind: 'newChild', parentId: t.id });
+    }
+  }
+  return out;
+}
+
 export default function Sidebar({
   view,
   onViewChange,
@@ -198,6 +232,10 @@ export default function Sidebar({
 }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  // When set, the next "create bucket" commit will be inserted as a
+  // child of this parent id rather than as a top-level bucket. Always
+  // null while creating === false.
+  const [creatingForParent, setCreatingForParent] = useState(null);
 
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
@@ -212,6 +250,15 @@ export default function Sidebar({
 
   function startCreating() {
     setCreating(true);
+    setCreatingForParent(null);
+    setNewName('');
+    requestAnimationFrame(() => createInputRef.current?.focus());
+  }
+
+  // Inline child-bucket creation, anchored under a specific parent.
+  function startCreatingChild(parentId) {
+    setCreating(true);
+    setCreatingForParent(parentId);
     setNewName('');
     requestAnimationFrame(() => createInputRef.current?.focus());
   }
@@ -227,13 +274,14 @@ export default function Sidebar({
 
   function cancelCreating() {
     setCreating(false);
+    setCreatingForParent(null);
     setNewName('');
   }
 
   async function commitCreate() {
     const name = newName.trim();
     if (!name) { cancelCreating(); return; }
-    await onCreateCollection({ name });
+    await onCreateCollection({ name, parentId: creatingForParent });
     cancelCreating();
   }
 
@@ -448,6 +496,12 @@ export default function Sidebar({
   const ctxItems = ctxMenu
     ? [
         { label: 'Rename', icon: <PencilIcon />, onClick: () => startRename(ctxMenu.collection) },
+        // Only top-level buckets can have children — single level cap.
+        ...(ctxMenu.collection.parent_id ? [] : [{
+          label: 'Add Child Bucket',
+          icon: <CollectionIcon />,
+          onClick: () => startCreatingChild(ctxMenu.collection.id),
+        }]),
         { label: 'Delete Bucket', icon: <TrashIcon />, danger: true, onClick: () => onDeleteCollection(ctxMenu.collection.id) },
       ]
     : [];
@@ -524,7 +578,7 @@ export default function Sidebar({
         </button>
       </div>
 
-      {creating && (
+      {creating && !creatingForParent && (
         <div className={styles.newCollectionForm}>
           <input
             ref={createInputRef}
@@ -550,7 +604,37 @@ export default function Sidebar({
         {collections.length === 0 && !creating ? (
           <div className={styles.empty}>No buckets yet</div>
         ) : (
-          collections.map((c) => {
+          flattenCollections(collections, creatingForParent).map((entry) => {
+            // Inline sentinel: the inline create-child input that
+            // belongs under a specific parent.
+            if (entry.kind === 'newChild') {
+              return (
+                <div
+                  key="__newChild__"
+                  className={`${styles.newCollectionForm} ${styles.childForm}`}
+                >
+                  <input
+                    ref={createInputRef}
+                    className={styles.newCollectionInput}
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={handleCreateKeyDown}
+                    placeholder="Child bucket name"
+                  />
+                  <div className={styles.newCollectionBtns}>
+                    <button className={styles.formBtn} onClick={cancelCreating}>Cancel</button>
+                    <button
+                      className={`${styles.formBtn} ${styles.formBtnPrimary}`}
+                      onClick={commitCreate}
+                    >
+                      Create
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            const c = entry.collection;
+            const depth = entry.depth;
             const active = view.type === 'collection' && view.id === c.id;
             const isDragging = draggingId === c.id;
             const isDropTarget = dropTargetId === c.id && draggingId && draggingId !== c.id;
@@ -559,6 +643,7 @@ export default function Sidebar({
               active && styles.active,
               isDragging && styles.dragging,
               isDropTarget && styles.dropTarget,
+              depth > 0 && styles.itemChild,
             ].filter(Boolean).join(' ');
 
             if (renamingId === c.id) {

@@ -271,6 +271,31 @@
   transition: background 100ms ease, box-shadow 100ms ease;
 }
 
+/* Child bucket — indented under its parent with a small connector
+   tick to suggest the parent relationship. Active/hover states stay
+   consistent with top-level items. */
+.itemChild {
+  padding-left: 24px;
+  position: relative;
+}
+
+.itemChild::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 6px;
+  height: 0.5px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+/* Inline child-create form, anchored under its parent. Uses the same
+   surface as the top-of-section form but indented to align with the
+   indented child rows so the new entry visually nests. */
+.childForm {
+  margin-left: 18px;
+}
+
 .item:hover {
   background: rgba(0, 0, 0, 0.04);
 }
