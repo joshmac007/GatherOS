@@ -4,6 +4,8 @@ import QuickSwitcher from './components/QuickSwitcher.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import WelcomeModal from './components/WelcomeModal.jsx';
+import WhatsNewModal from './components/WhatsNewModal.jsx';
+import { pickNotesForUpgrade, RELEASE_NOTES } from './data/releaseNotes.js';
 import ShortcutsModal from './components/ShortcutsModal.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import Grid from './components/Grid.jsx';
@@ -200,6 +202,27 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiUnlockedOpen, setAiUnlockedOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [whatsNewNotes, setWhatsNewNotes] = useState(null);
+
+  // Show "What's new" once after an auto-update lands the user on a
+  // newer build. Brand-new installs (no lastSeenVersion stored) get
+  // their version recorded silently — first-launch onboarding is
+  // owned by the welcome modal, not this one.
+  useEffect(() => {
+    const currentVersion = window.moodmark?.app?.version;
+    if (!currentVersion) return;
+    let lastSeen = null;
+    try { lastSeen = localStorage.getItem('moodmark.lastSeenVersion'); } catch {}
+    if (!lastSeen) {
+      try { localStorage.setItem('moodmark.lastSeenVersion', currentVersion); } catch {}
+      return;
+    }
+    const notes = pickNotesForUpgrade(currentVersion, lastSeen);
+    if (notes) setWhatsNewNotes(notes);
+    // Always advance the cursor — even when there's no notes block
+    // for the new version, we don't want to keep checking forever.
+    try { localStorage.setItem('moodmark.lastSeenVersion', currentVersion); } catch {}
+  }, []);
 
   // Dev-only console handles for QA. Lets us pop the onboarding /
   // celebration modals without juggling localStorage flags or wiping
@@ -210,6 +233,13 @@ export default function App() {
     window.__moodmarkDebug = {
       showWelcome: () => setWelcomeOpen(true),
       showAIUnlocked: () => setAiUnlockedOpen(true),
+      showWhatsNew: (version) => {
+        const target = version
+          ? RELEASE_NOTES.find((r) => r.version === version)
+          : RELEASE_NOTES[0];
+        if (target) setWhatsNewNotes(target);
+        else console.warn('[debug] no release notes for', version);
+      },
     };
     return () => { delete window.__moodmarkDebug; };
   }, []);
@@ -1663,6 +1693,12 @@ export default function App() {
       <WelcomeModal
         open={welcomeOpen}
         onClose={() => setWelcomeOpen(false)}
+      />
+
+      <WhatsNewModal
+        open={!!whatsNewNotes}
+        onClose={() => setWhatsNewNotes(null)}
+        notes={whatsNewNotes}
       />
     </div>
   );

@@ -44,6 +44,9 @@ async function ensureScreenRecordingPermission() {
   let status = systemPreferences.getMediaAccessStatus('screen');
   if (status === 'granted') return true;
 
+  // Trigger the system permission prompt. Silently no-ops if the
+  // user has already denied — getMediaAccessStatus is the source of
+  // truth on the next read.
   try {
     await desktopCapturer.getSources({
       types: ['screen'],
@@ -54,15 +57,25 @@ async function ensureScreenRecordingPermission() {
   status = systemPreferences.getMediaAccessStatus('screen');
   if (status === 'granted') return true;
 
+  // Still not granted (denied / restricted / dismissed prompt).
+  // Walk the user to the right pane in System Settings. In dev we
+  // run inside an `Electron` host binary, so that's the toggle name
+  // they'll see; packaged builds appear as the product name.
+  const productName = app.isPackaged ? app.getName() : 'Electron';
+  const restartLine = app.isPackaged
+    ? `Then quit and reopen GatherOS for the change to take effect.`
+    : `Then quit and relaunch the dev session for the change to take effect.`;
+
   const res = await dialog.showMessageBox({
     type: 'info',
-    buttons: ['Open System Settings', 'Cancel'],
+    buttons: ['Open System Settings', 'Not now'],
     defaultId: 0,
     cancelId: 1,
-    title: 'Screen Recording Permission Needed',
-    message: 'GatherOS needs permission to record your screen to capture screenshots.',
+    title: 'Screen Recording permission needed',
+    message: 'GatherOS needs Screen Recording to capture screenshots.',
     detail:
-      'Click "Open System Settings", enable Screen Recording for Electron, then quit GatherOS (Ctrl+C in Terminal) and run it again with "npm run dev".',
+      `Click “Open System Settings”, then enable Screen Recording for “${productName}”.\n\n` +
+      restartLine,
   });
   if (res.response === 0) {
     shell.openExternal(

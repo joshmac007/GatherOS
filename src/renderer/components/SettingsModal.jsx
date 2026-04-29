@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './SettingsModal.module.css';
+import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
 
 const STATUS_IDLE = 'idle';
 const STATUS_TESTING = 'testing';
@@ -64,6 +65,9 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [wipeState, setWipeState] = useState({ running: false, message: null });
   const [aiOpen, setAiOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [acksOpen, setAcksOpen] = useState(false);
+  const appVersion = window.moodmark?.app?.version || '';
   const inputRef = useRef(null);
 
   async function handleWipeLibrary() {
@@ -502,7 +506,46 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           </div>
           )}
         </section>
+
+        <section className={`${styles.section} ${styles.drawerSection}`}>
+          <button
+            type="button"
+            className={styles.drawerHeader}
+            onClick={() => setAboutOpen((v) => !v)}
+            aria-expanded={aboutOpen}
+          >
+            <span className={styles.sectionTitle}>About</span>
+            <span className={[styles.drawerChevron, aboutOpen && styles.drawerChevronOpen].filter(Boolean).join(' ')}>
+              <DrawerChevron />
+            </span>
+          </button>
+          {aboutOpen && (
+          <div className={styles.drawerBody}>
+            <div className={styles.aboutRow}>
+              <span className={styles.aboutLabel}>Version</span>
+              <span className={styles.aboutValue}>
+                {appVersion ? `v${appVersion}` : '—'}
+              </span>
+            </div>
+            <div className={styles.aboutRow}>
+              <span className={styles.aboutLabel}>Open source</span>
+              <button
+                type="button"
+                className={styles.aboutLink}
+                onClick={() => setAcksOpen(true)}
+              >
+                View acknowledgments
+              </button>
+            </div>
+          </div>
+          )}
+        </section>
       </div>
+
+      <AcknowledgmentsModal
+        open={acksOpen}
+        onClose={() => setAcksOpen(false)}
+      />
     </div>,
     document.body,
   );

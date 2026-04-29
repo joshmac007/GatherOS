@@ -1,4 +1,5 @@
 const path = require('node:path');
+const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { app } = require('electron');
 const Database = require('better-sqlite3');
@@ -58,55 +59,131 @@ function initDatabase() {
   db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  // Baseline schema first — CREATE TABLE IF NOT EXISTS is a no-op on
+  // existing DBs but bootstraps fresh ones. Then run versioned
+  // migrations on top to bring any older shape up to current.
   db.exec(SCHEMA);
   migrate();
   return db;
 }
 
+// ── Versioned migrations ───────────────────────────────────────────
+//
+// SQLite's user_version pragma is our schema version cursor. Each
+// entry of MIGRATIONS is a function run exactly once on databases
+// whose user_version is below the entry's index. After a successful
+// run, user_version is bumped to that index + 1.
+//
+// Adding a migration:
+//   1. Append a new function to MIGRATIONS. Never reorder/delete
+//      existing entries — that breaks any DB in the field already
+//      advanced past your insertion point.
+//   2. Each migration is wrapped in a transaction, so a throw rolls
+//      back the entire change atomically and leaves user_version
+//      unchanged.
+//   3. Make data-touching logic idempotent where you can; even with
+//      transactional rollback, an inconsistent half-migration on
+//      disk is safer to retry than to assume.
+const MIGRATIONS = [
+  // v0 → v1: pulls every legacy DB up to today's baseline. Idempotent
+  // so DBs that pre-date user_version tracking (and have already had
+  // these columns added by the old best-effort migration) pass
+  // through cleanly.
+  (database) => {
+    addColumnIfMissing(database, 'collections', 'order_index', 'INTEGER DEFAULT 0');
+    // Seed order_index in created_at order so existing buckets keep
+    // their visual order. Only fires when no row has been ordered
+    // (avoids re-shuffling on a re-migrate against an already-seeded
+    // table).
+    const ordered = database
+      .prepare('SELECT COUNT(*) AS n FROM collections WHERE order_index > 0')
+      .get().n;
+    if (ordered === 0) {
+      const rows = database.prepare('SELECT id FROM collections ORDER BY created_at ASC').all();
+      const stmt = database.prepare('UPDATE collections SET order_index = ? WHERE id = ?');
+      rows.forEach((r, i) => stmt.run(i, r.id));
+    }
+    addColumnIfMissing(database, 'saves', 'ai_description', 'TEXT');
+    addColumnIfMissing(database, 'saves', 'embedding', 'BLOB');
+    addColumnIfMissing(database, 'saves', 'ocr_text', 'TEXT');
+    addColumnIfMissing(database, 'saves', 'ai_prompt', 'TEXT');
+    addColumnIfMissing(database, 'saves', 'deleted_at', 'INTEGER');
+    // Generic per-save metadata as JSON. Used today for tag-specific
+    // extras (e.g. the "font" tag stores name/designer/buy_url here).
+    addColumnIfMissing(database, 'saves', 'meta', 'TEXT');
+    addColumnIfMissing(database, 'saves', 'notes', 'TEXT');
+    // One level of bucket nesting; cascade-on-delete handled in
+    // application code (SQLite ALTER doesn't allow REFERENCES).
+    addColumnIfMissing(database, 'collections', 'parent_id', 'TEXT');
+  },
+];
+
+function addColumnIfMissing(database, table, name, type) {
+  const cols = database.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.find((c) => c.name === name)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+  }
+}
+
 function migrate() {
-  const cols = db.prepare("PRAGMA table_info(collections)").all();
-  if (!cols.find((c) => c.name === 'order_index')) {
-    db.exec('ALTER TABLE collections ADD COLUMN order_index INTEGER DEFAULT 0');
-    // Seed existing rows in created_at order so they keep their visual order.
-    const rows = db.prepare('SELECT id FROM collections ORDER BY created_at ASC').all();
-    const stmt = db.prepare('UPDATE collections SET order_index = ? WHERE id = ?');
-    rows.forEach((r, i) => stmt.run(i, r.id));
+  const currentVersion = db.pragma('user_version', { simple: true });
+  const targetVersion = MIGRATIONS.length;
+  if (currentVersion >= targetVersion) return;
+
+  // One copy-on-disk before applying any unapplied migrations, in case
+  // a downstream change in the queue corrupts the file. Backup is best-
+  // effort: if it fails (no disk, permissions), we log and proceed —
+  // the per-migration transaction is the real safety net.
+  if (databaseHasUserData()) {
+    backupDatabaseBeforeMigrate(currentVersion);
   }
 
-  const saveCols = db.prepare("PRAGMA table_info(saves)").all();
-  if (!saveCols.find((c) => c.name === 'ai_description')) {
-    db.exec('ALTER TABLE saves ADD COLUMN ai_description TEXT');
+  for (let v = currentVersion; v < targetVersion; v++) {
+    const fn = MIGRATIONS[v];
+    if (!fn) {
+      db.pragma(`user_version = ${v + 1}`);
+      continue;
+    }
+    try {
+      const apply = db.transaction(() => {
+        fn(db);
+        db.pragma(`user_version = ${v + 1}`);
+      });
+      apply();
+    } catch (err) {
+      console.error(`[db] migration v${v} → v${v + 1} failed:`, err.message);
+      // Rethrow so the app surfaces the failure rather than booting
+      // into a half-migrated DB. The transaction has already rolled
+      // back; user_version remains at the prior value.
+      throw err;
+    }
   }
-  if (!saveCols.find((c) => c.name === 'embedding')) {
-    db.exec('ALTER TABLE saves ADD COLUMN embedding BLOB');
-  }
-  if (!saveCols.find((c) => c.name === 'ocr_text')) {
-    db.exec('ALTER TABLE saves ADD COLUMN ocr_text TEXT');
-  }
-  if (!saveCols.find((c) => c.name === 'ai_prompt')) {
-    db.exec('ALTER TABLE saves ADD COLUMN ai_prompt TEXT');
-  }
-  if (!saveCols.find((c) => c.name === 'deleted_at')) {
-    db.exec('ALTER TABLE saves ADD COLUMN deleted_at INTEGER');
-  }
-  // Generic per-save metadata as JSON. Used today for tag-specific
-  // extras (e.g. the "font" tag stores name/designer/buy_url here).
-  // Stored as TEXT — caller is responsible for stringify/parse.
-  if (!saveCols.find((c) => c.name === 'meta')) {
-    db.exec('ALTER TABLE saves ADD COLUMN meta TEXT');
-  }
-  if (!saveCols.find((c) => c.name === 'notes')) {
-    db.exec('ALTER TABLE saves ADD COLUMN notes TEXT');
-  }
+}
 
-  // One level of bucket nesting. Top-level buckets have parent_id NULL;
-  // a child's parent_id points at a top-level bucket's id. Plain TEXT
-  // (no REFERENCES) because SQLite's ALTER TABLE ADD COLUMN restricts
-  // foreign-key clauses; cascade-on-delete is handled in deleteCollection.
-  // The 2-level cap is enforced in the application layer.
-  const collectionCols = db.prepare("PRAGMA table_info(collections)").all();
-  if (!collectionCols.find((c) => c.name === 'parent_id')) {
-    db.exec('ALTER TABLE collections ADD COLUMN parent_id TEXT');
+function databaseHasUserData() {
+  // Brand-new databases skip the backup — there's nothing to lose,
+  // and the file may not even exist on disk yet on first run.
+  try {
+    const file = getDatabasePath();
+    if (!fs.existsSync(file)) return false;
+    const stat = fs.statSync(file);
+    if (stat.size < 4096) return false;
+    const row = db.prepare('SELECT COUNT(*) AS n FROM saves').get();
+    return row.n > 0;
+  } catch {
+    return false;
+  }
+}
+
+function backupDatabaseBeforeMigrate(fromVersion) {
+  try {
+    const file = getDatabasePath();
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backup = `${file}.pre-v${fromVersion + 1}.${stamp}.bak`;
+    fs.copyFileSync(file, backup);
+    console.log(`[db] migration backup written: ${path.basename(backup)}`);
+  } catch (err) {
+    console.error('[db] migration backup failed (continuing):', err.message);
   }
 }
 
