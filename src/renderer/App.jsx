@@ -17,6 +17,7 @@ import LoadingScreen from './components/LoadingScreen.jsx';
 import CompostBurst from './components/CompostBurst.jsx';
 import FocusedSortMode from './components/FocusedSortMode.jsx';
 import { useLibrary } from './hooks/useLibrary.js';
+import { useUndoStack } from './hooks/useUndoStack.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
 
@@ -169,10 +170,49 @@ export default function App() {
     freshIds,
   } = useLibrary();
 
+  // Cmd+Z undo stack. Mutations push a label + reversal closure; the
+  // global keydown handler at the end of this component pops & runs.
+  const undoStack = useUndoStack();
+
+  // Wrap useLibrary's updateSaveMeta so renames / URL / notes edits
+  // are undoable. Captures the previous values from the live saves
+  // array before delegating to the underlying setter.
+  const undoableUpdateSaveMeta = useCallback((id, patch) => {
+    const before = saves.find((s) => s.id === id);
+    updateSaveMeta(id, patch);
+    if (!before) return;
+    const inverse = {};
+    if ('title' in patch && (before.title || null) !== (patch.title || null)) {
+      inverse.title = before.title || null;
+    }
+    if ('sourceUrl' in patch && (before.source_url || null) !== (patch.sourceUrl || null)) {
+      inverse.sourceUrl = before.source_url || null;
+    }
+    if ('notes' in patch && (before.notes || null) !== (patch.notes || null)) {
+      inverse.notes = before.notes || null;
+    }
+    if ('meta' in patch && (before.meta || null) !== (patch.meta || null)) {
+      inverse.meta = before.meta || null;
+    }
+    if (Object.keys(inverse).length === 0) return;
+    const label = 'title' in inverse
+      ? 'rename'
+      : 'sourceUrl' in inverse
+      ? 'URL change'
+      : 'notes' in inverse
+      ? 'note edit'
+      : 'edit';
+    undoStack.push(label, () => updateSaveMeta(id, inverse));
+  }, [saves, updateSaveMeta, undoStack]);
+
   const handleColorFilter = useCallback((hex) => {
+    const previous = colorFilter;
     setColorFilter(hex);
     setFocusedId(null); // back to the grid so the filtered set is visible
-  }, [setColorFilter]);
+    if (previous !== hex) {
+      undoStack.push('color filter', () => setColorFilter(previous));
+    }
+  }, [colorFilter, setColorFilter, undoStack]);
 
   const [selected, setSelected] = useState(() => new Set());
   const [gridColumns, setGridColumns] = useState(3);
@@ -663,6 +703,13 @@ export default function App() {
           // In Unsorted view the saves no longer match the filter
           // (they now belong to a bucket), so refresh to drop them.
           if (view.type === 'unsorted') reload();
+          undoStack.push('add to bucket', async () => {
+            for (const id of targetIds) {
+              await window.moodmark.collections.removeSave({ collectionId: col.id, saveId: id });
+            }
+            loadCollections();
+            if (view.type === 'unsorted') reload();
+          });
         },
       });
       const submenu = tops.map((parent) => {
@@ -695,7 +742,7 @@ export default function App() {
       },
     });
     return items;
-  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves]);
+  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack]);
 
   const handleCardContextMenu = useCallback(async (saveId, x, y) => {
     // Resolve the bucket memberships used to filter the Add-to-Bucket
@@ -845,6 +892,24 @@ export default function App() {
     for (const saveId of saveIds) {
       await window.moodmark.collections.addSave({ collectionId: bucketId, saveId });
     }
+    // Push undo: pure-add reverses with a remove-from-target;
+    // a move-from-A-to-B reverses with remove-from-target plus
+    // re-add to the source bucket.
+    undoStack.push(
+      saveIds.length === 1 ? 'add to bucket' : 'add to bucket',
+      async () => {
+        for (const saveId of saveIds) {
+          await window.moodmark.collections.removeSave({ collectionId: bucketId, saveId });
+        }
+        if (sourceBucketId) {
+          for (const saveId of saveIds) {
+            await window.moodmark.collections.addSave({ collectionId: sourceBucketId, saveId });
+          }
+        }
+        loadCollections();
+        if (view.type === 'collection') reload();
+      },
+    );
     if (sourceBucketId) {
       for (const saveId of saveIds) {
         await window.moodmark.collections.removeSave({ collectionId: sourceBucketId, saveId });
@@ -856,7 +921,7 @@ export default function App() {
     loadCollections();
     if (view.type === 'unsorted') reload();
     if (saveIds.length > 1) setSelected(new Set());
-  }, [saves, loadCollections, view, reload]);
+  }, [saves, loadCollections, view, reload, undoStack]);
 
   // Library switch: closes the renderer's current view state and
   // re-fetches everything against the now-active library. The main
@@ -913,14 +978,27 @@ export default function App() {
   }, [refreshLibraries, loadCollections, reload, setColorFilter, setSearch, setView]);
 
   const handleCreateCollection = useCallback(async (payload) => {
-    await window.moodmark.collections.create(payload);
+    const created = await window.moodmark.collections.create(payload);
     loadCollections();
-  }, [loadCollections]);
+    if (created?.id) {
+      undoStack.push('new bucket', async () => {
+        await window.moodmark.collections.delete(created.id);
+        loadCollections();
+      });
+    }
+  }, [loadCollections, undoStack]);
 
   const handleRenameCollection = useCallback(async (payload) => {
+    const previous = collections.find((c) => c.id === payload.id);
     await window.moodmark.collections.rename(payload);
     loadCollections();
-  }, [loadCollections]);
+    if (previous && previous.name !== payload.name) {
+      undoStack.push('rename', async () => {
+        await window.moodmark.collections.rename({ id: payload.id, name: previous.name });
+        loadCollections();
+      });
+    }
+  }, [collections, loadCollections, undoStack]);
 
   // Sidebar nav also drops focus + selection so users land on the masonry grid
   // instead of staying inside the FocusedView.
@@ -938,6 +1016,7 @@ export default function App() {
   }, [view, handleViewChange, loadCollections]);
 
   const handleReorderCollections = useCallback(async (orderedIds) => {
+    const previousOrder = collections.map((c) => c.id);
     // Optimistic local reorder so the sidebar doesn't flash back to old order.
     setCollections((prev) => {
       const byId = new Map(prev.map((c) => [c.id, c]));
@@ -945,7 +1024,19 @@ export default function App() {
     });
     await window.moodmark.collections.reorder(orderedIds);
     loadCollections();
-  }, [loadCollections]);
+    const same = previousOrder.length === orderedIds.length
+      && previousOrder.every((id, i) => id === orderedIds[i]);
+    if (!same) {
+      undoStack.push('reorder', async () => {
+        setCollections((prev) => {
+          const byId = new Map(prev.map((c) => [c.id, c]));
+          return previousOrder.map((id) => byId.get(id)).filter(Boolean);
+        });
+        await window.moodmark.collections.reorder(previousOrder);
+        loadCollections();
+      });
+    }
+  }, [collections, loadCollections, undoStack]);
 
   const focusedIndex = useMemo(
     () => (focusedId ? saves.findIndex((s) => s.id === focusedId) : -1),
@@ -1282,6 +1373,30 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [focusedId, selected, handleDeleteSelected, goNext, goPrev]);
 
+  // Global Cmd+Z (Ctrl+Z on non-Mac). Pops the latest mutation off
+  // the undo stack and surfaces a brief "Undid <label>" toast. Skips
+  // anything fired from a real text input — the OS-native browser
+  // undo for those fields takes precedence so the user's word-by-
+  // word edits stay reversible inside the field.
+  useEffect(() => {
+    function onKey(e) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.shiftKey || e.altKey) return;
+      if ((e.key || '').toLowerCase() !== 'z') return;
+      const t = e.target;
+      if (
+        t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+      ) return;
+      e.preventDefault();
+      const label = undoStack.undo();
+      if (label) {
+        showActionToast({ message: `Undid ${label}`, durationMs: 1600 });
+      }
+    }
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [undoStack, showActionToast]);
+
   const onDragOver = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1493,7 +1608,7 @@ export default function App() {
             onClose={() => setFocusedId(null)}
             onCollectionsChanged={loadCollections}
             onTagsChanged={loadAllTags}
-            onUpdateMeta={updateSaveMeta}
+            onUpdateMeta={undoableUpdateSaveMeta}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenSave={(id) => setFocusedId(id)}
           />
