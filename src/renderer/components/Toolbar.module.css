@@ -108,7 +108,7 @@
   align-items: center;
   background: rgba(0, 0, 0, 0.04);
   border: 0.5px solid rgba(0, 0, 0, 0.06);
-  border-radius: 7px;
+  border-radius: 999px;
   padding: 2px;
   -webkit-app-region: no-drag;
 }
@@ -122,7 +122,7 @@
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 5px;
+  border-radius: 999px;
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
@@ -139,28 +139,21 @@
    leaving the rim visible as a faux stroke. The icon stacks on
    top via z-index. */
 .layoutBtn.layoutBtnActive {
-  /* Outer radius is parent's 7px minus the 2px container padding,
-     so the button's corners sit concentric with the tab. */
-  border-radius: 5px;
+  border-radius: 999px;
   background:
     linear-gradient(180deg, #E2E2E2 0%, #B2B2B2 24.5%, #DADADA 58.47%, #DADADA 100%);
   color: #000;
   box-shadow:
     0 0 0 0.5px #BABABA,
-    0 25px 7px 0 rgba(0, 0, 0, 0),
-    0 16px 6px 0 rgba(0, 0, 0, 0.02),
-    0 9px 5px 0 rgba(0, 0, 0, 0.06),
-    0 4px 4px 0 rgba(0, 0, 0, 0.11),
-    0 1px 2px 0 rgba(0, 0, 0, 0.12);
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .layoutBtn.layoutBtnActive::before {
   content: '';
   position: absolute;
   inset: 2px;
-  /* Inner radius = outer (5) − 2px stroke = 3, so the rim is a
-     constant 2px wide all the way around. */
-  border-radius: 3px;
+  border-radius: 999px;
   background:
     linear-gradient(180deg, #D9D9D9 0%, #CBCBCB 100%);
   pointer-events: none;
