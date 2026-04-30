@@ -267,7 +267,7 @@
   background: transparent;
   border: none;
   border-radius: 7px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
