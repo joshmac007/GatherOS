@@ -523,7 +523,6 @@ export default function DetailPanel({
               className={styles.image}
               alt={record.title || ''}
               draggable={false}
-              crossOrigin="anonymous"
               onClick={handleImageClick}
               onMouseMove={handleImageMouseMove}
             />

@@ -46,13 +46,17 @@ export function useEyedropper(imageRef, recordId) {
       canvasDataRef.current = null;
       setHoverHex(null);
       setJustCopied(false);
-      return undefined;
     }
+  }, [picking]);
+
+  // Lazy-init the sampling canvas. We do this on first hover/click
+  // rather than on mode start so we don't race the image's load —
+  // by the time the user has moved the mouse to the image, we know
+  // the <img>'s natural dimensions are populated.
+  function ensureCanvas() {
+    if (canvasDataRef.current) return canvasDataRef.current;
     const img = imageRef.current;
-    if (!img || !img.naturalWidth) {
-      setPicking(false);
-      return undefined;
-    }
+    if (!img || !img.naturalWidth) return null;
     try {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
@@ -64,15 +68,15 @@ export function useEyedropper(imageRef, recordId) {
         width: img.naturalWidth,
         height: img.naturalHeight,
       };
+      return canvasDataRef.current;
     } catch (err) {
-      console.error('Eyedropper canvas init failed:', err);
-      setPicking(false);
+      console.error('[eyedropper] canvas init failed:', err);
+      return null;
     }
-    return undefined;
-  }, [picking, imageRef]);
+  }
 
   function pixelAt(clientX, clientY) {
-    const data = canvasDataRef.current;
+    const data = ensureCanvas();
     const img = imageRef.current;
     if (!data || !img) return null;
     const rect = img.getBoundingClientRect();
@@ -88,7 +92,8 @@ export function useEyedropper(imageRef, recordId) {
           .join('')
           .toUpperCase()
       );
-    } catch {
+    } catch (err) {
+      console.error('[eyedropper] sample failed:', err);
       return null;
     }
   }

@@ -275,7 +275,6 @@ export default function FocusedView({
               src={src}
               className={styles.image}
               alt={record.title || ''}
-              crossOrigin="anonymous"
               draggable={!picking}
               onClick={picking ? handlePickerClick : undefined}
               onMouseMove={picking ? handleImageMouseMove : undefined}

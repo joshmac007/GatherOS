@@ -95,34 +95,31 @@
    row. Same footprint and rounded shape as a real swatch, but with
    a hairline outline and a centered icon instead of a flat fill so
    it reads as an action rather than a sampled color. */
-/* Compact icon-only button at the end of the palette row. All
-   interaction feedback (current hex, "Copied" confirmation) is
-   surfaced near the cursor — nothing here changes after a pick. */
+/* Plain icon at the end of the palette row — no surface, no
+   border, takes the same footprint as a swatch. Active state is
+   conveyed only by the icon color flipping to primary text color
+   (and the crosshair cursor on the image while armed). */
 .pickerBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.05);
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
-  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
   cursor: pointer;
   padding: 0;
-  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+  transition: color 100ms ease;
 }
 
 .pickerBtn:hover {
-  background: rgba(0, 0, 0, 0.08);
   color: var(--text-primary);
 }
 
 .pickerBtnActive,
 .pickerBtnActive:hover {
-  background: var(--text-primary);
-  border-color: var(--text-primary);
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .pickerBtn svg {
@@ -146,7 +143,7 @@
   font-size: 11px;
   letter-spacing: 0.02em;
   pointer-events: none;
-  z-index: 10000;
+  z-index: 999999;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
   white-space: nowrap;
   transform: translate(-50%, calc(-100% - 14px));
