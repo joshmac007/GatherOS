@@ -106,23 +106,32 @@
   min-width: 0;
 }
 
+/* Pill-shaped tray that holds one or more shortcut chips. Padding
+   is equal on all sides so the chips inside sit with the same
+   gutter top, bottom, left, and right of the tray. */
 .rowKeys {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 999px;
   flex-shrink: 0;
 }
 
+/* Individual key chip. min-width = height + border-radius: 999px =
+   single-character keys render as perfect circles. Longer keys
+   like "Esc" or "click" auto-expand horizontally and become pills. */
 .kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 22px;
   height: 22px;
-  padding: 0 6px;
+  padding: 0 7px;
   background: #ffffff;
   border: 0.5px solid rgba(0, 0, 0, 0.12);
-  border-radius: 5px;
+  border-radius: 999px;
   font-family: var(--font-ui);
   font-size: 11px;
   color: var(--text-primary);
