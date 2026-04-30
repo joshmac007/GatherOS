@@ -582,43 +582,6 @@ export default function DetailPanel({
               onClick={handleImageClick}
             />
             {typeLabel && <div className={styles.typeBadge}>{typeLabel}</div>}
-            <button
-              type="button"
-              className={[styles.eyedropperBtn, picking && styles.eyedropperBtnActive]
-                .filter(Boolean)
-                .join(' ')}
-              onClick={(e) => {
-                e.stopPropagation();
-                setPicking((v) => !v);
-              }}
-              title={picking ? 'Cancel eyedropper (Esc)' : 'Pick a color from this image'}
-              aria-pressed={picking}
-            >
-              <EyedropperIcon />
-            </button>
-            {pickedHex && (
-              <div
-                className={[styles.pickedPill, pickedHex === 'error' && styles.pickedPillError]
-                  .filter(Boolean)
-                  .join(' ')}
-                role="status"
-              >
-                {pickedHex === 'error' ? (
-                  <span>Couldn’t read pixel</span>
-                ) : (
-                  <>
-                    <span
-                      className={styles.pickedSwatch}
-                      style={{ background: pickedHex }}
-                    />
-                    <span className={styles.pickedHex}>
-                      {pickedHex.toUpperCase()}
-                    </span>
-                    <span className={styles.pickedCopied}>· Copied</span>
-                  </>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -766,25 +729,45 @@ export default function DetailPanel({
         )}
       </div>
 
-      {palette.length > 0 && (
-        <div className={styles.palette}>
-          {palette.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={styles.swatch}
-              style={{ background: color }}
-              onClick={() => copyColor(color)}
-              title={`Copy ${color.toUpperCase()}`}
-              aria-label={`Copy ${color}`}
-            >
-              {copiedColor === color && (
-                <span className={styles.swatchTooltip}>Copied {color.toUpperCase()}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className={styles.palette}>
+        {palette.map((color) => (
+          <button
+            key={color}
+            type="button"
+            className={styles.swatch}
+            style={{ background: color }}
+            onClick={() => copyColor(color)}
+            title={`Copy ${color.toUpperCase()}`}
+            aria-label={`Copy ${color}`}
+          >
+            {copiedColor === color && (
+              <span className={styles.swatchTooltip}>Copied {color.toUpperCase()}</span>
+            )}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={[
+            styles.swatch,
+            styles.eyedropperSwatch,
+            picking && styles.eyedropperSwatchActive,
+          ].filter(Boolean).join(' ')}
+          onClick={() => setPicking((v) => !v)}
+          title={picking ? 'Cancel eyedropper (Esc)' : 'Pick a color from the image'}
+          aria-pressed={picking}
+          aria-label="Pick a color from the image"
+        >
+          <EyedropperIcon />
+          {pickedHex && pickedHex !== 'error' && (
+            <span className={styles.swatchTooltip}>
+              Picked {pickedHex.toUpperCase()}
+            </span>
+          )}
+          {pickedHex === 'error' && (
+            <span className={styles.swatchTooltip}>Couldn’t read pixel</span>
+          )}
+        </button>
+      </div>
 
       <div className={styles.collectionsSection}>
         <div className={styles.collectionsLabel}>
