@@ -133,28 +133,26 @@
   min-width: 140px;
   padding: 8px 24px;
   border-radius: 9px;
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.78) 100%);
-  backdrop-filter: blur(24px) saturate(1.6);
-  -webkit-backdrop-filter: blur(24px) saturate(1.6);
-  color: var(--text-primary);
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, #D9D9D9 0%, #CBCBCB 100%) padding-box,
+    linear-gradient(180deg, #E2E2E2 0%, #B2B2B2 24.5%, #DADADA 58.47%, #DADADA 100%) border-box;
+  color: #000;
   font-size: 13px;
   font-weight: 500;
   font-family: var(--font-ui);
   cursor: pointer;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 14px rgba(0, 0, 0, 0.06);
-  transition: background 120ms ease, transform 80ms ease, box-shadow 140ms ease;
+    0 0 0 0.5px #BABABA,
+    0 1px 2px rgba(0, 0, 0, 0.12),
+    0 4px 4px rgba(0, 0, 0, 0.11),
+    0 9px 5px rgba(0, 0, 0, 0.06),
+    0 16px 6px rgba(0, 0, 0, 0.02);
+  transition: filter 120ms ease, transform 80ms ease;
 }
 
 .gotItBtn:hover {
-  background: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.88) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    0 1px 2px rgba(0, 0, 0, 0.05),
-    0 6px 18px rgba(0, 0, 0, 0.08);
+  filter: brightness(1.04);
 }
 
 .gotItBtn:active {
