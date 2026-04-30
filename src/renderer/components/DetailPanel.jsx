@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
+import { useEyedropper } from '../hooks/useEyedropper.js';
 import TagSuggestions from './TagSuggestions.jsx';
 import { CollectionIcon } from './Sidebar.jsx';
 
@@ -140,124 +141,16 @@ export default function DetailPanel({
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
   const [copiedColor, setCopiedColor] = useState(null);
-  // Eyedropper / pixel picker. When `picking` is true the preview's
-  // cursor turns into a crosshair, a small tooltip follows the
-  // cursor showing the live hex of whatever pixel is underneath,
-  // and clicking samples that pixel + copies the hex. The tooltip
-  // briefly flashes "Copied" before the mode auto-deactivates.
-  const [picking, setPicking] = useState(false);
-  const [hoverHex, setHoverHex] = useState(null);
-  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
-  const [justCopied, setJustCopied] = useState(false);
   const imageRef = useRef(null);
-  // Pre-rasterized canvas while picking — re-drawing on every
-  // mousemove would burn cycles for nothing on large images.
-  const canvasDataRef = useRef(null);
-
-  // Always cancel the picker when the user navigates to a different
-  // save — a stuck-on crosshair across records would be confusing.
-  useEffect(() => {
-    setPicking(false);
-    setHoverHex(null);
-    setJustCopied(false);
-  }, [record.id]);
-
-  // Escape exits picking mode without sampling.
-  useEffect(() => {
-    if (!picking) return undefined;
-    function onKey(e) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setPicking(false);
-      }
-    }
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [picking]);
-
-  // Build the sampling canvas once when picking starts. We can't do
-  // this at click time because we also need the canvas for the live
-  // hex tooltip while the user is still hovering.
-  useEffect(() => {
-    if (!picking) {
-      canvasDataRef.current = null;
-      setHoverHex(null);
-      setJustCopied(false);
-      return undefined;
-    }
-    const img = imageRef.current;
-    if (!img || !img.naturalWidth) {
-      setPicking(false);
-      return undefined;
-    }
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(img, 0, 0);
-      canvasDataRef.current = {
-        ctx,
-        width: img.naturalWidth,
-        height: img.naturalHeight,
-      };
-    } catch (err) {
-      console.error('Eyedropper canvas init failed:', err);
-      setPicking(false);
-    }
-    return undefined;
-  }, [picking]);
-
-  function pixelAt(clientX, clientY) {
-    const data = canvasDataRef.current;
-    const img = imageRef.current;
-    if (!data || !img) return null;
-    const rect = img.getBoundingClientRect();
-    const sx = Math.floor((clientX - rect.left) * (data.width / rect.width));
-    const sy = Math.floor((clientY - rect.top) * (data.height / rect.height));
-    if (sx < 0 || sy < 0 || sx >= data.width || sy >= data.height) return null;
-    try {
-      const px = data.ctx.getImageData(sx, sy, 1, 1).data;
-      return (
-        '#' +
-        [px[0], px[1], px[2]]
-          .map((c) => c.toString(16).padStart(2, '0'))
-          .join('')
-          .toUpperCase()
-      );
-    } catch {
-      return null;
-    }
-  }
-
-  function handleImageMouseMove(e) {
-    if (!picking || justCopied) return;
-    const hex = pixelAt(e.clientX, e.clientY);
-    if (hex) {
-      setHoverHex(hex);
-      setHoverPos({ x: e.clientX, y: e.clientY });
-    }
-  }
-
-  async function handleImageClick(e) {
-    if (!picking) return;
-    const hex = pixelAt(e.clientX, e.clientY);
-    if (!hex) return;
-    try {
-      await navigator.clipboard.writeText(hex.toLowerCase());
-    } catch (err) {
-      console.error('Eyedropper copy failed:', err);
-    }
-    setHoverHex(hex);
-    setHoverPos({ x: e.clientX, y: e.clientY });
-    setJustCopied(true);
-    // Hold the "Copied" state long enough to read, then drop the
-    // mode entirely. setHoverHex(null) inside the picking effect's
-    // cleanup ensures the tooltip unmounts.
-    setTimeout(() => {
-      setPicking(false);
-    }, 900);
-  }
+  const {
+    picking,
+    togglePicking,
+    handleImageClick,
+    handleImageMouseMove,
+    hoverHex,
+    hoverPos,
+    justCopied,
+  } = useEyedropper(imageRef, record.id);
   const [autoTagging, setAutoTagging] = useState(false);
   const [autoTagError, setAutoTagError] = useState('');
   const [promptGenerating, setPromptGenerating] = useState(false);
@@ -804,7 +697,7 @@ export default function DetailPanel({
             styles.pickerBtn,
             picking && styles.pickerBtnActive,
           ].filter(Boolean).join(' ')}
-          onClick={() => setPicking((v) => !v)}
+          onClick={togglePicking}
           title={
             picking
               ? 'Click the image to sample a color (Esc to cancel)'

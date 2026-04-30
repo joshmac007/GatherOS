@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import styles from './FocusedView.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+import { useEyedropper } from '../hooks/useEyedropper.js';
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
@@ -51,6 +53,24 @@ function ExportIcon() {
   );
 }
 
+function EyedropperIcon() {
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 2l3 3" />
+      <path d="M10.4 0.6l3 3" />
+      <path d="M9.5 3.5L4 9v3h3l5.5-5.5z" />
+    </svg>
+  );
+}
+
 function TrashIcon() {
   return (
     <svg
@@ -91,6 +111,16 @@ export default function FocusedView({
 }) {
   const [zoom, setZoom] = useState(1);
   const stageRef = useRef(null);
+  const imageRef = useRef(null);
+  const {
+    picking,
+    togglePicking,
+    handleImageClick: handlePickerClick,
+    handleImageMouseMove,
+    hoverHex,
+    hoverPos,
+    justCopied,
+  } = useEyedropper(imageRef, record.id);
 
   // Reset zoom whenever the user moves to a different image.
   useEffect(() => {
@@ -188,6 +218,18 @@ export default function FocusedView({
 
           <button
             type="button"
+            className={[styles.iconBtn, picking && styles.iconBtnActive]
+              .filter(Boolean)
+              .join(' ')}
+            title={picking ? 'Click image to sample (Esc to cancel)' : 'Pick a color from the image'}
+            onClick={togglePicking}
+            aria-pressed={picking}
+          >
+            <EyedropperIcon />
+          </button>
+
+          <button
+            type="button"
             className={styles.iconBtn}
             title="Open in Preview"
             onClick={() => onOpenInPreview(record.file_path)}
@@ -217,7 +259,11 @@ export default function FocusedView({
 
       <div
         ref={stageRef}
-        className={`${styles.stage} ${zoom > 1 ? styles.stageScroll : ''}`}
+        className={[
+          styles.stage,
+          zoom > 1 && styles.stageScroll,
+          picking && styles.stagePicking,
+        ].filter(Boolean).join(' ')}
       >
         {src && (
           <div
@@ -225,11 +271,19 @@ export default function FocusedView({
             style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
           >
             <img
+              ref={imageRef}
               src={src}
               className={styles.image}
               alt={record.title || ''}
-              draggable
+              crossOrigin="anonymous"
+              draggable={!picking}
+              onClick={picking ? handlePickerClick : undefined}
+              onMouseMove={picking ? handleImageMouseMove : undefined}
               onDragStart={(e) => {
+                if (picking) {
+                  e.preventDefault();
+                  return;
+                }
                 // Hand the OS the file path via Electron's webContents.startDrag
                 // (same path masonry cards use). preventDefault stops the
                 // browser's default image-drag ghost so only the native
@@ -244,7 +298,7 @@ export default function FocusedView({
           </div>
         )}
 
-        {(hasPrev || hasNext) && zoom <= 1 && (
+        {(hasPrev || hasNext) && zoom <= 1 && !picking && (
           <div className={styles.navHint}>
             <kbd className={styles.kbd}>←</kbd>
             <kbd className={styles.kbd}>→</kbd>
@@ -252,6 +306,30 @@ export default function FocusedView({
           </div>
         )}
       </div>
+
+      {picking && hoverHex && ReactDOM.createPortal(
+        <div
+          className={[
+            styles.cursorTooltip,
+            justCopied && styles.cursorTooltipCopied,
+          ].filter(Boolean).join(' ')}
+          style={{ left: hoverPos.x, top: hoverPos.y }}
+          aria-hidden="true"
+        >
+          {justCopied ? (
+            <span>Copied</span>
+          ) : (
+            <>
+              <span
+                className={styles.cursorTooltipSwatch}
+                style={{ background: hoverHex }}
+              />
+              <span>{hoverHex}</span>
+            </>
+          )}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
