@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
@@ -140,19 +141,25 @@ export default function DetailPanel({
   const typeLabel = fileTypeLabel(record.file_path);
   const [copiedColor, setCopiedColor] = useState(null);
   // Eyedropper / pixel picker. When `picking` is true the preview's
-  // cursor turns into a crosshair; the next click on the image
-  // samples the pixel under it, copies the hex to the clipboard,
-  // and surfaces it briefly in the preview overlay.
+  // cursor turns into a crosshair, a small tooltip follows the
+  // cursor showing the live hex of whatever pixel is underneath,
+  // and clicking samples that pixel + copies the hex. The tooltip
+  // briefly flashes "Copied" before the mode auto-deactivates.
   const [picking, setPicking] = useState(false);
-  const [pickedHex, setPickedHex] = useState(null);
+  const [hoverHex, setHoverHex] = useState(null);
+  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  const [justCopied, setJustCopied] = useState(false);
   const imageRef = useRef(null);
-  const pickedTimerRef = useRef(null);
+  // Pre-rasterized canvas while picking — re-drawing on every
+  // mousemove would burn cycles for nothing on large images.
+  const canvasDataRef = useRef(null);
 
   // Always cancel the picker when the user navigates to a different
   // save — a stuck-on crosshair across records would be confusing.
   useEffect(() => {
     setPicking(false);
-    setPickedHex(null);
+    setHoverHex(null);
+    setJustCopied(false);
   }, [record.id]);
 
   // Escape exits picking mode without sampling.
@@ -168,43 +175,88 @@ export default function DetailPanel({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [picking]);
 
-  function flashPicked(hex) {
-    setPickedHex(hex);
-    if (pickedTimerRef.current) clearTimeout(pickedTimerRef.current);
-    pickedTimerRef.current = setTimeout(() => {
-      setPickedHex(null);
-      pickedTimerRef.current = null;
-    }, 1800);
-  }
-
-  async function handleImageClick(e) {
-    if (!picking) return;
+  // Build the sampling canvas once when picking starts. We can't do
+  // this at click time because we also need the canvas for the live
+  // hex tooltip while the user is still hovering.
+  useEffect(() => {
+    if (!picking) {
+      canvasDataRef.current = null;
+      setHoverHex(null);
+      setJustCopied(false);
+      return undefined;
+    }
     const img = imageRef.current;
-    if (!img || !img.naturalWidth) return;
-    const rect = img.getBoundingClientRect();
-    const sx = ((e.clientX - rect.left) * (img.naturalWidth / rect.width)) | 0;
-    const sy = ((e.clientY - rect.top) * (img.naturalHeight / rect.height)) | 0;
-    if (sx < 0 || sy < 0 || sx >= img.naturalWidth || sy >= img.naturalHeight) return;
+    if (!img || !img.naturalWidth) {
+      setPicking(false);
+      return undefined;
+    }
     try {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d', { willReadFrequently: false });
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(img, 0, 0);
-      const data = ctx.getImageData(sx, sy, 1, 1).data;
-      const hex =
-        '#' +
-        [data[0], data[1], data[2]]
-          .map((c) => c.toString(16).padStart(2, '0'))
-          .join('');
-      await navigator.clipboard.writeText(hex);
-      flashPicked(hex);
+      canvasDataRef.current = {
+        ctx,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      };
     } catch (err) {
-      console.error('Eyedropper failed:', err);
-      flashPicked('error');
-    } finally {
+      console.error('Eyedropper canvas init failed:', err);
       setPicking(false);
     }
+    return undefined;
+  }, [picking]);
+
+  function pixelAt(clientX, clientY) {
+    const data = canvasDataRef.current;
+    const img = imageRef.current;
+    if (!data || !img) return null;
+    const rect = img.getBoundingClientRect();
+    const sx = Math.floor((clientX - rect.left) * (data.width / rect.width));
+    const sy = Math.floor((clientY - rect.top) * (data.height / rect.height));
+    if (sx < 0 || sy < 0 || sx >= data.width || sy >= data.height) return null;
+    try {
+      const px = data.ctx.getImageData(sx, sy, 1, 1).data;
+      return (
+        '#' +
+        [px[0], px[1], px[2]]
+          .map((c) => c.toString(16).padStart(2, '0'))
+          .join('')
+          .toUpperCase()
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  function handleImageMouseMove(e) {
+    if (!picking || justCopied) return;
+    const hex = pixelAt(e.clientX, e.clientY);
+    if (hex) {
+      setHoverHex(hex);
+      setHoverPos({ x: e.clientX, y: e.clientY });
+    }
+  }
+
+  async function handleImageClick(e) {
+    if (!picking) return;
+    const hex = pixelAt(e.clientX, e.clientY);
+    if (!hex) return;
+    try {
+      await navigator.clipboard.writeText(hex.toLowerCase());
+    } catch (err) {
+      console.error('Eyedropper copy failed:', err);
+    }
+    setHoverHex(hex);
+    setHoverPos({ x: e.clientX, y: e.clientY });
+    setJustCopied(true);
+    // Hold the "Copied" state long enough to read, then drop the
+    // mode entirely. setHoverHex(null) inside the picking effect's
+    // cleanup ensures the tooltip unmounts.
+    setTimeout(() => {
+      setPicking(false);
+    }, 900);
   }
   const [autoTagging, setAutoTagging] = useState(false);
   const [autoTagError, setAutoTagError] = useState('');
@@ -580,6 +632,7 @@ export default function DetailPanel({
               draggable={false}
               crossOrigin="anonymous"
               onClick={handleImageClick}
+              onMouseMove={handleImageMouseMove}
             />
             {typeLabel && <div className={styles.typeBadge}>{typeLabel}</div>}
           </div>
@@ -761,17 +814,32 @@ export default function DetailPanel({
           aria-label="Pick a color from the image"
         >
           <EyedropperIcon />
-          <span className={styles.pickerBtnLabel}>
-            {picking
-              ? 'Click image…'
-              : pickedHex && pickedHex !== 'error'
-              ? `Picked ${pickedHex.toUpperCase()}`
-              : pickedHex === 'error'
-              ? 'Couldn’t read pixel'
-              : 'Pick'}
-          </span>
         </button>
       </div>
+
+      {picking && hoverHex && ReactDOM.createPortal(
+        <div
+          className={[
+            styles.cursorTooltip,
+            justCopied && styles.cursorTooltipCopied,
+          ].filter(Boolean).join(' ')}
+          style={{ left: hoverPos.x, top: hoverPos.y }}
+          aria-hidden="true"
+        >
+          {justCopied ? (
+            <span>Copied</span>
+          ) : (
+            <>
+              <span
+                className={styles.cursorTooltipSwatch}
+                style={{ background: hoverHex }}
+              />
+              <span>{hoverHex}</span>
+            </>
+          )}
+        </div>,
+        document.body,
+      )}
 
       <div className={styles.collectionsSection}>
         <div className={styles.collectionsLabel}>

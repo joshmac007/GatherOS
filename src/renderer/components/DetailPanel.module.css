@@ -95,25 +95,21 @@
    row. Same footprint and rounded shape as a real swatch, but with
    a hairline outline and a centered icon instead of a flat fill so
    it reads as an action rather than a sampled color. */
-/* Sits at the end of the palette row as a labeled button rather
-   than a swatch-shaped chip — when it was just an icon people
-   missed it entirely. The label changes between "Pick" / "Click
-   image…" / "Picked #ABC123" so the workflow is self-explanatory. */
+/* Compact icon-only button at the end of the palette row. All
+   interaction feedback (current hex, "Copied" confirmation) is
+   surfaced near the cursor — nothing here changes after a pick. */
 .pickerBtn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 28px;
   height: 28px;
-  padding: 0 10px 0 8px;
-  border-radius: 999px;
+  border-radius: 6px;
   background: rgba(0, 0, 0, 0.05);
   border: 0.5px solid rgba(0, 0, 0, 0.08);
   color: var(--text-secondary);
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  font-family: inherit;
   cursor: pointer;
+  padding: 0;
   transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
 }
 
@@ -130,14 +126,44 @@
 }
 
 .pickerBtn svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
+}
+
+/* Cursor-following tooltip while the picker is armed. Portaled to
+   document.body so it floats over everything; positioned so it
+   sits 14px above the cursor and is centered horizontally on it. */
+.cursorTooltip {
+  position: fixed;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(20, 20, 20, 0.92);
+  color: #fff;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 14px));
+}
+
+.cursorTooltipSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.35);
   flex-shrink: 0;
 }
 
-.pickerBtnLabel {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.cursorTooltipCopied {
+  font-family: inherit;
+  letter-spacing: -0.005em;
+  font-weight: 500;
 }
 
 .palette {
