@@ -88,19 +88,20 @@ function normalizeUrl(input) {
 }
 
 function EyedropperIcon() {
+  // Crosshair / reticle — reads as "pinpoint a pixel" without
+  // committing to the eyedropper-as-a-tool metaphor.
   return (
     <svg
       viewBox="0 0 14 14"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M9 2l3 3" />
-      <path d="M10.5 0.5l3 3" />
-      <path d="M9.5 3.5L4 9v3h3l5.5-5.5" />
+      <circle cx="7" cy="7" r="3.5" />
+      <path d="M7 0.5v2M7 11.5v2M0.5 7h2M11.5 7h2" />
     </svg>
   );
 }
