@@ -88,20 +88,19 @@ function normalizeUrl(input) {
 }
 
 function EyedropperIcon() {
-  // Crosshair / reticle — reads as "pinpoint a pixel" without
-  // committing to the eyedropper-as-a-tool metaphor.
   return (
     <svg
       viewBox="0 0 14 14"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.4"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <circle cx="7" cy="7" r="3.5" />
-      <path d="M7 0.5v2M7 11.5v2M0.5 7h2M11.5 7h2" />
+      <path d="M9 2l3 3" />
+      <path d="M10.4 0.6l3 3" />
+      <path d="M9.5 3.5L4 9v3h3l5.5-5.5z" />
     </svg>
   );
 }
@@ -749,24 +748,28 @@ export default function DetailPanel({
         <button
           type="button"
           className={[
-            styles.swatch,
-            styles.eyedropperSwatch,
-            picking && styles.eyedropperSwatchActive,
+            styles.pickerBtn,
+            picking && styles.pickerBtnActive,
           ].filter(Boolean).join(' ')}
           onClick={() => setPicking((v) => !v)}
-          title={picking ? 'Cancel eyedropper (Esc)' : 'Pick a color from the image'}
+          title={
+            picking
+              ? 'Click the image to sample a color (Esc to cancel)'
+              : 'Pick a color from the image'
+          }
           aria-pressed={picking}
           aria-label="Pick a color from the image"
         >
           <EyedropperIcon />
-          {pickedHex && pickedHex !== 'error' && (
-            <span className={styles.swatchTooltip}>
-              Picked {pickedHex.toUpperCase()}
-            </span>
-          )}
-          {pickedHex === 'error' && (
-            <span className={styles.swatchTooltip}>Couldn’t read pixel</span>
-          )}
+          <span className={styles.pickerBtnLabel}>
+            {picking
+              ? 'Click image…'
+              : pickedHex && pickedHex !== 'error'
+              ? `Picked ${pickedHex.toUpperCase()}`
+              : pickedHex === 'error'
+              ? 'Couldn’t read pixel'
+              : 'Pick'}
+          </span>
         </button>
       </div>
 

@@ -95,30 +95,49 @@
    row. Same footprint and rounded shape as a real swatch, but with
    a hairline outline and a centered icon instead of a flat fill so
    it reads as an action rather than a sampled color. */
-.eyedropperSwatch {
-  background: transparent !important;
+/* Sits at the end of the palette row as a labeled button rather
+   than a swatch-shaped chip — when it was just an icon people
+   missed it entirely. The label changes between "Pick" / "Click
+   image…" / "Picked #ABC123" so the workflow is self-explanatory. */
+.pickerBtn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
   color: var(--text-secondary);
-  box-shadow: none;
-  transition: background 100ms ease, color 100ms ease;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
 }
 
-.eyedropperSwatch:hover {
-  background: rgba(0, 0, 0, 0.05) !important;
+.pickerBtn:hover {
+  background: rgba(0, 0, 0, 0.08);
   color: var(--text-primary);
 }
 
-.eyedropperSwatchActive,
-.eyedropperSwatchActive:hover {
-  background: var(--text-primary) !important;
+.pickerBtnActive,
+.pickerBtnActive:hover {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
   color: #fff;
 }
 
-.eyedropperSwatch svg {
-  width: 14px;
-  height: 14px;
+.pickerBtn svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.pickerBtnLabel {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .palette {
