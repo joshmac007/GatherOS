@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './Sidebar.module.css';
 import ContextMenu from './ContextMenu.jsx';
+import LibrarySwitcher from './LibrarySwitcher.jsx';
 import { fileUrl } from '../lib/fileUrl.js';
 
 function GridIcon() {
@@ -246,6 +247,12 @@ function DisclosureChevron({ expanded }) {
 }
 
 export default function Sidebar({
+  libraries,
+  activeLibraryId,
+  onSwitchLibrary,
+  onCreateLibrary,
+  onRenameLibrary,
+  onDeleteLibrary,
   view,
   onViewChange,
   collections = [],
@@ -614,6 +621,16 @@ export default function Sidebar({
         >
           <CollapseSidebarIcon />
         </button>
+      )}
+      {Array.isArray(libraries) && libraries.length > 0 && (
+        <LibrarySwitcher
+          libraries={libraries}
+          activeId={activeLibraryId}
+          onSwitch={onSwitchLibrary}
+          onCreate={onCreateLibrary}
+          onRename={onRenameLibrary}
+          onDelete={onDeleteLibrary}
+        />
       )}
       <div className={styles.sectionHeaderRow}>
         <span className={styles.sectionHeaderLabel}>Library</span>

@@ -50,7 +50,11 @@ CREATE TABLE IF NOT EXISTS save_tags (
 let db = null;
 
 function getDatabasePath() {
-  return path.join(app.getPath('userData'), 'moodmark.db');
+  // Resolved per-call so a library switch (which writes a new
+  // active id into the registry) is reflected the next time the
+  // DB is opened.
+  const { getActiveLibraryRoot } = require('./library-registry');
+  return path.join(getActiveLibraryRoot(), 'moodmark.db');
 }
 
 function initDatabase() {
@@ -197,6 +201,14 @@ function closeDatabase() {
     db.close();
     db = null;
   }
+}
+
+// Closes the current handle and reopens against whatever library
+// is now active in the registry. Called by the library-switch IPC
+// after the registry's active id has been flipped.
+function reopenDatabase() {
+  closeDatabase();
+  return initDatabase();
 }
 
 function insertSave({
@@ -652,6 +664,7 @@ module.exports = {
   initDatabase,
   getDatabase,
   closeDatabase,
+  reopenDatabase,
   getDatabasePath,
   insertSave,
   getAllSaves,

@@ -187,6 +187,23 @@ export default function App() {
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Multi-library state. Loaded once on mount; refreshed whenever
+  // the user creates / renames / deletes from the library switcher.
+  const [libraries, setLibraries] = useState([]);
+  const [activeLibraryId, setActiveLibraryId] = useState(null);
+  const refreshLibraries = useCallback(async () => {
+    try {
+      const res = await window.moodmark.libraries.list();
+      if (res?.libraries) {
+        setLibraries(res.libraries);
+        setActiveLibraryId(res.activeId);
+      }
+    } catch (err) {
+      console.error('library list failed:', err);
+    }
+  }, []);
+  useEffect(() => { refreshLibraries(); }, [refreshLibraries]);
   // Splash that runs once per app launch. The LoadingScreen calls
   // onDone after its 0→100 count + exit animation completes, at which
   // point we unmount it for the rest of the session.
@@ -841,6 +858,44 @@ export default function App() {
     if (saveIds.length > 1) setSelected(new Set());
   }, [saves, loadCollections, view, reload]);
 
+  // Library switch: closes the renderer's current view state and
+  // re-fetches everything against the now-active library. The main
+  // process has already closed + reopened the DB by the time we
+  // get here.
+  const handleSwitchLibrary = useCallback(async (id) => {
+    if (!id || id === activeLibraryId) return;
+    const res = await window.moodmark.libraries.switch(id);
+    if (!res?.ok) return;
+    setActiveLibraryId(id);
+    setView({ type: 'all' });
+    setFocusedId(null);
+    setSelected(new Set());
+    setSearch('');
+    setColorFilter(null);
+    await loadCollections();
+    await reload();
+  }, [activeLibraryId, loadCollections, reload, setColorFilter, setSearch, setView]);
+
+  const handleCreateLibrary = useCallback(async (name) => {
+    const res = await window.moodmark.libraries.create(name);
+    if (res?.ok && res.library) {
+      await refreshLibraries();
+      // Auto-switch to the newly-created library so the user lands
+      // in their fresh empty space.
+      await handleSwitchLibrary(res.library.id);
+    }
+  }, [refreshLibraries, handleSwitchLibrary]);
+
+  const handleRenameLibrary = useCallback(async (id, name) => {
+    const res = await window.moodmark.libraries.rename(id, name);
+    if (res?.ok) refreshLibraries();
+  }, [refreshLibraries]);
+
+  const handleDeleteLibrary = useCallback(async (id) => {
+    const res = await window.moodmark.libraries.delete(id);
+    if (res?.ok) refreshLibraries();
+  }, [refreshLibraries]);
+
   const handleCreateCollection = useCallback(async (payload) => {
     await window.moodmark.collections.create(payload);
     loadCollections();
@@ -1317,6 +1372,12 @@ export default function App() {
       <div className={`layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {!sidebarCollapsed && (
           <Sidebar
+            libraries={libraries}
+            activeLibraryId={activeLibraryId}
+            onSwitchLibrary={handleSwitchLibrary}
+            onCreateLibrary={handleCreateLibrary}
+            onRenameLibrary={handleRenameLibrary}
+            onDeleteLibrary={handleDeleteLibrary}
             view={view}
             onViewChange={handleViewChange}
             collections={collections}

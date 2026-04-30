@@ -33,6 +33,8 @@ const { showToast, destroyToastWindow } = require('./toast-window');
 const { setSaveNotifier } = require('./notify');
 const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
+const libraryRegistry = require('./library-registry');
+const { reopenDatabase } = require('./db');
 
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:5173';
@@ -267,10 +269,47 @@ ipcMain.on('app:get-version', (event) => {
   event.returnValue = app.getVersion();
 });
 
+// ── Library registry IPC ────────────────────────────────────────────
+// All five handlers are thin wrappers over library-registry. The
+// switch handler additionally closes the current DB, reopens it
+// against the newly-active library, and notifies the renderer so
+// it can refetch every cached collection / save.
+
+ipcMain.handle('library:list', () => libraryRegistry.listLibraries());
+
+ipcMain.handle('library:create', (_e, name) => {
+  return libraryRegistry.createLibrary(name);
+});
+
+ipcMain.handle('library:rename', (_e, payload = {}) => {
+  return libraryRegistry.renameLibrary(payload.id, payload.name);
+});
+
+ipcMain.handle('library:delete', (_e, id) => {
+  return libraryRegistry.deleteLibrary(id);
+});
+
+ipcMain.handle('library:switch', (_e, id) => {
+  const result = libraryRegistry.setActiveLibrary(id);
+  if (!result.ok) return result;
+  // Closing + reopening the DB picks up the new active path. The
+  // image and thumb dirs are also derived per-call so they need no
+  // explicit refresh.
+  reopenDatabase();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('library:switched', { activeId: id });
+  }
+  return { ok: true };
+});
+
 app.whenReady().then(() => {
   if (process.platform === 'darwin') nativeTheme.themeSource = 'light';
   setSaveNotifier(notifySaved);
   registerMoodmarkFileProtocol();
+  // Bootstrap the library registry first — moves any pre-multi-
+  // library data into a default library folder so the DB and image
+  // dirs initialize against the right path on the next call.
+  libraryRegistry.bootstrap();
   ensureStorageDirs();
   initDatabase();
   registerIpcHandlers();

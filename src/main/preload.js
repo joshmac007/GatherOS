@@ -72,6 +72,13 @@ contextBridge.exposeInMainWorld('moodmark', {
     installStarter: () => ipcRenderer.invoke('library:install-starter'),
     wipeAll: () => ipcRenderer.invoke('library:wipe-all'),
   },
+  libraries: {
+    list: () => ipcRenderer.invoke('library:list'),
+    create: (name) => ipcRenderer.invoke('library:create', name),
+    rename: (id, name) => ipcRenderer.invoke('library:rename', { id, name }),
+    delete: (id) => ipcRenderer.invoke('library:delete', id),
+    switch: (id) => ipcRenderer.invoke('library:switch', id),
+  },
   drag: {
     // Fire-and-forget IPC because webContents.startDrag must run
     // synchronously off the renderer's dragstart event.
@@ -104,6 +111,7 @@ contextBridge.exposeInMainWorld('moodmark', {
       'save:indexing-end',
       'update-ready',
       'ai:reindex-progress',
+      'library:switched',
     ]);
     if (!allowed.has(channel)) return () => {};
     const wrapped = (_event, ...args) => listener(...args);

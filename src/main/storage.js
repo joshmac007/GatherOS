@@ -4,11 +4,15 @@ const crypto = require('node:crypto');
 const { app } = require('electron');
 
 function getImagesDir() {
-  return path.join(app.getPath('userData'), 'images');
+  // Resolved per-call so library switches are picked up without
+  // needing to plumb a path through every save / read code path.
+  const { getActiveLibraryRoot } = require('./library-registry');
+  return path.join(getActiveLibraryRoot(), 'images');
 }
 
 function getThumbsDir() {
-  return path.join(app.getPath('userData'), 'thumbs');
+  const { getActiveLibraryRoot } = require('./library-registry');
+  return path.join(getActiveLibraryRoot(), 'thumbs');
 }
 
 function ensureStorageDirs() {
