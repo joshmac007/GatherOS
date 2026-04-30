@@ -276,8 +276,8 @@ export default function FocusedView({
               className={styles.image}
               alt={record.title || ''}
               draggable={!picking}
-              onClick={picking ? handlePickerClick : undefined}
-              onMouseMove={picking ? handleImageMouseMove : undefined}
+              onClick={handlePickerClick}
+              onMouseMove={handleImageMouseMove}
               onDragStart={(e) => {
                 if (picking) {
                   e.preventDefault();
@@ -306,18 +306,21 @@ export default function FocusedView({
         )}
       </div>
 
-      {picking && hoverHex && ReactDOM.createPortal(
+      {picking && ReactDOM.createPortal(
         <div
           className={[
             styles.cursorTooltip,
             justCopied && styles.cursorTooltipCopied,
           ].filter(Boolean).join(' ')}
-          style={{ left: hoverPos.x, top: hoverPos.y }}
+          style={{
+            left: hoverPos.x || window.innerWidth / 2,
+            top: hoverPos.y || window.innerHeight / 2,
+          }}
           aria-hidden="true"
         >
           {justCopied ? (
             <span>Copied</span>
-          ) : (
+          ) : hoverHex ? (
             <>
               <span
                 className={styles.cursorTooltipSwatch}
@@ -325,6 +328,8 @@ export default function FocusedView({
               />
               <span>{hoverHex}</span>
             </>
+          ) : (
+            <span>Hover image…</span>
           )}
         </div>,
         document.body,
