@@ -283,6 +283,11 @@ export default function App() {
   useEffect(() => {
     if (onboardingTriggeredRef.current) return;
     if (!OnboardingTour.shouldShow()) return;
+    // Wait for the startup splash to finish, the welcome modal to
+    // close, and the library's initial load to resolve. Otherwise
+    // the spotlight either lands behind the splash or anchors on a
+    // sidebar that hasn't fully painted yet.
+    if (booting) return;
     if (welcomeOpen) return;
     if (loading) return;
     onboardingTriggeredRef.current = true;
@@ -290,7 +295,7 @@ export default function App() {
     // (sidebar layout settles after the first frame).
     const t = setTimeout(() => setOnboardingActive(true), 280);
     return () => clearTimeout(t);
-  }, [welcomeOpen, loading]);
+  }, [booting, welcomeOpen, loading]);
 
   // Show "What's new" once after an auto-update lands the user on a
   // newer build. Brand-new installs (no lastSeenVersion stored) get
