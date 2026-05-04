@@ -226,6 +226,11 @@ export default function Toolbar({
 
         {onLayoutChange && (
           <div className={styles.layoutToggle} role="group" aria-label="Layout">
+            <span
+              aria-hidden="true"
+              className={styles.layoutThumb}
+              data-pos={layout === 'list' ? 'list' : 'masonry'}
+            />
             <button
               type="button"
               className={[styles.layoutBtn, layout === 'masonry' && styles.layoutBtnActive]

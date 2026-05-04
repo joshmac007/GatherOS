@@ -104,6 +104,7 @@
 
 
 .layoutToggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   background: rgba(0, 0, 0, 0.04);
@@ -111,6 +112,42 @@
   border-radius: 999px;
   padding: 2px;
   -webkit-app-region: no-drag;
+}
+
+/* Sliding raised-metal pill behind the active button. Two-layer fill
+   (outer rim + inner gradient via ::before) matches the sidebar's
+   primary button. data-pos drives the translate so the pill glides
+   between buttons instead of popping in/out. */
+.layoutThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, #E2E2E2 0%, #B2B2B2 24.5%, #DADADA 58.47%, #DADADA 100%);
+  box-shadow:
+    0 0 0 0.5px #BABABA,
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.05);
+  pointer-events: none;
+  z-index: 0;
+  transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.layoutThumb::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, #D9D9D9 0%, #CBCBCB 100%);
+  pointer-events: none;
+}
+
+.layoutThumb[data-pos='list'] {
+  transform: translateX(22px);
 }
 
 .layoutBtn {
@@ -126,38 +163,18 @@
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
-  transition: color 100ms ease;
+  z-index: 1;
+  transition: color 200ms ease;
 }
 
 .layoutBtn:hover {
   color: var(--text-primary);
 }
 
-/* Active state — two-layer raised-metal button. The element itself
-   is the outer rim: a brushed-metal gradient + multi-stop drop
-   shadow. ::before sits inset by 1px with a softer gradient,
-   leaving the rim visible as a faux stroke. The icon stacks on
-   top via z-index. */
+/* Active state — text/icon color only. The metal surface is rendered
+   by the sliding .layoutThumb behind both buttons. */
 .layoutBtn.layoutBtnActive {
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, #E2E2E2 0%, #B2B2B2 24.5%, #DADADA 58.47%, #DADADA 100%);
   color: #000;
-  box-shadow:
-    0 0 0 0.5px #BABABA,
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.layoutBtn.layoutBtnActive::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, #D9D9D9 0%, #CBCBCB 100%);
-  pointer-events: none;
-  z-index: 0;
 }
 
 .layoutBtn svg {

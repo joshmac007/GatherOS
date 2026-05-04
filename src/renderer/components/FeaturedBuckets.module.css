@@ -7,10 +7,12 @@
 /* ── Cards row (normal flow) ─────────────────────────────────────────── */
 
 .cardsRow {
-  /* Pull the row's bottom up so the scroller's hover-shadow padding
-     (28px) doesn't push the masonry grid down by an extra inch. */
+  /* Pull the row's bottom up so the scroller's 28px hover-shadow
+     padding plus the grid's own 20px top padding don't stack into
+     a fat gap below the cards. -30px lands at ~18px visible space
+     below the cards, matching the 18px above. */
   padding: 14px 20px 0;
-  margin-bottom: -10px;
+  margin-bottom: -30px;
   pointer-events: none; /* let drags / clicks pass through gaps */
 }
 
