@@ -15,6 +15,15 @@ asarUnpack:
   - node_modules/@img/**/*
 mac:
   category: public.app-category.productivity
+  # Strip Electron's bundled non-English locales. macOS Sequoia
+  # (and some endpoint security tools) flag certain locale.pak
+  # files as restricted, which makes codesign fail mid-build with
+  # "Operation not permitted". We only ship English UI today, so
+  # there's nothing lost — and we drop ~30MB from the app bundle.
+  electronLanguages:
+    - en
+    - en-US
+    - en-GB
   target:
     - target: dmg
       arch:
