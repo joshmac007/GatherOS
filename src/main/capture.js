@@ -283,25 +283,42 @@ async function captureWindow() {
   if (!ok) return;
 
   const tmpPath = path.join(os.tmpdir(), `gatheros-window-${Date.now()}.png`);
+  console.log('[gatheros] captureWindow start →', tmpPath);
 
   try {
     await new Promise((resolve, reject) => {
       // -w: window selection mode (the native blue-hover UX)
-      // -x: silent (no shutter sound)
-      // -t png
+      // -t png  (no -x so the shutter sound confirms it fired)
       const proc = spawn('/usr/sbin/screencapture', [
-        '-w', '-x', '-t', 'png', tmpPath,
+        '-w', '-t', 'png', tmpPath,
       ]);
+      let stderr = '';
+      proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
       proc.on('close', (code) => {
+        console.log(
+          `[gatheros] screencapture exit=${code}` +
+            (stderr ? ` stderr=${stderr.trim()}` : ''),
+        );
         if (code === 0) resolve();
         else reject(new Error(`screencapture exited with ${code}`));
       });
-      proc.on('error', reject);
+      proc.on('error', (err) => {
+        console.error('[gatheros] screencapture spawn error:', err);
+        reject(err);
+      });
     });
 
-    if (!fs.existsSync(tmpPath)) return; // user pressed Esc
+    // Give the FS a beat to flush. screencapture closes its file
+    // handle before exit, but sandbox / FS journaling can lag.
+    await new Promise((r) => setTimeout(r, 80));
+
+    if (!fs.existsSync(tmpPath)) {
+      console.log('[gatheros] captureWindow: no file produced (user cancelled)');
+      return;
+    }
 
     const raw = fs.readFileSync(tmpPath);
+    console.log(`[gatheros] captureWindow: read ${raw.length} bytes`);
     const framed = await padWindowImage(raw);
 
     const { saveImageFromBuffer } = require('./storage');
@@ -310,8 +327,9 @@ async function captureWindow() {
     const imgData = await saveImageFromBuffer(framed, 'png');
     const record = insertSave(imgData);
     notifySaved(record);
+    console.log('[gatheros] captureWindow: saved', record?.id);
   } catch (err) {
-    console.error('Failed to capture window:', err);
+    console.error('[gatheros] Failed to capture window:', err);
   } finally {
     if (fs.existsSync(tmpPath)) {
       try { fs.unlinkSync(tmpPath); } catch {}
