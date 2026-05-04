@@ -12,6 +12,7 @@ function normalizeRect(a, b) {
 
 function CaptureOverlay() {
   const [drag, setDrag] = useState(null);
+  const [cursor, setCursor] = useState(null);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') window.captureOverlay.cancel(); };
@@ -25,7 +26,9 @@ function CaptureOverlay() {
   }, []);
 
   const onMouseMove = useCallback((e) => {
-    setDrag((d) => (d ? { ...d, end: { x: e.clientX, y: e.clientY } } : null));
+    const pt = { x: e.clientX, y: e.clientY };
+    setCursor(pt);
+    setDrag((d) => (d ? { ...d, end: pt } : null));
   }, []);
 
   const onMouseUp = useCallback((e) => {
@@ -47,6 +50,22 @@ function CaptureOverlay() {
 
   const sel = drag ? normalizeRect(drag.start, drag.end) : null;
 
+  // Anchor the size readout to the cursor — bottom-right by default,
+  // flip to top-left when the cursor is near the screen edges so the
+  // chip never gets clipped.
+  const READOUT_OFFSET = 14;
+  const READOUT_W = 88;
+  const READOUT_H = 24;
+  let readoutPos = null;
+  if (sel && cursor) {
+    const flipX = cursor.x + READOUT_OFFSET + READOUT_W > window.innerWidth;
+    const flipY = cursor.y + READOUT_OFFSET + READOUT_H > window.innerHeight;
+    readoutPos = {
+      left: flipX ? cursor.x - READOUT_OFFSET - READOUT_W : cursor.x + READOUT_OFFSET,
+      top: flipY ? cursor.y - READOUT_OFFSET - READOUT_H : cursor.y + READOUT_OFFSET,
+    };
+  }
+
   return (
     <div
       style={{
@@ -54,21 +73,75 @@ function CaptureOverlay() {
         inset: 0,
         cursor: 'crosshair',
         background: 'transparent',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
       }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
     >
+      {/* Selection: a dimmed rectangle with a 2px white stroke. The
+          rest of the screen stays at full opacity so the user can
+          still see what they're framing around. */}
       {sel && (
         <div style={{
           position: 'absolute',
-          left: sel.x, top: sel.y,
-          width: sel.w, height: sel.h,
+          left: sel.x,
+          top: sel.y,
+          width: sel.w,
+          height: sel.h,
+          background: 'rgba(0, 0, 0, 0.22)',
           border: '2px solid rgba(255, 255, 255, 0.95)',
-          boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.6)',
           boxSizing: 'border-box',
           pointerEvents: 'none',
         }} />
+      )}
+
+      {/* Live W×H readout — small dark chip pinned next to the cursor. */}
+      {sel && readoutPos && (
+        <div style={{
+          position: 'absolute',
+          left: readoutPos.left,
+          top: readoutPos.top,
+          width: READOUT_W,
+          height: READOUT_H,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0, 0, 0, 0.78)',
+          color: '#fff',
+          borderRadius: 6,
+          fontSize: 11,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: 0.2,
+          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
+          pointerEvents: 'none',
+          fontFeatureSettings: '"tnum"',
+        }}>
+          {Math.round(sel.w)} × {Math.round(sel.h)}
+        </div>
+      )}
+
+      {/* Resting hint at the bottom-center until the user starts
+          dragging. Disappears once a selection is being drawn so it
+          doesn't fight with the readout for attention. */}
+      {!sel && (
+        <div style={{
+          position: 'fixed',
+          left: '50%',
+          bottom: 28,
+          transform: 'translateX(-50%)',
+          padding: '7px 14px',
+          background: 'rgba(0, 0, 0, 0.78)',
+          color: '#fff',
+          borderRadius: 999,
+          fontSize: 12,
+          letterSpacing: 0.2,
+          boxShadow: '0 6px 24px rgba(0, 0, 0, 0.35)',
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}>
+          Drag to capture · <span style={{ opacity: 0.65 }}>Esc to cancel</span>
+        </div>
       )}
     </div>
   );
