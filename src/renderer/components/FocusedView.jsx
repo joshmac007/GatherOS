@@ -140,6 +140,13 @@ export default function FocusedView({
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'Escape') {
         e.preventDefault();
+        // If the eyedropper is armed, Escape disarms it without
+        // closing the focused view. Second Escape (when not picking)
+        // is what actually backs out to the grid.
+        if (picking) {
+          togglePicking();
+          return;
+        }
         onBack();
       } else if (e.key === 'ArrowLeft' && hasPrev) {
         e.preventDefault();
@@ -151,7 +158,7 @@ export default function FocusedView({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onBack, onPrev, onNext, hasPrev, hasNext]);
+  }, [onBack, onPrev, onNext, hasPrev, hasNext, picking, togglePicking]);
 
   const src = fileUrl(record.file_path);
   const zoomFillPct = ((zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN)) * 100;
