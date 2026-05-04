@@ -53,9 +53,9 @@ function CaptureOverlay() {
   // Anchor the size readout to the cursor — bottom-right by default,
   // flip to top-left when the cursor is near the screen edges so the
   // chip never gets clipped.
-  const READOUT_OFFSET = 14;
-  const READOUT_W = 88;
-  const READOUT_H = 24;
+  const READOUT_OFFSET = 12;
+  const READOUT_W = 70;
+  const READOUT_H = 20;
   let readoutPos = null;
   if (sel && cursor) {
     const flipX = cursor.x + READOUT_OFFSET + READOUT_W > window.innerWidth;
@@ -89,8 +89,8 @@ function CaptureOverlay() {
           top: sel.y,
           width: sel.w,
           height: sel.h,
-          background: 'rgba(0, 0, 0, 0.22)',
-          border: '2px solid rgba(255, 255, 255, 0.95)',
+          background: 'rgba(0, 0, 0, 0.15)',
+          border: '1px solid rgba(255, 255, 255, 0.95)',
           boxSizing: 'border-box',
           pointerEvents: 'none',
         }} />
@@ -109,15 +109,15 @@ function CaptureOverlay() {
           justifyContent: 'center',
           background: 'rgba(0, 0, 0, 0.78)',
           color: '#fff',
-          borderRadius: 6,
-          fontSize: 11,
+          borderRadius: 4,
+          fontSize: 10.5,
           fontVariantNumeric: 'tabular-nums',
-          letterSpacing: 0.2,
+          letterSpacing: 0,
           boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
           pointerEvents: 'none',
           fontFeatureSettings: '"tnum"',
         }}>
-          {Math.round(sel.w)} × {Math.round(sel.h)}
+          {Math.round(sel.w)}×{Math.round(sel.h)}
         </div>
       )}
 
