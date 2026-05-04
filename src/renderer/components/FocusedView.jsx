@@ -20,7 +20,7 @@ const SidebarIcon = () => <PanelLeft {...FV_ICON} />;
 const PreviewIcon = () => <ExternalLink {...FV_ICON} />;
 const ExportIcon = () => <Download {...FV_ICON} />;
 // Lucide's Pipette is the canonical eyedropper.
-const EyedropperIcon = () => <Pipette {...FV_ICON} strokeWidth={2} />;
+const EyedropperIcon = () => <Pipette {...FV_ICON} />;
 const TrashIcon = () => <Trash2 {...FV_ICON} />;
 
 function defaultExportName(record) {
