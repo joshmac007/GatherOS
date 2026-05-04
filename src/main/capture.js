@@ -123,6 +123,17 @@ async function startScreenshotCapture() {
 
   overlayWin.on('closed', () => { overlayWin = null; });
 
+  // When launched from the tray menu, the menu keeps keyboard focus
+  // by default and the overlay receives no key events — so Escape
+  // does nothing. Steal focus on first show so Escape (and any other
+  // shortcuts inside the overlay) actually reach the renderer.
+  overlayWin.once('ready-to-show', () => {
+    if (process.platform === 'darwin') {
+      try { app.focus({ steal: true }); } catch {}
+    }
+    if (overlayWin && !overlayWin.isDestroyed()) overlayWin.focus();
+  });
+
   if (isDev) {
     overlayWin.loadURL(`${DEV_URL}/overlay.html`);
   } else {
