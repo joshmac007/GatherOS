@@ -32,7 +32,7 @@ const {
   captureWindow,
 } = require('./capture');
 const { showToast, destroyToastWindow } = require('./toast-window');
-const { setSaveNotifier, setDuplicateNotifier } = require('./notify');
+const { setSaveNotifier, setDuplicateNotifier, setTrayRefresher } = require('./notify');
 const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
 const libraryRegistry = require('./library-registry');
@@ -96,6 +96,9 @@ function notifySaved(record) {
     mainWindow.webContents.send('save:created', record);
   }
   showToast(record);
+  // Refresh the tray's recent-saves block so a fresh capture/drop
+  // appears under the menu bar icon without a manual relaunch.
+  rebuildTrayMenu();
   // Background AI pipeline — runs only if the user opted in to at least
   // one feature and a key is configured. Errors are swallowed so the
   // save flow never blocks on it.
@@ -241,23 +244,108 @@ function buildTrayIcon() {
   return icon;
 }
 
-function createTray() {
-  tray = new Tray(buildTrayIcon());
-  tray.setToolTip('GatherOS');
+// Click handler for a recent-save tray entry: bring the main window
+// forward (creating it if needed) and ask the renderer to open the
+// focused view on that save.
+function openSaveFromTray(saveId) {
+  if (!saveId) return;
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    createMainWindow();
+  }
+  // The window may still be loading on first launch; give it a beat
+  // before pinging the renderer so the listener is wired up.
+  const send = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('focus:save', saveId);
+    }
+  };
+  if (mainWindow && mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.once('did-finish-load', send);
+  } else {
+    send();
+  }
+}
 
-  const menu = Menu.buildFromTemplate([
+// Resize a thumb on disk to a menu-friendly icon. Returns null if the
+// file is missing so we can fall back to a label-only entry.
+function trayIconFromThumb(thumbPath) {
+  try {
+    if (!thumbPath || !fs.existsSync(thumbPath)) return null;
+    const img = nativeImage.createFromPath(thumbPath);
+    if (img.isEmpty()) return null;
+    return img.resize({ height: 16, quality: 'good' });
+  } catch {
+    return null;
+  }
+}
+
+function buildTrayMenuTemplate() {
+  // Pull the latest saves directly from the DB. Lazy-required so the
+  // tray creation path doesn't tangle with init order.
+  let recents = [];
+  try {
+    const { getAllSaves } = require('./db');
+    recents = getAllSaves({ search: '', sort: 'newest', view: 'all' }).slice(0, 13);
+  } catch {
+    recents = [];
+  }
+
+  const visible = recents.slice(0, 3);
+  const overflow = recents.slice(3, 13);
+
+  const recentItems = visible.map((s) => ({
+    label: s.title || 'Untitled',
+    icon: trayIconFromThumb(s.thumb_path) || undefined,
+    click: () => openSaveFromTray(s.id),
+  }));
+
+  const overflowSubmenu = overflow.length > 0
+    ? [{
+        label: 'Recently saved',
+        submenu: overflow.map((s) => ({
+          label: s.title || 'Untitled',
+          icon: trayIconFromThumb(s.thumb_path) || undefined,
+          click: () => openSaveFromTray(s.id),
+        })),
+      }]
+    : [];
+
+  const recentBlock = recentItems.length > 0
+    ? [...recentItems, ...overflowSubmenu, { type: 'separator' }]
+    : [];
+
+  return [
     { label: 'Open GatherOS', click: () => {
       if (mainWindow) mainWindow.focus();
       else createMainWindow();
     }},
     { type: 'separator' },
+    ...recentBlock,
     { label: 'Capture Area  ⌘⇧S', click: startScreenshotCapture },
     { label: 'Capture Fullscreen', click: captureFullscreen },
     { label: 'Capture Window…', click: captureWindow },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
-  ]);
-  tray.setContextMenu(menu);
+  ];
+}
+
+function rebuildTrayMenu() {
+  if (!tray) return;
+  try {
+    tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()));
+  } catch (err) {
+    console.error('[gatheros] rebuildTrayMenu failed:', err);
+  }
+}
+
+function createTray() {
+  tray = new Tray(buildTrayIcon());
+  tray.setToolTip('GatherOS');
+  tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()));
 
   tray.on('click', () => {
     if (mainWindow) mainWindow.focus();
@@ -335,6 +423,7 @@ ipcMain.handle('library:switch', (_e, id) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('library:switched', { activeId: id });
   }
+  rebuildTrayMenu();
   return { ok: true };
 });
 
@@ -342,6 +431,7 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') nativeTheme.themeSource = 'light';
   setSaveNotifier(notifySaved);
   setDuplicateNotifier(notifyDuplicateInRenderer);
+  setTrayRefresher(rebuildTrayMenu);
   registerMoodmarkFileProtocol();
   // Bootstrap the library registry first — moves any pre-multi-
   // library data into a default library folder so the DB and image

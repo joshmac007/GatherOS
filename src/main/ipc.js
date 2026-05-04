@@ -6,7 +6,7 @@ const {
   getAllSaves, getSave, deleteSave, restoreSave, permanentlyDeleteSave,
   emptyTrash, wipeLibrary, updateSave, insertSave,
   getSaveEmbeddings, getSavesByIds, getUnindexedSaves, getUnindexedCount, getSmartViewCounts,
-  filterByColor,
+  filterByColor, findSimilarByPalette,
   getAllCollections, getCollectionsForSave, getCollectionsContainingAll, createCollection, renameCollection,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
   getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
@@ -25,7 +25,7 @@ const {
   captureFullscreen,
   captureWindow,
 } = require('./capture');
-const { notifySaved, notifyDuplicate } = require('./notify');
+const { notifySaved, notifyDuplicate, refreshTray } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
 const { buildStarterPack } = require('./starterPack');
@@ -188,14 +188,23 @@ function registerIpcHandlers() {
 
   // Soft delete — sends the save to Trash. Files stay on disk until the
   // user permanently deletes or empties Trash.
-  ipcMain.handle('saves:delete', (_e, id) => deleteSave(id));
+  ipcMain.handle('saves:delete', (_e, id) => {
+    const r = deleteSave(id);
+    refreshTray();
+    return r;
+  });
 
-  ipcMain.handle('saves:restore', (_e, id) => restoreSave(id));
+  ipcMain.handle('saves:restore', (_e, id) => {
+    const r = restoreSave(id);
+    refreshTray();
+    return r;
+  });
 
   // Hard delete from Trash: also removes the underlying image + thumb.
   ipcMain.handle('saves:permanent-delete', (_e, id) => {
     const result = permanentlyDeleteSave(id);
     if (result.ok) deleteImageFiles(result.filePath, result.thumbPath);
+    refreshTray();
     return result;
   });
 
@@ -204,6 +213,7 @@ function registerIpcHandlers() {
     if (result.ok) {
       for (const f of result.files) deleteImageFiles(f.filePath, f.thumbPath);
     }
+    refreshTray();
     return { ok: true, count: result.files.length };
   });
 
@@ -604,6 +614,43 @@ function registerIpcHandlers() {
   // []) if the anchor itself isn't indexed yet — calling code can
   // skip rendering the section in that case. Trashed saves are
   // filtered out so the user doesn't get suggestions from the bin.
+  // Right-click "Find similar" — works without an OpenAI key. Tries
+  // embedding cosine similarity first when both the anchor and at
+  // least one other save have embeddings; otherwise falls back to
+  // palette ΔE distance over the swatches we already extract on save.
+  // Returns full save records sorted by similarity, anchor excluded.
+  ipcMain.handle('saves:find-similar', (_e, saveId, limit = 24) => {
+    if (!saveId) return [];
+    const cap = Math.max(1, Math.min(Number(limit) || 24, 60));
+
+    const rows = getSaveEmbeddings();
+    const anchor = rows.find((r) => r.id === saveId);
+    if (anchor && rows.length >= 2) {
+      const a = bufferToFloat32(anchor.embedding);
+      const dim = a.length;
+      const scored = rows
+        .filter((r) => r.id !== saveId)
+        .map((row) => ({
+          id: row.id,
+          score: cosineSim(a, bufferToFloat32(row.embedding), dim),
+        }))
+        .filter((r) => r.score >= 0.30)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, cap);
+      if (scored.length > 0) {
+        const ids = scored.map((s) => s.id);
+        const records = getSavesByIds(ids).filter((r) => !r.deleted_at);
+        const orderById = new Map(ids.map((id, i) => [id, i]));
+        records.sort((a, b) => orderById.get(a.id) - orderById.get(b.id));
+        return records;
+      }
+    }
+
+    // Embedding path empty (no key, no anchor embedding, or below
+    // the relevance cutoff) — fall back to the palette path.
+    return findSimilarByPalette(saveId, cap);
+  });
+
   ipcMain.handle('ai:similar-saves', (_e, saveId, limit = 5) => {
     if (!saveId) return [];
     const rows = getSaveEmbeddings();

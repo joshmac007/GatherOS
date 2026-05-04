@@ -374,6 +374,61 @@ function filterByColor(saves, hex, threshold = 22, paletteLimit = null) {
 
 // view: 'all' (default — excludes trashed), 'unsorted' (no bucket
 // membership, excludes trashed), or 'trash' (only trashed).
+// Find saves that look like the anchor based on palette alone — no
+// AI required. For each anchor swatch we take the closest swatch in
+// the candidate's palette (ΔE76 in LAB) and average those distances;
+// smaller average = more similar. Skips deleted rows and the anchor
+// itself. Returns full save records sorted ascending by score.
+function findSimilarByPalette(anchorId, limit = 24) {
+  if (!anchorId) return [];
+  const anchor = getSave(anchorId);
+  if (!anchor || !anchor.palette) return [];
+  let anchorPalette;
+  try { anchorPalette = JSON.parse(anchor.palette); } catch { return []; }
+  if (!Array.isArray(anchorPalette) || anchorPalette.length === 0) return [];
+  const anchorLabs = anchorPalette.map(hexToLab).filter(Boolean);
+  if (anchorLabs.length === 0) return [];
+
+  const db = getDatabase();
+  const rows = db
+    .prepare(
+      'SELECT id, palette FROM saves WHERE deleted_at IS NULL AND id != ? AND palette IS NOT NULL',
+    )
+    .all(anchorId);
+
+  const scored = [];
+  for (const row of rows) {
+    let pal;
+    try { pal = JSON.parse(row.palette); } catch { continue; }
+    if (!Array.isArray(pal) || pal.length === 0) continue;
+    const labs = pal.map(hexToLab).filter(Boolean);
+    if (labs.length === 0) continue;
+    let total = 0;
+    for (const a of anchorLabs) {
+      let best = Infinity;
+      for (const b of labs) {
+        const d = deltaE76(a, b);
+        if (d < best) best = d;
+      }
+      total += best;
+    }
+    scored.push({ id: row.id, score: total / anchorLabs.length });
+  }
+
+  // Hard cap on average ΔE — beyond ~28 the palettes have nothing
+  // meaningful in common and the suggestions read as random.
+  scored.sort((a, b) => a.score - b.score);
+  const ids = scored
+    .filter((s) => s.score <= 28)
+    .slice(0, Math.max(1, Math.min(limit, 60)))
+    .map((s) => s.id);
+  if (ids.length === 0) return [];
+  const records = getSavesByIds(ids);
+  const orderById = new Map(ids.map((id, i) => [id, i]));
+  records.sort((a, b) => orderById.get(a.id) - orderById.get(b.id));
+  return records;
+}
+
 function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorHex = null, view = 'all' } = {}) {
   const db = getDatabase();
   const conditions = [];
@@ -731,6 +786,7 @@ module.exports = {
   insertSave,
   findSaveByHash,
   backfillContentHashes,
+  findSimilarByPalette,
   getAllSaves,
   getSave,
   deleteSave,

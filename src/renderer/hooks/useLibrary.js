@@ -14,6 +14,10 @@ export function useLibrary() {
   // race each other and flicker through 3-4 result sets.
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [colorFilter, setColorFilter] = useState(null);
+  // similarTo holds the anchor save record ({ id, thumb_path }) when the
+  // user picked "Find similar" on a card. Setting it overrides the
+  // normal getAll query and routes through saves:find-similar instead.
+  const [similarTo, setSimilarTo] = useState(null);
 
   // Monotonic counter that's bumped on every new load(). When a request
   // resolves we check it's still the latest before committing — late
@@ -29,22 +33,29 @@ export function useLibrary() {
     const myId = ++requestIdRef.current;
     setLoading(true);
     try {
-      const backendView = view.type === 'unsorted' || view.type === 'trash'
-        ? view.type
-        : 'all';
-      const data = await window.moodmark.saves.getAll({
-        search: debouncedSearch,
-        sort: 'newest',
-        view: backendView,
-        collectionId: view.type === 'collection' ? view.id : undefined,
-        colorHex: colorFilter || undefined,
-      });
+      let data;
+      if (similarTo?.id) {
+        // Find-similar query bypasses search / view / color and just
+        // returns the ranked similar set straight from the backend.
+        data = await window.moodmark.saves.findSimilar(similarTo.id, 60);
+      } else {
+        const backendView = view.type === 'unsorted' || view.type === 'trash'
+          ? view.type
+          : 'all';
+        data = await window.moodmark.saves.getAll({
+          search: debouncedSearch,
+          sort: 'newest',
+          view: backendView,
+          collectionId: view.type === 'collection' ? view.id : undefined,
+          colorHex: colorFilter || undefined,
+        });
+      }
       if (requestIdRef.current !== myId) return; // stale, ignore
       setSaves(data);
     } finally {
       if (requestIdRef.current === myId) setLoading(false);
     }
-  }, [debouncedSearch, view, colorFilter]);
+  }, [debouncedSearch, view, colorFilter, similarTo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -145,6 +156,8 @@ export function useLibrary() {
     setSearch,
     colorFilter,
     setColorFilter,
+    similarTo,
+    setSimilarTo,
     reload: load,
     deleteSave,
     restoreSave,

@@ -4,6 +4,7 @@ import QuickSwitcher from './components/QuickSwitcher.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import WelcomeModal from './components/WelcomeModal.jsx';
+import OnboardingTour from './components/OnboardingTour.jsx';
 import WhatsNewModal from './components/WhatsNewModal.jsx';
 import { pickNotesForUpgrade, RELEASE_NOTES } from './data/releaseNotes.js';
 import ShortcutsModal from './components/ShortcutsModal.jsx';
@@ -67,6 +68,16 @@ function RestoreIcon() {
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M3 8 a5 5 0 1 0 1.6 -3.6" />
       <path d="M3 2.5 V5 H5.5" />
+    </svg>
+  );
+}
+
+function SimilarIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="2" width="6" height="6" rx="1.2" />
+      <rect x="9" y="9" width="5" height="5" rx="1" />
+      <path d="M11.5 4.5L9.5 2.5M9.5 4.5l2-2" />
     </svg>
   );
 }
@@ -163,6 +174,8 @@ export default function App() {
     setSearch,
     colorFilter,
     setColorFilter,
+    similarTo,
+    setSimilarTo,
     reload,
     deleteSave,
     restoreSave,
@@ -315,6 +328,23 @@ export default function App() {
   const [aiUnlockedOpen, setAiUnlockedOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [whatsNewNotes, setWhatsNewNotes] = useState(null);
+  // Lightweight first-launch tooltips — gate on the localStorage flag
+  // and only start once the welcome modal has closed and the library
+  // has finished its initial load. Once-per-mount guard via ref so the
+  // tour doesn't restart on every dep change.
+  const [onboardingActive, setOnboardingActive] = useState(false);
+  const onboardingTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (onboardingTriggeredRef.current) return;
+    if (!OnboardingTour.shouldShow()) return;
+    if (welcomeOpen) return;
+    if (loading) return;
+    onboardingTriggeredRef.current = true;
+    // Slight delay so the spotlight lands on already-rendered targets
+    // (sidebar layout settles after the first frame).
+    const t = setTimeout(() => setOnboardingActive(true), 280);
+    return () => clearTimeout(t);
+  }, [welcomeOpen, loading]);
 
   // Show "What's new" once after an auto-update lands the user on a
   // newer build. Brand-new installs (no lastSeenVersion stored) get
@@ -777,6 +807,27 @@ export default function App() {
         submenu,
       });
     }
+    // Find similar — single-save action only (multi-select doesn't
+    // make semantic sense; we'd need to merge anchors). Hidden when
+    // already viewing a similar-to set anchored on this same save.
+    if (!isMulti && similarTo?.id !== saveId) {
+      if (items.length > 0) items.push({ type: 'separator' });
+      items.push({
+        label: 'Find similar',
+        icon: <SimilarIcon />,
+        onClick: () => {
+          const anchor = saves.find((s) => s.id === saveId);
+          if (!anchor) return;
+          setSimilarTo({
+            id: anchor.id,
+            thumb_path: anchor.thumb_path,
+            file_path: anchor.file_path,
+            title: anchor.title,
+          });
+        },
+      });
+    }
+
     // Delete: soft-delete with the same undo toast as the bulk path.
     if (items.length > 0) items.push({ type: 'separator' });
     items.push({
@@ -797,7 +848,7 @@ export default function App() {
       },
     });
     return items;
-  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack]);
+  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack, similarTo, setSimilarTo]);
 
   const handleCardContextMenu = useCallback(async (saveId, x, y) => {
     // Resolve the bucket memberships used to filter the Add-to-Bucket
@@ -1064,7 +1115,21 @@ export default function App() {
     setView(newView);
     setFocusedId(null);
     setSelected(new Set());
-  }, [setView]);
+    // A view change is a different intent than "more like this one",
+    // so drop any active similar-to anchor when the user navigates.
+    setSimilarTo(null);
+  }, [setView, setSimilarTo]);
+
+  // Tray-menu "Recent saves" entry click. Main fires 'focus:save'
+  // with the id; mirror the duplicate-toast flow — switch to All so
+  // the record is in displaySaves, then open it in the focused view.
+  useEffect(() => {
+    return window.moodmark.on('focus:save', (id) => {
+      if (!id) return;
+      handleViewChange({ type: 'all' });
+      setTimeout(() => setFocusedId(id), 80);
+    });
+  }, [handleViewChange]);
 
   // Duplicate-on-save toast. Main fires 'save:duplicate' with the
   // existing row whenever a drop / capture / drop-url tries to add
@@ -1656,6 +1721,8 @@ export default function App() {
                 semanticSearchActive={semanticSearchActive}
                 colorFilter={colorFilter}
                 onClearColorFilter={() => setColorFilter(null)}
+                similarTo={similarTo}
+                onClearSimilar={() => setSimilarTo(null)}
                 searchInputRef={searchInputRef}
                 viewTitle={(() => {
                   if (view.type === 'collection') {
@@ -2024,6 +2091,11 @@ export default function App() {
       <WelcomeModal
         open={welcomeOpen}
         onClose={() => setWelcomeOpen(false)}
+      />
+
+      <OnboardingTour
+        active={onboardingActive}
+        onDone={() => setOnboardingActive(false)}
       />
 
       <WhatsNewModal

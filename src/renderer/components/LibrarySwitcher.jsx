@@ -233,7 +233,7 @@ export default function LibrarySwitcher({
 
   return (
     <div className={styles.wrap}>
-      <div ref={triggerRowRef} className={styles.triggerRow}>
+      <div ref={triggerRowRef} className={styles.triggerRow} data-onboarding="library-switcher">
         {renaming ? (
           <input
             ref={renameInputRef}

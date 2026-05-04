@@ -20,9 +20,25 @@ function notifyDuplicate(existing) {
   duplicateNotifier(existing);
 }
 
+// Tray menu shows the latest saves; mutations elsewhere need to ping
+// the menu builder to refresh. Wired via setTrayRefresher in index.js.
+let trayRefresher = () => {};
+
+function setTrayRefresher(fn) {
+  trayRefresher = typeof fn === 'function' ? fn : () => {};
+}
+
+function refreshTray() {
+  try { trayRefresher(); } catch (err) {
+    console.error('[gatheros] refreshTray failed:', err);
+  }
+}
+
 module.exports = {
   setSaveNotifier,
   setDuplicateNotifier,
+  setTrayRefresher,
   notifySaved,
   notifyDuplicate,
+  refreshTray,
 };

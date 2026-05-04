@@ -1,5 +1,6 @@
 import React from 'react';
 import styles from './Toolbar.module.css';
+import { fileUrl } from '../lib/fileUrl.js';
 
 function SearchIcon() {
   return (
@@ -105,6 +106,8 @@ export default function Toolbar({
   semanticSearchActive = false,
   colorFilter = null,
   onClearColorFilter,
+  similarTo = null,
+  onClearSimilar,
   searchInputRef,
   viewTitle = null,
   onBackToAll = null,
@@ -143,7 +146,7 @@ export default function Toolbar({
         )}
       </div>
 
-      <div className={styles.searchWrap}>
+      <div className={styles.searchWrap} data-onboarding="search">
         <span
           className={[styles.searchIcon, semanticSearchActive && styles.searchIconAi]
             .filter(Boolean)
@@ -184,6 +187,24 @@ export default function Toolbar({
       </div>
 
       <div className={styles.right}>
+        {similarTo && (
+          <button
+            type="button"
+            className={styles.colorChip}
+            onClick={onClearSimilar}
+            title="Clear find-similar filter"
+          >
+            <img
+              className={styles.similarChipThumb}
+              src={fileUrl(similarTo.thumb_path || similarTo.file_path)}
+              alt=""
+              draggable={false}
+            />
+            <span className={styles.colorChipLabel}>Similar</span>
+            <span className={styles.colorChipX} aria-hidden="true">×</span>
+          </button>
+        )}
+
         {colorFilter && (
           <button
             type="button"

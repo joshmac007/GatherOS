@@ -236,6 +236,18 @@
   flex-shrink: 0;
 }
 
+/* Anchor thumbnail for the "Similar to" chip — slightly larger
+   than the color dot so the image is recognisable, with a soft
+   inner stroke that mirrors the color chip's circle. */
+.similarChipThumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+}
+
 .colorChipLabel {
   font-variant-numeric: tabular-nums;
 }
