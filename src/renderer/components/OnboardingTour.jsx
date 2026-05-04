@@ -15,7 +15,33 @@ const STEPS = [
     pad: 8,
     title: 'Your libraries live here',
     body: (
-      <>Switch between libraries, create new ones, and browse your buckets from the sidebar.</>
+      <>Switch between libraries, create new ones, and rename or delete them from the sidebar.</>
+    ),
+  },
+  {
+    target: '[data-onboarding="buckets"]',
+    placement: 'right',
+    pad: 6,
+    title: 'Organize with buckets',
+    body: (
+      <>
+        Buckets are how you group references — moodboards, color studies,
+        type explorations, anything. Drop saves into one with the +
+        button, drag them between buckets, or right-click any image to
+        sort it from the grid.
+      </>
+    ),
+  },
+  {
+    target: null,
+    placement: 'center',
+    title: 'Drag images in from anywhere',
+    body: (
+      <>
+        Drop image files, screenshots, or links straight onto the window
+        — Finder, browser, Slack, anywhere. Hold <span className={styles.kbd}>⌥</span>
+        {' '}while dragging a card out to send the actual file to another app.
+      </>
     ),
   },
   {
@@ -34,7 +60,21 @@ const STEPS = [
     body: (
       <>
         Press <span className={styles.kbd}>⌘</span><span className={styles.kbd}>⇧</span><span className={styles.kbd}>S</span>
-        {' '}from anywhere to drag-select a region — or use the menu bar icon for full-screen and window captures.
+        {' '}from anywhere to drag-select a region — or use the menu bar
+        icon for full-screen and window captures.
+      </>
+    ),
+  },
+  {
+    target: '[data-onboarding="settings"]',
+    placement: 'right',
+    pad: 6,
+    title: 'Add your OpenAI key in Settings',
+    body: (
+      <>
+        Drop a ChatGPT API key into Settings to unlock auto-titles,
+        smart tags, and semantic search. Everything stays local — the
+        key only leaves your machine when you opt in to a feature.
       </>
     ),
   },

@@ -570,7 +570,7 @@ export default function Sidebar({
         })}
       </nav>
 
-      <div className={styles.sectionHeaderRow}>
+      <div className={styles.sectionHeaderRow} data-onboarding="buckets">
         <span className={styles.sectionHeaderLabel}>Buckets</span>
         <button
           className={styles.addBtn}
@@ -792,6 +792,7 @@ export default function Sidebar({
               className={styles.footerBtn}
               onClick={onOpenSettings}
               title="Settings"
+              data-onboarding="settings"
             >
               <span className={styles.footerIcon}><SettingsGearIcon /></span>
               <span className={styles.footerLabel}>Settings</span>
