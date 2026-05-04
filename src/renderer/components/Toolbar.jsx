@@ -1,6 +1,7 @@
 import React from 'react';
 import styles from './Toolbar.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+import SfSymbol from './SfSymbol.jsx';
 
 function SearchIcon() {
   return (
@@ -153,7 +154,7 @@ export default function Toolbar({
             .join(' ')}
           title={semanticSearchActive ? 'Visual search (AI)' : undefined}
         >
-          {semanticSearchActive ? <SearchSparkleIcon /> : <SearchIcon />}
+          {semanticSearchActive ? <SearchSparkleIcon /> : <SfSymbol name="search" size={14} weight={500} />}
         </span>
         <input
           ref={searchInputRef}
