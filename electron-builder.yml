@@ -27,6 +27,27 @@ mac:
   hardenedRuntime: true
   gatekeeperAssess: false
   notarize: false
+  # Declared so the Dock icon highlights when dragging images. The
+  # main-process 'open-file' listener actually saves them.
+  fileAssociations:
+    - ext: png
+      role: Editor
+    - ext: jpg
+      role: Editor
+    - ext: jpeg
+      role: Editor
+    - ext: gif
+      role: Editor
+    - ext: webp
+      role: Editor
+    - ext: avif
+      role: Editor
+    - ext: bmp
+      role: Editor
+    - ext: heic
+      role: Editor
+    - ext: tiff
+      role: Editor
 publish:
   provider: github
   owner: BrettfromDJ

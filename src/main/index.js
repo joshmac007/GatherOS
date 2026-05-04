@@ -44,6 +44,46 @@ const DEV_URL = 'http://localhost:5173';
 let mainWindow = null;
 let tray = null;
 
+// macOS Dock-drop queue. The 'open-file' event can fire BEFORE app
+// is ready (e.g. when the user drags an image onto a non-running
+// app's Dock icon and that triggers launch), so the listener has to
+// be installed at module load time and paths queued until storage
+// + DB are initialized. drainDockOpenQueue runs once init completes
+// and again on every subsequent drop while the app is alive.
+const dockOpenQueue = [];
+let dockOpenReady = false;
+
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  dockOpenQueue.push(filePath);
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  drainDockOpenQueue();
+});
+
+async function drainDockOpenQueue() {
+  if (!dockOpenReady || dockOpenQueue.length === 0) return;
+  const { saveImageFromFile } = require('./storage');
+  const { insertSave } = require('./db');
+  while (dockOpenQueue.length > 0) {
+    const filePath = dockOpenQueue.shift();
+    try {
+      const imgData = await saveImageFromFile(filePath);
+      if (imgData.duplicateOf) {
+        notifyDuplicateInRenderer(imgData.existing);
+      } else {
+        const record = insertSave(imgData);
+        notifySaved(record);
+      }
+    } catch (err) {
+      console.error('[gatheros] Dock-drop save failed:', filePath, err?.message || err);
+    }
+  }
+}
+
 // Custom file protocol so renderers loaded over http://localhost (and the
 // packaged app loaded from file://) can both read images out of the userData
 // directory by absolute path.
@@ -444,6 +484,11 @@ app.whenReady().then(() => {
   createTray();
   registerCaptureHotkey();
   initUpdater(mainWindow);
+
+  // Storage + DB are now ready; drain any Dock-drop paths that
+  // accumulated during launch (and unblock subsequent drops).
+  dockOpenReady = true;
+  drainDockOpenQueue();
 
   // One-shot backfill of content_hash for rows that pre-date the
   // dedup feature. Runs in the background so it doesn't block boot.
