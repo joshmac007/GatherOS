@@ -13,6 +13,40 @@
   min-width: 0;
 }
 
+/* Loading skeleton — masonry-aspect placeholders with a soft
+   shimmer that runs while the library data resolves. Keeps the
+   user-visible layout stable so the eventual image grid doesn't
+   shift everything around when it lands. */
+.skeleton {
+  width: 100%;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.04) 100%);
+  background-size: 220% 100%;
+  animation: skeletonShimmer 1.4s linear infinite;
+  opacity: 0;
+  animation:
+    skeletonShimmer 1.4s linear infinite,
+    skeletonFade 200ms ease-out forwards;
+}
+
+@keyframes skeletonShimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@keyframes skeletonFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: skeletonFade 200ms ease-out forwards;
+    background: rgba(0, 0, 0, 0.05);
+  }
+}
+
 .state {
   flex: 1 1 auto;
   display: flex;

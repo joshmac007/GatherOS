@@ -56,6 +56,33 @@ function formatDate(ts) {
   });
 }
 
+// Friendly relative timestamp ("3h ago", "yesterday") — the absolute
+// date is surfaced as a hover tooltip via formatAbsoluteDate.
+function formatRelativeDate(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  const min = 60 * 1000;
+  const hour = 60 * min;
+  const day = 24 * hour;
+  if (diff < min) return 'just now';
+  if (diff < hour) return `${Math.floor(diff / min)}m ago`;
+  if (diff < day) return `${Math.floor(diff / hour)}h ago`;
+  if (diff < 2 * day) return 'yesterday';
+  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
+  return formatDate(ts);
+}
+
+function formatAbsoluteDate(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function formatBytes(n) {
   if (!n) return '';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -887,7 +914,9 @@ export default function DetailPanel({
 
       <dl className={styles.meta}>
         <dt>Saved</dt>
-        <dd>{formatDate(record.created_at)}</dd>
+        <dd title={formatAbsoluteDate(record.created_at)}>
+          {formatRelativeDate(record.created_at)}
+        </dd>
         {record.width && record.height && (
           <>
             <dt>Dimensions</dt>

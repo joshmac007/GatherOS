@@ -1,7 +1,44 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ImageCard from './ImageCard.jsx';
 import styles from './Grid.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+
+// Lightweight loading shimmer — masonry-shaped placeholders that
+// only fade in after a 150ms grace period, so flash-fast loads
+// (cached library reopens, view switches with warm data) don't
+// blink a skeleton frame.
+function Skeletons({ columns }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 150);
+    return () => clearTimeout(t);
+  }, []);
+  if (!visible) return <div className={styles.state} />;
+
+  const heights = [200, 260, 180, 240, 320, 220, 280, 200, 160, 240, 300, 200];
+  const cols = Array.from({ length: columns }, (_, c) =>
+    Array.from({ length: 4 }, (_, r) => heights[(c * 4 + r) % heights.length]),
+  );
+  return (
+    <div
+      className={styles.grid}
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      aria-hidden="true"
+    >
+      {cols.map((heights, i) => (
+        <div key={i} className={styles.column}>
+          {heights.map((h, j) => (
+            <div
+              key={j}
+              className={styles.skeleton}
+              style={{ height: h }}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function relativeDate(ts) {
   if (!ts) return '';
@@ -39,7 +76,7 @@ export default function Grid({
   }, [saves, columns]);
 
   if (loading && saves.length === 0) {
-    return <div className={styles.state} />;
+    return <Skeletons columns={columns} />;
   }
 
   if (saves.length === 0) {
@@ -60,7 +97,7 @@ export default function Grid({
       hint = 'Click the chip in the toolbar to clear the filter.';
     } else if (isCollection) {
       title = 'Bucket is empty';
-      hint = 'Right-click any image and choose "Add to Bucket"';
+      hint = 'Drop an image, paste a URL, or ⌘⇧S to capture.';
     } else if (isUnsorted) {
       title = 'Nothing unsorted';
       hint = 'Every save belongs to at least one bucket.';
