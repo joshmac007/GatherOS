@@ -121,18 +121,40 @@ async function startScreenshotCapture() {
   overlayWin.setAlwaysOnTop(true, 'screen-saver');
   overlayWin.setIgnoreMouseEvents(false);
 
-  overlayWin.on('closed', () => { overlayWin = null; });
+  // Backstop for the renderer's keydown listener: while the overlay
+  // is open, Escape is wired through the OS shortcut layer too. If
+  // focus ever slips (tray menu held it, another app stole it, etc.)
+  // the user can still bail out without restarting the app.
+  const escAccelerator = 'Escape';
+  let escRegistered = false;
+  try {
+    escRegistered = globalShortcut.register(escAccelerator, () => {
+      handleOverlayCancel();
+    });
+  } catch {}
+
+  overlayWin.on('closed', () => {
+    overlayWin = null;
+    if (escRegistered) {
+      try { globalShortcut.unregister(escAccelerator); } catch {}
+      escRegistered = false;
+    }
+  });
 
   // When launched from the tray menu, the menu keeps keyboard focus
-  // by default and the overlay receives no key events — so Escape
-  // does nothing. Steal focus on first show so Escape (and any other
-  // shortcuts inside the overlay) actually reach the renderer.
-  overlayWin.once('ready-to-show', () => {
+  // by default and the overlay receives no key events. Try to steal
+  // focus at every reasonable moment (creation, finish-load, show)
+  // so the renderer's keydown listener actually fires.
+  const stealFocus = () => {
+    if (!overlayWin || overlayWin.isDestroyed()) return;
     if (process.platform === 'darwin') {
       try { app.focus({ steal: true }); } catch {}
     }
-    if (overlayWin && !overlayWin.isDestroyed()) overlayWin.focus();
-  });
+    try { overlayWin.focus(); } catch {}
+  };
+  overlayWin.once('ready-to-show', stealFocus);
+  overlayWin.webContents.once('did-finish-load', stealFocus);
+  overlayWin.on('show', stealFocus);
 
   if (isDev) {
     overlayWin.loadURL(`${DEV_URL}/overlay.html`);
@@ -152,12 +174,22 @@ async function handleOverlayComplete(rect) {
   win.setOpacity(0);
   win.hide();
 
+  // Hard kill-switch: no matter what happens below — capture hangs,
+  // sharp throws, IPC stalls — the overlay must not linger. 4s is
+  // long enough for a clean capture path on slow disks but short
+  // enough that a stuck flow doesn't trap the user.
+  const killTimer = setTimeout(() => {
+    if (!win.isDestroyed()) {
+      try { win.close(); } catch {}
+    }
+  }, 4000);
+
   // Give the compositor a frame to render without the overlay.
   await new Promise((r) => setTimeout(r, 120));
 
   try {
     const cropped = await captureAndCrop(rect);
-    win.close();
+    if (!win.isDestroyed()) win.close();
 
     const { saveImageFromBuffer } = require('./storage');
     const { insertSave } = require('./db');
@@ -168,6 +200,8 @@ async function handleOverlayComplete(rect) {
   } catch (err) {
     console.error('Failed to capture screenshot:', err);
     if (!win.isDestroyed()) win.close();
+  } finally {
+    clearTimeout(killTimer);
   }
 }
 
