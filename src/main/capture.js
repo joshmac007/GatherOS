@@ -193,10 +193,14 @@ async function handleOverlayComplete(rect) {
 
     const { saveImageFromBuffer } = require('./storage');
     const { insertSave } = require('./db');
-    const { notifySaved } = require('./notify');
+    const { notifySaved, notifyDuplicate } = require('./notify');
     const imgData = await saveImageFromBuffer(cropped, 'png');
-    const record = insertSave(imgData);
-    notifySaved(record);
+    if (imgData.duplicateOf) {
+      notifyDuplicate(imgData.existing);
+    } else {
+      const record = insertSave(imgData);
+      notifySaved(record);
+    }
   } catch (err) {
     console.error('Failed to capture screenshot:', err);
     if (!win.isDestroyed()) win.close();
@@ -261,10 +265,14 @@ async function captureFullscreen() {
   try {
     const { saveImageFromBuffer } = require('./storage');
     const { insertSave } = require('./db');
-    const { notifySaved } = require('./notify');
+    const { notifySaved, notifyDuplicate } = require('./notify');
     const imgData = await saveImageFromBuffer(source.thumbnail.toPNG(), 'png');
-    const record = insertSave(imgData);
-    notifySaved(record);
+    if (imgData.duplicateOf) {
+      notifyDuplicate(imgData.existing);
+    } else {
+      const record = insertSave(imgData);
+      notifySaved(record);
+    }
   } catch (err) {
     console.error('Failed to capture fullscreen:', err);
   }
@@ -323,11 +331,16 @@ async function captureWindow() {
 
     const { saveImageFromBuffer } = require('./storage');
     const { insertSave } = require('./db');
-    const { notifySaved } = require('./notify');
+    const { notifySaved, notifyDuplicate } = require('./notify');
     const imgData = await saveImageFromBuffer(framed, 'png');
-    const record = insertSave(imgData);
-    notifySaved(record);
-    console.log('[gatheros] captureWindow: saved', record?.id);
+    if (imgData.duplicateOf) {
+      notifyDuplicate(imgData.existing);
+      console.log('[gatheros] captureWindow: duplicate of', imgData.duplicateOf);
+    } else {
+      const record = insertSave(imgData);
+      notifySaved(record);
+      console.log('[gatheros] captureWindow: saved', record?.id);
+    }
   } catch (err) {
     console.error('[gatheros] Failed to capture window:', err);
   } finally {

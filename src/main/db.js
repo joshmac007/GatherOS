@@ -120,6 +120,16 @@ const MIGRATIONS = [
     // application code (SQLite ALTER doesn't allow REFERENCES).
     addColumnIfMissing(database, 'collections', 'parent_id', 'TEXT');
   },
+  // v1 → v2: SHA-256 of the original bytes per save. Powers the
+  // "already in your library" duplicate-on-save toast. New rows get
+  // a hash from the storage layer; existing rows are filled in by a
+  // background backfill kicked off after init (see backfillContentHashes).
+  (database) => {
+    addColumnIfMissing(database, 'saves', 'content_hash', 'TEXT');
+    database.exec(
+      'CREATE INDEX IF NOT EXISTS idx_saves_content_hash ON saves(content_hash)',
+    );
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -221,6 +231,7 @@ function insertSave({
   sourceUrl,
   title,
   palette,
+  contentHash,
 } = {}) {
   const db = getDatabase();
   const record = {
@@ -233,15 +244,66 @@ function insertSave({
     height: height || null,
     file_size: fileSize || null,
     palette: Array.isArray(palette) && palette.length ? JSON.stringify(palette) : null,
+    content_hash: contentHash || null,
     created_at: Date.now(),
   };
   db.prepare(`
     INSERT INTO saves
-      (id, file_path, thumb_path, title, source_url, width, height, file_size, palette, created_at)
+      (id, file_path, thumb_path, title, source_url, width, height, file_size, palette, content_hash, created_at)
     VALUES
-      (@id, @file_path, @thumb_path, @title, @source_url, @width, @height, @file_size, @palette, @created_at)
+      (@id, @file_path, @thumb_path, @title, @source_url, @width, @height, @file_size, @palette, @content_hash, @created_at)
   `).run(record);
   return record;
+}
+
+// Find a non-trashed save by its SHA-256 hash. Returns the row or
+// undefined. Trashed dupes are ignored on purpose — re-saving a
+// previously-deleted image should produce a fresh entry rather than
+// silently linking the user to a record they tossed.
+function findSaveByHash(hash) {
+  if (!hash) return undefined;
+  const db = getDatabase();
+  return db
+    .prepare(
+      'SELECT * FROM saves WHERE content_hash = ? AND deleted_at IS NULL LIMIT 1',
+    )
+    .get(hash);
+}
+
+// Iterate rows that pre-date the content_hash column and fill in
+// hashes from disk. Called once after init from a background task —
+// libraries with thousands of images can take a few seconds, so we
+// chunk and yield to avoid stalling the main thread's event loop.
+async function backfillContentHashes({ batchSize = 50 } = {}) {
+  const db = getDatabase();
+  const rows = db
+    .prepare('SELECT id, file_path FROM saves WHERE content_hash IS NULL')
+    .all();
+  if (rows.length === 0) return 0;
+
+  const fs = require('node:fs');
+  const update = db.prepare('UPDATE saves SET content_hash = ? WHERE id = ?');
+  let filled = 0;
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const slice = rows.slice(i, i + batchSize);
+    const tx = db.transaction(() => {
+      for (const row of slice) {
+        try {
+          if (!fs.existsSync(row.file_path)) continue;
+          const buf = fs.readFileSync(row.file_path);
+          const hash = crypto.createHash('sha256').update(buf).digest('hex');
+          update.run(hash, row.id);
+          filled += 1;
+        } catch (err) {
+          console.error('[gatheros] hash backfill failed for', row.id, err.message);
+        }
+      }
+    });
+    tx();
+    // Yield so the renderer's startup work isn't starved.
+    await new Promise((r) => setImmediate(r));
+  }
+  return filled;
 }
 
 // ── Color search helpers ──────────────────────────────────────────────────
@@ -667,6 +729,8 @@ module.exports = {
   reopenDatabase,
   getDatabasePath,
   insertSave,
+  findSaveByHash,
+  backfillContentHashes,
   getAllSaves,
   getSave,
   deleteSave,

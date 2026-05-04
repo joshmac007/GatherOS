@@ -584,10 +584,10 @@ export default function App() {
     if (commit) commit();
   }, []);
 
-  const showActionToast = useCallback(({ message, onUndo, onCommit, durationMs = 5000 }) => {
+  const showActionToast = useCallback(({ message, onUndo, action, onCommit, durationMs = 5000 }) => {
     runPendingCommit();
     actionToastCommitRef.current = onCommit || null;
-    setActionToast({ message, onUndo });
+    setActionToast({ message, onUndo, action });
     actionToastTimerRef.current = setTimeout(() => {
       const commit = actionToastCommitRef.current;
       actionToastCommitRef.current = null;
@@ -1065,6 +1065,30 @@ export default function App() {
     setFocusedId(null);
     setSelected(new Set());
   }, [setView]);
+
+  // Duplicate-on-save toast. Main fires 'save:duplicate' with the
+  // existing row whenever a drop / capture / drop-url tries to add
+  // bytes that already live in the library. We show a brief toast
+  // with a Show button that switches to All and focuses that save.
+  useEffect(() => {
+    return window.moodmark.on('save:duplicate', (existing) => {
+      if (!existing?.id) return;
+      showActionToast({
+        message: 'Already in your library',
+        durationMs: 4500,
+        action: {
+          label: 'Show',
+          run: () => {
+            handleViewChange({ type: 'all' });
+            // Let the view-change reload settle before opening the
+            // focused panel; otherwise focusedIndex resolves against
+            // a stale displaySaves and the panel renders empty.
+            setTimeout(() => setFocusedId(existing.id), 80);
+          },
+        },
+      });
+    });
+  }, [showActionToast, handleViewChange]);
 
   const handleDeleteCollection = useCallback(async (id) => {
     await window.moodmark.collections.delete(id);
@@ -1697,6 +1721,21 @@ export default function App() {
           {actionToast.onUndo && (
             <button type="button" className="trash-toast-undo" onClick={handleActionToastUndo}>
               Undo
+            </button>
+          )}
+          {actionToast.action && (
+            <button
+              type="button"
+              className="trash-toast-undo"
+              onClick={() => {
+                if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
+                actionToastTimerRef.current = null;
+                actionToastCommitRef.current = null;
+                setActionToast(null);
+                actionToast.action.run();
+              }}
+            >
+              {actionToast.action.label}
             </button>
           )}
         </div>

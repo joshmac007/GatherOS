@@ -107,6 +107,7 @@ contextBridge.exposeInMainWorld('moodmark', {
   on: (channel, listener) => {
     const allowed = new Set([
       'save:created',
+      'save:duplicate',
       'save:updated',
       'save:indexing-start',
       'save:indexing-end',

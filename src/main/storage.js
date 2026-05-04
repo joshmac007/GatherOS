@@ -103,6 +103,22 @@ async function saveImageFromUrl(url) {
 }
 
 async function _writeImageFiles(buffer, ext, sharp) {
+  // Hash first. If the same bytes already live in the library
+  // (non-trashed), short-circuit — no file writes, no palette work.
+  // The caller (ipc/capture) is responsible for surfacing the
+  // duplicate to the user instead of inserting a new save.
+  const contentHash = crypto.createHash('sha256').update(buffer).digest('hex');
+  try {
+    const { findSaveByHash } = require('./db');
+    const existing = findSaveByHash(contentHash);
+    if (existing) {
+      return { duplicateOf: existing.id, existing };
+    }
+  } catch (err) {
+    // Pre-init or migration glitch — fall through and write as new.
+    console.warn('[gatheros] dedup lookup failed, treating as new:', err.message);
+  }
+
   const id = crypto.randomUUID();
   const filePath = path.join(getImagesDir(), `${id}.${ext}`);
   const thumbPath = path.join(getThumbsDir(), `${id}.jpg`);
@@ -130,6 +146,7 @@ async function _writeImageFiles(buffer, ext, sharp) {
     height: meta.height || null,
     fileSize: buffer.length,
     palette,
+    contentHash,
   };
 }
 

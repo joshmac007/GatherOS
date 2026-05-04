@@ -32,7 +32,7 @@ const {
   captureWindow,
 } = require('./capture');
 const { showToast, destroyToastWindow } = require('./toast-window');
-const { setSaveNotifier } = require('./notify');
+const { setSaveNotifier, setDuplicateNotifier } = require('./notify');
 const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
 const libraryRegistry = require('./library-registry');
@@ -100,6 +100,16 @@ function notifySaved(record) {
   // one feature and a key is configured. Errors are swallowed so the
   // save flow never blocks on it.
   maybeAIIndexInBackground(record);
+}
+
+// Surface a duplicate-on-save event to the renderer so it can show a
+// toast that links to the existing entry. Stays out of showToast and
+// the AI pipeline — nothing was actually saved.
+function notifyDuplicateInRenderer(existing) {
+  if (!existing) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('save:duplicate', existing);
+  }
 }
 
 // One vision call yields title + description. The description (plus
@@ -258,8 +268,12 @@ function createTray() {
     for (const file of files) {
       try {
         const imgData = await saveImageFromFile(file);
-        const record = insertSave(imgData);
-        notifySaved(record);
+        if (imgData.duplicateOf) {
+          notifyDuplicateInRenderer(imgData.existing);
+        } else {
+          const record = insertSave(imgData);
+          notifySaved(record);
+        }
       } catch (err) {
         console.error('Tray drop failed:', err);
       }
@@ -327,6 +341,7 @@ ipcMain.handle('library:switch', (_e, id) => {
 app.whenReady().then(() => {
   if (process.platform === 'darwin') nativeTheme.themeSource = 'light';
   setSaveNotifier(notifySaved);
+  setDuplicateNotifier(notifyDuplicateInRenderer);
   registerMoodmarkFileProtocol();
   // Bootstrap the library registry first — moves any pre-multi-
   // library data into a default library folder so the DB and image
@@ -339,6 +354,15 @@ app.whenReady().then(() => {
   createTray();
   registerCaptureHotkey();
   initUpdater(mainWindow);
+
+  // One-shot backfill of content_hash for rows that pre-date the
+  // dedup feature. Runs in the background so it doesn't block boot.
+  setTimeout(() => {
+    const { backfillContentHashes } = require('./db');
+    backfillContentHashes()
+      .then((n) => { if (n > 0) console.log(`[gatheros] Hashed ${n} legacy save(s) for dedup.`); })
+      .catch((err) => console.error('[gatheros] Hash backfill failed:', err));
+  }, 1500);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

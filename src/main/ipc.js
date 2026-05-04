@@ -25,7 +25,7 @@ const {
   captureFullscreen,
   captureWindow,
 } = require('./capture');
-const { notifySaved } = require('./notify');
+const { notifySaved, notifyDuplicate } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
 const { buildStarterPack } = require('./starterPack');
@@ -231,6 +231,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('saves:drop-file', async (_e, filePath) => {
     const imgData = await saveImageFromFile(filePath);
+    if (imgData.duplicateOf) {
+      notifyDuplicate(imgData.existing);
+      return imgData.existing;
+    }
     const record = insertSave(imgData);
     notifySaved(record);
     return record;
@@ -248,6 +252,10 @@ function registerIpcHandlers() {
     for (const url of candidates) {
       try {
         const imgData = await saveImageFromUrl(url);
+        if (imgData.duplicateOf) {
+          notifyDuplicate(imgData.existing);
+          return imgData.existing;
+        }
         const record = insertSave(imgData);
         notifySaved(record);
         return record;
@@ -509,6 +517,14 @@ function registerIpcHandlers() {
     for (const card of cards) {
       try {
         const imgData = await saveImageFromBuffer(card.buffer, card.ext);
+        if (imgData.duplicateOf) {
+          // Fresh-library install shouldn't hit this, but if it does
+          // just attach the existing save to the starter bucket and
+          // move on — no notification, this is a seed flow.
+          addSaveToCollection({ collectionId: collection.id, saveId: imgData.existing.id });
+          installed += 1;
+          continue;
+        }
         const record = insertSave({ ...imgData, title: card.title });
         addSaveToCollection({ collectionId: collection.id, saveId: record.id });
         notifySaved(record);

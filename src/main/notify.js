@@ -1,14 +1,28 @@
 // Tiny shared module so capture.js and ipc.js don't have to import the
 // main BrowserWindow setup just to fire a "save:created" + toast.
 
-let notifier = () => {};
+let savedNotifier = () => {};
+let duplicateNotifier = () => {};
 
 function setSaveNotifier(fn) {
-  notifier = typeof fn === 'function' ? fn : () => {};
+  savedNotifier = typeof fn === 'function' ? fn : () => {};
+}
+
+function setDuplicateNotifier(fn) {
+  duplicateNotifier = typeof fn === 'function' ? fn : () => {};
 }
 
 function notifySaved(record) {
-  notifier(record);
+  savedNotifier(record);
 }
 
-module.exports = { setSaveNotifier, notifySaved };
+function notifyDuplicate(existing) {
+  duplicateNotifier(existing);
+}
+
+module.exports = {
+  setSaveNotifier,
+  setDuplicateNotifier,
+  notifySaved,
+  notifyDuplicate,
+};
