@@ -56,7 +56,7 @@ function EraseIcon() {
   );
 }
 
-export default function SettingsModal({ open, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped, onKeySaved }) {
+export default function SettingsModal({ open, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped, onKeySaved, onReplayOnboarding }) {
   const [hasKey, setHasKey] = useState(false);
   const [draft, setDraft] = useState('');
   const [status, setStatus] = useState(STATUS_IDLE);
@@ -561,6 +561,18 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
                 View acknowledgments
               </button>
             </div>
+            {onReplayOnboarding && (
+              <div className={styles.aboutRow}>
+                <span className={styles.aboutLabel}>Welcome tour</span>
+                <button
+                  type="button"
+                  className={styles.aboutLink}
+                  onClick={onReplayOnboarding}
+                >
+                  Replay
+                </button>
+              </div>
+            )}
           </div>
           )}
         </section>

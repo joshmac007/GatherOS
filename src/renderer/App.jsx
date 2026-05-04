@@ -2029,6 +2029,14 @@ export default function App() {
         onConfiguredChange={setAiConfigured}
         onPrefsChange={setPrefs}
         onKeySaved={() => setAiUnlockedOpen(true)}
+        onReplayOnboarding={() => {
+          try { localStorage.removeItem('moodmark.onboardingTooltipsShown'); } catch {}
+          onboardingTriggeredRef.current = false;
+          setSettingsOpen(false);
+          // Brief delay so the modal's close transition finishes
+          // before the tour spotlight tries to anchor.
+          setTimeout(() => setOnboardingActive(true), 200);
+        }}
         onLibraryWiped={() => {
           // Reset focus + selection in case the user was viewing a
           // save mid-wipe, then re-pull collections/saves so the UI
