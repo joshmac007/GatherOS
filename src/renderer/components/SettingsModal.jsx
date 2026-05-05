@@ -69,6 +69,7 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [wipeState, setWipeState] = useState({ running: false, message: null });
   const [snapshots, setSnapshots] = useState([]);
   const [snapshotState, setSnapshotState] = useState({ running: false, message: null });
+  const [snapshotsListOpen, setSnapshotsListOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -547,32 +548,51 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
               {snapshotState.running ? 'Working…' : 'Snapshot now'}
             </button>
           </div>
-          {snapshots.length > 0 && (
-            <ul className={styles.snapshotList}>
-              {snapshots.map((s) => (
-                <li key={s.path} className={styles.snapshotRow}>
-                  <div className={styles.snapshotMeta}>
-                    <div className={styles.snapshotWhen}>
-                      {formatRelativeTimestamp(s.timestamp)}
-                    </div>
-                    <div className={styles.snapshotSub}>
-                      {new Date(s.timestamp).toLocaleString()}
-                      {' · '}{formatBackupSize(s.size)}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={styles.btn}
-                    disabled={snapshotState.running}
-                    onClick={() => handleRestoreSnapshot(s)}
-                  >
-                    Restore
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {snapshots.length === 0 && (
+          {snapshots.length > 0 ? (
+            <div className={styles.subDrawer}>
+              <button
+                type="button"
+                className={styles.subDrawerHeader}
+                onClick={() => setSnapshotsListOpen((v) => !v)}
+                aria-expanded={snapshotsListOpen}
+              >
+                <span>Available snapshots ({snapshots.length})</span>
+                <span
+                  className={[
+                    styles.drawerChevron,
+                    snapshotsListOpen && styles.drawerChevronOpen,
+                  ].filter(Boolean).join(' ')}
+                >
+                  <DrawerChevron />
+                </span>
+              </button>
+              {snapshotsListOpen && (
+                <ul className={styles.snapshotList}>
+                  {snapshots.map((s) => (
+                    <li key={s.path} className={styles.snapshotRow}>
+                      <div className={styles.snapshotMeta}>
+                        <span className={styles.snapshotWhen}>
+                          {formatRelativeTimestamp(s.timestamp)}
+                        </span>
+                        <span className={styles.snapshotSub}>
+                          {new Date(s.timestamp).toLocaleString()}
+                          {' · '}{formatBackupSize(s.size)}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className={styles.btn}
+                        disabled={snapshotState.running}
+                        onClick={() => handleRestoreSnapshot(s)}
+                      >
+                        Restore
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
             <div className={styles.sectionHint} style={{ marginTop: 4 }}>
               No snapshots yet. The first one will be taken automatically
               within a moment.

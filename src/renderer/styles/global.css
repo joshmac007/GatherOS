@@ -18,6 +18,10 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   user-select: none;
+  /* Avoid single-word widows on the last line of any paragraph the
+     app renders. Modern browsers (Safari 17.4+, Chrome 117+) honor
+     this; older ones ignore it gracefully. */
+  text-wrap: pretty;
 }
 
 input,

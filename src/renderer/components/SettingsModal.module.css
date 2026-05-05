@@ -389,23 +389,53 @@
 .snapshotMeta {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
 }
 
 .snapshotWhen {
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.snapshotSub {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.snapshotSub {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+/* Inline collapsible group inside a section drawer (e.g. the
+   Available snapshots list under Data → Backups). Lighter chrome
+   than the top-level drawerSection so the nesting reads. */
+.subDrawer {
+  margin-top: 4px;
 }
+
+.subDrawerHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.subDrawerHeader:hover { color: var(--text-primary); }
 
 .toggleRow {
   display: flex;
