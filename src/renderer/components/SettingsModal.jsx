@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
+import { History } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
 import PrivacyModal from './PrivacyModal.jsx';
@@ -530,19 +531,19 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           <div className={styles.divider} />
 
           <p className={styles.sectionHint}>
-            GatherOS automatically saves a daily snapshot of your library's
-            database. Image files are content-hashed and append-only on
-            disk, so only the database changes between sessions —
-            snapshotting it gives you point-in-time recovery without
-            taking up much space. The most recent {7} are kept.
+            GatherOS saves daily snapshots of your library so you can
+            restore if necessary.
           </p>
           <div className={styles.actions} style={{ justifyContent: 'flex-start', marginBottom: 6 }}>
             <button
               type="button"
-              className={styles.btn}
+              className={`${styles.btn} ${styles.btnWithIcon}`}
               onClick={handleSnapshotNow}
               disabled={snapshotState.running}
             >
+              <span className={styles.btnIcon}>
+                <History size={14} strokeWidth={1.7} aria-hidden="true" />
+              </span>
               {snapshotState.running ? 'Working…' : 'Snapshot now'}
             </button>
           </div>
