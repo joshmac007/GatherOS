@@ -1,5 +1,6 @@
 appId: com.gatheros.app
 productName: GatherOS
+afterPack: scripts/strip-gendered-locales.js
 afterSign: scripts/notarize.js
 directories:
   output: dist/build
