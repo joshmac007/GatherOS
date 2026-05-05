@@ -18,6 +18,7 @@ import {
   Pencil,
   Shuffle,
   ChevronRight,
+  Megaphone,
 } from 'lucide-react';
 
 const SIDEBAR_ICON = { strokeWidth: 1.6, 'aria-hidden': true };
@@ -25,6 +26,7 @@ const GridIcon = () => <LayoutGrid {...SIDEBAR_ICON} />;
 const CollapseSidebarIcon = () => <PanelLeft {...SIDEBAR_ICON} />;
 const SettingsGearIcon = () => <Settings {...SIDEBAR_ICON} />;
 const KeyboardIcon = () => <Keyboard {...SIDEBAR_ICON} />;
+const MegaphoneIcon = () => <Megaphone {...SIDEBAR_ICON} />;
 // Buckets read as folders in the sidebar — the previous bespoke
 // pail icon doesn't have a clean Lucide equivalent, FolderClosed is
 // the closest semantic match.
@@ -146,6 +148,8 @@ export default function Sidebar({
   onUpload,
   onOpenSettings,
   onOpenShortcuts,
+  onOpenReleaseNotes,
+  releaseNotesUnseen = false,
   createCollectionSignal,
 }) {
   const [creating, setCreating] = useState(false);
@@ -784,8 +788,22 @@ export default function Sidebar({
         )}
       </nav>
 
-      {(onOpenSettings || onOpenShortcuts) && (
+      {(onOpenSettings || onOpenShortcuts || onOpenReleaseNotes) && (
         <div className={styles.footer}>
+          {onOpenReleaseNotes && (
+            <button
+              type="button"
+              className={styles.footerBtn}
+              onClick={onOpenReleaseNotes}
+              title="What's new in this release"
+            >
+              <span className={styles.footerIcon}><MegaphoneIcon /></span>
+              <span className={styles.footerLabel}>What's New</span>
+              {releaseNotesUnseen && (
+                <span className={styles.footerBadge} aria-label="New release notes available" />
+              )}
+            </button>
+          )}
           {onOpenSettings && (
             <button
               type="button"

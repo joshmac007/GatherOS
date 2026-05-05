@@ -274,6 +274,30 @@ export default function App() {
   const [aiUnlockedOpen, setAiUnlockedOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [whatsNewNotes, setWhatsNewNotes] = useState(null);
+  // Tracks the last version whose release notes the user explicitly
+  // clicked through via the sidebar's "What's New" button. Drives the
+  // small dot on that footer item: present whenever there's a notes
+  // block for the current app version that this user hasn't viewed
+  // yet. Separate from moodmark.lastSeenVersion (which advances on
+  // every launch regardless of whether the auto-modal shows).
+  const [lastViewedNotesVersion, setLastViewedNotesVersion] = useState(() => {
+    try { return localStorage.getItem('moodmark.lastViewedReleaseNotesVersion') || null; }
+    catch { return null; }
+  });
+  const currentAppVersion = window.moodmark?.app?.version || null;
+  const latestReleaseNotes = RELEASE_NOTES[0] || null;
+  const releaseNotesUnseen = !!latestReleaseNotes
+    && !!currentAppVersion
+    && latestReleaseNotes.version === currentAppVersion
+    && lastViewedNotesVersion !== currentAppVersion;
+  const handleOpenReleaseNotes = useCallback(() => {
+    if (!latestReleaseNotes) return;
+    setWhatsNewNotes(latestReleaseNotes);
+    if (currentAppVersion) {
+      try { localStorage.setItem('moodmark.lastViewedReleaseNotesVersion', currentAppVersion); } catch {}
+      setLastViewedNotesVersion(currentAppVersion);
+    }
+  }, [latestReleaseNotes, currentAppVersion]);
   // Lightweight first-launch tooltips — gate on the localStorage flag
   // and only start once the welcome modal has closed and the library
   // has finished its initial load. Once-per-mount guard via ref so the
@@ -1652,6 +1676,8 @@ export default function App() {
             onUpload={handleUploadClick}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenShortcuts={() => setShortcutsOpen(true)}
+            onOpenReleaseNotes={handleOpenReleaseNotes}
+            releaseNotesUnseen={releaseNotesUnseen}
             createCollectionSignal={createCollectionSignal}
           />
         )}

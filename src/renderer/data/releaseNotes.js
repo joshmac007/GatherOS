@@ -20,6 +20,31 @@ import {
 
 export const RELEASE_NOTES = [
   {
+    version: '0.1.20',
+    items: [
+      {
+        Icon: CardsIcon,
+        title: 'Find similar from any image',
+        description: 'Right-click a save and pick "Find similar" — works without an OpenAI key by falling back to color palette comparisons.',
+      },
+      {
+        Icon: WindowIcon,
+        title: 'Capture window from the menu bar',
+        description: 'Three new menu-bar capture options: full screen, a single window, or the existing drag-region selection.',
+      },
+      {
+        Icon: GlassIcon,
+        title: 'Duplicate detection on save',
+        description: 'GatherOS now hashes every save and surfaces an "Already in your library" toast with a link to the existing entry.',
+      },
+      {
+        Icon: PermissionIcon,
+        title: 'Drag images onto the Dock icon',
+        description: 'Drop image files (or links from Chrome) directly onto the GatherOS Dock icon to add them to the active library.',
+      },
+    ],
+  },
+  {
     version: '0.1.9',
     items: [
       {

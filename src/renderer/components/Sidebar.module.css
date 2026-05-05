@@ -64,6 +64,7 @@
 }
 
 .footerBtn {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -101,6 +102,19 @@
 .footerLabel {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* Subtle blue dot to the right of the "What's New" footer label,
+   shown when the user is on a newer version than the last one
+   they explicitly viewed via this button. Disappears the moment
+   they click it. */
+.footerBadge {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .sectionHeader {
