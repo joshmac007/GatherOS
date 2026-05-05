@@ -146,6 +146,7 @@ export default function Sidebar({
   onReorderCollections,
   onAddSavesToBucket,
   onExternalDropToBucket,
+  onSetAppDragging,
   onToggleCollapse,
   onUpload,
   onOpenSettings,
@@ -495,6 +496,16 @@ export default function Sidebar({
     e.dataTransfer.dropEffect = 'copy';
     if (saveDropTargetId !== bucketId) setSaveDropTargetId(bucketId);
 
+    // External drag is over a folder row → suppress the app-shell's
+    // catch-all "Drop to save" overlay so the user sees a clear,
+    // single drop affordance (the highlighted row). stopPropagation
+    // prevents the app-shell's bubbling onDragOver from re-flipping
+    // the overlay back on as the cursor moves over the sidebar.
+    if (external) {
+      e.stopPropagation();
+      onSetAppDragging?.(false);
+    }
+
     // Spring-load (auto-switch view after a hover) only fires for
     // in-app save drags. External file drops arrive without the
     // user having committed to a folder yet — auto-switching the
@@ -554,6 +565,9 @@ export default function Sidebar({
       // off to the parent.
       const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'));
       const urls = files.length === 0 ? extractDropImageUrls(e.dataTransfer) : [];
+      // App-shell's onDrop won't fire (we stopPropagation), so we
+      // explicitly clear the overlay flag here.
+      onSetAppDragging?.(false);
       onExternalDropToBucket?.(bucketId, { files, urls });
     }
   }
@@ -822,7 +836,10 @@ export default function Sidebar({
                 onDragLeave={handleSaveDragLeave}
                 onDragEnd={handleDragEnd}
                 onDrop={(e) => {
-                  if (isSaveDrag(e)) {
+                  // In-app save-card drag → add to folder
+                  // External file/URL drag → save + add to folder
+                  // Folder-reorder drag → handleDrop (existing)
+                  if (isSaveDrag(e) || isExternalImageDrag(e)) {
                     handleSaveDrop(e, c.id);
                   } else {
                     handleDrop(e, c.id);

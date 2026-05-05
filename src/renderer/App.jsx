@@ -1719,6 +1719,7 @@ export default function App() {
             onReorderCollections={handleReorderCollections}
             onAddSavesToBucket={handleAddSavesToBucket}
             onExternalDropToBucket={handleExternalDropToBucket}
+            onSetAppDragging={setDragging}
             onToggleCollapse={toggleSidebar}
             onUpload={handleUploadClick}
             onOpenSettings={() => setSettingsOpen(true)}
