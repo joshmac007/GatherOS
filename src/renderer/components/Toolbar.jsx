@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Search,
   Sparkles,
@@ -8,6 +8,8 @@ import {
   LayoutGrid,
   AlignJustify,
   LayoutDashboard,
+  X as LucideX,
+  Clock as LucideClock,
 } from 'lucide-react';
 import styles from './Toolbar.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -26,12 +28,165 @@ const MasonryIcon = () => <LayoutDashboard {...ICON} />;
 const ListViewIcon = () => <AlignJustify {...ICON} />;
 const GridLargeIcon = () => <LayoutGrid className={styles.zoomIcon} {...ICON} />;
 
+// Search input + clear-X + recent-searches dropdown. Pulled into its
+// own component so the focus/blur/dropdown state stays local and
+// doesn't churn the rest of the Toolbar's render tree.
+function SearchField({
+  search,
+  onSearchChange,
+  searchInputRef,
+  semanticSearchActive,
+  onOpenQuickSwitcher,
+  recentSearches,
+  onRecordSearch,
+  onClearRecentSearches,
+}) {
+  const [focused, setFocused] = useState(false);
+  const wrapRef = useRef(null);
+
+  // Close the dropdown if the user clicks outside the input wrapper.
+  // The blur listener handles tabbing out; this catches clicks on
+  // grid cards / sidebar / etc. that don't shift focus through the
+  // browser's blur path (e.g. mousedown on a button that
+  // immediately re-focuses).
+  useEffect(() => {
+    if (!focused) return;
+    function onPointerDown(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setFocused(false);
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [focused]);
+
+  const showRecents = focused && !search && recentSearches.length > 0;
+  const showClearX = !!search;
+
+  function applyRecent(term) {
+    onSearchChange(term);
+    setFocused(false);
+    searchInputRef?.current?.focus();
+  }
+
+  return (
+    <div
+      ref={wrapRef}
+      className={styles.searchWrap}
+      data-onboarding="search"
+    >
+      <span
+        className={[styles.searchIcon, semanticSearchActive && styles.searchIconAi]
+          .filter(Boolean)
+          .join(' ')}
+        title={semanticSearchActive ? 'Visual search (AI)' : undefined}
+      >
+        {semanticSearchActive ? <SearchSparkleIcon /> : <SearchIcon />}
+      </span>
+      <input
+        ref={searchInputRef}
+        className={styles.search}
+        type="search"
+        placeholder={semanticSearchActive ? 'Describe what you’re looking for…' : 'Search by title or tag'}
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          // Record the search after a successful "completed" search:
+          // the user typed something and is moving on. The recents
+          // dropdown handler closes the popover separately, so we
+          // don't fight with click-on-recent.
+          if (search && search.trim()) onRecordSearch?.(search);
+        }}
+        onKeyDown={(e) => {
+          // Escape always exits the field. When the input is empty
+          // we just blur; when it has content we clear-then-blur on
+          // a single keystroke (native <input type="search"> only
+          // clears, leaving focus behind).
+          if (e.key === 'Escape') {
+            if (search) onSearchChange('');
+            e.currentTarget.blur();
+            setFocused(false);
+          }
+        }}
+      />
+
+      {showClearX && (
+        <button
+          type="button"
+          className={styles.clearSearchBtn}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            onSearchChange('');
+            searchInputRef?.current?.focus();
+          }}
+          title="Clear search"
+          aria-label="Clear search"
+        >
+          <LucideX size={12} strokeWidth={2.2} aria-hidden="true" />
+        </button>
+      )}
+
+      {!showClearX && onOpenQuickSwitcher && (
+        <button
+          type="button"
+          className={styles.qkChip}
+          onClick={onOpenQuickSwitcher}
+          title="Quick switcher — jump to any folder, tag, or save"
+        >
+          <span className={styles.qkChipKey}>⌘</span>
+          <span className={styles.qkChipKey}>K</span>
+        </button>
+      )}
+
+      {showRecents && (
+        <div className={styles.recentsDropdown} role="listbox">
+          <div className={styles.recentsHeader}>
+            <span>Recent searches</span>
+            {onClearRecentSearches && (
+              <button
+                type="button"
+                className={styles.recentsClear}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onClearRecentSearches();
+                  searchInputRef?.current?.focus();
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {recentSearches.map((term) => (
+            <button
+              type="button"
+              key={term}
+              className={styles.recentsItem}
+              role="option"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => applyRecent(term)}
+            >
+              <span className={styles.recentsIcon}>
+                <LucideClock size={13} strokeWidth={1.6} aria-hidden="true" />
+              </span>
+              <span className={styles.recentsTerm}>{term}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const COLS_MIN = 2;
 const COLS_MAX = 8;
 
 export default function Toolbar({
   search,
   onSearchChange,
+  recentSearches = [],
+  onRecordSearch,
+  onClearRecentSearches,
   columns,
   onColumnsChange,
   onToggleSidebar,
@@ -78,45 +233,16 @@ export default function Toolbar({
         )}
       </div>
 
-      <div className={styles.searchWrap} data-onboarding="search">
-        <span
-          className={[styles.searchIcon, semanticSearchActive && styles.searchIconAi]
-            .filter(Boolean)
-            .join(' ')}
-          title={semanticSearchActive ? 'Visual search (AI)' : undefined}
-        >
-          {semanticSearchActive ? <SearchSparkleIcon /> : <SearchIcon />}
-        </span>
-        <input
-          ref={searchInputRef}
-          className={styles.search}
-          type="search"
-          placeholder={semanticSearchActive ? 'Describe what you’re looking for…' : 'Search by title or tag'}
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          onKeyDown={(e) => {
-            // Escape always exits the field. When the input is empty
-            // we just blur; when it has content we clear-then-blur on
-            // a single keystroke (native <input type="search"> only
-            // clears, leaving focus behind).
-            if (e.key === 'Escape') {
-              if (search) onSearchChange('');
-              e.currentTarget.blur();
-            }
-          }}
-        />
-        {onOpenQuickSwitcher && (
-          <button
-            type="button"
-            className={styles.qkChip}
-            onClick={onOpenQuickSwitcher}
-            title="Quick switcher — jump to any folder, tag, or save"
-          >
-            <span className={styles.qkChipKey}>⌘</span>
-            <span className={styles.qkChipKey}>K</span>
-          </button>
-        )}
-      </div>
+      <SearchField
+        search={search}
+        onSearchChange={onSearchChange}
+        searchInputRef={searchInputRef}
+        semanticSearchActive={semanticSearchActive}
+        onOpenQuickSwitcher={onOpenQuickSwitcher}
+        recentSearches={recentSearches}
+        onRecordSearch={onRecordSearch}
+        onClearRecentSearches={onClearRecentSearches}
+      />
 
       <div className={styles.right}>
         {similarTo && (

@@ -7,6 +7,7 @@ const {
   nativeImage,
   nativeTheme,
   protocol,
+  shell,
 } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -461,6 +462,22 @@ ipcMain.on('app:get-version', (event) => {
 // it can refetch every cached collection / save.
 
 ipcMain.handle('library:list', () => libraryRegistry.listLibraries());
+
+// Reveal the currently active library's folder in Finder. Useful for
+// manual backups and for users who want to inspect what GatherOS has
+// stored on disk. Resolved per-call so library switches are picked up.
+ipcMain.handle('library:reveal-active', () => {
+  try {
+    const root = libraryRegistry.getActiveLibraryRoot();
+    if (!root) return { ok: false, reason: 'no-active-library' };
+    return shell.openPath(root).then((err) => {
+      if (err) return { ok: false, reason: err };
+      return { ok: true, path: root };
+    });
+  } catch (err) {
+    return { ok: false, reason: err?.message || String(err) };
+  }
+});
 
 ipcMain.handle('library:previews', (_e, payload = {}) => {
   const id = typeof payload === 'string' ? payload : payload.id;

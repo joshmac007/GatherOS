@@ -309,6 +309,132 @@
   transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
 }
 
+/* Replaces the ⌘K chip when the input has text. Same right-edge
+   anchor so the visual position is identical — the user just sees
+   the affordance change from "open quick switcher" to "clear what
+   I just typed." */
+.clearSearchBtn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.08);
+  border: none;
+  border-radius: 50%;
+  color: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.clearSearchBtn:hover {
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(0, 0, 0, 0.78);
+}
+
+/* Recent-searches popover. Mounts when the search input is focused
+   AND empty AND has any history. Anchored below the input via
+   .searchWrap's position: relative. */
+.recentsDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  padding: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.86) 100%);
+  backdrop-filter: blur(40px) saturate(1.6);
+  -webkit-backdrop-filter: blur(40px) saturate(1.6);
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  border-radius: 9px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 4px 14px rgba(0, 0, 0, 0.08),
+    0 16px 36px rgba(0, 0, 0, 0.12);
+  animation: recentsIn 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes recentsIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.recentsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 4px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.recentsClear {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 100ms ease;
+}
+
+.recentsClear:hover {
+  color: var(--text-secondary);
+}
+
+.recentsItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background 100ms ease;
+}
+
+.recentsItem:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.recentsIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.recentsTerm {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .qkChip:hover {
   background: rgba(10, 132, 255, 0.10);
   border-color: rgba(10, 132, 255, 0.30);

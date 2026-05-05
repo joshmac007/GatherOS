@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
+import { useRecentSearches } from './hooks/useRecentSearches.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
 import { seededShuffle } from './lib/shuffle.js';
@@ -134,6 +135,7 @@ export default function App() {
   // Cmd+Z undo stack. Mutations push a label + reversal closure; the
   // global keydown handler at the end of this component pops & runs.
   const undoStack = useUndoStack();
+  const recentSearches = useRecentSearches();
 
   // Per-view shuffle seeds. Persisted to localStorage so a shuffle
   // sticks across navigation, search, sort, and full app restarts —
@@ -1739,6 +1741,9 @@ export default function App() {
               <Toolbar
                 search={search}
                 onSearchChange={setSearch}
+                recentSearches={recentSearches.items}
+                onRecordSearch={recentSearches.recordSearch}
+                onClearRecentSearches={recentSearches.clearAll}
                 columns={gridColumns}
                 onColumnsChange={setGridColumns}
                 layout={gridLayout}
