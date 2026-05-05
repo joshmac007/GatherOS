@@ -27,6 +27,7 @@ import {
   MinusCircle,
   ArrowRightFromLine,
   ArrowUp,
+  Clipboard,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -48,6 +49,7 @@ const RestoreIcon = () => <RotateCcw {...ICON} />;
 const SimilarIcon = () => <Copy {...ICON} />;
 const MinusCircleIcon = () => <MinusCircle {...ICON} />;
 const SortFabIcon = () => <ArrowRightFromLine {...ICON} />;
+const ClipboardIcon = () => <Clipboard {...ICON} />;
 
 function pickLargestFromSrcset(srcset) {
   if (!srcset) return null;
@@ -819,6 +821,28 @@ export default function App() {
       });
     }
 
+    // Copy image bytes to the system clipboard so the user can
+    // paste into Figma / Slack / Mail / etc. Single-save only — the
+    // clipboard holds one image at a time.
+    if (!isMulti) {
+      const anchor = saves.find((s) => s.id === saveId);
+      if (anchor?.file_path) {
+        if (items.length > 0) items.push({ type: 'separator' });
+        items.push({
+          label: 'Copy image',
+          icon: <ClipboardIcon />,
+          onClick: async () => {
+            const result = await window.moodmark.image.copyToClipboard(anchor.file_path);
+            if (result?.ok) {
+              showActionToast({ message: 'Copied to clipboard', durationMs: 1400 });
+            } else {
+              showActionToast({ message: 'Could not copy image', durationMs: 2400 });
+            }
+          },
+        });
+      }
+    }
+
     // Delete: soft-delete with the same undo toast as the bulk path.
     if (items.length > 0) items.push({ type: 'separator' });
     items.push({
@@ -839,7 +863,7 @@ export default function App() {
       },
     });
     return items;
-  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack, similarTo, setSimilarTo]);
+  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack, similarTo, setSimilarTo, showActionToast]);
 
   const handleCardContextMenu = useCallback(async (saveId, x, y) => {
     // Resolve the bucket memberships used to filter the Add-to-Bucket

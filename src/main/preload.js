@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('moodmark', {
     openInPreview: (filePath) => ipcRenderer.invoke('image:open-in-preview', filePath),
     export: (filePath, defaultName) =>
       ipcRenderer.invoke('image:export', { filePath, defaultName }),
+    copyToClipboard: (filePath) => ipcRenderer.invoke('image:copy-to-clipboard', filePath),
   },
   shell: {
     openUrl: (url) => ipcRenderer.invoke('shell:open-url', url),

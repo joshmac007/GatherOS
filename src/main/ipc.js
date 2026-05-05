@@ -1,4 +1,4 @@
-const { ipcMain, shell, dialog, BrowserWindow, nativeImage, app } = require('electron');
+const { ipcMain, shell, dialog, BrowserWindow, nativeImage, clipboard, app } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -318,6 +318,28 @@ function registerIpcHandlers() {
   ipcMain.handle('image:open-in-preview', (_e, filePath) => {
     shell.openPath(filePath);
     return { ok: true };
+  });
+
+  // Write the actual image bytes to the system clipboard so the user
+  // can paste into Figma, Slack, Mail, etc. Uses nativeImage rather
+  // than a file URL — most apps treat that as a real image paste,
+  // not a link. Returns { ok: false } silently on missing files so
+  // a stale UI doesn't crash the renderer.
+  ipcMain.handle('image:copy-to-clipboard', (_e, filePath) => {
+    try {
+      if (!filePath || !fs.existsSync(filePath)) {
+        return { ok: false, reason: 'file-missing' };
+      }
+      const img = nativeImage.createFromPath(filePath);
+      if (img.isEmpty()) {
+        return { ok: false, reason: 'unreadable' };
+      }
+      clipboard.writeImage(img);
+      return { ok: true };
+    } catch (err) {
+      console.error('[gatheros] copy-to-clipboard failed:', err);
+      return { ok: false, reason: err?.message || String(err) };
+    }
   });
 
   ipcMain.handle('shell:open-url', (_e, url) => {
