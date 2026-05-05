@@ -76,6 +76,11 @@ contextBridge.exposeInMainWorld('moodmark', {
     wipeAll: () => ipcRenderer.invoke('library:wipe-all'),
     revealActive: () => ipcRenderer.invoke('library:reveal-active'),
   },
+  backup: {
+    list: () => ipcRenderer.invoke('backup:list'),
+    snapshot: () => ipcRenderer.invoke('backup:snapshot'),
+    restore: (snapshotPath) => ipcRenderer.invoke('backup:restore', snapshotPath),
+  },
   libraries: {
     list: () => ipcRenderer.invoke('library:list'),
     create: (name) => ipcRenderer.invoke('library:create', name),

@@ -555,6 +555,23 @@ app.whenReady().then(() => {
       .catch((err) => console.error('[gatheros] Hash backfill failed:', err));
   }, 1500);
 
+  // Daily auto-snapshot of the SQLite DB. No-ops if the latest
+  // snapshot is <24h old; otherwise produces a fresh one and prunes
+  // older ones beyond the keep-N cap. Image files are append-only
+  // (content-hash-named) so we don't include them — the DB is the
+  // only thing that meaningfully changes between sessions.
+  setTimeout(() => {
+    try {
+      const { maybeSnapshotOnLaunch } = require('./backup');
+      const result = maybeSnapshotOnLaunch();
+      if (result?.ok) {
+        console.log('[backup] auto-snapshot taken at', new Date(result.timestamp).toISOString());
+      }
+    } catch (err) {
+      console.error('[backup] launch snapshot failed:', err);
+    }
+  }, 2500);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });

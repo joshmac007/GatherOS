@@ -466,6 +466,34 @@ function registerIpcHandlers() {
     }
   });
 
+  // Local DB-only backup snapshots. Powers Settings → Data → Backups.
+  ipcMain.handle('backup:list', () => {
+    const { listSnapshots } = require('./backup');
+    return listSnapshots();
+  });
+  ipcMain.handle('backup:snapshot', () => {
+    const { snapshotLibraryDb } = require('./backup');
+    return snapshotLibraryDb();
+  });
+  ipcMain.handle('backup:restore', (_e, snapshotPath) => {
+    const { restoreFromSnapshot } = require('./backup');
+    const result = restoreFromSnapshot(snapshotPath);
+    if (result?.ok) {
+      // Same renderer-refresh handshake we use for library:switch —
+      // every cached collection / save needs to refetch from the
+      // rolled-back DB.
+      try {
+        const { BrowserWindow } = require('electron');
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('library:switched', { reason: 'restore' });
+          }
+        }
+      } catch {}
+    }
+    return result;
+  });
+
   // Full library backup as a single .zip — includes the SQLite DB,
   // images/, and thumbs/. Uses the macOS `zip` CLI (built in) so no
   // new node deps. Returns { ok, savedPath, count? } or { canceled }.

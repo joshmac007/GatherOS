@@ -365,6 +365,48 @@
   margin: 16px 0;
 }
 
+/* Backup snapshot list inside the Data drawer. Each row shows a
+   relative timestamp, the absolute date, and a Restore button. */
+.snapshotList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.snapshotRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.025);
+  border: 0.5px solid rgba(0, 0, 0, 0.05);
+}
+
+.snapshotMeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.snapshotWhen {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.snapshotSub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 .toggleRow {
   display: flex;
   align-items: center;

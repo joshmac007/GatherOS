@@ -1138,6 +1138,17 @@ export default function App() {
   // Tray-menu "Recent saves" entry click. Main fires 'focus:save'
   // with the id; mirror the duplicate-toast flow — switch to All so
   // the record is in displaySaves, then open it in the focused view.
+  // Library swap (user switch OR backup restore) → repaint against
+  // the new DB content. Triggered by main broadcasting library:switched.
+  useEffect(() => {
+    return window.moodmark.on('library:switched', () => {
+      setFocusedId(null);
+      setSelected(new Set());
+      loadCollections();
+      reload();
+    });
+  }, [loadCollections, reload]);
+
   useEffect(() => {
     return window.moodmark.on('focus:save', (id) => {
       if (!id) return;

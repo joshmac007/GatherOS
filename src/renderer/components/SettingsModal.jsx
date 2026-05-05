@@ -66,6 +66,8 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
   const [exportState, setExportState] = useState({ running: false, message: null });
   const [wipeState, setWipeState] = useState({ running: false, message: null });
+  const [snapshots, setSnapshots] = useState([]);
+  const [snapshotState, setSnapshotState] = useState({ running: false, message: null });
   const [aiOpen, setAiOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -164,6 +166,47 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
     setPrefs(updated);
     await window.moodmark.settings.setPref(name, next);
     onPrefsChange?.(updated);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    window.moodmark.backup.list().then((rows) => {
+      if (!cancelled) setSnapshots(Array.isArray(rows) ? rows : []);
+    });
+    return () => { cancelled = true; };
+  }, [open]);
+
+  async function handleSnapshotNow() {
+    if (snapshotState.running) return;
+    setSnapshotState({ running: true, message: null });
+    const result = await window.moodmark.backup.snapshot();
+    const rows = await window.moodmark.backup.list();
+    setSnapshots(Array.isArray(rows) ? rows : []);
+    setSnapshotState({
+      running: false,
+      message: result?.ok ? 'Snapshot saved.' : `Snapshot failed: ${result?.reason || 'unknown'}`,
+    });
+  }
+
+  async function handleRestoreSnapshot(snapshot) {
+    const stamp = formatRelativeTimestamp(snapshot.timestamp);
+    const ok = window.confirm(
+      `Restore the library from the snapshot taken ${stamp}?\n\n`
+      + 'Saves added since that snapshot will disappear from the library. '
+      + 'The image files on disk are untouched, so nothing is permanently '
+      + 'lost — re-importing those files would resurface them.\n\n'
+      + 'A fresh snapshot of the current state is taken first as a safety net.',
+    );
+    if (!ok) return;
+    setSnapshotState({ running: true, message: null });
+    const result = await window.moodmark.backup.restore(snapshot.path);
+    const rows = await window.moodmark.backup.list();
+    setSnapshots(Array.isArray(rows) ? rows : []);
+    setSnapshotState({
+      running: false,
+      message: result?.ok ? 'Restored. Reloading…' : `Restore failed: ${result?.reason || 'unknown'}`,
+    });
   }
 
   useEffect(() => {
@@ -487,6 +530,62 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
           <div className={styles.divider} />
 
           <p className={styles.sectionHint}>
+            GatherOS automatically saves a daily snapshot of your library's
+            database. Image files are content-hashed and append-only on
+            disk, so only the database changes between sessions —
+            snapshotting it gives you point-in-time recovery without
+            taking up much space. The most recent {7} are kept.
+          </p>
+          <div className={styles.actions} style={{ justifyContent: 'flex-start', marginBottom: 6 }}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={handleSnapshotNow}
+              disabled={snapshotState.running}
+            >
+              {snapshotState.running ? 'Working…' : 'Snapshot now'}
+            </button>
+          </div>
+          {snapshots.length > 0 && (
+            <ul className={styles.snapshotList}>
+              {snapshots.map((s) => (
+                <li key={s.path} className={styles.snapshotRow}>
+                  <div className={styles.snapshotMeta}>
+                    <div className={styles.snapshotWhen}>
+                      {formatRelativeTimestamp(s.timestamp)}
+                    </div>
+                    <div className={styles.snapshotSub}>
+                      {new Date(s.timestamp).toLocaleString()}
+                      {' · '}{formatBackupSize(s.size)}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.btn}
+                    disabled={snapshotState.running}
+                    onClick={() => handleRestoreSnapshot(s)}
+                  >
+                    Restore
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {snapshots.length === 0 && (
+            <div className={styles.sectionHint} style={{ marginTop: 4 }}>
+              No snapshots yet. The first one will be taken automatically
+              within a moment.
+            </div>
+          )}
+          {snapshotState.message && (
+            <div className={styles.sectionHint} style={{ marginTop: 8 }}>
+              {snapshotState.message}
+            </div>
+          )}
+
+          <div className={styles.divider} />
+
+          <p className={styles.sectionHint}>
             Erase your entire library — every save, folder, and tag. The
             underlying image files are deleted from disk. This cannot be
             undone.
@@ -590,6 +689,33 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
     </div>,
     document.body,
   );
+}
+
+// "5 minutes ago" / "2 hours ago" / "3 days ago" — used for the
+// backup snapshot list so each row reads at a glance.
+function formatRelativeTimestamp(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  const min = 60 * 1000;
+  const hour = 60 * min;
+  const day = 24 * hour;
+  if (diff < min) return 'just now';
+  if (diff < hour) {
+    const m = Math.max(1, Math.round(diff / min));
+    return `${m} minute${m === 1 ? '' : 's'} ago`;
+  }
+  if (diff < day) {
+    const h = Math.round(diff / hour);
+    return `${h} hour${h === 1 ? '' : 's'} ago`;
+  }
+  const d = Math.round(diff / day);
+  return `${d} day${d === 1 ? '' : 's'} ago`;
+}
+
+function formatBackupSize(bytes) {
+  if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function reasonToMessage(reason) {
