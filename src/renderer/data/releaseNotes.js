@@ -20,6 +20,31 @@ import {
 
 export const RELEASE_NOTES = [
   {
+    version: '0.1.21',
+    items: [
+      {
+        Icon: PermissionIcon,
+        title: 'Drop images directly into folders',
+        description: 'Drag a file from Finder, an image from Chrome, or a URL onto any folder in the sidebar — it saves and lands in that folder in one step.',
+      },
+      {
+        Icon: CardsIcon,
+        title: 'Lasso to select',
+        description: 'Drag on the empty grid background to draw a selection rectangle. Cards highlight live as the rectangle passes over them.',
+      },
+      {
+        Icon: WindowIcon,
+        title: 'Drag folders to nest (and back out)',
+        description: 'Drop a folder onto another folder’s middle to nest it as a child. Drop on a top-level row to promote it back out.',
+      },
+      {
+        Icon: GlassIcon,
+        title: 'Daily backup snapshots',
+        description: 'GatherOS quietly snapshots your library every day so you can roll back from Settings → Data if anything ever goes sideways.',
+      },
+    ],
+  },
+  {
     version: '0.1.20',
     items: [
       {
