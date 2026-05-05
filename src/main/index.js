@@ -84,6 +84,44 @@ async function drainDockOpenQueue() {
   }
 }
 
+// Same shape for URL drops onto the Dock — Chrome and other browsers
+// drag images as URLs rather than promised files in many flows. We
+// fetch + persist via the existing saveImageFromUrl pipeline so the
+// dedup, palette, and AI hooks fire just like a drag-into-window.
+const dockOpenUrlQueue = [];
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return;
+  dockOpenUrlQueue.push(url);
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  drainDockOpenUrlQueue();
+});
+
+async function drainDockOpenUrlQueue() {
+  if (!dockOpenReady || dockOpenUrlQueue.length === 0) return;
+  const { saveImageFromUrl } = require('./storage');
+  const { insertSave } = require('./db');
+  while (dockOpenUrlQueue.length > 0) {
+    const url = dockOpenUrlQueue.shift();
+    try {
+      const imgData = await saveImageFromUrl(url);
+      if (imgData.duplicateOf) {
+        notifyDuplicateInRenderer(imgData.existing);
+      } else {
+        const record = insertSave(imgData);
+        notifySaved(record);
+      }
+    } catch (err) {
+      console.error('[gatheros] Dock-drop URL save failed:', url, err?.message || err);
+    }
+  }
+}
+
 // Custom file protocol so renderers loaded over http://localhost (and the
 // packaged app loaded from file://) can both read images out of the userData
 // directory by absolute path.
@@ -485,10 +523,11 @@ app.whenReady().then(() => {
   registerCaptureHotkey();
   initUpdater(mainWindow);
 
-  // Storage + DB are now ready; drain any Dock-drop paths that
-  // accumulated during launch (and unblock subsequent drops).
+  // Storage + DB are now ready; drain any Dock-drop paths or URLs
+  // that accumulated during launch (and unblock subsequent drops).
   dockOpenReady = true;
   drainDockOpenQueue();
+  drainDockOpenUrlQueue();
 
   // One-shot backfill of content_hash for rows that pre-date the
   // dedup feature. Runs in the background so it doesn't block boot.

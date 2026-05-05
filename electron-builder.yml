@@ -57,6 +57,26 @@ mac:
       role: Editor
     - ext: tiff
       role: Editor
+  # Catch-all for image-shaped drops that don't have a concrete file
+  # extension yet — Chrome and other browsers drag images as a
+  # 'promised file' with the generic public.image UTI; without this
+  # entry the Dock icon won't even highlight on those drags. Plus an
+  # http/https URL receiver so dragging a link straight onto the
+  # Dock saves the image at that URL. LSHandlerRank: None on both so
+  # we don't show up as a default browser or default image opener.
+  extendInfo:
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: Image
+        CFBundleTypeRole: Editor
+        LSHandlerRank: None
+        LSItemContentTypes:
+          - public.image
+    CFBundleURLTypes:
+      - CFBundleURLName: HTTP/HTTPS Image Drop
+        CFBundleURLSchemes:
+          - http
+          - https
+        LSHandlerRank: None
 publish:
   provider: github
   owner: BrettfromDJ
