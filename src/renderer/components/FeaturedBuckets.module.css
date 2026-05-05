@@ -10,8 +10,9 @@
   /* Pull the row's bottom up so the scroller's 28px hover-shadow
      padding plus the grid's own 20px top padding don't stack into
      a fat gap below the cards. -30px lands at ~18px visible space
-     below the cards, matching the 18px above. */
-  padding: 14px 20px 0;
+     below the cards, matching the 18px above (2px cardsRow top +
+     16px scroller top — see .scroller for why the split). */
+  padding: 2px 20px 0;
   margin-bottom: -30px;
   pointer-events: none; /* let drags / clicks pass through gaps */
 }
@@ -67,12 +68,13 @@
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  /* overflow-y is coerced to match overflow-x, so hover-shadow on
-     cards gets clipped at every scroller edge. Inflate the scroller
-     with internal padding on all four sides for shadow clearance,
-     and pull it back with negative margins so the visual position
-     of the cards (and the row's outer padding) is unchanged. */
-  padding: 4px 16px 28px;
+  /* overflow-y is coerced to match overflow-x, so card halos and
+     rotated thumbnail edges that extend ABOVE the card get clipped
+     here. Top padding 16px (was 4px) gives the cards real headroom
+     for their outer shadow + the rotated stack's bounding box;
+     .cardsRow padding-top was reduced by 12px to keep the total
+     visible top spacing constant. */
+  padding: 16px 16px 28px;
   margin: 0 -16px;
   scroll-behavior: smooth;
   scrollbar-width: none;
