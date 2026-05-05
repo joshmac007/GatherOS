@@ -338,15 +338,13 @@
   color: rgba(0, 0, 0, 0.78);
 }
 
-/* Recent-searches popover. Mounts when the search input is focused
-   AND empty AND has any history. Anchored below the input via
-   .searchWrap's position: relative. */
+/* Recent-searches popover. Portaled to document.body and positioned
+   via inline left/top/width pulled from the input's bounding rect, so
+   parent stacking contexts (toolbar, grid-scroll) can't bury it under
+   featured-folder cards or other elevated content. */
 .recentsDropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 60;
+  position: fixed;
+  z-index: 9000;
   padding: 4px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.86) 100%);

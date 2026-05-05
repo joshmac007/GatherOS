@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search,
   Sparkles,
@@ -43,16 +44,42 @@ function SearchField({
 }) {
   const [focused, setFocused] = useState(false);
   const wrapRef = useRef(null);
+  const dropdownRef = useRef(null);
+  // Mirrors the input's bounding rect so the portaled dropdown can
+  // align under it. Recomputed on focus, on window resize, and on
+  // scroll — covers every case where the input visually moves.
+  const [anchorRect, setAnchorRect] = useState(null);
 
-  // Close the dropdown if the user clicks outside the input wrapper.
-  // The blur listener handles tabbing out; this catches clicks on
-  // grid cards / sidebar / etc. that don't shift focus through the
-  // browser's blur path (e.g. mousedown on a button that
-  // immediately re-focuses).
+  useLayoutEffect(() => {
+    if (!focused) {
+      setAnchorRect(null);
+      return undefined;
+    }
+    const measure = () => {
+      const el = wrapRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setAnchorRect({ left: r.left, bottom: r.bottom, width: r.width });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [focused]);
+
+  // Close the dropdown if the user clicks outside the input wrapper
+  // OR outside the portaled dropdown. The blur listener handles
+  // tabbing out; this catches clicks on grid cards / sidebar / etc.
+  // that don't shift focus through the browser's blur path.
   useEffect(() => {
     if (!focused) return;
     function onPointerDown(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+      const inWrap = wrapRef.current && wrapRef.current.contains(e.target);
+      const inDropdown = dropdownRef.current && dropdownRef.current.contains(e.target);
+      if (!inWrap && !inDropdown) {
         setFocused(false);
       }
     }
@@ -139,8 +166,17 @@ function SearchField({
         </button>
       )}
 
-      {showRecents && (
-        <div className={styles.recentsDropdown} role="listbox">
+      {showRecents && anchorRect && createPortal(
+        <div
+          ref={dropdownRef}
+          className={styles.recentsDropdown}
+          role="listbox"
+          style={{
+            left: anchorRect.left,
+            top: anchorRect.bottom + 6,
+            width: anchorRect.width,
+          }}
+        >
           <div className={styles.recentsHeader}>
             <span>Recent searches</span>
             {onClearRecentSearches && (
@@ -172,7 +208,8 @@ function SearchField({
               <span className={styles.recentsTerm}>{term}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
