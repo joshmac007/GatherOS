@@ -17,6 +17,7 @@
     "build:renderer": "vite build",
     "build:mac:arm": "vite build && electron-builder --mac --arm64",
     "build:mac:x64": "vite build && electron-builder --mac --x64",
+    "prerelease": "node scripts/check-release-version.js",
     "release": "vite build && electron-builder --publish always",
     "postrelease": "electron-builder install-app-deps",
     "version:patch": "npm version patch",
