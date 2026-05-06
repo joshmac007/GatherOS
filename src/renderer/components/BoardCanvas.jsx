@@ -260,10 +260,15 @@ export default function BoardCanvas({
       // Clear selection when clicking empty canvas with select tool.
       if (e.button === 0 && !e.shiftKey) onSelectIds(new Set());
     } else if (e.button === 0 && e.target === e.currentTarget) {
-      // Click on empty canvas with non-select tool: dispatch up so the
-      // parent can decide what to add (sticky / text at click point).
-      // The parent owns selection for these clicks — we'd otherwise
-      // wipe the selection it just set on a freshly-created item.
+      // Click on empty canvas with non-select tool: dispatch up so
+      // the parent can decide what to add (sticky / text at click
+      // point). preventDefault is critical — without it the browser's
+      // default mousedown behaviour clears focus from any element
+      // *after* our handler returns, which means the contentEditable
+      // we just created and focused gets blurred a few microseconds
+      // later, leaving the user unable to type until they click
+      // again. The preventDefault keeps focus exactly where we put it.
+      e.preventDefault();
       const rect = canvasRef.current.getBoundingClientRect();
       const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, pan, zoom);
       onCanvasClick?.(world, tool);
