@@ -268,6 +268,7 @@ export default function BoardView({
   collections = [],
   onRenameBoard,
   onExit,
+  onShowToast,
 }) {
   const [board, setBoard] = useState(null);
   const [items, setItems] = useState([]);
@@ -603,6 +604,11 @@ export default function BoardView({
         onItemsChange={handleItemsChange}
         onCanvasClick={handleCanvasClick}
         onDropImage={handleDropImage}
+        onExternalImageSaved={(n) => {
+          onShowToast?.(
+            n === 1 ? 'Added to library' : `Added ${n} images to library`,
+          );
+        }}
         tool={tool}
       />
 

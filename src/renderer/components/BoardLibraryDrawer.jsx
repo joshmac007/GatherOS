@@ -29,6 +29,10 @@ export default function BoardLibraryDrawer({ collections, onClose }) {
   const [saves, setSaves] = useState([]);
   const [loading, setLoading] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  // Bumped by the save:created subscription below so the drawer
+  // refreshes whenever a new image lands in the library — including
+  // images dropped onto the board canvas while the drawer is open.
+  const [refreshTick, setRefreshTick] = useState(0);
   const requestId = useRef(0);
 
   // Debounce typed search so we don't spam IPC on every keystroke.
@@ -37,7 +41,9 @@ export default function BoardLibraryDrawer({ collections, onClose }) {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Load filtered saves whenever the search or folder changes.
+  // Load filtered saves whenever the search, folder, or refresh
+  // tick changes. The tick is bumped externally by the save:created
+  // subscription so newly-saved images show up in the drawer live.
   useEffect(() => {
     const myId = ++requestId.current;
     setLoading(true);
@@ -56,7 +62,15 @@ export default function BoardLibraryDrawer({ collections, onClose }) {
       setSaves(Array.isArray(data) ? data : []);
       setLoading(false);
     })();
-  }, [debouncedSearch, collectionId]);
+  }, [debouncedSearch, collectionId, refreshTick]);
+
+  // Live-refresh on every new save in the library, regardless of
+  // where it was added (board canvas, masonry, paste, capture).
+  useEffect(() => {
+    return window.moodmark.on('save:created', () => {
+      setRefreshTick((t) => t + 1);
+    });
+  }, []);
 
   const activeOption = useMemo(() => {
     const fromStatic = STATIC_OPTIONS.find((o) => o.id === collectionId);

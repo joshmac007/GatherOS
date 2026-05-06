@@ -227,6 +227,7 @@ export default function BoardCanvas({
   onItemsChange,
   onCanvasClick,
   onDropImage,
+  onExternalImageSaved,
   tool,
 }) {
   const canvasRef = useRef(null);
@@ -730,6 +731,11 @@ export default function BoardCanvas({
 
   const handleDrop = async (e) => {
     e.preventDefault();
+    // stopPropagation prevents the App-level drop handler (which
+    // also saves the dropped file and switches to 'all') from
+    // running on top of ours — without this we'd save twice and
+    // get bounced out of the board into the masonry view.
+    e.stopPropagation();
     const rect = canvasRef.current.getBoundingClientRect();
     const baseWorld = screenToWorld(
       e.clientX - rect.left,
@@ -764,11 +770,13 @@ export default function BoardCanvas({
     );
     if (files.length > 0) {
       let world = baseWorld;
+      let savedCount = 0;
       for (const file of files) {
         try {
           const record = await window.moodmark.saves.dropFile(file);
           if (record?.id) {
             onDropImage?.({ saveRecord: record, world });
+            savedCount += 1;
             // Cascade subsequent drops down-and-right so a
             // multi-file drop doesn't pile up at one point.
             world = { x: world.x + 24, y: world.y + 24 };
@@ -777,6 +785,7 @@ export default function BoardCanvas({
           console.error('Board drop file failed:', err);
         }
       }
+      if (savedCount > 0) onExternalImageSaved?.(savedCount);
       return;
     }
 
@@ -785,7 +794,10 @@ export default function BoardCanvas({
     if (urls.length > 0) {
       try {
         const record = await window.moodmark.saves.dropUrl(urls);
-        if (record?.id) onDropImage?.({ saveRecord: record, world: baseWorld });
+        if (record?.id) {
+          onDropImage?.({ saveRecord: record, world: baseWorld });
+          onExternalImageSaved?.(1);
+        }
       } catch (err) {
         console.error('Board drop URL failed:', err);
       }

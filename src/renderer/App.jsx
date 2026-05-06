@@ -1825,6 +1825,7 @@ export default function App() {
               collections={collections}
               onRenameBoard={handleRenameBoard}
               onExit={() => setView({ type: 'all' })}
+              onShowToast={(message) => showActionToast({ message, durationMs: 1800 })}
             />
           ) : focused ? (
             <FocusedView
