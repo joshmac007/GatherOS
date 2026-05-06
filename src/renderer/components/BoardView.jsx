@@ -1922,12 +1922,6 @@ export default function BoardView({
           onClick={() => setZoom((z) => Math.min(4, z + 0.1))}
           title="Zoom in"
         >+</button>
-        <button
-          type="button"
-          className={styles.zoomBtn}
-          onClick={() => { setPan(INITIAL_PAN); setZoom(INITIAL_ZOOM); }}
-          title="Reset view"
-        >⤒</button>
       </div>
     </div>
   );

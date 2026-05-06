@@ -29,22 +29,20 @@
   align-items: center;
   gap: 4px;
   padding: 0 12px 0 8px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
-  border-radius: 14px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 1px #FFF inset;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
   cursor: pointer;
   z-index: 5;
-  transition: background 100ms ease, transform 80ms ease;
+  transition: filter 100ms ease, transform 80ms ease;
 }
 
 .backBtn:hover {
-  background: #F1F1EE;
+  filter: brightness(0.98);
 }
 
 .backBtn:active {
