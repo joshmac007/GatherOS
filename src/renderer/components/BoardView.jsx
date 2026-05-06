@@ -523,7 +523,8 @@ export default function BoardView({
           aria-label="Back to library"
           title="Back to library"
         >
-          <ChevronLeft size={16} strokeWidth={2} />
+          <ChevronLeft size={14} strokeWidth={2} />
+          <span>Back</span>
         </button>
       )}
 
