@@ -689,6 +689,31 @@
   cursor: nwse-resize;
 }
 
+/* Lock indicator on locked items. Top-right corner with the same
+   counter-zoom math as the corner handles so it stays at constant
+   screen size regardless of canvas zoom. */
+.lockBadge {
+  position: absolute;
+  top:  calc(6px / var(--board-zoom, 1));
+  right: calc(6px / var(--board-zoom, 1));
+  width:  calc(20px / var(--board-zoom, 1));
+  height: calc(20px / var(--board-zoom, 1));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: calc(0.5px / var(--board-zoom, 1)) solid rgba(0, 0, 0, 0.10);
+  border-radius: 50%;
+  color: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 2;
+  box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(2px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.15);
+}
+.lockBadge svg {
+  width: calc(11px / var(--board-zoom, 1));
+  height: calc(11px / var(--board-zoom, 1));
+}
+
 .itemImage {
   width: 100%;
   height: 100%;

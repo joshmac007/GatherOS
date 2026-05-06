@@ -26,10 +26,14 @@ import {
   Square,
   Circle,
   Triangle,
+  Lock,
+  Unlock,
+  Copy,
 } from 'lucide-react';
 import styles from './BoardView.module.css';
 import BoardCanvas from './BoardCanvas.jsx';
 import BoardLibraryDrawer from './BoardLibraryDrawer.jsx';
+import ContextMenu from './ContextMenu.jsx';
 import { fileUrl } from '../lib/fileUrl.js';
 
 const TOOL_ICON = { strokeWidth: 1.6, 'aria-hidden': true, size: 18 };
@@ -1069,6 +1073,196 @@ export default function BoardView({
     window.moodmark.boards.deleteItem({ boardId, itemId: id });
   }, [imageBarItem, boardId, pushHistory]);
 
+  // ── Context menu (right-click) ───────────────────────────────
+  // Held as { x, y, items } when open. Builder pulls from the
+  // current selection so the menu acts on the full set even when
+  // the user only right-clicked one of them.
+  const [boardCtx, setBoardCtx] = useState(null);
+
+  const removeIdsFromBoard = useCallback((ids) => {
+    if (!ids.length) return;
+    pushHistory();
+    setItems((prev) => prev.filter((it) => !ids.includes(it.id)));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
+    window.moodmark.boards.deleteItems({ boardId, itemIds: ids });
+  }, [boardId, pushHistory]);
+
+  const setLockOnIds = useCallback((ids, locked) => {
+    if (!ids.length) return;
+    pushHistory();
+    setItems((prev) => prev.map((it) => {
+      if (!ids.includes(it.id)) return it;
+      const next = { ...it, data: { ...(it.data || {}), locked }, updated_at: Date.now() };
+      persistItem(next);
+      return next;
+    }));
+  }, [persistItem, pushHistory]);
+
+  const buildBoardCtxItems = useCallback((target) => {
+    // If the right-clicked item is in the current selection, the
+    // menu acts on every selected item; otherwise just on the one.
+    const targetIds = selectedIds.has(target.id)
+      ? Array.from(selectedIds)
+      : [target.id];
+    const isMulti = targetIds.length > 1;
+    const suffix = isMulti ? ` (${targetIds.length})` : '';
+    const targets = items.filter((it) => targetIds.includes(it.id));
+    const allLocked = targets.every((it) => it.data?.locked);
+    const anyShape = targets.some((it) => it.type === 'shape');
+
+    const out = [];
+
+    out.push({
+      label: `Copy${suffix}`,
+      icon: <Copy size={14} strokeWidth={1.7} />,
+      onClick: () => {
+        const copied = targets.map((it) => ({ ...it, data: { ...(it.data || {}) } }));
+        setClipboard(copied);
+      },
+    });
+    out.push({
+      label: `Duplicate${suffix}`,
+      icon: <Copy size={14} strokeWidth={1.7} />,
+      onClick: () => {
+        // Same logic as ⌘D, scoped to targetIds rather than the
+        // current selection so a right-click on an unselected item
+        // still does the right thing.
+        pushHistory();
+        const OFFSET = 24;
+        const newIds = [];
+        const dupes = targets.map((it) => {
+          const id = uuid();
+          newIds.push(id);
+          return {
+            ...it,
+            id,
+            board_id: boardId,
+            x: (it.x || 0) + OFFSET,
+            y: (it.y || 0) + OFFSET,
+            z_index: nextZ(items),
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          };
+        });
+        setItems((prev) => [...prev, ...dupes]);
+        setSelectedIds(new Set(newIds));
+        persistMany(dupes);
+      },
+    });
+
+    out.push({ type: 'separator' });
+
+    out.push({
+      label: `Bring to front${suffix}`,
+      icon: <ArrowUpToLine size={14} strokeWidth={1.7} />,
+      onClick: () => {
+        pushHistory();
+        let z = items.reduce((m, it) => Math.max(m, it.z_index ?? 0), 0);
+        const next = items.map((it) => {
+          if (!targetIds.includes(it.id)) return it;
+          z += 1;
+          const updated = { ...it, z_index: z, updated_at: Date.now() };
+          persistItem(updated);
+          return updated;
+        });
+        setItems(next);
+      },
+    });
+    out.push({
+      label: `Send to back${suffix}`,
+      icon: <ArrowDownToLine size={14} strokeWidth={1.7} />,
+      onClick: () => {
+        pushHistory();
+        let z = items.reduce((m, it) => Math.min(m, it.z_index ?? 0), 0);
+        const next = items.map((it) => {
+          if (!targetIds.includes(it.id)) return it;
+          z -= 1;
+          const updated = { ...it, z_index: z, updated_at: Date.now() };
+          persistItem(updated);
+          return updated;
+        });
+        setItems(next);
+      },
+    });
+
+    // Shape kind swap — only when every target is a shape.
+    if (anyShape && targets.every((it) => it.type === 'shape')) {
+      out.push({ type: 'separator' });
+      out.push({
+        label: 'Shape: Rectangle',
+        icon: <Square size={14} strokeWidth={1.7} />,
+        onClick: () => {
+          pushHistory();
+          setItems((prev) => prev.map((it) => {
+            if (!targetIds.includes(it.id)) return it;
+            const next = { ...it, data: { ...(it.data || {}), kind: 'rect' }, updated_at: Date.now() };
+            persistItem(next);
+            return next;
+          }));
+        },
+      });
+      out.push({
+        label: 'Shape: Ellipse',
+        icon: <Circle size={14} strokeWidth={1.7} />,
+        onClick: () => {
+          pushHistory();
+          setItems((prev) => prev.map((it) => {
+            if (!targetIds.includes(it.id)) return it;
+            const next = { ...it, data: { ...(it.data || {}), kind: 'ellipse' }, updated_at: Date.now() };
+            persistItem(next);
+            return next;
+          }));
+        },
+      });
+      out.push({
+        label: 'Shape: Triangle',
+        icon: <Triangle size={14} strokeWidth={1.7} />,
+        onClick: () => {
+          pushHistory();
+          setItems((prev) => prev.map((it) => {
+            if (!targetIds.includes(it.id)) return it;
+            const next = { ...it, data: { ...(it.data || {}), kind: 'triangle' }, updated_at: Date.now() };
+            persistItem(next);
+            return next;
+          }));
+        },
+      });
+    }
+
+    out.push({ type: 'separator' });
+
+    out.push({
+      label: allLocked ? `Unlock${suffix}` : `Lock${suffix}`,
+      icon: allLocked
+        ? <Unlock size={14} strokeWidth={1.7} />
+        : <Lock size={14} strokeWidth={1.7} />,
+      onClick: () => setLockOnIds(targetIds, !allLocked),
+    });
+
+    out.push({ type: 'separator' });
+
+    out.push({
+      label: `Remove from board${suffix}`,
+      icon: <Trash2 size={14} strokeWidth={1.7} />,
+      danger: true,
+      onClick: () => removeIdsFromBoard(targetIds),
+    });
+
+    return out;
+  }, [
+    items, selectedIds, boardId,
+    persistItem, persistMany, pushHistory,
+    removeIdsFromBoard, setLockOnIds,
+  ]);
+
+  const handleItemContextMenu = useCallback((target, x, y) => {
+    setBoardCtx({ x, y, items: buildBoardCtxItems(target) });
+  }, [buildBoardCtxItems]);
+
 
   return (
     <div ref={rootRef} className={styles.root}>
@@ -1174,6 +1368,7 @@ export default function BoardView({
           onLibraryReload?.();
         }}
         onSetAppDragging={onSetAppDragging}
+        onItemContextMenu={handleItemContextMenu}
         tool={tool}
       />
 
@@ -1181,6 +1376,15 @@ export default function BoardView({
         <BoardLibraryDrawer
           collections={collections}
           onClose={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {boardCtx && (
+        <ContextMenu
+          x={boardCtx.x}
+          y={boardCtx.y}
+          items={boardCtx.items}
+          onClose={() => setBoardCtx(null)}
         />
       )}
 

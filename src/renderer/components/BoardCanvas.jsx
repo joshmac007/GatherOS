@@ -137,6 +137,7 @@ function BoardItem({
   onResizeStart,
   onCommitEdit,
   onBeginEdit,
+  onContextMenu,
 }) {
   const baseStyle = {
     left: item.x,
@@ -152,7 +153,18 @@ function BoardItem({
     if (editing) return;
     e.stopPropagation();
     onSelect(item.id, e.shiftKey);
-    onMoveStart(item, e);
+    // Locked items are pinned in place — clicking them still selects
+    // (so the user can unlock from the context menu) but doesn't
+    // start a move drag.
+    if (!item.data?.locked) {
+      onMoveStart(item, e);
+    }
+  };
+
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onContextMenu?.(item, e.clientX, e.clientY);
   };
 
   let content = null;
@@ -271,10 +283,31 @@ function BoardItem({
       ].filter(Boolean).join(' ')}
       style={baseStyle}
       onMouseDown={handleMouseDown}
-      onDoubleClick={isTextish ? (e) => { e.stopPropagation(); onBeginEdit(item.id); } : undefined}
+      onContextMenu={handleContextMenu}
+      onDoubleClick={
+        isTextish && !item.data?.locked
+          ? (e) => { e.stopPropagation(); onBeginEdit(item.id); }
+          : undefined
+      }
     >
       {content}
-      {selected && !multiSelected && (
+      {item.data?.locked && (
+        <span className={styles.lockBadge} title="Locked">
+          {/* SVG lock icon — small white-bg pill in the top-right */}
+          <svg viewBox="0 0 14 14" width="10" height="10" aria-hidden="true">
+            <rect x="3" y="6.4" width="8" height="6" rx="1.2" fill="currentColor" />
+            <path
+              d="M4.8 6.4V4.5a2.2 2.2 0 0 1 4.4 0v1.9"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      )}
+      {selected && !multiSelected && !item.data?.locked && (
         <SelectionHandles
           onResizeStart={(corner, e) => onResizeStart(item, corner, e)}
         />
@@ -299,6 +332,7 @@ export default function BoardCanvas({
   onDropImage,
   onExternalImageSaved,
   onSetAppDragging,
+  onItemContextMenu,
   tool,
 }) {
   const canvasRef = useRef(null);
@@ -941,6 +975,7 @@ export default function BoardCanvas({
             onResizeStart={handleItemResizeStart}
             onBeginEdit={onBeginEdit}
             onCommitEdit={onCommitEdit}
+            onContextMenu={onItemContextMenu}
           />
         ))}
 
