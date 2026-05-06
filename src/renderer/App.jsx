@@ -193,6 +193,27 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // Boards run full-screen — auto-collapse the sidebar on entry and
+  // restore the user's previous state on exit. We stash the previous
+  // value in a ref so a manual toggle while inside the board doesn't
+  // get clobbered by later view changes.
+  const preBoardSidebar = useRef(null);
+  useEffect(() => {
+    if (view.type === 'board') {
+      if (preBoardSidebar.current === null) {
+        preBoardSidebar.current = sidebarCollapsed;
+        setSidebarCollapsed(true);
+      }
+    } else if (preBoardSidebar.current !== null) {
+      setSidebarCollapsed(preBoardSidebar.current);
+      preBoardSidebar.current = null;
+    }
+    // sidebarCollapsed is intentionally NOT a dep — we only want to
+    // run on view-type transitions, not every time the user toggles
+    // the sidebar themselves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.type]);
+
   // Multi-library state. Loaded once on mount; refreshed whenever
   // the user creates / renames / deletes from the library switcher.
   const [libraries, setLibraries] = useState([]);
@@ -1803,6 +1824,7 @@ export default function App() {
               saves={saves}
               collections={collections}
               onRenameBoard={handleRenameBoard}
+              onExit={() => setView({ type: 'all' })}
             />
           ) : focused ? (
             <FocusedView

@@ -17,6 +17,7 @@ import {
   AlignRight,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
 } from 'lucide-react';
 import styles from './BoardView.module.css';
 import BoardCanvas from './BoardCanvas.jsx';
@@ -261,7 +262,13 @@ function uuid() {
   return `b_${Math.random().toString(36).slice(2)}_${Date.now()}`;
 }
 
-export default function BoardView({ boardId, saves, collections = [], onRenameBoard }) {
+export default function BoardView({
+  boardId,
+  saves,
+  collections = [],
+  onRenameBoard,
+  onExit,
+}) {
   const [board, setBoard] = useState(null);
   const [items, setItems] = useState([]);
   const [tool, setTool] = useState('select');
@@ -508,6 +515,18 @@ export default function BoardView({ boardId, saves, collections = [], onRenameBo
 
   return (
     <div ref={rootRef} className={styles.root}>
+      {onExit && (
+        <button
+          type="button"
+          className={styles.backBtn}
+          onClick={onExit}
+          title="Back to library"
+        >
+          <ChevronLeft size={14} strokeWidth={1.8} />
+          <span>Library</span>
+        </button>
+      )}
+
       <div className={styles.titleBar}>
         <input
           className={styles.titleInput}
