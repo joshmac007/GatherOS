@@ -860,6 +860,58 @@
   z-index: 0;
 }
 
+/* Frame: a labelled section/container that lives behind every other
+   item on the canvas. The body is a hairline-bordered rectangle; the
+   tab pokes out of the top-left edge with the (editable) title. */
+.frameBody {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.frameTab {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 8px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.frameTabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 480px;
+}
+
+.frameTabInput {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  padding: 1px 6px;
+  outline: none;
+  min-width: 80px;
+}
+
+.frameTabInput:focus {
+  border-color: var(--accent);
+}
+
 .shapeText {
   position: relative;
   z-index: 1;

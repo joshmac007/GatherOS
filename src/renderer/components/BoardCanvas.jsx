@@ -92,6 +92,39 @@ function textStyleFor(item) {
 // Inner editable for text/sticky items. The contentEditable's text
 // content is driven imperatively via ref so React doesn't reconcile
 // away the user's keystrokes during edit. Empty state shows a
+// Inline title input for frames. Auto-focuses, selects all on
+// mount, commits on Enter / blur, cancels on Escape (reverts to
+// the initial title without persisting).
+function FrameTitleInput({ initial, onCommit }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, []);
+  return (
+    <input
+      ref={ref}
+      className={styles.frameTabInput}
+      defaultValue={initial}
+      onBlur={(e) => onCommit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.currentTarget.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.currentTarget.value = initial;
+          e.currentTarget.blur();
+        }
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
 // CSS-only ::before placeholder so the editor reads as "Type
 // something" before the user types.
 function EditableTextContent({ item, editing, onCommitEdit }) {
@@ -254,7 +287,12 @@ function BoardItem({
     width: item.width || undefined,
     height: item.height || undefined,
     transform: item.rotation ? `rotate(${item.rotation}deg)` : undefined,
-    zIndex: item.z_index ?? 0,
+    // Frames always sit behind regular items so they read as
+    // background sections / containers, regardless of when they
+    // were created (later additions naturally get a higher z_index).
+    zIndex: item.type === 'frame'
+      ? -1_000_000 + (item.z_index ?? 0)
+      : (item.z_index ?? 0),
   };
 
   const handleMouseDown = (e) => {
@@ -419,6 +457,30 @@ function BoardItem({
           editing={editing}
           onCommitEdit={onCommitEdit}
         />
+      </>
+    );
+  } else if (item.type === 'frame') {
+    isTextish = true;
+    // Frame body fills the wrapper; the title tab sits above the
+    // top-left of the body (absolute-positioned via CSS so the
+    // wrapper's bounding box still hugs the frame rect, not the tab).
+    // onCommitEdit gets the new title — handleCommitEdit in BoardView
+    // detects type === 'frame' and writes it into data.title.
+    const fill = item.data?.fill || '#FFFFFF';
+    const title = item.data?.title || '';
+    content = (
+      <>
+        <div className={styles.frameTab}>
+          {editing ? (
+            <FrameTitleInput
+              initial={title}
+              onCommit={(t) => onCommitEdit(item.id, t)}
+            />
+          ) : (
+            <span className={styles.frameTabLabel} title={title}>{title || 'Untitled frame'}</span>
+          )}
+        </div>
+        <div className={styles.frameBody} style={{ background: fill }} />
       </>
     );
   } else {
@@ -784,6 +846,34 @@ export default function BoardCanvas({
       movingIds = [item.id];
       onSelectIds(new Set([item.id]));
     }
+
+    // Frames behave like spatial groups — dragging a frame translates
+    // every item whose center sits inside the frame's bounds. We do
+    // this for any frame currently in `movingIds` so multi-selecting
+    // frames + free items still moves their contents along. Items
+    // already in `movingIds` (because they were directly selected)
+    // are skipped to avoid double-translation downstream.
+    const movingSet = new Set(movingIds);
+    for (const id of movingIds) {
+      const f = items.find((x) => x.id === id);
+      if (!f || f.type !== 'frame') continue;
+      const fx1 = f.x;
+      const fy1 = f.y;
+      const fx2 = f.x + (f.width || 0);
+      const fy2 = f.y + (f.height || 0);
+      for (const it of items) {
+        if (movingSet.has(it.id)) continue;
+        if (it.type === 'frame') continue; // don't nest-drag frames
+        // Use the item's center for inclusion — matches the visual
+        // sense of "this item belongs to that frame".
+        const cx = it.x + (it.width || 0) / 2;
+        const cy = it.y + (it.height || 0) / 2;
+        if (cx >= fx1 && cx <= fx2 && cy >= fy1 && cy <= fy2) {
+          movingSet.add(it.id);
+        }
+      }
+    }
+    movingIds = Array.from(movingSet);
 
     const offsets = new Map();
     for (const id of movingIds) {

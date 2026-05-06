@@ -46,12 +46,10 @@ const TOOLS = [
   { id: 'image',  label: 'Image library (I)',  Icon: (p) => <ImagePlus {...TOOL_ICON} {...p} /> },
   { id: 'sticky', label: 'Sticky note (S)',    Icon: (p) => <StickyNote {...TOOL_ICON} {...p} /> },
   { id: 'text',   label: 'Text',                Icon: (p) => <Type {...TOOL_ICON} {...p} /> },
-  // Phase 2: shapes / arrow are live; pen and frame still placeholders.
-  // The buttons render so the layout matches the final tool set; each
-  // unimplemented one is disabled until its pass lands.
+  // Phase 2: shapes / arrow / frame are live; pen still placeholder.
   { id: 'shape',  label: 'Shapes & lines',      Icon: (p) => <Shapes {...TOOL_ICON} {...p} /> },
+  { id: 'frame',  label: 'Frame (F)',            Icon: (p) => <Frame {...TOOL_ICON} {...p} /> },
   { id: 'pen',    label: 'Pen — coming soon',    Icon: (p) => <PenTool {...TOOL_ICON} {...p} />, disabled: true },
-  { id: 'frame',  label: 'Frame — coming soon',  Icon: (p) => <Frame {...TOOL_ICON} {...p} />, disabled: true },
 ];
 
 const INITIAL_PAN = { x: 0, y: 0 };
@@ -66,6 +64,11 @@ const DEFAULT_IMAGE_MAX = 360;
 const DEFAULT_STICKY = { width: 180, height: 180 };
 const DEFAULT_TEXT = { width: null, height: null };
 const DEFAULT_SHAPE = { width: 180, height: 120 };
+const DEFAULT_FRAME = { width: 600, height: 400 };
+const FRAME_DEFAULT_DATA = {
+  title: '',
+  fill: '#FFFFFF',
+};
 const SHAPE_DEFAULT_DATA = {
   kind: 'rect',
   text: '',
@@ -1218,7 +1221,7 @@ export default function BoardView({
   // item type at that world position. Empty clicks under unsupported
   // tools just deselect.
   const handleCanvasClick = useCallback((world, activeTool) => {
-    if (activeTool !== 'sticky' && activeTool !== 'text' && activeTool !== 'shape') {
+    if (activeTool !== 'sticky' && activeTool !== 'text' && activeTool !== 'shape' && activeTool !== 'frame') {
       setSelectedIds(new Set());
       return;
     }
@@ -1227,16 +1230,25 @@ export default function BoardView({
       ? DEFAULT_STICKY
       : activeTool === 'shape'
         ? DEFAULT_SHAPE
-        : DEFAULT_TEXT;
+        : activeTool === 'frame'
+          ? DEFAULT_FRAME
+          : DEFAULT_TEXT;
     // Text items launch unsized so the inner editor drives the
     // bounding box (matching the reference: a small "Type something"
     // pill rather than a fixed-width slab). Sticky and shape get
     // their default sized rectangles.
     const w = size.width || 0;
     const h = size.height || 0;
+    // Frames get an auto-numbered title so the user can identify them
+    // before renaming. Counts existing frames + 1.
+    const frameCount = activeTool === 'frame'
+      ? items.filter((it) => it.type === 'frame').length + 1
+      : 0;
     const data = activeTool === 'shape'
       ? { ...SHAPE_DEFAULT_DATA, kind: shapeKind }
-      : { text: '' };
+      : activeTool === 'frame'
+        ? { ...FRAME_DEFAULT_DATA, title: `Frame ${frameCount}` }
+        : { text: '' };
     const item = {
       id: uuid(),
       board_id: boardId,
@@ -1253,29 +1265,38 @@ export default function BoardView({
       created_at: Date.now(),
       updated_at: Date.now(),
     };
-    // flushSync forces React to commit the new item to the DOM
-    // synchronously inside the original mousedown handler. Without
-    // it, React's normal async commit lands AFTER the user's mouseup,
-    // so the browser's default mouseup-over-contentEditable focus
-    // step has nothing focusable to land on, and the caret never
-    // takes — the user has to click again. With flushSync, the
-    // contentEditable exists and is focused before mouseup fires.
-    flushSync(() => {
+    // Frames don't auto-enter edit mode on drop — their auto-numbered
+    // title is the default, and the user can double-click the title
+    // tab to rename. Other text-bearing items focus their inner
+    // contentEditable immediately so the user can start typing.
+    if (activeTool === 'frame') {
       setItems((prev) => [...prev, item]);
       setSelectedIds(new Set([item.id]));
-      setEditingItemId(item.id);
-    });
-    const el = document.querySelector(
-      `[data-item-id="${item.id}"] [contenteditable="true"]`,
-    );
-    if (el) {
-      el.focus();
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      range.collapse(false);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
+    } else {
+      // flushSync forces React to commit the new item to the DOM
+      // synchronously inside the original mousedown handler. Without
+      // it, React's normal async commit lands AFTER the user's mouseup,
+      // so the browser's default mouseup-over-contentEditable focus
+      // step has nothing focusable to land on, and the caret never
+      // takes — the user has to click again. With flushSync, the
+      // contentEditable exists and is focused before mouseup fires.
+      flushSync(() => {
+        setItems((prev) => [...prev, item]);
+        setSelectedIds(new Set([item.id]));
+        setEditingItemId(item.id);
+      });
+      const el = document.querySelector(
+        `[data-item-id="${item.id}"] [contenteditable="true"]`,
+      );
+      if (el) {
+        el.focus();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
     }
     persistItem(item);
     // Fall back to select after placing — single-click-to-add feels
@@ -1288,8 +1309,11 @@ export default function BoardView({
     setItems((prev) => {
       const it = prev.find((x) => x.id === itemId);
       if (!it) return prev;
-      // Only push history if the text actually changed.
-      if ((it.data?.text || '') !== text) {
+      // Frames store the editable string in data.title; everything
+      // else uses data.text. Pick the right field per item type.
+      const field = it.type === 'frame' ? 'title' : 'text';
+      // Only push history if the value actually changed.
+      if ((it.data?.[field] || '') !== text) {
         const snap = prev.map((p) => ({ ...p, data: { ...(p.data || {}) } }));
         undoStack.current.push(snap);
         if (undoStack.current.length > 100) undoStack.current.shift();
@@ -1298,7 +1322,7 @@ export default function BoardView({
       }
       return prev.map((p) => {
         if (p.id !== itemId) return p;
-        const next = { ...p, data: { ...(p.data || {}), text }, updated_at: Date.now() };
+        const next = { ...p, data: { ...(p.data || {}), [field]: text }, updated_at: Date.now() };
         persistItem(next);
         return next;
       });
@@ -1387,6 +1411,8 @@ export default function BoardView({
         // B for "bend" — elbow arrow.
         setTool('arrow');
         setArrowKind('elbow');
+      } else if (!cmd && (k === 'f')) {
+        setTool('frame');
       }
     }
     window.addEventListener('keydown', onKey);
