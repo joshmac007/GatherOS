@@ -1,7 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X, FolderClosed } from 'lucide-react';
+import {
+  Search,
+  X,
+  FolderClosed,
+  LayoutGrid,
+  Inbox,
+  ChevronDown,
+  Check,
+} from 'lucide-react';
 import styles from './BoardView.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+
+// Static option metadata for the folder dropdown — used both to
+// render the trigger label and to seed the popup menu. Per-collection
+// rows are appended at render time.
+const STATIC_OPTIONS = [
+  { id: 'all',      label: 'All images', Icon: LayoutGrid },
+  { id: 'unsorted', label: 'Unsorted',   Icon: Inbox },
+];
 
 // Library drawer for the board canvas. Lets the user search the
 // full library, narrow by folder, and drag thumbnails onto the
@@ -42,15 +58,40 @@ export default function BoardLibraryDrawer({ collections, onClose }) {
     })();
   }, [debouncedSearch, collectionId]);
 
-  const folderLabel = useMemo(() => {
-    if (collectionId === 'all') return 'All images';
-    if (collectionId === 'unsorted') return 'Unsorted';
+  const activeOption = useMemo(() => {
+    const fromStatic = STATIC_OPTIONS.find((o) => o.id === collectionId);
+    if (fromStatic) return fromStatic;
     const c = collections.find((x) => x.id === collectionId);
-    return c?.name || 'Folder';
+    return c
+      ? { id: c.id, label: c.name, Icon: FolderClosed }
+      : STATIC_OPTIONS[0];
   }, [collectionId, collections]);
 
   const count = saves.length;
   const countLabel = `${count} ${count === 1 ? 'image' : 'images'}`;
+
+  // Custom dropdown: native <select> can't render icons next to its
+  // options, so we paint a button + popup ourselves. Click-outside
+  // and Escape both dismiss.
+  const [folderMenuOpen, setFolderMenuOpen] = useState(false);
+  const folderMenuRef = useRef(null);
+  useEffect(() => {
+    if (!folderMenuOpen) return;
+    function onDown(e) {
+      if (folderMenuRef.current && !folderMenuRef.current.contains(e.target)) {
+        setFolderMenuOpen(false);
+      }
+    }
+    function onKey(e) { if (e.key === 'Escape') setFolderMenuOpen(false); }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [folderMenuOpen]);
+
+  const ActiveIcon = activeOption.Icon;
 
   return (
     <div className={styles.drawer}>
@@ -88,24 +129,74 @@ export default function BoardLibraryDrawer({ collections, onClose }) {
           )}
         </label>
 
-        <div className={styles.drawerFolderRow}>
-          <FolderClosed size={13} strokeWidth={1.8} className={styles.drawerFolderIcon} />
-          <select
+        <div className={styles.drawerFolderRow} ref={folderMenuRef}>
+          <button
+            type="button"
             className={styles.drawerFolder}
-            value={collectionId}
-            onChange={(e) => setCollectionId(e.target.value)}
-            title={folderLabel}
+            onClick={() => setFolderMenuOpen((s) => !s)}
+            title={activeOption.label}
+            aria-haspopup="listbox"
+            aria-expanded={folderMenuOpen}
           >
-            <option value="all">All images</option>
-            <option value="unsorted">Unsorted</option>
-            {collections.length > 0 && <option disabled>──────────</option>}
-            {collections.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            <ActiveIcon size={13} strokeWidth={1.8} className={styles.drawerFolderIcon} />
+            <span className={styles.drawerFolderLabel}>{activeOption.label}</span>
+            <ChevronDown
+              size={13}
+              strokeWidth={2}
+              className={styles.drawerFolderChevron}
+            />
+          </button>
           <span className={styles.drawerCount}>{countLabel}</span>
+
+          {folderMenuOpen && (
+            <div className={styles.drawerFolderMenu} role="listbox">
+              {STATIC_OPTIONS.map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="option"
+                  aria-selected={collectionId === id}
+                  className={[
+                    styles.drawerFolderOption,
+                    collectionId === id && styles.drawerFolderOptionActive,
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => {
+                    setCollectionId(id);
+                    setFolderMenuOpen(false);
+                  }}
+                >
+                  <Icon size={13} strokeWidth={1.8} className={styles.drawerFolderOptionIcon} />
+                  <span className={styles.drawerFolderOptionLabel}>{label}</span>
+                  {collectionId === id && (
+                    <Check size={13} strokeWidth={2} className={styles.drawerFolderOptionCheck} />
+                  )}
+                </button>
+              ))}
+              {collections.length > 0 && <div className={styles.drawerFolderMenuSep} />}
+              {collections.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="option"
+                  aria-selected={collectionId === c.id}
+                  className={[
+                    styles.drawerFolderOption,
+                    collectionId === c.id && styles.drawerFolderOptionActive,
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => {
+                    setCollectionId(c.id);
+                    setFolderMenuOpen(false);
+                  }}
+                >
+                  <FolderClosed size={13} strokeWidth={1.8} className={styles.drawerFolderOptionIcon} />
+                  <span className={styles.drawerFolderOptionLabel}>{c.name}</span>
+                  {collectionId === c.id && (
+                    <Check size={13} strokeWidth={2} className={styles.drawerFolderOptionCheck} />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

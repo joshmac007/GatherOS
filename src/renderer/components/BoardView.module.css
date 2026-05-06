@@ -283,19 +283,18 @@
 }
 
 .drawerFolderRow {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   height: 26px;
 }
 
-.drawerFolderIcon {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
 .drawerFolder {
-  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
   min-width: 0;
   height: 100%;
   background: transparent;
@@ -305,16 +304,112 @@
   color: var(--text-primary);
   outline: none;
   cursor: pointer;
-  padding: 0 4px;
-  /* Use the system caret rather than the default chunky arrow so
-     the row reads as a quiet inline control instead of a form
-     widget. */
-  appearance: none;
-  -webkit-appearance: none;
+  padding: 0 6px;
+  border-radius: 6px;
+  transition: background 100ms ease;
 }
 
 .drawerFolder:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.drawerFolderIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.drawerFolderLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawerFolderChevron {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* Popup menu — sits just below the trigger button. The trigger row
+   is position: relative so the menu anchors to it. */
+.drawerFolderMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+  background: #ffffff;
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px #FFF inset,
+    0 6px 22px rgba(0, 0, 0, 0.12);
+  max-height: 280px;
+  overflow-y: auto;
+  animation: drawerMenuIn 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes drawerMenuIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.drawerFolderOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
   color: var(--text-primary);
+  text-align: left;
+}
+
+.drawerFolderOption:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.drawerFolderOptionActive {
+  color: var(--accent);
+}
+
+.drawerFolderOptionIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.drawerFolderOptionActive .drawerFolderOptionIcon,
+.drawerFolderOptionActive .drawerFolderOptionCheck {
+  color: var(--accent);
+}
+
+.drawerFolderOptionLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawerFolderOptionCheck {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.drawerFolderMenuSep {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 4px 4px;
 }
 
 .drawerCount {
@@ -332,6 +427,11 @@
 .drawerGrid {
   flex: 1 1 auto;
   overflow-y: auto;
+  /* Force the cross axis to never scroll. With only overflow-y set,
+     the browser coerces overflow-x to auto and a horizontal
+     scrollbar appears whenever a hover lift / shadow extends a
+     pixel past the column edge. */
+  overflow-x: hidden;
   padding: 10px 12px 14px;
   column-count: 2;
   column-gap: 8px;
