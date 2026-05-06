@@ -65,8 +65,35 @@ app.on('open-file', (event, filePath) => {
   drainDockOpenQueue();
 });
 
+// Block until the main window's renderer has finished loading, so
+// notifySaved/notifyDuplicateInRenderer don't fire IPCs into a
+// half-initialized renderer. Also catches the cold-launch case
+// where Dock-drop spawns the app: dockOpenReady flips true right
+// after createMainWindow(), but the renderer still has 100-300ms
+// of vite-load left.
+async function waitForMainWindowReady() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow.webContents.isLoading()) return;
+  await new Promise((resolve) => {
+    const wc = mainWindow.webContents;
+    const cleanup = () => {
+      wc.off('did-finish-load', cleanup);
+      wc.off('did-fail-load', cleanup);
+      wc.off('destroyed', cleanup);
+      resolve();
+    };
+    wc.once('did-finish-load', cleanup);
+    wc.once('did-fail-load', cleanup);
+    wc.once('destroyed', cleanup);
+    // Belt-and-suspenders timeout — if neither event ever fires, we
+    // still proceed (worst case: user misses the save:created toast).
+    setTimeout(cleanup, 4000);
+  });
+}
+
 async function drainDockOpenQueue() {
   if (!dockOpenReady || dockOpenQueue.length === 0) return;
+  await waitForMainWindowReady();
   const { saveImageFromFile } = require('./storage');
   const { insertSave } = require('./db');
   while (dockOpenQueue.length > 0) {
@@ -74,10 +101,12 @@ async function drainDockOpenQueue() {
     try {
       const imgData = await saveImageFromFile(filePath);
       if (imgData.duplicateOf) {
-        notifyDuplicateInRenderer(imgData.existing);
+        try { notifyDuplicateInRenderer(imgData.existing); }
+        catch (err) { console.error('[gatheros] notifyDuplicate failed:', err); }
       } else {
         const record = insertSave(imgData);
-        notifySaved(record);
+        try { notifySaved(record); }
+        catch (err) { console.error('[gatheros] notifySaved failed:', err); }
       }
     } catch (err) {
       console.error('[gatheros] Dock-drop save failed:', filePath, err?.message || err);
@@ -105,6 +134,7 @@ app.on('open-url', (event, url) => {
 
 async function drainDockOpenUrlQueue() {
   if (!dockOpenReady || dockOpenUrlQueue.length === 0) return;
+  await waitForMainWindowReady();
   const { saveImageFromUrl } = require('./storage');
   const { insertSave } = require('./db');
   while (dockOpenUrlQueue.length > 0) {
@@ -112,10 +142,12 @@ async function drainDockOpenUrlQueue() {
     try {
       const imgData = await saveImageFromUrl(url);
       if (imgData.duplicateOf) {
-        notifyDuplicateInRenderer(imgData.existing);
+        try { notifyDuplicateInRenderer(imgData.existing); }
+        catch (err) { console.error('[gatheros] notifyDuplicate failed:', err); }
       } else {
         const record = insertSave(imgData);
-        notifySaved(record);
+        try { notifySaved(record); }
+        catch (err) { console.error('[gatheros] notifySaved failed:', err); }
       }
     } catch (err) {
       console.error('[gatheros] Dock-drop URL save failed:', url, err?.message || err);
@@ -171,17 +203,20 @@ function registerMoodmarkFileProtocol() {
 }
 
 function notifySaved(record) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('save:created', record);
-  }
-  showToast(record);
-  // Refresh the tray's recent-saves block so a fresh capture/drop
-  // appears under the menu bar icon without a manual relaunch.
-  rebuildTrayMenu();
-  // Background AI pipeline — runs only if the user opted in to at least
-  // one feature and a key is configured. Errors are swallowed so the
-  // save flow never blocks on it.
-  maybeAIIndexInBackground(record);
+  // Each side-effect is isolated: a failure in showToast (creating
+  // a new BrowserWindow during cold launch is the most common
+  // crasher) shouldn't take out the IPC notify or tray rebuild.
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('save:created', record);
+    }
+  } catch (err) { console.error('[gatheros] save:created send failed:', err); }
+  try { showToast(record); }
+  catch (err) { console.error('[gatheros] showToast failed:', err); }
+  try { rebuildTrayMenu(); }
+  catch (err) { console.error('[gatheros] rebuildTrayMenu failed:', err); }
+  try { maybeAIIndexInBackground(record); }
+  catch (err) { console.error('[gatheros] AI index failed:', err); }
 }
 
 // Surface a duplicate-on-save event to the renderer so it can show a
