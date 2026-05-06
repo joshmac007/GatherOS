@@ -35,6 +35,25 @@ button {
   color: inherit;
 }
 
+/* Only show focus rings for true keyboard navigation. Without this,
+   any button retains the browser's default focus outline after
+   click → modal-open → Escape, which leaves a phantom orange ring
+   on the trigger. :focus-visible keeps Tab-navigation accessible
+   while suppressing the mouse-click case across every button,
+   input, and link in the app. Components that want a custom
+   keyboard-focus look opt back in with their own :focus-visible. */
+:focus {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
 .app-shell {
   position: relative;
   display: flex;
