@@ -295,7 +295,7 @@
 }
 
 .addNoteBtn:hover {
-  color: var(--accent);
+  color: #000000;
 }
 
 .notesInput {
