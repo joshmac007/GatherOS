@@ -25,7 +25,9 @@ const SearchSparkleIcon = () => <Sparkles {...ICON} fill="currentColor" />;
 const SidebarIcon = () => <PanelLeft {...ICON} />;
 const BackChevronIcon = () => <ChevronLeft {...ICON} strokeWidth={2} />;
 const GridSmallIcon = () => <Grid3x3 className={styles.zoomIcon} {...ICON} />;
-const MasonryIcon = () => <LayoutDashboard {...ICON} />;
+// Match the sidebar's "All" affordance (also LayoutGrid) so the
+// grid-layout button reads as "this is the grid/all view."
+const MasonryIcon = () => <LayoutGrid {...ICON} />;
 const ListViewIcon = () => <AlignJustify {...ICON} />;
 const GridLargeIcon = () => <LayoutGrid className={styles.zoomIcon} {...ICON} />;
 
