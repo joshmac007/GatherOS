@@ -649,9 +649,31 @@ export default function BoardCanvas({
               },
             };
           }
-          // Sticky and image: traditional explicit-size resize. Sticky
-          // keeps its body type at the default fontSize — only the
-          // box grows.
+          // Sticky: free-aspect box resize, but the body fontSize
+          // scales by the smaller of the two axis ratios so the
+          // text never outgrows whichever dimension the user is
+          // shrinking. Image keeps its existing free-resize.
+          if (type === 'sticky') {
+            const fontScale = Math.min(
+              newW / initial.width,
+              newH / initial.height,
+            );
+            return {
+              ...it,
+              x: newX,
+              y: newY,
+              width: newW,
+              height: newH,
+              data: {
+                ...initial.data,
+                fontSize: Math.max(
+                  8,
+                  Math.min(72, Math.round((initial.fontSize || 14) * fontScale)),
+                ),
+              },
+            };
+          }
+          // Image: traditional explicit-size resize.
           return {
             ...it,
             x: newX,
