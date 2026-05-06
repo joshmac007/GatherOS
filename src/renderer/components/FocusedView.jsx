@@ -44,6 +44,12 @@ export default function FocusedView({
   morphSource = false,
 }) {
   const [zoom, setZoom] = useState(1);
+  // Capture once on mount: was this focused view opened via a morph
+  // transition? If so, the .focused fadeIn keyframe is permanently
+  // suppressed for this mount. Toggling it with the live morphSource
+  // would re-trigger the animation when the morph ends and the class
+  // gets removed, making the topBar flash from opacity 0 → 1.
+  const [openedViaMorph] = useState(morphSource);
   const stageRef = useRef(null);
   const imageRef = useRef(null);
   const {
@@ -106,7 +112,7 @@ export default function FocusedView({
     <div
       className={[
         styles.focused,
-        morphSource && styles.focusedMorphing,
+        openedViaMorph && styles.focusedMorphing,
       ].filter(Boolean).join(' ')}
     >
       <div className={styles.topBar}>
