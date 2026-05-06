@@ -176,8 +176,31 @@ export default function Sidebar({
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Anchor rect for the portaled help popover. Recomputed on open
+  // and on resize/scroll so the popover stays glued to the trigger.
+  const [helpAnchor, setHelpAnchor] = useState(null);
   const helpBtnRef = useRef(null);
   const helpPopRef = useRef(null);
+
+  useEffect(() => {
+    if (!helpOpen) {
+      setHelpAnchor(null);
+      return undefined;
+    }
+    const measure = () => {
+      const el = helpBtnRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setHelpAnchor({ left: r.left, top: r.top, width: r.width });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [helpOpen]);
 
   // Close the help popover on outside click / Escape.
   useEffect(() => {
@@ -977,11 +1000,16 @@ export default function Sidebar({
             )}
           </button>
 
-          {helpOpen && (
+          {helpOpen && helpAnchor && ReactDOM.createPortal(
             <div
               ref={helpPopRef}
               className={styles.helpPopover}
               role="menu"
+              style={{
+                left: helpAnchor.left,
+                bottom: window.innerHeight - helpAnchor.top + 4,
+                width: helpAnchor.width,
+              }}
             >
               {onOpenReleaseNotes && (
                 <>
@@ -1029,7 +1057,8 @@ export default function Sidebar({
                   )}
                 </>
               )}
-            </div>
+            </div>,
+            document.body,
           )}
         </div>
       )}

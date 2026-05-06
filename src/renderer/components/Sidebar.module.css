@@ -70,15 +70,13 @@
   color: var(--text-primary);
 }
 
-/* Pops up from the Help footer button. Anchored absolutely to the
-   .footer element above it so it always rises in the same spot
-   regardless of how many items it contains. */
+/* Pops up from the Help footer button. Portaled to document.body
+   and positioned via inline left/bottom from the trigger's rect,
+   because the sidebar is overflow-y: auto and would clip an
+   absolutely-positioned popover that lived inside it. */
 .helpPopover {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  left: 8px;
-  right: 8px;
-  z-index: 1000;
+  position: fixed;
+  z-index: 9000;
   padding: 4px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.86) 100%);
