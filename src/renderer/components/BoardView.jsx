@@ -1155,7 +1155,7 @@ export default function BoardView({
   // Drag-to-create: the canvas dispatches start + end world coords
   // when the user finishes drawing an arrow. Build the bounding rect
   // (with padding so the arrowhead isn't clipped) and persist.
-  const handleArrowCreate = useCallback((start, end) => {
+  const handleArrowCreate = useCallback(({ start, end }) => {
     pushHistory();
     const minX = Math.min(start.x, end.x) - ARROW_BBOX_PAD;
     const minY = Math.min(start.y, end.y) - ARROW_BBOX_PAD;
@@ -1820,7 +1820,7 @@ export default function BoardView({
         }}
         onSetAppDragging={onSetAppDragging}
         onItemContextMenu={handleItemContextMenu}
-        onArrowCreate={({ start, end }) => handleArrowCreate(start, end)}
+        onArrowCreate={handleArrowCreate}
         arrowKind={arrowKind}
         tool={tool}
       />

@@ -695,6 +695,10 @@ export default function BoardCanvas({
           pan,
           zoom,
         );
+        // Stash on the ref too so the mouseup handler can read the
+        // latest end point even though it's running from a stale
+        // useEffect closure (deps don't include arrowDrawPreview).
+        arrowDrawState.current.end = cur;
         const { start } = arrowDrawState.current;
         setArrowDrawPreview({ x1: start.x, y1: start.y, x2: cur.x, y2: cur.y });
         return;
@@ -991,10 +995,8 @@ export default function BoardCanvas({
         setLassoRect(null);
       }
       if (arrowDrawState.current) {
-        const { start } = arrowDrawState.current;
-        const end = arrowDrawPreview
-          ? { x: arrowDrawPreview.x2, y: arrowDrawPreview.y2 }
-          : start;
+        const { start, end: liveEnd } = arrowDrawState.current;
+        const end = liveEnd || start;
         arrowDrawState.current = null;
         setArrowDrawPreview(null);
         // Ignore micro-drags so a click on empty canvas with the
@@ -1018,7 +1020,7 @@ export default function BoardCanvas({
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [items, pan, zoom, onPanZoomChange, onItemsChange]);
+  }, [items, pan, zoom, onPanZoomChange, onItemsChange, onArrowCreate]);
 
   // Drop: a thumbnail dragged from the library drawer (data with
   // saveId) or external image drops via the host's drop handler. We
