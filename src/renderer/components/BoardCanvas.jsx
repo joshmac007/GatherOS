@@ -26,19 +26,12 @@ function textStyleFor(item) {
   };
 }
 
-// Editable text/sticky item. The contentEditable's text content is
-// driven imperatively via ref to keep React from reconciling user
-// keystrokes. Empty state shows a CSS-only ::before placeholder so
-// the editor reads as "Type something" before the user types.
-function EditableTextItem({
-  item,
-  selected,
-  editing,
-  baseStyle,
-  onMouseDown,
-  onBeginEdit,
-  onCommitEdit,
-}) {
+// Inner editable for text/sticky items. The contentEditable's text
+// content is driven imperatively via ref so React doesn't reconcile
+// away the user's keystrokes during edit. Empty state shows a
+// CSS-only ::before placeholder so the editor reads as "Type
+// something" before the user types.
+function EditableTextContent({ item, editing, onCommitEdit }) {
   const ref = useRef(null);
   const cls = item.type === 'sticky' ? styles.itemSticky : styles.itemText;
 
@@ -69,40 +62,39 @@ function EditableTextItem({
     sel?.addRange(range);
   }, [editing]);
 
-  const autosize = !item.width && item.type === 'text';
-
   return (
     <div
-      data-item-id={item.id}
-      className={[
-        styles.item,
-        selected && styles.itemSelected,
-        autosize && styles.itemAutosize,
-      ].filter(Boolean).join(' ')}
-      style={baseStyle}
-      onMouseDown={onMouseDown}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        onBeginEdit(item.id);
-      }}
-    >
-      <div
-        ref={ref}
-        className={[cls, editing && styles.itemEditable].filter(Boolean).join(' ')}
-        style={textStyleFor(item)}
-        contentEditable={editing}
-        suppressContentEditableWarning
-        data-placeholder="Type something"
-        onBlur={(e) => onCommitEdit(item.id, e.currentTarget.innerText)}
-        onMouseDown={(e) => { if (editing) e.stopPropagation(); }}
-        onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur(); }}
-      />
-    </div>
+      ref={ref}
+      className={[cls, editing && styles.itemEditable].filter(Boolean).join(' ')}
+      style={textStyleFor(item)}
+      contentEditable={editing}
+      suppressContentEditableWarning
+      data-placeholder="Type something"
+      onBlur={(e) => onCommitEdit(item.id, e.currentTarget.innerText)}
+      onMouseDown={(e) => { if (editing) e.stopPropagation(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur(); }}
+    />
+  );
+}
+
+// 4 corner handles, rendered when the item is selected. Pure visual
+// for now — drag-to-resize lands in the next pass; the wrapper
+// handles move regardless of where the click lands inside it.
+function SelectionHandles() {
+  return (
+    <>
+      <span className={`${styles.handle} ${styles.handleNw}`} />
+      <span className={`${styles.handle} ${styles.handleNe}`} />
+      <span className={`${styles.handle} ${styles.handleSw}`} />
+      <span className={`${styles.handle} ${styles.handleSe}`} />
+    </>
   );
 }
 
 // Render one item by type. Each item is positioned absolutely in
 // world coords; the parent .world div carries the pan/zoom transform.
+// All types share the same wrapper so selection ring + corner
+// handles + move/double-click semantics are identical.
 function BoardItem({
   item,
   saves,
@@ -130,42 +122,50 @@ function BoardItem({
     onMoveStart(item, e);
   };
 
+  let content = null;
+  let isTextish = false;
   if (item.type === 'image') {
     // Prefer the live save's path so a moved/restored file resolves
-    // correctly; fall back to the saveId resolution and finally to
-    // the URL stored in the item's data blob (legacy / unknown saves).
+    // correctly; fall back to the URL stored on the item.
     const liveSave = saves.find((s) => s.id === item.data?.saveId);
     const src = liveSave
       ? fileUrl(liveSave.file_path)
       : item.data?.fileUrl || null;
     if (!src) return null;
-    return (
-      <div
-        data-item-id={item.id}
-        className={[styles.item, selected && styles.itemSelected].filter(Boolean).join(' ')}
-        style={baseStyle}
-        onMouseDown={handleMouseDown}
-      >
-        <img src={src} className={styles.itemImage} draggable={false} alt="" />
-      </div>
+    content = (
+      <img src={src} className={styles.itemImage} draggable={false} alt="" />
     );
-  }
-
-  if (item.type === 'sticky' || item.type === 'text') {
-    return (
-      <EditableTextItem
+  } else if (item.type === 'text' || item.type === 'sticky') {
+    isTextish = true;
+    content = (
+      <EditableTextContent
         item={item}
-        selected={selected}
         editing={editing}
-        baseStyle={baseStyle}
-        onMouseDown={handleMouseDown}
-        onBeginEdit={onBeginEdit}
         onCommitEdit={onCommitEdit}
       />
     );
+  } else {
+    return null;
   }
 
-  return null;
+  const autosize = isTextish && !item.width && item.type === 'text';
+
+  return (
+    <div
+      data-item-id={item.id}
+      className={[
+        styles.item,
+        selected && styles.itemSelected,
+        autosize && styles.itemAutosize,
+      ].filter(Boolean).join(' ')}
+      style={baseStyle}
+      onMouseDown={handleMouseDown}
+      onDoubleClick={isTextish ? (e) => { e.stopPropagation(); onBeginEdit(item.id); } : undefined}
+    >
+      {content}
+      {selected && <SelectionHandles />}
+    </div>
+  );
 }
 
 export default function BoardCanvas({

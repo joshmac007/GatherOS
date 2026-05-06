@@ -278,15 +278,37 @@
   cursor: grab;
 }
 
+/* Selected items get a thin blue ring + 4 corner handles. The ring
+   uses outline (not border) so it doesn't change the item's box
+   model — drag/move math stays accurate, and the handles can sit
+   exactly on the corners without compensating for a border. */
 .item.itemSelected {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: 1.5px solid var(--accent, #0a84ff);
+  outline-offset: 0;
 }
 
 .item:active {
   cursor: grabbing;
 }
+
+/* Resize handles. Pure visual indicators for now — clicking still
+   moves the item; resize behaviour lands in the next pass. */
+.handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.30);
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.handleNw { top: -6px;    left: -6px; }
+.handleNe { top: -6px;    right: -6px; }
+.handleSw { bottom: -6px; left: -6px; }
+.handleSe { bottom: -6px; right: -6px; }
 
 .itemImage {
   width: 100%;
@@ -330,6 +352,13 @@
 .itemEditable {
   outline: none;
   cursor: text;
+  /* Re-enable text selection on the editor — the .item wrapper
+     above sets user-select: none for drag ergonomics, but Chromium
+     will refuse to place a caret in (or accept keystrokes on) a
+     contentEditable that inherits user-select: none. Without this
+     override the user has to click twice before they can type. */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Empty contentEditable shows a faded "Type something" placeholder
