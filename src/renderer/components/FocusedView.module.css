@@ -260,12 +260,13 @@
      slider. With width/height: auto + max-width/height: 100%,
      the image stuck at its natural pixel size once the wrap grew
      past 100%, so anything not several × the stage didn't appear
-     to zoom at all. */
+     to zoom at all. No border-radius / box-shadow here: with
+     object-fit: contain the element box extends beyond the visible
+     image (letterbox bands), and any chrome on the box would draw
+     a frame around the whole stage rather than around the image. */
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: 6px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 .navHint {
