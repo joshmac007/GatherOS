@@ -138,19 +138,21 @@
    CTA scale. */
 .gotItBtn {
   min-width: 140px;
-  padding: 8px 24px;
+  height: 36px;
+  padding: 0 22px;
   border-radius: 999px;
-  border: 2px solid transparent;
+  border: 0.5px solid rgba(0, 0, 0, 0.18);
   background:
-    linear-gradient(180deg, #D9D9D9 0%, #CBCBCB 100%) padding-box,
-    linear-gradient(180deg, #E2E2E2 0%, #B2B2B2 24.5%, #DADADA 58.47%, #DADADA 100%) border-box;
+    linear-gradient(180deg, #E6E6E6 0%, #C9C9C9 100%);
   color: #000;
   font-size: 13px;
   font-weight: 500;
   font-family: var(--font-ui);
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
   box-shadow:
-    0 0 0 0.5px #BABABA,
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
     0 1px 2px rgba(0, 0, 0, 0.08),
     0 2px 4px rgba(0, 0, 0, 0.05);
   transition: filter 120ms ease, transform 80ms ease;
