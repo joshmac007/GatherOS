@@ -417,7 +417,17 @@ export default function BoardView({ boardId, saves, onRenameBoard }) {
         setSelectedIds(new Set());
         window.moodmark.boards.deleteItems({ boardId, itemIds: ids });
       } else if (e.key === 'Escape') {
+        // Confirm any in-progress text edit, then drop selection
+        // and clear edit state so the bounding box, handles, and
+        // floating styler all dismiss together.
+        if (editingItemId) {
+          const el = document.querySelector(
+            `[data-item-id="${editingItemId}"] [contenteditable="true"]`,
+          );
+          if (el) el.blur();
+        }
         setSelectedIds(new Set());
+        setEditingItemId(null);
         setTool('select');
       } else if (e.key === 'v' || e.key === 'V') {
         setTool('select');

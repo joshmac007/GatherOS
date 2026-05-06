@@ -258,7 +258,16 @@ export default function BoardCanvas({
       };
       setIsPanning(true);
       // Clear selection when clicking empty canvas with select tool.
-      if (e.button === 0 && !e.shiftKey) onSelectIds(new Set());
+      // Also explicitly blur any focused contentEditable so the
+      // editor's onBlur handler fires onCommitEdit → editingItemId
+      // clears, hiding the cursor + floating styler. Without this
+      // the preventDefault above suppresses the browser's own
+      // focus-management blur and the cursor lingers in the editor.
+      if (e.button === 0 && !e.shiftKey) {
+        const editing = document.querySelector('[contenteditable="true"]');
+        if (editing) editing.blur();
+        onSelectIds(new Set());
+      }
     } else if (e.button === 0 && e.target === e.currentTarget) {
       // Click on empty canvas with non-select tool: dispatch up so
       // the parent can decide what to add (sticky / text at click
