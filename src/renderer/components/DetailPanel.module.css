@@ -591,11 +591,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 9px 3px 7px;
-  background:
-    linear-gradient(180deg, rgba(108, 99, 255, 0.12), rgba(255, 108, 222, 0.12));
-  border: 0.5px solid rgba(108, 99, 255, 0.25);
-  border-radius: 999px;
+  padding: 3px 11px 3px 9px;
+  background: linear-gradient(0deg, #EDE8FD 0%, #F1F1EE 100%);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 100px;
+  box-shadow: 0 1px 0 1px #FFF inset;
   font-family: var(--font-ui);
   font-size: 11px;
   color: #6c63ff;
@@ -604,9 +604,7 @@
 }
 
 .autoTagBtn:hover:not(:disabled) {
-  background:
-    linear-gradient(180deg, rgba(108, 99, 255, 0.18), rgba(255, 108, 222, 0.18));
-  border-color: rgba(108, 99, 255, 0.4);
+  background: linear-gradient(0deg, #E4DCFB 0%, #ECEAE5 100%);
 }
 
 .autoTagBtn:active:not(:disabled) {
