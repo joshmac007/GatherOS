@@ -49,8 +49,7 @@ const TOOLS = [
   // Phase 2: shapes / arrow are live; pen and frame still placeholders.
   // The buttons render so the layout matches the final tool set; each
   // unimplemented one is disabled until its pass lands.
-  { id: 'shape',  label: 'Shape (R / E / T)',   Icon: (p) => <Shapes {...TOOL_ICON} {...p} /> },
-  { id: 'arrow',  label: 'Arrow / Line (A / L)',Icon: (p) => <MoveUpRight {...TOOL_ICON} {...p} /> },
+  { id: 'shape',  label: 'Shapes & lines',      Icon: (p) => <Shapes {...TOOL_ICON} {...p} /> },
   { id: 'pen',    label: 'Pen — coming soon',    Icon: (p) => <PenTool {...TOOL_ICON} {...p} />, disabled: true },
   { id: 'frame',  label: 'Frame — coming soon',  Icon: (p) => <Frame {...TOOL_ICON} {...p} />, disabled: true },
 ];
@@ -428,11 +427,19 @@ function nextZ(items) {
   return Math.max(...items.map((i) => i.z_index ?? 0)) + 1;
 }
 
-// Shape tool button — clicking the icon opens a small flyout where
-// the user picks rect / ellipse / triangle. The picked kind sticks
-// across spawns and is also reflected in the floating styler when
-// a shape is selected. Click-outside / Escape both dismiss.
-function ShapeToolButton({ active, kind, onPick, Icon }) {
+// Combined shape + arrow tool button. Clicking the icon opens a
+// vertical flyout split into two sections (shapes / lines), divided
+// by a thin separator. Picking any row activates the appropriate
+// tool with the corresponding kind. Active highlight follows the
+// current tool + kind so the flyout always shows what's armed.
+function ShapeToolButton({
+  activeTool,
+  shapeKind,
+  arrowKind,
+  onPickShape,
+  onPickArrow,
+  Icon,
+}) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   useEffect(() => {
@@ -451,77 +458,23 @@ function ShapeToolButton({ active, kind, onPick, Icon }) {
     };
   }, [open]);
 
-  const KINDS = [
-    { id: 'rect',     Icon: Square,   label: 'Rectangle', kbd: 'R' },
-    { id: 'ellipse',  Icon: Circle,   label: 'Ellipse',   kbd: 'E' },
-    { id: 'triangle', Icon: Triangle, label: 'Triangle',  kbd: 'T' },
+  // Single ordered list with a section field; we render a divider
+  // between the last 'shape' and the first 'arrow' row.
+  const ROWS = [
+    { section: 'shape', kind: 'rect',     Icon: Square,           label: 'Rectangle', kbd: 'R' },
+    { section: 'shape', kind: 'ellipse',  Icon: Circle,           label: 'Ellipse',   kbd: 'E' },
+    { section: 'shape', kind: 'triangle', Icon: Triangle,         label: 'Triangle',  kbd: 'T' },
+    { section: 'arrow', kind: 'line',     Icon: Slash,            label: 'Line',      kbd: 'L' },
+    { section: 'arrow', kind: 'arrow',    Icon: MoveUpRight,      label: 'Arrow',     kbd: 'A' },
+    { section: 'arrow', kind: 'elbow',    Icon: CornerDownRight,  label: 'Elbow arrow', kbd: 'B' },
   ];
 
-  return (
-    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-flex' }}>
-      <button
-        type="button"
-        className={[
-          styles.toolBtn,
-          active && styles.toolBtnActive,
-        ].filter(Boolean).join(' ')}
-        title="Shape (R)"
-        onClick={() => setOpen((s) => !s)}
-      >
-        <Icon />
-      </button>
-      {open && (
-        <div className={styles.shapeToolFlyout} role="menu">
-          {KINDS.map(({ id, Icon: KIcon, label, kbd }) => (
-            <button
-              key={id}
-              type="button"
-              className={[
-                styles.shapeToolFlyoutBtn,
-                kind === id && active && styles.shapeToolFlyoutBtnActive,
-              ].filter(Boolean).join(' ')}
-              onClick={() => { onPick(id); setOpen(false); }}
-            >
-              <span className={styles.shapeToolFlyoutBtnIcon}>
-                <KIcon size={16} strokeWidth={1.8} />
-              </span>
-              <span className={styles.shapeToolFlyoutBtnLabel}>{label}</span>
-              <span className={styles.shapeToolFlyoutBtnKbd}>{kbd}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </span>
+  const isActive = (row) => (
+    (row.section === 'shape' && activeTool === 'shape' && shapeKind === row.kind) ||
+    (row.section === 'arrow' && activeTool === 'arrow' && arrowKind === row.kind)
   );
-}
 
-// Arrow tool button — same flyout pattern as ShapeToolButton but
-// for line / arrow / elbow. Sub-shortcuts 1 / 2 / 3 swap kind when
-// the arrow tool is armed.
-function ArrowToolButton({ active, kind, onPick, Icon }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    }
-    function onKey(e) { if (e.key === 'Escape') setOpen(false); }
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  const KINDS = [
-    { id: 'line',    Icon: Slash,            label: 'Line',        kbd: 'L' },
-    { id: 'arrow',   Icon: MoveUpRight,      label: 'Arrow',       kbd: 'A' },
-    { id: 'elbow',   Icon: CornerDownRight,  label: 'Elbow arrow', kbd: '3' },
-  ];
+  const masterActive = activeTool === 'shape' || activeTool === 'arrow';
 
   return (
     <span ref={wrapRef} style={{ position: 'relative', display: 'inline-flex' }}>
@@ -529,32 +482,42 @@ function ArrowToolButton({ active, kind, onPick, Icon }) {
         type="button"
         className={[
           styles.toolBtn,
-          active && styles.toolBtnActive,
+          masterActive && styles.toolBtnActive,
         ].filter(Boolean).join(' ')}
-        title="Arrow / Line (L)"
+        title="Shapes & lines"
         onClick={() => setOpen((s) => !s)}
       >
         <Icon />
       </button>
       {open && (
         <div className={styles.shapeToolFlyout} role="menu">
-          {KINDS.map(({ id, Icon: KIcon, label, kbd }) => (
-            <button
-              key={id}
-              type="button"
-              className={[
-                styles.shapeToolFlyoutBtn,
-                kind === id && active && styles.shapeToolFlyoutBtnActive,
-              ].filter(Boolean).join(' ')}
-              onClick={() => { onPick(id); setOpen(false); }}
-            >
-              <span className={styles.shapeToolFlyoutBtnIcon}>
-                <KIcon size={16} strokeWidth={1.8} />
-              </span>
-              <span className={styles.shapeToolFlyoutBtnLabel}>{label}</span>
-              <span className={styles.shapeToolFlyoutBtnKbd}>{kbd}</span>
-            </button>
-          ))}
+          {ROWS.map((row, idx) => {
+            const prev = ROWS[idx - 1];
+            const showDivider = prev && prev.section !== row.section;
+            return (
+              <React.Fragment key={row.kind}>
+                {showDivider && <div className={styles.shapeToolFlyoutSep} />}
+                <button
+                  type="button"
+                  className={[
+                    styles.shapeToolFlyoutBtn,
+                    isActive(row) && styles.shapeToolFlyoutBtnActive,
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => {
+                    if (row.section === 'shape') onPickShape(row.kind);
+                    else onPickArrow(row.kind);
+                    setOpen(false);
+                  }}
+                >
+                  <span className={styles.shapeToolFlyoutBtnIcon}>
+                    <row.Icon size={16} strokeWidth={1.8} />
+                  </span>
+                  <span className={styles.shapeToolFlyoutBtnLabel}>{row.label}</span>
+                  <span className={styles.shapeToolFlyoutBtnKbd}>{row.kbd}</span>
+                </button>
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
     </span>
@@ -1332,11 +1295,9 @@ export default function BoardView({
         setTool('image');
         setDrawerOpen(true);
       }
-      // Shape kind shortcuts — each lands the shape tool armed
-      // with the matching kind so the next click drops that shape
-      // immediately. R / E / T are letter aliases for the kind
-      // numbers 1 / 2 / 3 which still work as sub-shortcuts within
-      // the tool.
+      // Shape + arrow kind shortcuts — each switches to the matching
+      // tool *and* sets the kind in one keystroke, so the next
+      // canvas click drops that shape / arrow.
       else if (!cmd && (k === 'r')) {
         setTool('shape');
         setShapeKind('rect');
@@ -1346,20 +1307,16 @@ export default function BoardView({
       } else if (!cmd && (k === 't')) {
         setTool('shape');
         setShapeKind('triangle');
-      } else if (!cmd && tool === 'shape' && (k === '1' || k === '2' || k === '3')) {
-        setShapeKind(k === '1' ? 'rect' : k === '2' ? 'ellipse' : 'triangle');
-      }
-      // Arrow kind shortcuts — A for arrow, L for plain line. Elbow
-      // doesn't get a top-level letter (still reachable via the
-      // flyout or sub-shortcut 3 once the arrow tool is armed).
-      else if (!cmd && (k === 'a')) {
+      } else if (!cmd && (k === 'a')) {
         setTool('arrow');
         setArrowKind('arrow');
       } else if (!cmd && (k === 'l')) {
         setTool('arrow');
         setArrowKind('line');
-      } else if (!cmd && tool === 'arrow' && (k === '1' || k === '2' || k === '3')) {
-        setArrowKind(k === '1' ? 'line' : k === '2' ? 'arrow' : 'elbow');
+      } else if (!cmd && (k === 'b')) {
+        // B for "bend" — elbow arrow.
+        setTool('arrow');
+        setArrowKind('elbow');
       }
     }
     window.addEventListener('keydown', onKey);
@@ -1746,20 +1703,11 @@ export default function BoardView({
             return (
               <ShapeToolButton
                 key={id}
-                active={tool === 'shape'}
-                kind={shapeKind}
-                onPick={(k) => { setShapeKind(k); setTool('shape'); }}
-                Icon={Icon}
-              />
-            );
-          }
-          if (id === 'arrow') {
-            return (
-              <ArrowToolButton
-                key={id}
-                active={tool === 'arrow'}
-                kind={arrowKind}
-                onPick={(k) => { setArrowKind(k); setTool('arrow'); }}
+                activeTool={tool}
+                shapeKind={shapeKind}
+                arrowKind={arrowKind}
+                onPickShape={(k) => { setShapeKind(k); setTool('shape'); }}
+                onPickArrow={(k) => { setArrowKind(k); setTool('arrow'); }}
                 Icon={Icon}
               />
             );

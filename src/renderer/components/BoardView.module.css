@@ -280,6 +280,14 @@
   background: rgba(10, 132, 255, 0.10);
 }
 
+/* Hairline separator between sections of the combined flyout
+   (shapes vs lines). Sits flush with the row padding. */
+.shapeToolFlyoutSep {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 4px 8px;
+}
+
 /* ── Library drawer (right rail, image source) ───────────────────── */
 
 .drawer {
