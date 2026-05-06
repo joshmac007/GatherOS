@@ -296,15 +296,13 @@
    input padding-right above keeps it from overlapping typed text. */
 .qkChip {
   position: absolute;
-  right: 6px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  /* Equal padding on all sides — top/bottom/left/right share the
-     same gutter so the keys sit with consistent breathing room. */
-  padding: 3px;
+  gap: 2px;
+  padding: 2px 5px;
   background: rgba(0, 0, 0, 0.04);
   border: 0.5px solid rgba(0, 0, 0, 0.07);
   border-radius: 999px;
@@ -443,16 +441,14 @@
 }
 
 /* Bare characters inside the .qkChip pill — no inner squared
-   container. Reads as one shape, not "boxes inside a box." Width
-   tracks the glyph (no min-width centering) so a narrow "K" doesn't
-   carry the same dead-space halo a wide "⌘" needs — that's what
-   was making the right side of the chip look heavier than the left. */
+   container. Reads as one shape, not "boxes inside a box." */
 .qkChipKey {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 14px;
-  padding: 0;
+  min-width: 12px;
+  height: 16px;
+  padding: 0 3px;
   background: transparent;
   border: none;
   font-family: var(--font-ui);
