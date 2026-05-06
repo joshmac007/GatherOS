@@ -398,7 +398,14 @@ export default function BoardCanvas({
             x: newX,
             y: newY,
             width: newW,
-            height: newH,
+            // Text items: leave height null so the wrapper hugs the
+            // content. We compute newH only to anchor the opposite
+            // corner during the drag — using it as an explicit height
+            // would leave empty space below the text whenever the
+            // typed content needs less than the box's height (which
+            // is most of the time, since fontSize scales with the
+            // drag and text is usually a single line).
+            height: type === 'text' ? null : newH,
           };
           // Text items: scale fontSize by the same ratio so the editor
           // toolbar's font-size input reflects the resize. Sticky keeps
