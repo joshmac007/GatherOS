@@ -156,6 +156,18 @@ function BoardItem({
       ? fileUrl(liveSave.file_path)
       : item.data?.fileUrl || null;
     if (!src) return null;
+    // Lock the wrapper to the image's natural aspect ratio so the
+    // bounding box always hugs the image — even for items stored
+    // with mismatched width/height, and even after a non-uniform
+    // drag (resize is now proportional, but legacy items can have
+    // any persisted shape). Width drives the size; height is
+    // computed via aspect-ratio.
+    const naturalW = liveSave?.width || item.data?.naturalWidth;
+    const naturalH = liveSave?.height || item.data?.naturalHeight;
+    if (naturalW && naturalH) {
+      baseStyle.aspectRatio = `${naturalW} / ${naturalH}`;
+      baseStyle.height = 'auto';
+    }
     content = (
       <img src={src} className={styles.itemImage} draggable={false} alt="" />
     );
@@ -314,9 +326,16 @@ export default function BoardCanvas({
     const itemEl = canvasRef.current.querySelector(`[data-item-id="${item.id}"]`);
     let measuredW = item.width;
     let measuredH = item.height;
-    if ((!measuredW || !measuredH) && itemEl) {
+    // Image items render with an aspect-locked height that may not
+    // match the persisted item.height (legacy data, prior non-
+    // uniform drags). Always measure from the DOM so the resize
+    // anchor math agrees with what the user sees on screen.
+    if (item.type === 'image' && itemEl) {
       const r = itemEl.getBoundingClientRect();
-      // Convert measured screen size back to world units.
+      measuredW = r.width / zoom;
+      measuredH = r.height / zoom;
+    } else if ((!measuredW || !measuredH) && itemEl) {
+      const r = itemEl.getBoundingClientRect();
       measuredW = measuredW || r.width / zoom;
       measuredH = measuredH || r.height / zoom;
     }
@@ -403,12 +422,13 @@ export default function BoardCanvas({
         let newW = Math.max(MIN, initial.width + dxSigned);
         let newH = Math.max(MIN, initial.height + dySigned);
 
-        // Text resizes uniformly because its fontSize scales with
-        // the box and a non-uniform drag would distort typography.
-        // Sticky and image both honour free aspect — sticky's body
-        // type is fixed so the user can shape the note however they
-        // want without affecting legibility.
-        if (type === 'text') {
+        // Text and image both resize uniformly — text scales its
+        // fontSize with the box, and images need to preserve their
+        // intrinsic aspect ratio so the wrapper always hugs the
+        // image with no letterbox space inside the bounding box.
+        // Sticky stays free-aspect so the user can shape the note
+        // tall, wide, or square.
+        if (type === 'text' || type === 'image') {
           const sx = newW / initial.width;
           const sy = newH / initial.height;
           const s = Math.max(sx, sy);

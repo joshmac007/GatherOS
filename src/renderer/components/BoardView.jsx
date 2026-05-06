@@ -337,7 +337,15 @@ export default function BoardView({ boardId, saves, collections = [], onRenameBo
       height: h,
       rotation: 0,
       z_index: nextZ(items),
-      data: { saveId, fileUrl: fileUrl(save.file_path) },
+      data: {
+        saveId,
+        fileUrl: fileUrl(save.file_path),
+        // Stash the source image's natural dimensions so the
+        // wrapper can always lock to its aspect ratio even if the
+        // referenced save is later deleted from the library.
+        naturalWidth: save.width || null,
+        naturalHeight: save.height || null,
+      },
       created_at: Date.now(),
       updated_at: Date.now(),
     };
