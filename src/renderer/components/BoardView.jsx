@@ -6,7 +6,6 @@ import {
   StickyNote,
   Type,
   Shapes,
-  PenTool,
   Frame,
   Undo2,
   Redo2,
@@ -47,10 +46,8 @@ const TOOLS = [
   { id: 'image',  label: 'Image library (I)',  Icon: (p) => <ImagePlus {...TOOL_ICON} {...p} /> },
   { id: 'sticky', label: 'Sticky note (S)',    Icon: (p) => <StickyNote {...TOOL_ICON} {...p} /> },
   { id: 'text',   label: 'Text',                Icon: (p) => <Type {...TOOL_ICON} {...p} /> },
-  // Phase 2: shapes / arrow / frame are live; pen still placeholder.
   { id: 'shape',  label: 'Shapes & lines',      Icon: (p) => <Shapes {...TOOL_ICON} {...p} /> },
   { id: 'frame',  label: 'Frame (F)',            Icon: (p) => <Frame {...TOOL_ICON} {...p} /> },
-  { id: 'pen',    label: 'Pen — coming soon',    Icon: (p) => <PenTool {...TOOL_ICON} {...p} />, disabled: true },
 ];
 
 const INITIAL_PAN = { x: 0, y: 0 };
