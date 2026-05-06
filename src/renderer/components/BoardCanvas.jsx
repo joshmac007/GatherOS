@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import styles from './BoardView.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+import { extractDropImageUrls } from '../lib/dropUrls.js';
 
 // Convert a screen-space point (relative to the canvas's top-left)
 // into world coordinates given the current pan + zoom.
@@ -727,22 +728,68 @@ export default function BoardCanvas({
     e.dataTransfer.dropEffect = 'copy';
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = async (e) => {
     e.preventDefault();
-    const raw = e.dataTransfer.getData('application/x-moodmark-board-save')
-      || e.dataTransfer.getData('application/x-moodmark-save-ids');
-    if (!raw) return;
-    let saveId = null;
-    try {
-      const parsed = JSON.parse(raw);
-      saveId = Array.isArray(parsed) ? parsed[0] : parsed.saveId || parsed;
-    } catch {
-      saveId = raw;
-    }
-    if (!saveId) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, pan, zoom);
-    onDropImage?.({ saveId, world });
+    const baseWorld = screenToWorld(
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+      pan,
+      zoom,
+    );
+
+    // 1) Internal library drag — a thumbnail dropped from the
+    //    BoardLibraryDrawer or a save dragged from the masonry grid.
+    const internal = e.dataTransfer.getData('application/x-moodmark-board-save')
+      || e.dataTransfer.getData('application/x-moodmark-save-ids');
+    if (internal) {
+      let saveId = null;
+      try {
+        const parsed = JSON.parse(internal);
+        saveId = Array.isArray(parsed) ? parsed[0] : parsed.saveId || parsed;
+      } catch {
+        saveId = internal;
+      }
+      if (saveId) onDropImage?.({ saveId, world: baseWorld });
+      return;
+    }
+
+    // 2) External image files (Finder, Photos, any OS-level drop).
+    //    Save each through the standard library pipeline so the
+    //    save:created notification fires and the masonry / library
+    //    drawer pick it up automatically; in the meantime we drop
+    //    the returned record straight onto the canvas.
+    const files = [...e.dataTransfer.files].filter((f) =>
+      f.type.startsWith('image/'),
+    );
+    if (files.length > 0) {
+      let world = baseWorld;
+      for (const file of files) {
+        try {
+          const record = await window.moodmark.saves.dropFile(file);
+          if (record?.id) {
+            onDropImage?.({ saveRecord: record, world });
+            // Cascade subsequent drops down-and-right so a
+            // multi-file drop doesn't pile up at one point.
+            world = { x: world.x + 24, y: world.y + 24 };
+          }
+        } catch (err) {
+          console.error('Board drop file failed:', err);
+        }
+      }
+      return;
+    }
+
+    // 3) External image URLs (a drag from a browser tab).
+    const urls = extractDropImageUrls(e.dataTransfer);
+    if (urls.length > 0) {
+      try {
+        const record = await window.moodmark.saves.dropUrl(urls);
+        if (record?.id) onDropImage?.({ saveRecord: record, world: baseWorld });
+      } catch (err) {
+        console.error('Board drop URL failed:', err);
+      }
+    }
   };
 
   return (

@@ -321,12 +321,20 @@ export default function BoardView({
     }
   }, [persistMany]);
 
-  // Drop an image from the library drawer: resolve the save record
-  // for its natural dimensions, scale down to a sensible default,
-  // and add a new image item centered on the drop point.
-  const handleDropImage = useCallback(({ saveId, world }) => {
-    const save = saves.find((s) => s.id === saveId);
-    if (!save) return;
+  // Drop an image onto the canvas. Accepts either:
+  //   - { saveId, world }     — internal drag from the library
+  //                              drawer or the masonry grid; the
+  //                              save is already in the library.
+  //   - { saveRecord, world } — external file/URL drop the canvas
+  //                              just routed through saves.dropFile
+  //                              / saves.dropUrl, so the live saves
+  //                              list might not have it yet.
+  // Either way we resolve to a save record, derive a sensible
+  // default size from its intrinsic dimensions, and spawn an image
+  // item centered on the drop point.
+  const handleDropImage = useCallback(({ saveId, saveRecord, world }) => {
+    const save = saveRecord || saves.find((s) => s.id === saveId);
+    if (!save?.id) return;
     const aspect = save.width && save.height ? save.width / save.height : 1;
     let w = save.width || DEFAULT_IMAGE_MAX;
     let h = save.height || DEFAULT_IMAGE_MAX;
@@ -345,7 +353,9 @@ export default function BoardView({
       rotation: 0,
       z_index: nextZ(items),
       data: {
-        saveId,
+        // save.id covers both branches: the internal saveId path
+        // and the saveRecord path (external file/URL drop).
+        saveId: save.id,
         fileUrl: fileUrl(save.file_path),
         // Stash the source image's natural dimensions so the
         // wrapper can always lock to its aspect ratio even if the
