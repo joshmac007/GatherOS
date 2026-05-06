@@ -80,12 +80,36 @@
   justify-content: center;
   background: rgba(0, 0, 0, 0.025);
   border-bottom: 1px solid var(--border);
+  /* 3D viewing distance for the imageWrap's rotateX / rotateY. Lower
+     values exaggerate the tilt; 900px gives a soft, photographic feel. */
+  perspective: 900px;
 }
 
 .imageWrap {
   position: relative;
   display: inline-flex;
   max-width: 100%;
+  /* CSS vars set by JS as the cursor moves; transform maps them to a
+     3D rotation. Defaults are 0 so the resting state is flat. The
+     longer eased transition is the spring-back when the cursor
+     leaves; the .imageWrapTilting class swaps in a fast linear
+     transition during live tracking so the tilt feels responsive
+     instead of laggy. */
+  transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transform-style: preserve-3d;
+  transition: transform 360ms cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
+}
+
+.imageWrapTilting {
+  transition: transform 80ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imageWrap {
+    transform: none !important;
+    transition: none !important;
+  }
 }
 
 .typeBadge {

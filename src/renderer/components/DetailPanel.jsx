@@ -149,6 +149,35 @@ export default function DetailPanel({
   const typeLabel = fileTypeLabel(record.file_path);
   const [copiedColor, setCopiedColor] = useState(null);
   const imageRef = useRef(null);
+  const previewWrapRef = useRef(null);
+  const [tilting, setTilting] = useState(false);
+
+  // Mouse-driven 3D tilt on the detail thumbnail. Tracks the cursor
+  // position over the preview area, normalises it to -0.5..0.5 from
+  // the image's centre, and writes --tilt-x / --tilt-y CSS vars on
+  // the wrap. CSS handles the rotateX/rotateY mapping; the .tilting
+  // class swaps in a snappy transition for live tracking and the
+  // default longer transition handles the spring-back on leave.
+  const handleTiltMove = (e) => {
+    const wrap = previewWrapRef.current;
+    if (!wrap) return;
+    if (!tilting) setTilting(true);
+    const rect = wrap.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width - 0.5;
+    const ny = (e.clientY - rect.top) / rect.height - 0.5;
+    const tiltY = nx * 18;  // rotateY follows horizontal mouse
+    const tiltX = -ny * 14; // rotateX follows vertical (inverted)
+    wrap.style.setProperty('--tilt-x', `${tiltX.toFixed(2)}deg`);
+    wrap.style.setProperty('--tilt-y', `${tiltY.toFixed(2)}deg`);
+  };
+
+  const handleTiltLeave = () => {
+    const wrap = previewWrapRef.current;
+    if (!wrap) return;
+    setTilting(false);
+    wrap.style.setProperty('--tilt-x', '0deg');
+    wrap.style.setProperty('--tilt-y', '0deg');
+  };
   const [autoTagging, setAutoTagging] = useState(false);
   const [autoTagError, setAutoTagError] = useState('');
   const [promptGenerating, setPromptGenerating] = useState(false);
@@ -508,9 +537,19 @@ export default function DetailPanel({
         </button>
       </header>
 
-      <div className={styles.preview}>
+      <div
+        className={styles.preview}
+        onMouseMove={handleTiltMove}
+        onMouseLeave={handleTiltLeave}
+      >
         {src && (
-          <div className={styles.imageWrap}>
+          <div
+            ref={previewWrapRef}
+            className={[
+              styles.imageWrap,
+              tilting && styles.imageWrapTilting,
+            ].filter(Boolean).join(' ')}
+          >
             <img
               ref={imageRef}
               src={src}
