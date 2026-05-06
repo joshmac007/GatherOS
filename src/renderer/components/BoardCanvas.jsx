@@ -190,7 +190,23 @@ function EditableTextContent({ item, editing, onCommitEdit }) {
         }
       }}
       onMouseDown={(e) => { if (editing) e.stopPropagation(); }}
-      onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur(); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.currentTarget.blur();
+          return;
+        }
+        if (e.key === 'Enter') {
+          // Force a <br> instead of the browser's default <div>
+          // paragraph block. <div> blocks become individual flex
+          // items inside a flex-centred shape, which lays them out
+          // sideways and breaks line-break expectations entirely.
+          // <br> keeps everything as one inline flow that the flex
+          // container centres as a single multi-line block, and
+          // works correctly in text + sticky too.
+          e.preventDefault();
+          document.execCommand('insertLineBreak');
+        }
+      }}
     />
   );
 }
