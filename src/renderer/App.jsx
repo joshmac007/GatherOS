@@ -14,6 +14,7 @@ import Grid from './components/Grid.jsx';
 import FeaturedBuckets from './components/FeaturedBuckets.jsx';
 import DetailPanel from './components/DetailPanel.jsx';
 import FocusedView from './components/FocusedView.jsx';
+import BoardView from './components/BoardView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
 import LoadingScreen from './components/LoadingScreen.jsx';
 import FocusedSortMode from './components/FocusedSortMode.jsx';
@@ -400,6 +401,33 @@ export default function App() {
   }, []);
 
   useEffect(() => { loadCollections(); }, [loadCollections]);
+
+  // Boards state — Miro-style infinite-canvas surfaces. Reloaded
+  // whenever a board is created/renamed/deleted so the sidebar list
+  // stays in sync.
+  const [boards, setBoards] = useState([]);
+  const loadBoards = useCallback(async () => {
+    const rows = await window.moodmark.boards.list();
+    setBoards(Array.isArray(rows) ? rows : []);
+  }, []);
+  useEffect(() => { loadBoards(); }, [loadBoards]);
+
+  const handleCreateBoard = useCallback(async () => {
+    const board = await window.moodmark.boards.create({ name: 'Untitled board' });
+    await loadBoards();
+    return board;
+  }, [loadBoards]);
+
+  const handleRenameBoard = useCallback(async ({ id, name }) => {
+    await window.moodmark.boards.rename({ id, name });
+    await loadBoards();
+  }, [loadBoards]);
+
+  const handleDeleteBoard = useCallback(async (id) => {
+    await window.moodmark.boards.delete(id);
+    setView((v) => (v.type === 'board' && v.id === id ? { type: 'all' } : v));
+    await loadBoards();
+  }, [loadBoards, setView]);
 
   // Refresh collection counts whenever the grid refreshes — and also
   // whenever the local saves array shrinks/grows from an optimistic
@@ -1760,11 +1788,22 @@ export default function App() {
             onOpenReleaseNotes={handleOpenReleaseNotes}
             releaseNotesUnseen={releaseNotesUnseen}
             createCollectionSignal={createCollectionSignal}
+            boards={boards}
+            onCreateBoard={handleCreateBoard}
+            onRenameBoard={handleRenameBoard}
+            onDeleteBoard={handleDeleteBoard}
           />
         )}
 
         <div className="main-col">
-          {focused ? (
+          {view.type === 'board' ? (
+            <BoardView
+              key={view.id}
+              boardId={view.id}
+              saves={saves}
+              onRenameBoard={handleRenameBoard}
+            />
+          ) : focused ? (
             <FocusedView
               record={focused}
               index={focusedIndex}

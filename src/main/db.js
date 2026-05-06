@@ -45,6 +45,33 @@ CREATE TABLE IF NOT EXISTS save_tags (
   PRIMARY KEY (save_id, tag_id)
 );
 
+CREATE TABLE IF NOT EXISTS boards (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  thumb_path   TEXT,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_boards_updated_at ON boards (updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS board_items (
+  id           TEXT PRIMARY KEY,
+  board_id     TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  type         TEXT NOT NULL,
+  x            REAL NOT NULL,
+  y            REAL NOT NULL,
+  width        REAL,
+  height       REAL,
+  rotation     REAL DEFAULT 0,
+  z_index      INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL DEFAULT '{}',
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_board_items_board_id ON board_items (board_id);
+
 `;
 
 let db = null;
@@ -801,6 +828,133 @@ function removeSaveFromCollection({ collectionId, saveId } = {}) {
   return { ok: true };
 }
 
+// ── Boards ──────────────────────────────────────────────────────────
+//
+// Boards are an infinite-canvas surface. A board has many board_items,
+// where each item has type-specific data stashed as a JSON blob in the
+// `data` column. Position/size live as columns so we can index/query
+// them later if needed (e.g. compute board bounds for thumbnails).
+
+function listBoards() {
+  return getDatabase().prepare(
+    'SELECT id, name, thumb_path, created_at, updated_at FROM boards ORDER BY updated_at DESC'
+  ).all();
+}
+
+function getBoard(id) {
+  return getDatabase().prepare(
+    'SELECT id, name, thumb_path, created_at, updated_at FROM boards WHERE id = ?'
+  ).get(id);
+}
+
+function createBoard({ name = 'Untitled board' } = {}) {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  getDatabase().prepare(
+    'INSERT INTO boards (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)'
+  ).run(id, name, now, now);
+  return { id, name, thumb_path: null, created_at: now, updated_at: now };
+}
+
+function renameBoard({ id, name } = {}) {
+  getDatabase().prepare(
+    'UPDATE boards SET name = ?, updated_at = ? WHERE id = ?'
+  ).run(name, Date.now(), id);
+  return { ok: true };
+}
+
+function deleteBoard(id) {
+  // ON DELETE CASCADE drops board_items automatically.
+  getDatabase().prepare('DELETE FROM boards WHERE id = ?').run(id);
+  return { ok: true };
+}
+
+function touchBoard(id) {
+  getDatabase().prepare(
+    'UPDATE boards SET updated_at = ? WHERE id = ?'
+  ).run(Date.now(), id);
+}
+
+function getBoardItems(boardId) {
+  const rows = getDatabase().prepare(
+    'SELECT id, board_id, type, x, y, width, height, rotation, z_index, data, created_at, updated_at FROM board_items WHERE board_id = ? ORDER BY z_index ASC'
+  ).all(boardId);
+  // Hydrate the JSON blob for the renderer; raw column stays as text.
+  return rows.map((r) => ({
+    ...r,
+    data: r.data ? safeParseJSON(r.data) : {},
+  }));
+}
+
+function safeParseJSON(s) {
+  try { return JSON.parse(s); } catch { return {}; }
+}
+
+function upsertBoardItem({ boardId, item } = {}) {
+  if (!boardId || !item) return { ok: false };
+  const now = Date.now();
+  const id = item.id || crypto.randomUUID();
+  const dataStr = JSON.stringify(item.data || {});
+  const existing = getDatabase().prepare(
+    'SELECT id FROM board_items WHERE id = ?'
+  ).get(id);
+
+  if (existing) {
+    getDatabase().prepare(
+      `UPDATE board_items SET
+         type = ?, x = ?, y = ?, width = ?, height = ?, rotation = ?,
+         z_index = ?, data = ?, updated_at = ?
+       WHERE id = ?`
+    ).run(
+      item.type, item.x, item.y, item.width ?? null, item.height ?? null,
+      item.rotation ?? 0, item.z_index ?? 0, dataStr, now, id,
+    );
+  } else {
+    getDatabase().prepare(
+      `INSERT INTO board_items
+         (id, board_id, type, x, y, width, height, rotation, z_index, data, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id, boardId, item.type, item.x, item.y,
+      item.width ?? null, item.height ?? null,
+      item.rotation ?? 0, item.z_index ?? 0, dataStr,
+      item.created_at || now, now,
+    );
+  }
+  touchBoard(boardId);
+  return { id, updated_at: now };
+}
+
+function bulkUpdateBoardItems({ boardId, items } = {}) {
+  if (!boardId || !Array.isArray(items) || items.length === 0) return { ok: true };
+  const db = getDatabase();
+  const tx = db.transaction(() => {
+    for (const it of items) {
+      upsertBoardItem({ boardId, item: it });
+    }
+  });
+  tx();
+  return { ok: true };
+}
+
+function deleteBoardItem({ boardId, itemId } = {}) {
+  getDatabase().prepare(
+    'DELETE FROM board_items WHERE id = ? AND board_id = ?'
+  ).run(itemId, boardId);
+  touchBoard(boardId);
+  return { ok: true };
+}
+
+function deleteBoardItems({ boardId, itemIds } = {}) {
+  if (!Array.isArray(itemIds) || itemIds.length === 0) return { ok: true };
+  const placeholders = itemIds.map(() => '?').join(',');
+  getDatabase().prepare(
+    `DELETE FROM board_items WHERE board_id = ? AND id IN (${placeholders})`
+  ).run(boardId, ...itemIds);
+  touchBoard(boardId);
+  return { ok: true };
+}
+
 module.exports = {
   initDatabase,
   getDatabase,
@@ -839,4 +993,15 @@ module.exports = {
   getTagsForSave,
   addTagToSave,
   removeTagFromSave,
+  // Boards
+  listBoards,
+  getBoard,
+  createBoard,
+  renameBoard,
+  deleteBoard,
+  getBoardItems,
+  upsertBoardItem,
+  bulkUpdateBoardItems,
+  deleteBoardItem,
+  deleteBoardItems,
 };

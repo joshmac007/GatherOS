@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Megaphone,
   HelpCircle,
+  Frame,
 } from 'lucide-react';
 
 const SIDEBAR_ICON = { strokeWidth: 1.6, 'aria-hidden': true };
@@ -36,6 +37,7 @@ const HelpIcon = () => <HelpCircle {...SIDEBAR_ICON} />;
 export const CollectionIcon = () => <FolderClosed {...SIDEBAR_ICON} />;
 export const InboxIcon = () => <Inbox {...SIDEBAR_ICON} />;
 export const TrashIcon = () => <Trash2 {...SIDEBAR_ICON} />;
+export const BoardIcon = () => <Frame {...SIDEBAR_ICON} />;
 
 // Inline count badge that briefly slide-fades on every change. The
 // effect skips the first render — opening the app shouldn't fire a
@@ -156,6 +158,10 @@ export default function Sidebar({
   onOpenReleaseNotes,
   releaseNotesUnseen = false,
   createCollectionSignal,
+  boards = [],
+  onCreateBoard,
+  onRenameBoard,
+  onDeleteBoard,
 }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -748,6 +754,65 @@ export default function Sidebar({
             </button>
           );
         })}
+      </nav>
+
+      <div className={styles.sectionHeaderRow}>
+        <span className={styles.sectionHeaderLabel}>Boards</span>
+        {onCreateBoard && (
+          <button
+            className={styles.addBtn}
+            onClick={async () => {
+              const board = await onCreateBoard();
+              if (board?.id) onViewChange?.({ type: 'board', id: board.id });
+            }}
+            title="New Board"
+          >
+            +
+          </button>
+        )}
+      </div>
+
+      <nav className={styles.section}>
+        {boards.length === 0 ? (
+          <div className={styles.empty}>No boards yet</div>
+        ) : (
+          boards.map((b) => {
+            const active = view.type === 'board' && view.id === b.id;
+            return (
+              <button
+                key={b.id}
+                className={`${styles.item} ${active ? styles.active : ''}`}
+                onClick={() => onViewChange?.({ type: 'board', id: b.id })}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  // Minimal contextual actions for boards: rename / delete.
+                  // Reuses window.prompt/confirm to keep this lean — we'll
+                  // graduate to a styled menu if/when boards get richer
+                  // metadata to hang affordances off.
+                  const choice = window.prompt(
+                    `Rename "${b.name}" to:\n(leave blank to delete)`,
+                    b.name,
+                  );
+                  if (choice === null) return;
+                  const trimmed = choice.trim();
+                  if (trimmed === '') {
+                    if (window.confirm(`Delete "${b.name}"? This can't be undone.`)) {
+                      onDeleteBoard?.(b.id);
+                    }
+                  } else if (trimmed !== b.name) {
+                    onRenameBoard?.({ id: b.id, name: trimmed });
+                  }
+                }}
+                title={b.name}
+              >
+                <span className={styles.icon}>
+                  <BoardIcon />
+                </span>
+                <span className={styles.label}>{b.name}</span>
+              </button>
+            );
+          })
+        )}
       </nav>
 
       <div className={styles.sectionHeaderRow} data-onboarding="buckets">

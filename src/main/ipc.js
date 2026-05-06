@@ -10,6 +10,8 @@ const {
   getAllCollections, getCollectionsForSave, getCollectionsContainingAll, createCollection, renameCollection, setCollectionParent,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
   getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
+  listBoards, getBoard, createBoard, renameBoard, deleteBoard,
+  getBoardItems, upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
 } = require('./db');
 const {
   deleteImageFiles,
@@ -286,6 +288,17 @@ function registerIpcHandlers() {
   ipcMain.handle('collections:reorder', (_e, ids) => reorderCollections(ids));
   ipcMain.handle('collections:add-save', (_e, payload) => addSaveToCollection(payload));
   ipcMain.handle('collections:remove-save', (_e, payload) => removeSaveFromCollection(payload));
+
+  ipcMain.handle('boards:list', () => listBoards());
+  ipcMain.handle('boards:get', (_e, id) => getBoard(id));
+  ipcMain.handle('boards:create', (_e, payload) => createBoard(payload));
+  ipcMain.handle('boards:rename', (_e, payload) => renameBoard(payload));
+  ipcMain.handle('boards:delete', (_e, id) => deleteBoard(id));
+  ipcMain.handle('boards:get-items', (_e, boardId) => getBoardItems(boardId));
+  ipcMain.handle('boards:upsert-item', (_e, payload) => upsertBoardItem(payload));
+  ipcMain.handle('boards:bulk-update-items', (_e, payload) => bulkUpdateBoardItems(payload));
+  ipcMain.handle('boards:delete-item', (_e, payload) => deleteBoardItem(payload));
+  ipcMain.handle('boards:delete-items', (_e, payload) => deleteBoardItems(payload));
 
   ipcMain.handle('tags:get-all', () => getAllTags());
   ipcMain.handle('tags:get-for-save', (_e, saveId) => getTagsForSave(saveId));
