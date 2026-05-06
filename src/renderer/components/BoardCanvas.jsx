@@ -450,6 +450,11 @@ export default function BoardCanvas({
   // Arrow endpoint drag in progress. Holds the active item and
   // which endpoint ('a' = start, 'b' = end) is moving.
   const arrowEndpointState = useRef(null);
+  // The id of the arrow currently being moved by a wrapper drag.
+  // Used to suppress its handles for the duration of the drag —
+  // when you click-and-drag to relocate the arrow you don't want
+  // the dots flashing along with the line.
+  const [arrowMovingId, setArrowMovingId] = useState(null);
   const [isPanning, setIsPanning] = useState(false);
 
   // Bounding rect that wraps every currently-selected item (in world
@@ -688,6 +693,9 @@ export default function BoardCanvas({
       if (it) offsets.set(id, { dx: it.x - cursor.x, dy: it.y - cursor.y });
     }
     moveState.current = { offsets, movingIds };
+    // Hide arrow chrome while the wrapper is moving so the handles
+    // don't shadow the line during a drag.
+    if (item.type === 'arrow') setArrowMovingId(item.id);
   };
 
   useEffect(() => {
@@ -974,6 +982,7 @@ export default function BoardCanvas({
         moveState.current = null;
         // Persist the final positions of the moved items.
         onItemsChange(items, { movingIds, persist: true });
+        setArrowMovingId(null);
       }
       if (resizeState.current) {
         const id = resizeState.current.itemId;
@@ -1262,6 +1271,10 @@ export default function BoardCanvas({
           const id = Array.from(selectedIds)[0];
           const it = items.find((x) => x.id === id);
           if (!it || it.type !== 'arrow' || it.data?.locked) return null;
+          // Suppress the handles while the user is dragging the
+          // whole arrow around — they obscure the line and feel
+          // jittery. They reappear on mouseup.
+          if (arrowMovingId === it.id) return null;
           const points = getArrowPoints(it);
           const startVertexDrag = (vertexIdx) => (e) => {
             if (e.button !== 0) return;

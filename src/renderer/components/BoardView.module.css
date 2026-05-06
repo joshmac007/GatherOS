@@ -889,10 +889,8 @@
    handles painted in BoardCanvas. */
 .itemArrow {
   background: transparent;
-  cursor: grab;
+  cursor: default;
 }
-
-.itemArrow:active { cursor: grabbing; }
 
 .arrowSvg {
   position: absolute;
@@ -915,7 +913,7 @@
   border-radius: 50%;
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(2px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.18);
   transform: translate(-50%, -50%);
-  cursor: pointer;
+  cursor: default;
   z-index: 2;
 }
 
@@ -932,7 +930,7 @@
   border-radius: 50%;
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(3px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.22);
   transform: translate(-50%, -50%);
-  cursor: move;
+  cursor: default;
   z-index: 2;
 }
 
@@ -947,7 +945,7 @@
   border-radius: 50%;
   opacity: 0.6;
   transform: translate(-50%, -50%);
-  cursor: crosshair;
+  cursor: default;
   z-index: 2;
   transition: opacity 80ms ease, transform 80ms ease;
 }
