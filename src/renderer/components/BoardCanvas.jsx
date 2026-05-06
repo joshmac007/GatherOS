@@ -228,6 +228,7 @@ export default function BoardCanvas({
   onCanvasClick,
   onDropImage,
   onExternalImageSaved,
+  onSetAppDragging,
   tool,
 }) {
   const canvasRef = useRef(null);
@@ -735,7 +736,12 @@ export default function BoardCanvas({
     // also saves the dropped file and switches to 'all') from
     // running on top of ours — without this we'd save twice and
     // get bounced out of the board into the masonry view.
+    // The trade-off is that the App's onDrop is also the only
+    // place that clears its `dragging` state, so we have to do
+    // that ourselves via the prop callback or the "Drop to save"
+    // overlay stays painted after the drop completes.
     e.stopPropagation();
+    onSetAppDragging?.(false);
     const rect = canvasRef.current.getBoundingClientRect();
     const baseWorld = screenToWorld(
       e.clientX - rect.left,

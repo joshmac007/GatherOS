@@ -269,6 +269,7 @@ export default function BoardView({
   onRenameBoard,
   onExit,
   onShowToast,
+  onSetAppDragging,
 }) {
   const [board, setBoard] = useState(null);
   const [items, setItems] = useState([]);
@@ -609,6 +610,7 @@ export default function BoardView({
             n === 1 ? 'Added to library' : `Added ${n} images to library`,
           );
         }}
+        onSetAppDragging={onSetAppDragging}
         tool={tool}
       />
 
