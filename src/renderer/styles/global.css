@@ -119,6 +119,15 @@ button {
   animation: trashToastIn 160ms ease-out;
 }
 
+/* Symmetric padding when there's no Undo / action chip on the
+   right — otherwise the 16px left + 8px right reads as awkward
+   whitespace on the left of the label. :has() works in modern
+   Electron / Chromium, so the toast styles itself based on
+   whether a button is rendered next to the label. */
+.trash-toast:not(:has(.trash-toast-undo)) {
+  padding: 8px 14px;
+}
+
 @keyframes trashToastIn {
   from { opacity: 0; transform: translate(-50%, 8px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
