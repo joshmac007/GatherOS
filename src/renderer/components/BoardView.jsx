@@ -23,6 +23,9 @@ import {
   ArrowUpToLine,
   ArrowDownToLine,
   Trash2,
+  Square,
+  Circle,
+  Triangle,
 } from 'lucide-react';
 import styles from './BoardView.module.css';
 import BoardCanvas from './BoardCanvas.jsx';
@@ -39,7 +42,7 @@ const TOOLS = [
   // Phase 2: shapes / pen / frame are placeholders for now. The
   // buttons render so the layout matches the final tool set; each
   // is disabled until its implementation lands.
-  { id: 'shape',  label: 'Shapes — coming soon', Icon: (p) => <Shapes {...TOOL_ICON} {...p} />, disabled: true },
+  { id: 'shape',  label: 'Shape (R)',           Icon: (p) => <Shapes {...TOOL_ICON} {...p} /> },
   { id: 'pen',    label: 'Pen — coming soon',    Icon: (p) => <PenTool {...TOOL_ICON} {...p} />, disabled: true },
   { id: 'frame',  label: 'Frame — coming soon',  Icon: (p) => <Frame {...TOOL_ICON} {...p} />, disabled: true },
 ];
@@ -55,6 +58,26 @@ const INITIAL_ZOOM = 1;
 const DEFAULT_IMAGE_MAX = 360;
 const DEFAULT_STICKY = { width: 180, height: 180 };
 const DEFAULT_TEXT = { width: null, height: null };
+const DEFAULT_SHAPE = { width: 180, height: 120 };
+const SHAPE_DEFAULT_DATA = {
+  kind: 'rect',
+  text: '',
+  fontSize: 14,
+  align: 'center',
+  fill: '#FFFFFF',
+  stroke: 'rgba(0, 0, 0, 0.85)',
+  strokeWidth: 2,
+};
+const SHAPE_FILL_SWATCHES = [
+  '#FFFFFF', '#F2F2F2', '#FFE7A8',
+  '#D8EFFE', '#DDF6E0', '#FBD9CE',
+  '#EFD8FE', '#FFD6E5', 'transparent',
+];
+const SHAPE_STROKE_SWATCHES = [
+  '#0a0a0a', '#5a5a5a', '#9a9a9a',
+  '#0a84ff', '#34c759', '#ff9500',
+  '#ff3b30', '#af52de', 'transparent',
+];
 
 // Curated font list for the text styler. Web-safe + system fonts so
 // they render consistently without bundling.
@@ -251,7 +274,122 @@ function TextStyler({ item, rootEl, pan, zoom, onUpdate }) {
           </div>
         )}
       </span>
+
+      {item.type === 'shape' && (
+        <ShapeControls
+          item={item}
+          onUpdate={onUpdate}
+        />
+      )}
     </div>
+  );
+}
+
+// Shape-specific controls slotted at the right end of the floating
+// styler. Kind swap (rect / ellipse / triangle), fill swatch, stroke
+// swatch. Each swatch opens its own popover; only one can be open at
+// a time so they don't stack visually.
+function ShapeControls({ item, onUpdate }) {
+  const data = item.data || {};
+  const kind = data.kind || 'rect';
+  const fill = data.fill || '#FFFFFF';
+  const stroke = data.stroke || 'rgba(0, 0, 0, 0.85)';
+  const [openPicker, setOpenPicker] = useState(null); // 'fill' | 'stroke' | null
+  useEffect(() => { setOpenPicker(null); }, [item.id]);
+
+  const set = (changes) => onUpdate({ ...data, ...changes });
+
+  const KIND_BUTTONS = [
+    { id: 'rect',     Icon: Square,   label: 'Rectangle' },
+    { id: 'ellipse',  Icon: Circle,   label: 'Ellipse' },
+    { id: 'triangle', Icon: Triangle, label: 'Triangle' },
+  ];
+
+  return (
+    <>
+      <div className={styles.tt_sep} />
+      <div className={styles.tt_group}>
+        {KIND_BUTTONS.map(({ id, Icon, label }) => (
+          <button
+            key={id}
+            type="button"
+            className={[
+              styles.tt_btn,
+              kind === id && styles.tt_btn_active,
+            ].filter(Boolean).join(' ')}
+            data-tooltip={label}
+            title={label}
+            onClick={() => set({ kind: id })}
+          >
+            <Icon size={14} strokeWidth={1.8} />
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.tt_sep} />
+
+      <span style={{ position: 'relative', display: 'inline-flex' }}>
+        <button
+          type="button"
+          className={styles.tt_color}
+          onClick={() => setOpenPicker((p) => (p === 'fill' ? null : 'fill'))}
+          data-tooltip="Fill color"
+          title="Fill color"
+          style={{ '--swatch': fill }}
+        >
+          <span className={styles.tt_colorChip} />
+          <ChevronDown size={12} strokeWidth={2} className={styles.tt_colorChevron} />
+        </button>
+        {openPicker === 'fill' && (
+          <div className={styles.tt_colorPopover}>
+            {SHAPE_FILL_SWATCHES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={[
+                  styles.tt_swatch,
+                  c === 'transparent' && styles.tt_swatchTransparent,
+                ].filter(Boolean).join(' ')}
+                style={c === 'transparent' ? undefined : { background: c }}
+                title={c === 'transparent' ? 'No fill' : c}
+                onClick={() => { set({ fill: c }); setOpenPicker(null); }}
+              />
+            ))}
+          </div>
+        )}
+      </span>
+
+      <span style={{ position: 'relative', display: 'inline-flex' }}>
+        <button
+          type="button"
+          className={styles.tt_color}
+          onClick={() => setOpenPicker((p) => (p === 'stroke' ? null : 'stroke'))}
+          data-tooltip="Stroke color"
+          title="Stroke color"
+          style={{ '--swatch': stroke }}
+        >
+          <span className={[styles.tt_colorChip, styles.tt_colorChipRing].join(' ')} />
+          <ChevronDown size={12} strokeWidth={2} className={styles.tt_colorChevron} />
+        </button>
+        {openPicker === 'stroke' && (
+          <div className={styles.tt_colorPopover}>
+            {SHAPE_STROKE_SWATCHES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={[
+                  styles.tt_swatch,
+                  c === 'transparent' && styles.tt_swatchTransparent,
+                ].filter(Boolean).join(' ')}
+                style={c === 'transparent' ? undefined : { background: c }}
+                title={c === 'transparent' ? 'No stroke' : c}
+                onClick={() => { set({ stroke: c }); setOpenPicker(null); }}
+              />
+            ))}
+          </div>
+        )}
+      </span>
+    </>
   );
 }
 
@@ -379,6 +517,10 @@ export default function BoardView({
   const [board, setBoard] = useState(null);
   const [items, setItems] = useState([]);
   const [tool, setTool] = useState('select');
+  // Active shape kind for the shape tool. Persists across multiple
+  // spawns so the user can place several rectangles in a row without
+  // re-picking each time. Swapped from the floating shape styler.
+  const [shapeKind, setShapeKind] = useState('rect');
   const [pan, setPan] = useState(INITIAL_PAN);
   const [zoom, setZoom] = useState(INITIAL_ZOOM);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -680,17 +822,25 @@ export default function BoardView({
   // item type at that world position. Empty clicks under unsupported
   // tools just deselect.
   const handleCanvasClick = useCallback((world, activeTool) => {
-    if (activeTool !== 'sticky' && activeTool !== 'text') {
+    if (activeTool !== 'sticky' && activeTool !== 'text' && activeTool !== 'shape') {
       setSelectedIds(new Set());
       return;
     }
     pushHistory();
-    const size = activeTool === 'sticky' ? DEFAULT_STICKY : DEFAULT_TEXT;
+    const size = activeTool === 'sticky'
+      ? DEFAULT_STICKY
+      : activeTool === 'shape'
+        ? DEFAULT_SHAPE
+        : DEFAULT_TEXT;
     // Text items launch unsized so the inner editor drives the
     // bounding box (matching the reference: a small "Type something"
-    // pill rather than a fixed-width slab). Sticky stays square.
+    // pill rather than a fixed-width slab). Sticky and shape get
+    // their default sized rectangles.
     const w = size.width || 0;
     const h = size.height || 0;
+    const data = activeTool === 'shape'
+      ? { ...SHAPE_DEFAULT_DATA, kind: shapeKind }
+      : { text: '' };
     const item = {
       id: uuid(),
       board_id: boardId,
@@ -703,7 +853,7 @@ export default function BoardView({
       height: size.height,
       rotation: 0,
       z_index: nextZ(items),
-      data: { text: '' },
+      data,
       created_at: Date.now(),
       updated_at: Date.now(),
     };
@@ -736,7 +886,7 @@ export default function BoardView({
     // more natural than staying armed and accidentally laying down
     // a chain of stickies.
     setTool('select');
-  }, [boardId, items, persistItem]);
+  }, [boardId, items, persistItem, pushHistory, shapeKind]);
 
   const handleCommitEdit = useCallback((itemId, text) => {
     setItems((prev) => {
@@ -817,6 +967,8 @@ export default function BoardView({
         setTool('text');
       } else if (!cmd && (k === 's')) {
         setTool('sticky');
+      } else if (!cmd && (k === 'r')) {
+        setTool('shape');
       } else if (!cmd && (k === 'i')) {
         setTool('image');
         setDrawerOpen(true);
@@ -845,7 +997,8 @@ export default function BoardView({
   // single-selected text/sticky. Anything else (image, multi-select,
   // nothing) hides the toolbar.
   const stylerItem = useMemo(() => {
-    const isTextish = (it) => it && (it.type === 'text' || it.type === 'sticky');
+    const isTextish = (it) =>
+      it && (it.type === 'text' || it.type === 'sticky' || it.type === 'shape');
     if (editingItemId) {
       const it = items.find((x) => x.id === editingItemId);
       return isTextish(it) ? it : null;

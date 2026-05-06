@@ -579,6 +579,7 @@
    cursor (small crosshair-in-square) reads as "drop a sticky here". */
 .canvasTextTool { cursor: text; }
 .canvasStickyTool { cursor: cell; }
+.canvasShapeTool { cursor: crosshair; }
 
 /* The "world" — items live inside this and get the pan + zoom
    transform applied to the whole subtree. transform-origin: 0 0 so
@@ -727,6 +728,41 @@
   /* Override the generic gray placeholder with a warm desaturated
      tone that harmonises with the paper colour. */
   color: rgba(120, 95, 0, 0.42);
+}
+
+/* ── Shapes ───────────────────────────────────────────────────────
+   The wrapper hosts an SVG (renders the outline / fill) plus an
+   editable text overlay centred on top. SVG has pointer-events:
+   none so the wrapper's mousedown still receives drag events. */
+.shapeBg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  /* SVG sits behind the editable text but above the wrapper bg. */
+  z-index: 0;
+}
+
+.shapeText {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+}
+
+.shapeText:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(0, 0, 0, 0.32);
+  pointer-events: none;
 }
 
 .itemText {
@@ -982,6 +1018,28 @@
   background: var(--swatch, currentColor);
   border: 1px solid rgba(0, 0, 0, 0.15);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+/* Stroke variant — renders as a ring (transparent fill, colored
+   border) so it visually reads as "this is the outline color" next
+   to the fill swatch. */
+.tt_colorChipRing {
+  background: transparent;
+  border: 3px solid var(--swatch, currentColor);
+  box-shadow: none;
+}
+
+/* Transparent swatch in the picker — checker pattern so the user
+   can pick "no fill" / "no stroke" unambiguously. */
+.tt_swatchTransparent {
+  background:
+    linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
+    linear-gradient(-45deg, transparent 75%, #ccc 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+  background-color: #fff;
 }
 
 .tt_colorChevron {

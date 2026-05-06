@@ -12,18 +12,21 @@ function screenToWorld(sx, sy, pan, zoom) {
   };
 }
 
-// Style props derived from item.data — used by both text and sticky
-// items. Falls back to sensible per-type defaults when a field hasn't
-// been customised yet.
+// Style props derived from item.data — used by text, sticky, and
+// shape items. Falls back to sensible per-type defaults when a field
+// hasn't been customised yet.
 function textStyleFor(item) {
   const isSticky = item.type === 'sticky';
+  const isShape = item.type === 'shape';
   return {
     fontFamily: item.data?.fontFamily || 'inherit',
-    fontSize: `${item.data?.fontSize || (isSticky ? 14 : 16)}px`,
+    fontSize: `${item.data?.fontSize || (isSticky || isShape ? 14 : 16)}px`,
     fontWeight: item.data?.bold ? 700 : 400,
     fontStyle: item.data?.italic ? 'italic' : 'normal',
-    textAlign: item.data?.align || 'left',
-    color: item.data?.color || (isSticky ? 'rgba(0, 0, 0, 0.85)' : 'var(--text-primary)'),
+    textAlign: item.data?.align || (isShape ? 'center' : 'left'),
+    color:
+      item.data?.color
+      || (isSticky ? 'rgba(0, 0, 0, 0.85)' : 'var(--text-primary)'),
   };
 }
 
@@ -34,7 +37,11 @@ function textStyleFor(item) {
 // something" before the user types.
 function EditableTextContent({ item, editing, onCommitEdit }) {
   const ref = useRef(null);
-  const cls = item.type === 'sticky' ? styles.itemSticky : styles.itemText;
+  const cls = item.type === 'shape'
+    ? styles.shapeText
+    : item.type === 'sticky'
+      ? styles.itemSticky
+      : styles.itemText;
 
   // Sync committed text → DOM when not editing. We deliberately do
   // NOT update during edit, otherwise React would clobber whatever
@@ -181,6 +188,69 @@ function BoardItem({
         editing={editing}
         onCommitEdit={onCommitEdit}
       />
+    );
+  } else if (item.type === 'shape') {
+    isTextish = true;
+    const kind = item.data?.kind || 'rect';
+    const fill = item.data?.fill || '#FFFFFF';
+    const stroke = item.data?.stroke || 'rgba(0, 0, 0, 0.85)';
+    const sw = item.data?.strokeWidth ?? 2;
+    // Render the shape outline as an SVG that fills the wrapper. The
+    // viewBox is square and we use preserveAspectRatio="none" so the
+    // shape stretches with the wrapper's aspect; vectorEffect=
+    // non-scaling-stroke keeps the stroke an even width all the way
+    // around even when the wrapper is far from square.
+    let shape;
+    if (kind === 'ellipse') {
+      shape = (
+        <ellipse
+          cx="50" cy="50"
+          rx={50 - sw / 2} ry={50 - sw / 2}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={sw}
+          vectorEffect="non-scaling-stroke"
+        />
+      );
+    } else if (kind === 'triangle') {
+      shape = (
+        <polygon
+          points="50,4 96,96 4,96"
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={sw}
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      );
+    } else {
+      shape = (
+        <rect
+          x={sw / 2} y={sw / 2}
+          width={100 - sw} height={100 - sw}
+          rx="2" ry="2"
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={sw}
+          vectorEffect="non-scaling-stroke"
+        />
+      );
+    }
+    content = (
+      <>
+        <svg
+          className={styles.shapeBg}
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+        >
+          {shape}
+        </svg>
+        <EditableTextContent
+          item={item}
+          editing={editing}
+          onCommitEdit={onCommitEdit}
+        />
+      </>
     );
   } else {
     return null;
@@ -652,11 +722,11 @@ export default function BoardCanvas({
               },
             };
           }
-          // Sticky: free-aspect box resize, but the body fontSize
+          // Sticky and shape both: free-aspect box, body fontSize
           // scales by the smaller of the two axis ratios so the
           // text never outgrows whichever dimension the user is
-          // shrinking. Image keeps its existing free-resize.
-          if (type === 'sticky') {
+          // shrinking.
+          if (type === 'sticky' || type === 'shape') {
             const fontScale = Math.min(
               newW / initial.width,
               newH / initial.height,
@@ -818,6 +888,7 @@ export default function BoardCanvas({
         isPanning && styles.canvasPanning,
         tool === 'text' && styles.canvasTextTool,
         tool === 'sticky' && styles.canvasStickyTool,
+        tool === 'shape' && styles.canvasShapeTool,
       ].filter(Boolean).join(' ')}
       style={{
         backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
