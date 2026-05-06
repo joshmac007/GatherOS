@@ -78,6 +78,8 @@
   position: fixed;
   z-index: 9000;
   padding: 4px;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.86) 100%);
   backdrop-filter: blur(40px) saturate(1.6);

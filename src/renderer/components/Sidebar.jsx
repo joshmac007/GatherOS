@@ -1005,6 +1005,12 @@ export default function Sidebar({
               ref={helpPopRef}
               className={styles.helpPopover}
               role="menu"
+              // mousedown stopPropagation prevents the document-level
+              // outside-click handler from racing the button's click
+              // (some sequences fire the close-effect before the click
+              // reaches the menu item, leaving the popover unmounted
+              // before the action fires).
+              onMouseDown={(e) => e.stopPropagation()}
               style={{
                 left: helpAnchor.left,
                 bottom: window.innerHeight - helpAnchor.top + 4,
@@ -1019,6 +1025,11 @@ export default function Sidebar({
                     role="menuitem"
                     className={styles.helpItem}
                     onClick={helpAction(onOpenReleaseNotes)}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      helpAction(onOpenReleaseNotes)();
+                    }}
                   >
                     <span className={styles.helpItemIcon}><MegaphoneIcon /></span>
                     <span className={styles.helpItemLabel}>What's New</span>
@@ -1039,6 +1050,11 @@ export default function Sidebar({
                       role="menuitem"
                       className={styles.helpItem}
                       onClick={helpAction(onOpenSettings)}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        helpAction(onOpenSettings)();
+                      }}
                     >
                       <span className={styles.helpItemIcon}><SettingsGearIcon /></span>
                       <span className={styles.helpItemLabel}>Settings</span>
@@ -1050,6 +1066,11 @@ export default function Sidebar({
                       role="menuitem"
                       className={styles.helpItem}
                       onClick={helpAction(onOpenShortcuts)}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        helpAction(onOpenShortcuts)();
+                      }}
                     >
                       <span className={styles.helpItemIcon}><KeyboardIcon /></span>
                       <span className={styles.helpItemLabel}>Shortcuts</span>
