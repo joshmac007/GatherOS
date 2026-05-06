@@ -1237,6 +1237,56 @@
 
 /* Transparent swatch in the picker — checker pattern so the user
    can pick "no fill" / "no stroke" unambiguously. */
+/* Stroke-width affordance — a small horizontal bar inside the
+   button that visually echoes the current width. */
+.tt_widthIndicator {
+  display: block;
+  width: 16px;
+  background: var(--text-primary);
+  border-radius: 1px;
+}
+
+.tt_widthPopover {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  min-width: 80px;
+  grid-template-columns: none;
+}
+
+.tt_widthOption {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0 8px;
+}
+
+.tt_widthOption:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tt_widthOptionActive,
+.tt_widthOptionActive:hover {
+  background: rgba(10, 132, 255, 0.10);
+}
+
+.tt_widthOption span {
+  display: block;
+  width: 50px;
+  background: var(--text-primary);
+  border-radius: 1px;
+}
+
+.tt_widthOptionActive span {
+  background: var(--accent);
+}
+
 .tt_swatchTransparent {
   background:
     linear-gradient(45deg, #ccc 25%, transparent 25%),

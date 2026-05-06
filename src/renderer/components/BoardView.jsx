@@ -560,6 +560,177 @@ function ArrowToolButton({ active, kind, onPick, Icon }) {
   );
 }
 
+// Floating action bar for selected arrows. Same positioning logic
+// as the other styler bars; controls cover kind swap, stroke color,
+// stroke width.
+function ArrowActionBar({
+  item,
+  rootEl,
+  pan,
+  zoom,
+  onUpdate,
+  onBringToFront,
+  onSendToBack,
+  onRemoveFromBoard,
+}) {
+  const [pos, setPos] = useState(null);
+  const [openPicker, setOpenPicker] = useState(null); // 'color' | 'width' | null
+  useEffect(() => { setOpenPicker(null); }, [item.id]);
+  useLayoutEffect(() => {
+    if (!rootEl) return;
+    const itemEl = document.querySelector(`[data-item-id="${item.id}"]`);
+    if (!itemEl) { setPos(null); return; }
+    const compute = () => {
+      const rootRect = rootEl.getBoundingClientRect();
+      const itemRect = itemEl.getBoundingClientRect();
+      setPos({
+        left: itemRect.left - rootRect.left + itemRect.width / 2,
+        top: itemRect.top - rootRect.top - 10,
+      });
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(itemEl);
+    return () => ro.disconnect();
+  }, [item.id, rootEl, pan, zoom, item.x, item.y, item.width, item.height]);
+
+  if (!pos) return null;
+
+  const data = item.data || {};
+  const kind = data.kind || 'arrow';
+  const stroke = data.stroke || '#0a0a0a';
+  const strokeWidth = data.strokeWidth || 2;
+
+  const set = (changes) => onUpdate({ ...data, ...changes });
+
+  const KINDS = [
+    { id: 'line',  Icon: Slash,           label: 'Line' },
+    { id: 'arrow', Icon: MoveUpRight,     label: 'Arrow' },
+    { id: 'elbow', Icon: CornerDownRight, label: 'Elbow' },
+  ];
+
+  return (
+    <div
+      className={styles.textToolbar}
+      style={{ left: pos.left, top: pos.top, transform: 'translate(-50%, -100%)' }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className={styles.tt_group}>
+        {KINDS.map(({ id, Icon, label }) => (
+          <button
+            key={id}
+            type="button"
+            className={[
+              styles.tt_btn,
+              kind === id && styles.tt_btn_active,
+            ].filter(Boolean).join(' ')}
+            data-tooltip={label}
+            title={label}
+            onClick={() => set({ kind: id })}
+          >
+            <Icon size={14} strokeWidth={1.8} />
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.tt_sep} />
+
+      <span style={{ position: 'relative', display: 'inline-flex' }}>
+        <button
+          type="button"
+          className={styles.tt_color}
+          onClick={() => setOpenPicker((p) => (p === 'color' ? null : 'color'))}
+          data-tooltip="Stroke color"
+          title="Stroke color"
+          style={{ '--swatch': stroke }}
+        >
+          <span className={styles.tt_colorChip} />
+          <ChevronDown size={12} strokeWidth={2} className={styles.tt_colorChevron} />
+        </button>
+        {openPicker === 'color' && (
+          <div className={styles.tt_colorPopover}>
+            {SHAPE_STROKE_SWATCHES.filter((c) => c !== 'transparent').map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={styles.tt_swatch}
+                style={{ background: c }}
+                title={c}
+                onClick={() => { set({ stroke: c }); setOpenPicker(null); }}
+              />
+            ))}
+          </div>
+        )}
+      </span>
+
+      <div className={styles.tt_sep} />
+
+      <span style={{ position: 'relative', display: 'inline-flex' }}>
+        <button
+          type="button"
+          className={styles.tt_btn}
+          data-tooltip="Stroke width"
+          title="Stroke width"
+          onClick={() => setOpenPicker((p) => (p === 'width' ? null : 'width'))}
+        >
+          <span className={styles.tt_widthIndicator} style={{ height: Math.min(8, strokeWidth) }} />
+        </button>
+        {openPicker === 'width' && (
+          <div className={[styles.tt_colorPopover, styles.tt_widthPopover].join(' ')}>
+            {ARROW_STROKE_WIDTHS.map((w) => (
+              <button
+                key={w}
+                type="button"
+                className={[
+                  styles.tt_widthOption,
+                  strokeWidth === w && styles.tt_widthOptionActive,
+                ].filter(Boolean).join(' ')}
+                title={`${w}px`}
+                onClick={() => { set({ strokeWidth: w }); setOpenPicker(null); }}
+              >
+                <span style={{ height: w }} />
+              </button>
+            ))}
+          </div>
+        )}
+      </span>
+
+      <div className={styles.tt_sep} />
+
+      <button
+        type="button"
+        className={styles.tt_btn}
+        data-tooltip="Bring to front"
+        title="Bring to front"
+        onClick={onBringToFront}
+      >
+        <ArrowUpToLine size={14} strokeWidth={1.8} />
+      </button>
+      <button
+        type="button"
+        className={styles.tt_btn}
+        data-tooltip="Send to back"
+        title="Send to back"
+        onClick={onSendToBack}
+      >
+        <ArrowDownToLine size={14} strokeWidth={1.8} />
+      </button>
+
+      <div className={styles.tt_sep} />
+
+      <button
+        type="button"
+        className={styles.tt_btn}
+        data-tooltip="Remove from board"
+        title="Remove from board"
+        onClick={onRemoveFromBoard}
+      >
+        <Trash2 size={14} strokeWidth={1.8} />
+      </button>
+    </div>
+  );
+}
+
 // Floating action bar for selected image items. Mirrors TextStyler's
 // positioning logic so the bar tracks the item's screen rect via a
 // useLayoutEffect + ResizeObserver. Buttons cover z-order (bring-to-
@@ -1235,6 +1406,52 @@ export default function BoardView({
     return it?.type === 'image' ? it : null;
   }, [selectedIds, items]);
 
+  // Single-selected arrow drives the floating arrow action bar.
+  const arrowBarItem = useMemo(() => {
+    if (selectedIds.size !== 1) return null;
+    const id = Array.from(selectedIds)[0];
+    const it = items.find((x) => x.id === id);
+    return it?.type === 'arrow' ? it : null;
+  }, [selectedIds, items]);
+
+  const handleArrowUpdate = useCallback((nextData) => {
+    if (!arrowBarItem) return;
+    pushHistory();
+    setItems((prev) => prev.map((it) => {
+      if (it.id !== arrowBarItem.id) return it;
+      const next = { ...it, data: nextData, updated_at: Date.now() };
+      persistItem(next);
+      return next;
+    }));
+  }, [arrowBarItem, persistItem, pushHistory]);
+
+  const handleArrowBringToFront = useCallback(() => {
+    if (!arrowBarItem) return;
+    pushHistory();
+    const maxZ = items.reduce((m, it) => Math.max(m, it.z_index ?? 0), 0);
+    const next = { ...arrowBarItem, z_index: maxZ + 1, updated_at: Date.now() };
+    setItems((prev) => prev.map((it) => (it.id === arrowBarItem.id ? next : it)));
+    persistItem(next);
+  }, [arrowBarItem, items, persistItem, pushHistory]);
+
+  const handleArrowSendToBack = useCallback(() => {
+    if (!arrowBarItem) return;
+    pushHistory();
+    const minZ = items.reduce((m, it) => Math.min(m, it.z_index ?? 0), 0);
+    const next = { ...arrowBarItem, z_index: minZ - 1, updated_at: Date.now() };
+    setItems((prev) => prev.map((it) => (it.id === arrowBarItem.id ? next : it)));
+    persistItem(next);
+  }, [arrowBarItem, items, persistItem, pushHistory]);
+
+  const handleArrowRemove = useCallback(() => {
+    if (!arrowBarItem) return;
+    pushHistory();
+    const id = arrowBarItem.id;
+    setItems((prev) => prev.filter((it) => it.id !== id));
+    setSelectedIds(new Set());
+    window.moodmark.boards.deleteItem({ boardId, itemId: id });
+  }, [arrowBarItem, boardId, pushHistory]);
+
   const handleBringToFront = useCallback(() => {
     if (!imageBarItem) return;
     pushHistory();
@@ -1645,6 +1862,19 @@ export default function BoardView({
           onDownload={handleDownloadItem}
           onCopyImage={handleCopyImageItem}
           onRemoveFromBoard={handleRemoveFromBoard}
+        />
+      )}
+
+      {arrowBarItem && (
+        <ArrowActionBar
+          item={arrowBarItem}
+          rootEl={rootRef.current}
+          pan={pan}
+          zoom={zoom}
+          onUpdate={handleArrowUpdate}
+          onBringToFront={handleArrowBringToFront}
+          onSendToBack={handleArrowSendToBack}
+          onRemoveFromBoard={handleArrowRemove}
         />
       )}
 
