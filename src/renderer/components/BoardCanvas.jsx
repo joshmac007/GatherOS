@@ -122,7 +122,10 @@ function EditableTextContent({ item, editing, onCommitEdit }) {
       // .focus() on a contentEditable that's just been promoted from
       // contentEditable=false without a tabindex).
       tabIndex={editing ? 0 : -1}
-      data-placeholder="Type something"
+      // Shapes are meaningful empty (the outline reads as the item),
+      // so they don't get a "Type something" placeholder. Text +
+      // sticky still do.
+      data-placeholder={item.type === 'shape' ? undefined : 'Type something'}
       onBlur={(e) => {
         onCommitEdit(item.id, e.currentTarget.innerText);
         // Clear any text the user had highlighted inside the editor

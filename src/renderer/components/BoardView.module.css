@@ -875,11 +875,10 @@
   overflow: hidden;
 }
 
-.shapeText:empty::before {
-  content: attr(data-placeholder);
-  color: rgba(0, 0, 0, 0.32);
-  pointer-events: none;
-}
+/* No placeholder on shapes — they're meaningful empty (the outline
+   itself reads as the item). The :empty selector in the shared
+   .itemText / .itemSticky placeholder rules above doesn't match
+   .shapeText so this is implicit, but documenting it here. */
 
 /* ── Arrows ───────────────────────────────────────────────────────
    The wrapper is the bounding rect (with a small padding for the
