@@ -15,7 +15,6 @@ import DetailPanel from './components/DetailPanel.jsx';
 import FocusedView from './components/FocusedView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
 import LoadingScreen from './components/LoadingScreen.jsx';
-import CompostBurst from './components/CompostBurst.jsx';
 import FocusedSortMode from './components/FocusedSortMode.jsx';
 import {
   LayoutDashboard,
@@ -1292,49 +1291,11 @@ export default function App() {
   }, [reload, loadCollections]);
 
   // Composting-trash burst state. When the user empties trash we
-  // capture each card's on-screen rect + palette swatches, then
-  // paint a one-shot canvas overlay where every card erupts into
-  // colored pixels that spiral toward the toast and dissolve into
-  // a warm glow. Pure visual flourish on top of the existing
-  // delete-with-undo flow.
-  const [compostBurst, setCompostBurst] = useState(null);
-
   // Empty Trash: same deferred-toast pattern. Operates on every save
   // currently visible in the Trash view (so search-filtered Empty
   // Trash means "empty what you see"; an unfiltered view empties all).
   const handleEmptyTrash = useCallback(() => {
     if (saves.length === 0) return;
-    // Snapshot rects + palettes BEFORE hideSavesLocal yanks the DOM.
-    // The burst plays on a canvas overlay, so it only needs the
-    // start positions in screen space (and the colors to paint).
-    const sources = [];
-    for (const s of saves) {
-      const el = document.querySelector(`[data-save-id="${s.id}"]`);
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      let colors = [];
-      if (s.palette) {
-        try {
-          const arr = JSON.parse(s.palette);
-          if (Array.isArray(arr)) colors = arr.slice(0, 6);
-        } catch {}
-      }
-      sources.push({
-        rect: { x: r.left, y: r.top, w: r.width, h: r.height },
-        colors,
-      });
-    }
-    if (sources.length > 0) {
-      setCompostBurst({
-        id: Date.now(),
-        sources,
-        target: {
-          x: window.innerWidth / 2,
-          y: window.innerHeight - 44, // ~ where the trash toast sits
-        },
-      });
-    }
-
     const ids = saves.map((s) => s.id);
     setSelected(new Set());
     showPermanentDeleteToast(ids);
@@ -1996,15 +1957,6 @@ export default function App() {
         <div className="drop-overlay">
           <span className="drop-message">Drop to save</span>
         </div>
-      )}
-
-      {compostBurst && (
-        <CompostBurst
-          key={compostBurst.id}
-          sources={compostBurst.sources}
-          target={compostBurst.target}
-          onDone={() => setCompostBurst(null)}
-        />
       )}
 
       {pendingUpdate && (
