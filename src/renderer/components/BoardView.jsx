@@ -45,12 +45,12 @@ const TOOLS = [
   { id: 'select', label: 'Select (V)',         Icon: (p) => <MousePointer2 {...TOOL_ICON} {...p} /> },
   { id: 'image',  label: 'Image library (I)',  Icon: (p) => <ImagePlus {...TOOL_ICON} {...p} /> },
   { id: 'sticky', label: 'Sticky note (S)',    Icon: (p) => <StickyNote {...TOOL_ICON} {...p} /> },
-  { id: 'text',   label: 'Text (T)',           Icon: (p) => <Type {...TOOL_ICON} {...p} /> },
+  { id: 'text',   label: 'Text',                Icon: (p) => <Type {...TOOL_ICON} {...p} /> },
   // Phase 2: shapes / arrow are live; pen and frame still placeholders.
   // The buttons render so the layout matches the final tool set; each
   // unimplemented one is disabled until its pass lands.
-  { id: 'shape',  label: 'Shape (R)',           Icon: (p) => <Shapes {...TOOL_ICON} {...p} /> },
-  { id: 'arrow',  label: 'Arrow / Line (L)',    Icon: (p) => <MoveUpRight {...TOOL_ICON} {...p} /> },
+  { id: 'shape',  label: 'Shape (R / E / T)',   Icon: (p) => <Shapes {...TOOL_ICON} {...p} /> },
+  { id: 'arrow',  label: 'Arrow / Line (A / L)',Icon: (p) => <MoveUpRight {...TOOL_ICON} {...p} /> },
   { id: 'pen',    label: 'Pen — coming soon',    Icon: (p) => <PenTool {...TOOL_ICON} {...p} />, disabled: true },
   { id: 'frame',  label: 'Frame — coming soon',  Icon: (p) => <Frame {...TOOL_ICON} {...p} />, disabled: true },
 ];
@@ -452,9 +452,9 @@ function ShapeToolButton({ active, kind, onPick, Icon }) {
   }, [open]);
 
   const KINDS = [
-    { id: 'rect',     Icon: Square,   label: 'Rectangle', kbd: '1' },
-    { id: 'ellipse',  Icon: Circle,   label: 'Ellipse',   kbd: '2' },
-    { id: 'triangle', Icon: Triangle, label: 'Triangle',  kbd: '3' },
+    { id: 'rect',     Icon: Square,   label: 'Rectangle', kbd: 'R' },
+    { id: 'ellipse',  Icon: Circle,   label: 'Ellipse',   kbd: 'E' },
+    { id: 'triangle', Icon: Triangle, label: 'Triangle',  kbd: 'T' },
   ];
 
   return (
@@ -518,8 +518,8 @@ function ArrowToolButton({ active, kind, onPick, Icon }) {
   }, [open]);
 
   const KINDS = [
-    { id: 'line',    Icon: Slash,            label: 'Line',        kbd: '1' },
-    { id: 'arrow',   Icon: MoveUpRight,      label: 'Arrow',       kbd: '2' },
+    { id: 'line',    Icon: Slash,            label: 'Line',        kbd: 'L' },
+    { id: 'arrow',   Icon: MoveUpRight,      label: 'Arrow',       kbd: 'A' },
     { id: 'elbow',   Icon: CornerDownRight,  label: 'Elbow arrow', kbd: '3' },
   ];
 
@@ -598,17 +598,10 @@ function ArrowActionBar({
   if (!pos) return null;
 
   const data = item.data || {};
-  const kind = data.kind || 'arrow';
   const stroke = data.stroke || '#0a0a0a';
   const strokeWidth = data.strokeWidth || 2;
 
   const set = (changes) => onUpdate({ ...data, ...changes });
-
-  const KINDS = [
-    { id: 'line',  Icon: Slash,           label: 'Line' },
-    { id: 'arrow', Icon: MoveUpRight,     label: 'Arrow' },
-    { id: 'elbow', Icon: CornerDownRight, label: 'Elbow' },
-  ];
 
   return (
     <div
@@ -616,26 +609,6 @@ function ArrowActionBar({
       style={{ left: pos.left, top: pos.top, transform: 'translate(-50%, -100%)' }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className={styles.tt_group}>
-        {KINDS.map(({ id, Icon, label }) => (
-          <button
-            key={id}
-            type="button"
-            className={[
-              styles.tt_btn,
-              kind === id && styles.tt_btn_active,
-            ].filter(Boolean).join(' ')}
-            data-tooltip={label}
-            title={label}
-            onClick={() => set({ kind: id })}
-          >
-            <Icon size={14} strokeWidth={1.8} />
-          </button>
-        ))}
-      </div>
-
-      <div className={styles.tt_sep} />
-
       <span style={{ position: 'relative', display: 'inline-flex' }}>
         <button
           type="button"
@@ -1353,23 +1326,40 @@ export default function BoardView({
         setTool('select');
       } else if (!cmd && (k === 'v')) {
         setTool('select');
-      } else if (!cmd && (k === 't')) {
-        setTool('text');
       } else if (!cmd && (k === 's')) {
         setTool('sticky');
-      } else if (!cmd && (k === 'r')) {
-        setTool('shape');
-      } else if (!cmd && (k === 'l')) {
-        setTool('arrow');
-      } else if (!cmd && tool === 'shape' && (k === '1' || k === '2' || k === '3')) {
-        // Sub-shortcuts when the shape tool is armed: 1 / 2 / 3
-        // swap the kind so the user can pick before clicking.
-        setShapeKind(k === '1' ? 'rect' : k === '2' ? 'ellipse' : 'triangle');
-      } else if (!cmd && tool === 'arrow' && (k === '1' || k === '2' || k === '3')) {
-        setArrowKind(k === '1' ? 'line' : k === '2' ? 'arrow' : 'elbow');
       } else if (!cmd && (k === 'i')) {
         setTool('image');
         setDrawerOpen(true);
+      }
+      // Shape kind shortcuts — each lands the shape tool armed
+      // with the matching kind so the next click drops that shape
+      // immediately. R / E / T are letter aliases for the kind
+      // numbers 1 / 2 / 3 which still work as sub-shortcuts within
+      // the tool.
+      else if (!cmd && (k === 'r')) {
+        setTool('shape');
+        setShapeKind('rect');
+      } else if (!cmd && (k === 'e')) {
+        setTool('shape');
+        setShapeKind('ellipse');
+      } else if (!cmd && (k === 't')) {
+        setTool('shape');
+        setShapeKind('triangle');
+      } else if (!cmd && tool === 'shape' && (k === '1' || k === '2' || k === '3')) {
+        setShapeKind(k === '1' ? 'rect' : k === '2' ? 'ellipse' : 'triangle');
+      }
+      // Arrow kind shortcuts — A for arrow, L for plain line. Elbow
+      // doesn't get a top-level letter (still reachable via the
+      // flyout or sub-shortcut 3 once the arrow tool is armed).
+      else if (!cmd && (k === 'a')) {
+        setTool('arrow');
+        setArrowKind('arrow');
+      } else if (!cmd && (k === 'l')) {
+        setTool('arrow');
+        setArrowKind('line');
+      } else if (!cmd && tool === 'arrow' && (k === '1' || k === '2' || k === '3')) {
+        setArrowKind(k === '1' ? 'line' : k === '2' ? 'arrow' : 'elbow');
       }
     }
     window.addEventListener('keydown', onKey);
