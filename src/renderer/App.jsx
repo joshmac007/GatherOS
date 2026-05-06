@@ -1353,9 +1353,17 @@ export default function App() {
         already = new Set(result || []);
       } catch { /* leave empty on failure */ }
     }
+    // If every folder is already a member of every selected save, the
+    // picker would be empty. Show a quick confirming toast instead of
+    // an empty menu floating over the selection bar.
+    const offerable = collections.filter((c) => !already.has(c.id));
+    if (offerable.length === 0) {
+      showActionToast({ message: 'Already in every folder', durationMs: 1800 });
+      return;
+    }
     setBulkAlreadyIn(already);
     setBulkPicker({ x: rect.left, y: rect.top - 4 });
-  }, [collections.length, selected]);
+  }, [collections, selected, showActionToast]);
 
   const handleBulkExportBoard = useCallback(async () => {
     const ids = [...selected];
@@ -1427,12 +1435,12 @@ export default function App() {
   const bulkPickerItems = useMemo(() => {
     if (!bulkPicker) return [];
     const ids = [...selected];
-    // Hide buckets every selected save is already a member of —
-    // adding again would be a no-op for all of them.
+    // Hide folders every selected save is already a member of —
+    // adding again would be a no-op for all of them. The picker
+    // never opens with an empty offer set; openBulkPicker shows a
+    // toast instead, so we don't render a "Already in every folder"
+    // header here anymore.
     const offer = collections.filter((c) => !bulkAlreadyIn.has(c.id));
-    if (offer.length === 0) {
-      return [{ type: 'header', label: 'Already in every folder' }];
-    }
     return [
       { type: 'header', label: `Add ${ids.length} to Folder` },
       ...offer.map((c) => ({
