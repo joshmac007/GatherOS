@@ -393,31 +393,36 @@ export default function BoardCanvas({
 
         const updated = items.map((it) => {
           if (it.id !== itemId) return it;
-          const next = {
+          // Text items don't carry an explicit width or height — only
+          // fontSize. The wrapper's width/height come from the text
+          // itself (max-content + auto), so the bounding box always
+          // hugs every side of the content exactly. newW / newH are
+          // still used to anchor the opposite corner during the drag,
+          // but never written back onto the item.
+          if (type === 'text') {
+            const scale = newW / initial.width;
+            return {
+              ...it,
+              x: newX,
+              y: newY,
+              width: null,
+              height: null,
+              data: {
+                ...initial.data,
+                fontSize: Math.max(8, Math.min(200, Math.round(initial.fontSize * scale))),
+              },
+            };
+          }
+          // Sticky and image: traditional explicit-size resize. Sticky
+          // keeps its body type at the default fontSize — only the
+          // box grows.
+          return {
             ...it,
             x: newX,
             y: newY,
             width: newW,
-            // Text items: leave height null so the wrapper hugs the
-            // content. We compute newH only to anchor the opposite
-            // corner during the drag — using it as an explicit height
-            // would leave empty space below the text whenever the
-            // typed content needs less than the box's height (which
-            // is most of the time, since fontSize scales with the
-            // drag and text is usually a single line).
-            height: type === 'text' ? null : newH,
+            height: newH,
           };
-          // Text items: scale fontSize by the same ratio so the editor
-          // toolbar's font-size input reflects the resize. Sticky keeps
-          // its body type at a fixed size — only the box grows.
-          if (type === 'text') {
-            const scale = newW / initial.width;
-            next.data = {
-              ...initial.data,
-              fontSize: Math.max(8, Math.min(200, Math.round(initial.fontSize * scale))),
-            };
-          }
-          return next;
         });
         onItemsChange(updated, { movingIds: [itemId], persist: false });
       }

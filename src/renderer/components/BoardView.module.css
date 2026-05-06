@@ -371,12 +371,15 @@
   display: block;
 }
 
-/* Text items auto-size to their content when no explicit size has
-   been set yet (newly placed text). The wrapper relaxes its rigid
-   width/height so the inner editable can drive the layout. */
+/* Text items auto-size to their content (newly placed and resized
+   text both — resize only persists fontSize, not width/height,
+   so the wrapper always hugs the text on every side). max-width
+   stays generous so the text can grow with fontSize without
+   force-wrapping; the user can insert manual line breaks if they
+   want a narrower column. */
 .itemAutosize {
   width: max-content;
-  max-width: 480px;
+  max-width: none;
   height: auto;
 }
 
