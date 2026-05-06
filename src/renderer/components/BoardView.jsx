@@ -18,6 +18,12 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronLeft,
+  ExternalLink,
+  Clipboard,
+  ArrowUpToLine,
+  ArrowDownToLine,
+  X,
+  Trash2,
 } from 'lucide-react';
 import styles from './BoardView.module.css';
 import BoardCanvas from './BoardCanvas.jsx';
@@ -253,6 +259,84 @@ function TextStyler({ item, rootEl, pan, zoom, onUpdate }) {
 function nextZ(items) {
   if (items.length === 0) return 1;
   return Math.max(...items.map((i) => i.z_index ?? 0)) + 1;
+}
+
+// Floating action bar for selected image items. Mirrors TextStyler's
+// positioning logic so the bar tracks the item's screen rect via a
+// useLayoutEffect + ResizeObserver. Buttons cover z-order (bring-to-
+// front / send-to-back), library affordances (Open in Preview, Copy
+// image), and removal — Remove-from-board keeps the underlying save
+// in the library, Trash sends it to the trash and clears every board
+// it was on via the save:deleted broadcast.
+function ImageActionBar({
+  item,
+  rootEl,
+  pan,
+  zoom,
+  onBringToFront,
+  onSendToBack,
+  onOpenInPreview,
+  onCopyImage,
+  onRemoveFromBoard,
+  onTrash,
+}) {
+  const [pos, setPos] = useState(null);
+  useLayoutEffect(() => {
+    if (!rootEl) return;
+    const itemEl = document.querySelector(`[data-item-id="${item.id}"]`);
+    if (!itemEl) {
+      setPos(null);
+      return;
+    }
+    const compute = () => {
+      const rootRect = rootEl.getBoundingClientRect();
+      const itemRect = itemEl.getBoundingClientRect();
+      setPos({
+        left: itemRect.left - rootRect.left + itemRect.width / 2,
+        top: itemRect.top - rootRect.top - 10,
+      });
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(itemEl);
+    return () => ro.disconnect();
+  }, [item.id, rootEl, pan, zoom, item.x, item.y, item.width, item.height]);
+
+  if (!pos) return null;
+
+  return (
+    <div
+      className={styles.textToolbar}
+      style={{ left: pos.left, top: pos.top, transform: 'translate(-50%, -100%)' }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <button type="button" className={styles.tt_btn} title="Open in Preview" onClick={onOpenInPreview}>
+        <ExternalLink size={14} strokeWidth={1.8} />
+      </button>
+      <button type="button" className={styles.tt_btn} title="Copy image" onClick={onCopyImage}>
+        <Clipboard size={14} strokeWidth={1.8} />
+      </button>
+      <div className={styles.tt_sep} />
+      <button type="button" className={styles.tt_btn} title="Bring to front" onClick={onBringToFront}>
+        <ArrowUpToLine size={14} strokeWidth={1.8} />
+      </button>
+      <button type="button" className={styles.tt_btn} title="Send to back" onClick={onSendToBack}>
+        <ArrowDownToLine size={14} strokeWidth={1.8} />
+      </button>
+      <div className={styles.tt_sep} />
+      <button type="button" className={styles.tt_btn} title="Remove from board" onClick={onRemoveFromBoard}>
+        <X size={14} strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        className={[styles.tt_btn, styles.tt_btn_danger].filter(Boolean).join(' ')}
+        title="Move to trash"
+        onClick={onTrash}
+      >
+        <Trash2 size={14} strokeWidth={1.8} />
+      </button>
+    </div>
+  );
 }
 
 function uuid() {
@@ -554,6 +638,58 @@ export default function BoardView({
     }));
   }, [stylerItem, persistItem]);
 
+  // Single-selected image item drives the floating image action bar.
+  const imageBarItem = useMemo(() => {
+    if (selectedIds.size !== 1) return null;
+    const id = Array.from(selectedIds)[0];
+    const it = items.find((x) => x.id === id);
+    return it?.type === 'image' ? it : null;
+  }, [selectedIds, items]);
+
+  const handleBringToFront = useCallback(() => {
+    if (!imageBarItem) return;
+    const maxZ = items.reduce((m, it) => Math.max(m, it.z_index ?? 0), 0);
+    const next = { ...imageBarItem, z_index: maxZ + 1, updated_at: Date.now() };
+    setItems((prev) => prev.map((it) => (it.id === imageBarItem.id ? next : it)));
+    persistItem(next);
+  }, [imageBarItem, items, persistItem]);
+
+  const handleSendToBack = useCallback(() => {
+    if (!imageBarItem) return;
+    const minZ = items.reduce((m, it) => Math.min(m, it.z_index ?? 0), 0);
+    const next = { ...imageBarItem, z_index: minZ - 1, updated_at: Date.now() };
+    setItems((prev) => prev.map((it) => (it.id === imageBarItem.id ? next : it)));
+    persistItem(next);
+  }, [imageBarItem, items, persistItem]);
+
+  const handleOpenInPreviewItem = useCallback(() => {
+    const save = saves.find((s) => s.id === imageBarItem?.data?.saveId);
+    if (save?.file_path) window.moodmark.image.openInPreview(save.file_path);
+  }, [imageBarItem, saves]);
+
+  const handleCopyImageItem = useCallback(async () => {
+    const save = saves.find((s) => s.id === imageBarItem?.data?.saveId);
+    if (!save?.file_path) return;
+    const result = await window.moodmark.image.copyToClipboard(save.file_path);
+    onShowToast?.(result?.ok ? 'Copied to clipboard' : 'Could not copy image');
+  }, [imageBarItem, saves, onShowToast]);
+
+  const handleRemoveFromBoard = useCallback(() => {
+    if (!imageBarItem) return;
+    const id = imageBarItem.id;
+    setItems((prev) => prev.filter((it) => it.id !== id));
+    setSelectedIds(new Set());
+    window.moodmark.boards.deleteItem({ boardId, itemId: id });
+  }, [imageBarItem, boardId]);
+
+  const handleTrashImageItem = useCallback(() => {
+    const saveId = imageBarItem?.data?.saveId;
+    if (!saveId) return;
+    // The save:deleted broadcast clears matching items locally, so
+    // we don't have to setItems here — the listener does.
+    window.moodmark.saves.delete(saveId);
+  }, [imageBarItem]);
+
   return (
     <div ref={rootRef} className={styles.root}>
       {onExit && (
@@ -663,6 +799,21 @@ export default function BoardView({
           pan={pan}
           zoom={zoom}
           onUpdate={handleStyleUpdate}
+        />
+      )}
+
+      {imageBarItem && (
+        <ImageActionBar
+          item={imageBarItem}
+          rootEl={rootRef.current}
+          pan={pan}
+          zoom={zoom}
+          onBringToFront={handleBringToFront}
+          onSendToBack={handleSendToBack}
+          onOpenInPreview={handleOpenInPreviewItem}
+          onCopyImage={handleCopyImageItem}
+          onRemoveFromBoard={handleRemoveFromBoard}
+          onTrash={handleTrashImageItem}
         />
       )}
 

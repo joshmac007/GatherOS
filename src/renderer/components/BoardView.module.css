@@ -840,6 +840,13 @@
   color: var(--accent);
 }
 
+/* Destructive button variant — red trash-style hover for the
+   image action bar's "Move to trash" affordance. */
+.tt_btn_danger:hover {
+  background: rgba(193, 50, 42, 0.08);
+  color: #c1322a;
+}
+
 .tt_select {
   height: 28px;
   padding: 0 8px;
