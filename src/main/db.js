@@ -491,6 +491,16 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   const conditions = [];
   const params = [];
 
+  // Parse `tag:`, `bucket:`, `color:`, `is:untagged`, `before:`, `after:`
+  // out of the search string so the SQL applies them directly. The
+  // remaining `text` is what runs through the substring LIKE pass.
+  const { parseSearchQuery } = require('./searchQuery');
+  const parsed = parseSearchQuery(search);
+  const text = parsed.text;
+  // Explicit color: filter wins over any caller-passed colorHex
+  // because the user typed it directly.
+  const effectiveColorHex = parsed.colorHex || colorHex;
+
   if (view === 'trash') {
     conditions.push('deleted_at IS NOT NULL');
   } else {
@@ -504,7 +514,42 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
     conditions.push(`id IN (SELECT save_id FROM collection_items WHERE collection_id = ?)`);
     params.push(collectionId);
   }
-  if (search) {
+
+  // tag:<name> — INNER JOIN through save_tags. Multiple tag filters
+  // AND together so `tag:serif tag:minimal` returns the intersection.
+  for (const name of parsed.tagNames) {
+    conditions.push(`id IN (
+      SELECT save_id FROM save_tags
+      JOIN tags ON save_tags.tag_id = tags.id
+      WHERE tags.name = ?
+    )`);
+    params.push(name);
+  }
+
+  // bucket:<name> — resolve via collections.name (case-insensitive).
+  // Multiple bucket filters intersect, same as tags.
+  for (const name of parsed.bucketNames) {
+    conditions.push(`id IN (
+      SELECT save_id FROM collection_items
+      WHERE collection_id IN (SELECT id FROM collections WHERE LOWER(name) = ?)
+    )`);
+    params.push(name);
+  }
+
+  if (parsed.untagged) {
+    conditions.push('id NOT IN (SELECT save_id FROM save_tags WHERE save_id IS NOT NULL)');
+  }
+
+  if (parsed.before != null) {
+    conditions.push('created_at < ?');
+    params.push(parsed.before);
+  }
+  if (parsed.after != null) {
+    conditions.push('created_at > ?');
+    params.push(parsed.after);
+  }
+
+  if (text) {
     // Substring match against title, tags, and OCR text. ai_description
     // is intentionally excluded — descriptions enumerate every visible
     // object so substring-matching them turns "sky" into a 50% hit
@@ -515,7 +560,7 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
       JOIN tags ON save_tags.tag_id = tags.id
       WHERE tags.name LIKE ?
     ))`);
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    params.push(`%${text}%`, `%${text}%`, `%${text}%`);
   }
 
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
@@ -524,7 +569,7 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   // Color filter: requested hex matched against each save's stored
   // palette in LAB space. Done in JS because SQLite doesn't have the
   // math we need; tractable up to a few thousand saves.
-  return colorHex ? filterByColor(rows, colorHex) : rows;
+  return effectiveColorHex ? filterByColor(rows, effectiveColorHex) : rows;
 }
 
 function getSave(id) {

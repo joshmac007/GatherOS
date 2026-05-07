@@ -3,6 +3,7 @@ import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
 import TagSuggestions from './TagSuggestions.jsx';
+import { fuzzyMatch } from '../lib/fuzzy.js';
 import { CollectionIcon } from './Sidebar.jsx';
 
 const SUGGESTION_LIMIT = 6;
@@ -269,19 +270,35 @@ export default function DetailPanel({
   const tagInputRef = React.useRef(null);
 
   const suggestions = useMemo(() => {
-    const draft = tagDraft.trim().toLowerCase();
+    const draft = tagDraft.trim().toLowerCase().replace(/^#+/, '');
     if (!draft) return [];
     const usedIds = new Set(tags.map((t) => t.id));
+    // Fuzzy match across every existing tag, prefer existing over
+    // creating new — the showCreateRow below only adds the "Create"
+    // option when no existing tag matches exactly. Sort first by
+    // fuzzy score (better = lower), then by save_count to surface
+    // the more-used tag among equally-good matches.
     return allTags
-      .filter((t) => !usedIds.has(t.id) && t.name.toLowerCase().startsWith(draft))
-      .sort((a, b) => (b.save_count || 0) - (a.save_count || 0) || a.name.localeCompare(b.name))
-      .slice(0, SUGGESTION_LIMIT);
+      .filter((t) => !usedIds.has(t.id))
+      .map((t) => ({ tag: t, match: fuzzyMatch(draft, t.name) }))
+      .filter((x) => x.match)
+      .sort((a, b) => {
+        if (a.match.score !== b.match.score) return a.match.score - b.match.score;
+        const cd = (b.tag.save_count || 0) - (a.tag.save_count || 0);
+        if (cd !== 0) return cd;
+        return a.tag.name.localeCompare(b.tag.name);
+      })
+      .slice(0, SUGGESTION_LIMIT)
+      .map((x) => x.tag);
   }, [tagDraft, tags, allTags]);
 
   // "Create '<draft>'" row when the draft doesn't exactly match any
-  // existing tag (used or unused). Keeps free-typing a clear path.
+  // existing tag (used or unused). Fuzzy matches don't suppress the
+  // Create option — the user might genuinely want a new tag whose
+  // name resembles an existing one — but an exact-name hit does so
+  // we don't offer to create a duplicate.
   const showCreateRow = useMemo(() => {
-    const draft = tagDraft.trim().toLowerCase();
+    const draft = tagDraft.trim().toLowerCase().replace(/^#+/, '');
     if (!draft) return false;
     const exists = allTags.some((t) => t.name.toLowerCase() === draft);
     return !exists;

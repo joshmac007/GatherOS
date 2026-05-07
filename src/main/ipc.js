@@ -67,12 +67,18 @@ function registerIpcHandlers() {
     const detectedHex = detectColorName(queryText);
     if (!detectedHex) return results;
     // Get every save that already passes the user's other filters
-    // (LIKE-irrelevant pieces of the query stripped out — we only want
-    // the view scoping here, not text matching).
+    // (view, collection, plus any tag:/bucket:/before:/etc. tokens
+    // sitting in opts.search). Pass only the structural tokens —
+    // free text would re-restrict the set we're trying to broaden
+    // via implicit color-name detection.
+    const structuralTokens = (opts.search || '')
+      .match(/(\w+:"[^"]*"|\w+:\S+|\S+)/g) || [];
+    const filterOnly = structuralTokens.filter((t) => /^\w+:/.test(t)).join(' ');
     const filteredSet = getAllSaves({
       filter: opts.filter,
       collectionId: opts.collectionId,
       colorHex: opts.colorHex || undefined,
+      search: filterOnly,
     });
     // Strict: ΔE 16 ("clearly the same color") + only the top 3 most
     // vibrant swatches per save (Vibrant / LightVibrant / DarkVibrant
@@ -94,10 +100,20 @@ function registerIpcHandlers() {
   ipcMain.handle('saves:get-all', async (_e, opts = {}) => {
     const semanticEnabled = settings.getPref('semanticSearch', false);
     const haveKey = settings.hasOpenAIKey();
-    const queryText = (opts.search || '').trim();
+    const rawSearch = (opts.search || '').trim();
+
+    // Pull out any tag:/bucket:/color:/before: etc. filters so the
+    // embedding query runs only against the user's free text, and so
+    // semantic candidates can be intersected with the structurally-
+    // filtered set below. parseSearchQuery is also called inside
+    // getAllSaves; doing it here too is cheap (regex tokenisation).
+    const { parseSearchQuery } = require('./searchQuery');
+    const parsed = parseSearchQuery(rawSearch);
+    const queryText = parsed.text;
 
     // Falls back to the regular LIKE path if semantic search isn't
-    // configured, isn't on, or there's no actual query to embed.
+    // configured, isn't on, or there's no actual free text to embed
+    // (a query of just `tag:foo` doesn't need embeddings).
     if (!semanticEnabled || !haveKey || !queryText) {
       return mergeColorNameMatches(getAllSaves(opts), opts, queryText);
     }
@@ -161,25 +177,20 @@ function registerIpcHandlers() {
         }
       }
 
-      // Apply the same filters as the LIKE path so view/collection
-      // toggles still work in semantic mode. (LIKE matches are already
-      // filtered, but semantic candidates aren't.)
-      const collectionId = opts.collectionId || null;
-      const collectionMembers = collectionId
-        ? new Set(
-            getAllSaves({ collectionId }).map((s) => s.id),
-          )
-        : null;
-
-      let filtered = merged.filter((s) => {
-        if (collectionId && !collectionMembers.has(s.id)) return false;
-        return true;
-      });
-      // Apply the color filter to semantic candidates too — getAllSaves
-      // already handled it for the LIKE matches, but the embedding-only
-      // hits never went through it.
-      if (opts.colorHex) {
-        filtered = filterByColor(filtered, opts.colorHex);
+      // Constrain semantic candidates to the structurally-filtered
+      // set (view / collection / tag: / bucket: / is:untagged /
+      // before: / after:). LIKE matches already obey these because
+      // getAllSaves ran with the full opts. The structural set is
+      // the same opts but with the free text stripped — text
+      // matching is what the embeddings do.
+      const structuralTokens = (rawSearch.match(/(\w+:"[^"]*"|\w+:\S+|\S+)/g) || [])
+        .filter((t) => /^\w+:/.test(t))
+        .join(' ');
+      const structuralOpts = { ...opts, search: structuralTokens };
+      const structuralIds = new Set(getAllSaves(structuralOpts).map((s) => s.id));
+      let filtered = merged.filter((s) => structuralIds.has(s.id));
+      if (parsed.colorHex || opts.colorHex) {
+        filtered = filterByColor(filtered, parsed.colorHex || opts.colorHex);
       }
       return mergeColorNameMatches(filtered, opts, queryText);
     } catch (err) {
