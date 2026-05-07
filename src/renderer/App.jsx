@@ -4,6 +4,7 @@ import Sidebar, { CollectionIcon } from './components/Sidebar.jsx';
 import QuickSwitcher from './components/QuickSwitcher.jsx';
 import QuickLookOverlay from './components/QuickLookOverlay.jsx';
 import BulkTagPicker from './components/BulkTagPicker.jsx';
+import RediscoverMode from './components/RediscoverMode.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import WelcomeModal from './components/WelcomeModal.jsx';
@@ -385,6 +386,9 @@ export default function App() {
           // (bail when typing, peek the right card) lives in one
           // place below.
           window.dispatchEvent(new CustomEvent('moodmark:quick-look'));
+          break;
+        case 'rediscover':
+          setRediscoverOpen(true);
           break;
         default:
           break;
@@ -855,6 +859,7 @@ export default function App() {
   // Bulk "Add to Collection" picker, anchored above the selection bar.
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
   const [bulkTagPicker, setBulkTagPicker] = useState(null); // { x, y } | null
+  const [rediscoverOpen, setRediscoverOpen] = useState(false);
 
   const buildCardMenuItems = useCallback((saveId, memberIds) => {
     // If the right-clicked save is part of an active multi-selection,
@@ -2493,6 +2498,29 @@ export default function App() {
           onClose={() => setBulkTagPicker(null)}
         />
       )}
+
+      <RediscoverMode
+        open={rediscoverOpen}
+        saves={saves}
+        collections={collections}
+        onTrash={async (id) => {
+          await deleteSave(id);
+        }}
+        onAddToBucket={async (saveId, collectionId) => {
+          try {
+            await window.moodmark.collections.addSave({ collectionId, saveId });
+            loadCollections();
+          } catch (err) {
+            console.error('[rediscover] addSave failed:', err);
+          }
+        }}
+        onClose={() => {
+          setRediscoverOpen(false);
+          // Refresh the grid view since trash + bucket changes
+          // happened underneath while the overlay was open.
+          reload();
+        }}
+      />
 
       {exportPicker && (
         <ContextMenu

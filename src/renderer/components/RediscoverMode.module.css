@@ -1,0 +1,293 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9400;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 8, 10, 0.92);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  font-family: var(--font-ui);
+  animation: scrimIn 140ms ease-out;
+}
+
+@keyframes scrimIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Counter pinned top-center, monospace so the digits don't jitter
+   when the count rolls over to the next save. */
+.progress {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.progressTotal {
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: 2px;
+}
+
+/* Card holds the image + caption. The leaving_* modifiers fire a
+   short translate-and-fade in the direction of the user's choice
+   so the action reads as physical. */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 88vw;
+  max-height: 78vh;
+  animation: cardIn 200ms cubic-bezier(0.18, 0.7, 0.32, 1);
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.leaving_left  { animation: leaveLeft 180ms ease-in forwards; }
+.leaving_right { animation: leaveRight 180ms ease-in forwards; }
+.leaving_up    { animation: leaveUp 180ms ease-in forwards; }
+
+@keyframes leaveLeft {
+  to { opacity: 0; transform: translateX(-80px) rotate(-2deg); }
+}
+@keyframes leaveRight {
+  to { opacity: 0; transform: translateX(80px) rotate(2deg); }
+}
+@keyframes leaveUp {
+  to { opacity: 0; transform: translateY(-80px) scale(0.96); }
+}
+
+.image {
+  display: block;
+  max-width: 88vw;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #1c1c1e;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 30px 80px rgba(0, 0, 0, 0.55);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.caption {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 5px 14px;
+  border-radius: 999px;
+  max-width: 80vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bottom hint bar — the four key affordances laid out as a single
+   row of pill buttons. Clickable so trackpad users aren't forced
+   onto the keyboard. */
+.hints {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.hintBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.hintBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.hintBtnExit {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+}
+
+/* Bucket picker — small popover floating above the hint bar when
+   the user hits ↑. Keyboard-driven (Up/Down + Enter) plus mouse. */
+.picker {
+  position: absolute;
+  bottom: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: rgba(28, 28, 30, 0.98);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.35),
+    0 24px 60px rgba(0, 0, 0, 0.45);
+  animation: pickerIn 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes pickerIn {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.pickerInput {
+  height: 30px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: #fff;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.pickerInput::placeholder { color: rgba(255, 255, 255, 0.4); }
+
+.pickerInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
+}
+
+.pickerList {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+}
+
+.pickerItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerItemActive,
+.pickerItem:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pickerDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+}
+
+.pickerEmpty {
+  padding: 14px 10px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
+/* End-of-queue panel. Centered glassy card with a "you've seen
+   everything" headline and a Done button. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 36px 40px 30px;
+  background: rgba(28, 28, 30, 0.92);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  text-align: center;
+  animation: cardIn 200ms cubic-bezier(0.18, 0.7, 0.32, 1);
+}
+
+.emptyTitle {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+
+.emptySub {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.doneBtn {
+  margin-top: 6px;
+  height: 32px;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 0.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.doneBtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}

@@ -113,6 +113,11 @@ function buildAppMenu({ getMainWindow }) {
           label: 'Quick Look',
           click: () => send('quick-look'),
         },
+        {
+          label: 'Rediscover',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => send('rediscover'),
+        },
         { type: 'separator' },
         {
           label: 'Toggle Sidebar',
