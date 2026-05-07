@@ -22,7 +22,50 @@ import {
   Megaphone,
   HelpCircle,
   Frame,
+  Sun,
+  Moon,
 } from 'lucide-react';
+
+// Tiny self-contained theme toggle that lives in the sidebar footer.
+// Source of truth is <html data-theme>; clicking flips the attribute,
+// persists the pref, and asks main to flip the macOS native chrome
+// (traffic lights, scrollbars). No props needed — same IPC the
+// Settings modal uses.
+function ThemeToggle({ className }) {
+  const [theme, setTheme] = React.useState(() =>
+    typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-theme') === 'dark'
+      ? 'dark'
+      : 'light',
+  );
+  async function flip() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+      await Promise.all([
+        window.moodmark?.settings?.setPref?.('theme', next),
+        window.moodmark?.app?.setTheme?.(next),
+      ]);
+    } catch {
+      /* best-effort — UI already reflects the swap */
+    }
+  }
+  const isDark = theme === 'dark';
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={flip}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {isDark
+        ? <Sun {...SIDEBAR_ICON} />
+        : <Moon {...SIDEBAR_ICON} />}
+    </button>
+  );
+}
 
 const SIDEBAR_ICON = { strokeWidth: 1.6, 'aria-hidden': true };
 const GridIcon = () => <LayoutGrid {...SIDEBAR_ICON} />;
@@ -1046,8 +1089,8 @@ export default function Sidebar({
         )}
       </nav>
 
-      {(onOpenSettings || onOpenShortcuts || onOpenReleaseNotes) && (
-        <div className={styles.footer}>
+      <div className={styles.footer}>
+        {(onOpenSettings || onOpenShortcuts || onOpenReleaseNotes) && (
           <button
             ref={helpBtnRef}
             type="button"
@@ -1064,6 +1107,8 @@ export default function Sidebar({
               <span className={styles.footerBadge} aria-label="New release notes available" />
             )}
           </button>
+        )}
+        <ThemeToggle className={styles.themeToggle} />
 
           {helpOpen && helpAnchor && ReactDOM.createPortal(
             <div
@@ -1146,8 +1191,7 @@ export default function Sidebar({
             </div>,
             document.body,
           )}
-        </div>
-      )}
+      </div>
 
       {ctxMenu && (
         <ContextMenu
