@@ -4,10 +4,15 @@ import styles from './PaywallModal.module.css';
 // Full-screen paywall shown when the user's trial has lapsed and
 // there's no active paid subscription. Blocks the rest of the app.
 //
-// The Subscribe buttons currently no-op with a TODO toast — Paddle
-// checkout wiring lands in Phase 3c. Sign-out is wired so a user
-// who wants to switch accounts isn't stuck.
-export default function PaywallModal({ license, onSignOut, onSubscribe }) {
+// onSubscribe(plan) opens the Paddle.js checkout overlay (wired up
+// in AppGate). Buttons disable while Paddle.js is still loading so
+// a click can't no-op silently.
+export default function PaywallModal({
+  license,
+  onSignOut,
+  onSubscribe,
+  canSubscribe = true,
+}) {
   const trialEndedAgo = license?.trial_ends_at
     ? Math.max(0, Math.round((Date.now() - license.trial_ends_at) / (24 * 60 * 60 * 1000)))
     : null;
@@ -29,6 +34,7 @@ export default function PaywallModal({ license, onSignOut, onSubscribe }) {
           <button
             type="button"
             className={`${styles.plan} ${styles.planFeatured}`}
+            disabled={!canSubscribe}
             onClick={() => onSubscribe?.('yearly')}
           >
             <div className={styles.planLabel}>Yearly</div>
@@ -38,6 +44,7 @@ export default function PaywallModal({ license, onSignOut, onSubscribe }) {
           <button
             type="button"
             className={styles.plan}
+            disabled={!canSubscribe}
             onClick={() => onSubscribe?.('monthly')}
           >
             <div className={styles.planLabel}>Monthly</div>

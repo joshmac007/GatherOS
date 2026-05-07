@@ -31,10 +31,16 @@ const URL_SCHEME = 'gatheros';
 const PADDLE = {
   // 'sandbox' | 'production'
   environment: env.GATHEROS_PADDLE_ENV || 'sandbox',
-  clientToken: env.GATHEROS_PADDLE_CLIENT_TOKEN || 'TODO_PADDLE_CLIENT_TOKEN',
+  clientToken:
+    env.GATHEROS_PADDLE_CLIENT_TOKEN ||
+    'test_4b9608c925f6fe727e6cc451e21',
   priceIds: {
-    monthly: env.GATHEROS_PADDLE_PRICE_MONTHLY || 'TODO_PRICE_ID_MONTHLY',
-    yearly: env.GATHEROS_PADDLE_PRICE_YEARLY || 'TODO_PRICE_ID_YEARLY',
+    monthly:
+      env.GATHEROS_PADDLE_PRICE_MONTHLY ||
+      'pri_01kr05jrjx8yv89cy2vg9s516t',
+    yearly:
+      env.GATHEROS_PADDLE_PRICE_YEARLY ||
+      'pri_01kr05j31v7xqt1zcf3fxyyyp9',
   },
 };
 

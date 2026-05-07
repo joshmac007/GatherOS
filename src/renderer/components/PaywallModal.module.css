@@ -71,8 +71,9 @@
   transition: filter 100ms ease, transform 80ms ease;
 }
 
-.plan:hover { filter: brightness(0.98); }
-.plan:active { transform: scale(0.99); }
+.plan:hover:not(:disabled) { filter: brightness(0.98); }
+.plan:active:not(:disabled) { transform: scale(0.99); }
+.plan:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .planFeatured {
   border-color: var(--accent, #0a84ff);
