@@ -7,7 +7,7 @@ compatibility_date = "2025-01-15"
 [[d1_databases]]
 binding = "DB"
 database_name = "gatheros-db"
-database_id = "TODO_FILL_AFTER_db:create"
+database_id = "4ee66c06-85c5-4b0d-9286-051a4276a99c"
 migrations_dir = "migrations"
 
 # Non-secret config. Secrets go through `wrangler secret put` so they
