@@ -199,6 +199,7 @@ export default function Sidebar({
   onOpenSettings,
   onOpenShortcuts,
   onOpenReleaseNotes,
+  onOpenRediscover,
   releaseNotesUnseen = false,
   createCollectionSignal,
   boards = [],
@@ -795,34 +796,51 @@ export default function Sidebar({
       </div>
 
       <nav className={styles.section}>
-        {SMART_VIEWS.map(({ id, label, Icon }) => {
+        {SMART_VIEWS.map(({ id, label, Icon }, viewIdx) => {
           const active = view.type === id;
           const count = smartCounts[id] ?? 0;
           const inboxZero = id === 'unsorted' && count === 0;
           return (
-            <button
-              key={id}
-              data-smart-view={id}
-              className={`${styles.item} ${active ? styles.active : ''}`}
-              onClick={() => onViewChange({ type: id })}
-              onContextMenu={(e) => handleSmartViewContextMenu(e, id)}
-              title={inboxZero ? 'Inbox zero — every save is in a folder' : undefined}
-            >
-              <span className={styles.icon}>
-                <Icon />
-              </span>
-              <span className={styles.label}>{label}</span>
-              {inboxZero ? (
-                <span
-                  className={`${styles.inboxZero}${active ? ' ' + styles.inboxZeroActive : ''}`}
-                  aria-label="Inbox zero"
-                >
-                  <CheckIcon />
+            <React.Fragment key={id}>
+              <button
+                data-smart-view={id}
+                className={`${styles.item} ${active ? styles.active : ''}`}
+                onClick={() => onViewChange({ type: id })}
+                onContextMenu={(e) => handleSmartViewContextMenu(e, id)}
+                title={inboxZero ? 'Inbox zero — every save is in a folder' : undefined}
+              >
+                <span className={styles.icon}>
+                  <Icon />
                 </span>
-              ) : (
-                <AnimatedCount value={count} className={styles.smartCount} />
+                <span className={styles.label}>{label}</span>
+                {inboxZero ? (
+                  <span
+                    className={`${styles.inboxZero}${active ? ' ' + styles.inboxZeroActive : ''}`}
+                    aria-label="Inbox zero"
+                  >
+                    <CheckIcon />
+                  </span>
+                ) : (
+                  <AnimatedCount value={count} className={styles.smartCount} />
+                )}
+              </button>
+              {/* Rediscover sits directly under All. It's an action,
+                  not a view — clicking it pops the full-screen
+                  shuffle overlay instead of changing the active
+                  filter, so we don't pass it through onViewChange. */}
+              {viewIdx === 0 && onOpenRediscover && (
+                <button
+                  className={styles.item}
+                  onClick={onOpenRediscover}
+                  title="Random save full-screen — ←→↑ to swipe / bucket / skip"
+                >
+                  <span className={styles.icon} style={{ color: 'var(--icon-purple)' }}>
+                    <ShuffleIcon />
+                  </span>
+                  <span className={styles.label}>Rediscover</span>
+                </button>
               )}
-            </button>
+            </React.Fragment>
           );
         })}
       </nav>
