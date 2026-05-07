@@ -45,7 +45,7 @@ const TOOLS = [
   { id: 'select', label: 'Select (V)',         Icon: (p) => <MousePointer2 {...TOOL_ICON} {...p} /> },
   { id: 'image',  label: 'Image library (I)',  Icon: (p) => <ImagePlus {...TOOL_ICON} {...p} /> },
   { id: 'sticky', label: 'Sticky note (S)',    Icon: (p) => <StickyNote {...TOOL_ICON} {...p} /> },
-  { id: 'text',   label: 'Text',                Icon: (p) => <Type {...TOOL_ICON} {...p} /> },
+  { id: 'text',   label: 'Text (T)',            Icon: (p) => <Type {...TOOL_ICON} {...p} /> },
   { id: 'shape',  label: 'Shapes & lines',      Icon: (p) => <Shapes {...TOOL_ICON} {...p} /> },
   { id: 'frame',  label: 'Frame (F)',            Icon: (p) => <Frame {...TOOL_ICON} {...p} /> },
 ];
@@ -534,7 +534,7 @@ function ShapeToolButton({
   const ROWS = [
     { section: 'shape', kind: 'rect',     Icon: Square,           label: 'Rectangle', kbd: 'R' },
     { section: 'shape', kind: 'ellipse',  Icon: Circle,           label: 'Ellipse',   kbd: 'E' },
-    { section: 'shape', kind: 'triangle', Icon: Triangle,         label: 'Triangle',  kbd: 'T' },
+    { section: 'shape', kind: 'triangle', Icon: Triangle,         label: 'Triangle',  kbd: 'Y' },
     { section: 'arrow', kind: 'line',     Icon: Slash,            label: 'Line',      kbd: 'L' },
     { section: 'arrow', kind: 'arrow',    Icon: MoveUpRight,      label: 'Arrow',     kbd: 'A' },
     { section: 'arrow', kind: 'elbow',    Icon: CornerDownRight,  label: 'Elbow arrow', kbd: 'B' },
@@ -1426,6 +1426,8 @@ export default function BoardView({
         setTool('shape');
         setShapeKind('ellipse');
       } else if (!cmd && (k === 't')) {
+        setTool('text');
+      } else if (!cmd && (k === 'y')) {
         setTool('shape');
         setShapeKind('triangle');
       } else if (!cmd && (k === 'a')) {

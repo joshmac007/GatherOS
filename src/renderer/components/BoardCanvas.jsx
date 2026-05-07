@@ -610,6 +610,10 @@ export default function BoardCanvas({
   // Active arrow-snap indicator while creating or dragging an
   // endpoint / vertex — { axis: 'h' | 'v', anchorX, anchorY }.
   const [snapHint, setSnapHint] = useState(null);
+  // Alignment guides shown while dragging items: array of
+  // { axis: 'h' | 'v', anchorX, anchorY } with up to one per axis.
+  // Separate from snapHint so the arrow path stays unchanged.
+  const [moveSnapGuides, setMoveSnapGuides] = useState([]);
   const [isPanning, setIsPanning] = useState(false);
 
   // Threshold (in world coords) for "close enough to lock" while
@@ -617,6 +621,83 @@ export default function BoardCanvas({
   // gesture feels the same on screen at every zoom level.
   // (Not memo'd — `zoom` is in scope per render.)
   const ARROW_SNAP = 8 / zoom;
+
+  // Threshold for snapping moving items' edges/centers to other
+  // items on the board. Same screen-px feel at every zoom level.
+  const MOVE_SNAP = 6 / zoom;
+
+  // Given the post-move `updated` items and the set of moving ids,
+  // find the smallest correction (dx, dy) that aligns one of the
+  // moving group's edges/centers with a non-moving item's edge or
+  // center on each axis. Returns { dx, dy, guides } where guides
+  // is up to one per axis: { axis, anchorX, anchorY } for rendering
+  // the long alignment line.
+  function computeMoveSnap(updated, movingSet) {
+    let mLeft = Infinity, mTop = Infinity, mRight = -Infinity, mBottom = -Infinity;
+    for (const it of updated) {
+      if (!movingSet.has(it.id)) continue;
+      // Ignore arrows for the AABB — their points already track with
+      // x/y so snapping the wrapper would still leave them visually
+      // aligned, and arrow bboxes are noisy.
+      if (it.type === 'arrow') continue;
+      const w = it.width || 0;
+      const h = it.height || 0;
+      mLeft = Math.min(mLeft, it.x);
+      mTop = Math.min(mTop, it.y);
+      mRight = Math.max(mRight, it.x + w);
+      mBottom = Math.max(mBottom, it.y + h);
+    }
+    if (!isFinite(mLeft)) return { dx: 0, dy: 0, guides: [] };
+    const mCenterX = (mLeft + mRight) / 2;
+    const mCenterY = (mTop + mBottom) / 2;
+
+    let bestX = null;
+    let bestY = null;
+    for (const t of updated) {
+      if (movingSet.has(t.id)) continue;
+      if (t.type === 'arrow') continue;
+      const w = t.width || 0;
+      const h = t.height || 0;
+      const tLeft = t.x;
+      const tRight = t.x + w;
+      const tCenterX = (tLeft + tRight) / 2;
+      const tTop = t.y;
+      const tBottom = t.y + h;
+      const tCenterY = (tTop + tBottom) / 2;
+
+      const xPairs = [
+        [mLeft, tLeft], [mLeft, tCenterX], [mLeft, tRight],
+        [mCenterX, tLeft], [mCenterX, tCenterX], [mCenterX, tRight],
+        [mRight, tLeft], [mRight, tCenterX], [mRight, tRight],
+      ];
+      for (const [m, s] of xPairs) {
+        const delta = s - m;
+        if (Math.abs(delta) < MOVE_SNAP && (!bestX || Math.abs(delta) < Math.abs(bestX.delta))) {
+          bestX = { delta, anchorX: s, anchorY: tCenterY };
+        }
+      }
+      const yPairs = [
+        [mTop, tTop], [mTop, tCenterY], [mTop, tBottom],
+        [mCenterY, tTop], [mCenterY, tCenterY], [mCenterY, tBottom],
+        [mBottom, tTop], [mBottom, tCenterY], [mBottom, tBottom],
+      ];
+      for (const [m, s] of yPairs) {
+        const delta = s - m;
+        if (Math.abs(delta) < MOVE_SNAP && (!bestY || Math.abs(delta) < Math.abs(bestY.delta))) {
+          bestY = { delta, anchorX: tCenterX, anchorY: s };
+        }
+      }
+    }
+
+    const guides = [];
+    if (bestX) guides.push({ axis: 'v', anchorX: bestX.anchorX, anchorY: bestX.anchorY });
+    if (bestY) guides.push({ axis: 'h', anchorX: bestY.anchorX, anchorY: bestY.anchorY });
+    return {
+      dx: bestX ? bestX.delta : 0,
+      dy: bestY ? bestY.delta : 0,
+      guides,
+    };
+  }
 
   // Pure helper: given a candidate point and a set of anchor points
   // to snap against, return { snapped, axis: 'h'|'v'|null,
@@ -1062,6 +1143,33 @@ export default function BoardCanvas({
           }
           return { ...it, x: newX, y: newY };
         });
+        // Alignment-snap: correct the moving group so an edge or
+        // center aligns with a stationary item if anything's within
+        // a 6-screen-px threshold. The same correction applies to
+        // every moving item so the cluster stays rigid.
+        const { dx: snapDx, dy: snapDy, guides } = computeMoveSnap(updated, movingSet);
+        if (snapDx !== 0 || snapDy !== 0) {
+          for (let i = 0; i < updated.length; i += 1) {
+            const it = updated[i];
+            if (!movingSet.has(it.id)) continue;
+            if (it.type === 'arrow' && it.data) {
+              const oldPoints = getArrowPoints(it);
+              const points = oldPoints.map((p) => ({
+                x: p.x + snapDx,
+                y: p.y + snapDy,
+              }));
+              updated[i] = {
+                ...it,
+                x: it.x + snapDx,
+                y: it.y + snapDy,
+                data: { ...it.data, points },
+              };
+            } else {
+              updated[i] = { ...it, x: it.x + snapDx, y: it.y + snapDy };
+            }
+          }
+        }
+        setMoveSnapGuides(guides);
         // Drop-target hint: highlight the frame currently containing
         // any non-frame moving item's center. Frames being moved
         // (drag-with-children) don't highlight themselves. Topmost
@@ -1255,6 +1363,7 @@ export default function BoardCanvas({
         onItemsChange(items, { movingIds, persist: true });
         setArrowMovingId(null);
         setHoveredFrameId(null);
+        setMoveSnapGuides([]);
       }
       if (resizeState.current) {
         const id = resizeState.current.itemId;
@@ -1497,6 +1606,17 @@ export default function BoardCanvas({
             }
           />
         )}
+        {moveSnapGuides.map((g, i) => (
+          <div
+            key={i}
+            className={g.axis === 'h' ? styles.snapLineH : styles.snapLineV}
+            style={
+              g.axis === 'h'
+                ? { left: g.anchorX - 20000, top: g.anchorY, width: 40000 }
+                : { left: g.anchorX, top: g.anchorY - 20000, height: 40000 }
+            }
+          />
+        ))}
         {arrowDrawPreview && (() => {
           // Live preview while the user drags out an arrow — same
           // bbox math as a committed arrow so the preview matches
