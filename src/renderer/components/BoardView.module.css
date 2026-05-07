@@ -208,14 +208,10 @@
   color: var(--text-primary);
 }
 
-/* Neutral active state — same recipe in both themes. The icon
-   reads as primary text colour on the matching faint surface tint
-   (light: faint black, dark: faint white) so the rail stays calm
-   instead of competing with selected-item chrome on the canvas. */
 .toolBtnActive,
 .toolBtnActive:hover {
-  background: var(--hover-bg-strong);
-  color: var(--text-primary);
+  background: var(--accent-bg-soft);
+  color: var(--accent);
 }
 
 .toolBtn:disabled {
