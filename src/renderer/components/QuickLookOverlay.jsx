@@ -54,19 +54,15 @@ export default function QuickLookOverlay({ save, onDismiss }) {
       aria-modal="true"
       aria-label="Quick Look"
     >
-      <div className={styles.frame} onClick={(e) => e.stopPropagation()}>
-        {src && (
-          <img
-            className={styles.image}
-            src={src}
-            alt={save.title || ''}
-            draggable={false}
-          />
-        )}
-        {save.title && (
-          <div className={styles.caption}>{save.title}</div>
-        )}
-      </div>
+      {src && (
+        <img
+          className={styles.image}
+          src={src}
+          alt=""
+          draggable={false}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
     </div>
   );
 }
