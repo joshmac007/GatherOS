@@ -29,10 +29,10 @@
   align-items: center;
   gap: 4px;
   padding: 0 12px 0 8px;
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  border: 1px solid var(--btn-border);
   border-radius: 10px;
-  box-shadow: 0 1px 0 1px #FFF inset;
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
@@ -65,12 +65,10 @@
      the pencil reveals — only the width should change. */
   height: 28px;
   padding: 0 14px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 999px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
@@ -119,7 +117,7 @@
 }
 
 .titleEditBtn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -149,12 +147,10 @@
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-secondary);
@@ -186,12 +182,10 @@
   flex-direction: column;
   gap: 4px;
   padding: 6px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   z-index: 6;
 }
 
@@ -210,13 +204,13 @@
 }
 
 .toolBtn:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg-soft);
   color: var(--text-primary);
 }
 
 .toolBtnActive,
 .toolBtnActive:hover {
-  background: rgba(10, 132, 255, 0.10);
+  background: var(--accent-bg-soft);
   color: var(--accent);
 }
 
@@ -227,7 +221,7 @@
 
 .toolDivider {
   height: 1px;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--border-hairline);
   margin: 4px 2px;
 }
 
@@ -245,12 +239,10 @@
   gap: 1px;
   padding: 4px;
   min-width: 168px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   z-index: 7;
   animation: shapeToolFlyoutIn 140ms cubic-bezier(0.32, 0.72, 0, 1);
 }
@@ -279,12 +271,12 @@
 }
 
 .shapeToolFlyoutBtn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
 }
 
 .shapeToolFlyoutBtnActive,
 .shapeToolFlyoutBtnActive:hover {
-  background: rgba(10, 132, 255, 0.10);
+  background: var(--accent-bg-soft);
   color: var(--accent);
 }
 
@@ -313,20 +305,20 @@
   color: var(--text-tertiary);
   flex-shrink: 0;
   padding: 1px 5px;
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   border-radius: 3px;
 }
 
 .shapeToolFlyoutBtnActive .shapeToolFlyoutBtnKbd {
   color: var(--accent);
-  background: rgba(10, 132, 255, 0.10);
+  background: var(--accent-bg-soft);
 }
 
 /* Hairline separator between sections of the combined flyout
    (shapes vs lines). Sits flush with the row padding. */
 .shapeToolFlyoutSep {
   height: 1px;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--hover-bg-strong);
   margin: 4px 8px;
 }
 
@@ -340,12 +332,10 @@
   width: 300px;
   display: flex;
   flex-direction: column;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   z-index: 6;
   overflow: hidden;
 }
@@ -380,7 +370,7 @@
 }
 
 .drawerClose:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -392,7 +382,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 0 12px 10px;
-  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 0.5px solid var(--border-hairline);
 }
 
 .drawerSearch {
@@ -401,16 +391,16 @@
   align-items: center;
   height: 30px;
   padding: 0 8px 0 28px;
-  background: rgba(0, 0, 0, 0.04);
-  border: 0.5px solid rgba(0, 0, 0, 0.06);
+  background: var(--hover-bg-soft);
+  border: 0.5px solid var(--border-hairline);
   border-radius: 7px;
   transition: background 100ms ease, border-color 100ms ease;
 }
 
 .drawerSearch:focus-within {
-  background: #ffffff;
-  border-color: rgba(10, 132, 255, 0.45);
-  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.15);
+  background: var(--input-bg-focus);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 2px var(--accent-bg-soft);
 }
 
 .drawerSearchIcon {
@@ -449,18 +439,18 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  background: rgba(0, 0, 0, 0.10);
+  background: var(--hover-bg-strong);
   border: none;
   border-radius: 50%;
-  color: rgba(0, 0, 0, 0.55);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
 }
 
 .drawerSearchClear:hover {
-  background: rgba(0, 0, 0, 0.18);
-  color: rgba(0, 0, 0, 0.78);
+  background: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .drawerFolderRow {
@@ -491,7 +481,7 @@
 }
 
 .drawerFolder:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
 }
 
 .drawerFolderIcon {
@@ -523,12 +513,10 @@
   flex-direction: column;
   gap: 1px;
   padding: 4px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   max-height: 280px;
   overflow-y: auto;
   animation: drawerMenuIn 120ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -557,7 +545,7 @@
 }
 
 .drawerFolderOption:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
 }
 
 .drawerFolderOptionActive {
@@ -589,7 +577,7 @@
 
 .drawerFolderMenuSep {
   height: 1px;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--border-hairline);
   margin: 4px 4px;
 }
 
@@ -629,9 +617,9 @@
 }
 
 .drawerGrid::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--border-strong);
   border-radius: 4px;
-  border: 2px solid #ffffff;
+  border: 2px solid var(--surface-1);
   background-clip: padding-box;
 }
 
@@ -639,8 +627,8 @@
   position: relative;
   display: block;
   width: 100%;
-  background: rgba(0, 0, 0, 0.04);
-  border: 0.5px solid rgba(0, 0, 0, 0.06);
+  background: var(--hover-bg-soft);
+  border: 0.5px solid var(--border-hairline);
   border-radius: 8px;
   overflow: hidden;
   cursor: grab;
@@ -706,7 +694,7 @@
   /* Subtle dot grid; the dots scale with the world transform via a
      pseudo-element so zooming visibly affects density. */
   background:
-    radial-gradient(circle, rgba(0, 0, 0, 0.10) 1px, transparent 1px) 0 0 / 24px 24px,
+    radial-gradient(circle, var(--border-strong) 1px, transparent 1px) 0 0 / 24px 24px,
     var(--content-bg);
   cursor: default;
 }
@@ -729,8 +717,8 @@
    any board zoom. */
 .framePreview {
   position: absolute;
-  border: 1px dashed rgba(10, 132, 255, 0.7);
-  background: rgba(10, 132, 255, 0.05);
+  border: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  background: var(--accent-bg-faint);
   border-radius: 6px;
   pointer-events: none;
 }
@@ -752,7 +740,7 @@
    stay at constant screen size by dividing through --board-zoom. */
 .marquee {
   position: absolute;
-  background: rgba(10, 132, 255, 0.10);
+  background: var(--accent-bg-soft);
   border: calc(1px / var(--board-zoom, 1)) solid var(--accent, #0a84ff);
   pointer-events: none;
   z-index: 999;
@@ -811,8 +799,8 @@
   position: absolute;
   width: calc(11px / var(--board-zoom, 1));
   height: calc(11px / var(--board-zoom, 1));
-  background: #ffffff;
-  border: calc(1px / var(--board-zoom, 1)) solid rgba(0, 0, 0, 0.30);
+  background: var(--surface-1);
+  border: calc(1px / var(--board-zoom, 1)) solid var(--border-strong);
   border-radius: 50%;
   box-shadow:
     0
@@ -855,10 +843,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
-  border: calc(0.5px / var(--board-zoom, 1)) solid rgba(0, 0, 0, 0.10);
+  background: var(--glass-from-hover);
+  border: calc(0.5px / var(--board-zoom, 1)) solid var(--border-strong);
   border-radius: 50%;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--text-secondary);
   pointer-events: none;
   z-index: 2;
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(2px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.15);
@@ -932,7 +920,7 @@
 .frameBody {
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   pointer-events: none;
   transition: border-color 120ms ease, background-color 120ms ease;
@@ -942,8 +930,8 @@
    The faint blue fill is layered as a box-shadow inset so it sits on
    top of any user-set background colour without overwriting it. */
 .frameBodyDropHover {
-  border-color: rgba(10, 132, 255, 0.6) !important;
-  box-shadow: inset 0 0 0 9999px rgba(10, 132, 255, 0.06);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent) !important;
+  box-shadow: inset 0 0 0 9999px var(--accent-bg-faint);
 }
 
 .frameTab {
@@ -975,8 +963,8 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
-  background: #FFFFFF;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: var(--input-bg-focus);
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 1px 6px;
   outline: none;
@@ -1035,7 +1023,7 @@
   position: absolute;
   width: calc(11px / var(--board-zoom, 1));
   height: calc(11px / var(--board-zoom, 1));
-  background: #ffffff;
+  background: var(--surface-1);
   border: calc(1.5px / var(--board-zoom, 1)) solid var(--accent, #0a84ff);
   border-radius: 50%;
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(2px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.18);
@@ -1053,7 +1041,7 @@
   width: calc(10px / var(--board-zoom, 1));
   height: calc(10px / var(--board-zoom, 1));
   background: var(--accent, #0a84ff);
-  border: calc(1.5px / var(--board-zoom, 1)) solid #ffffff;
+  border: calc(1.5px / var(--board-zoom, 1)) solid var(--surface-1);
   border-radius: 50%;
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(3px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.22);
   transform: translate(-50%, -50%);
@@ -1098,15 +1086,15 @@
   position: absolute;
   pointer-events: none;
   z-index: 998;
-  background: rgba(10, 132, 255, 0.7);
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 .snapLineH {
   height: calc(1px / var(--board-zoom, 1));
   background-image: repeating-linear-gradient(
     to right,
-    rgba(10, 132, 255, 0.75) 0,
-    rgba(10, 132, 255, 0.75) 5px,
+    color-mix(in srgb, var(--accent) 75%, transparent) 0,
+    color-mix(in srgb, var(--accent) 75%, transparent) 5px,
     transparent 5px,
     transparent 10px
   );
@@ -1118,8 +1106,8 @@
   width: calc(1px / var(--board-zoom, 1));
   background-image: repeating-linear-gradient(
     to bottom,
-    rgba(10, 132, 255, 0.75) 0,
-    rgba(10, 132, 255, 0.75) 5px,
+    color-mix(in srgb, var(--accent) 75%, transparent) 0,
+    color-mix(in srgb, var(--accent) 75%, transparent) 5px,
     transparent 5px,
     transparent 10px
   );
@@ -1161,7 +1149,7 @@
 .itemText:empty::before,
 .itemSticky:empty::before {
   content: attr(data-placeholder);
-  color: rgba(0, 0, 0, 0.32);
+  color: var(--text-tertiary);
   pointer-events: none;
   display: block;
 }
@@ -1187,12 +1175,10 @@
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   white-space: nowrap;
   font-size: 13px;
   color: var(--text-primary);
@@ -1207,7 +1193,7 @@
 .tt_sep {
   width: 1px;
   height: 18px;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--hover-bg-strong);
   margin: 0 4px;
   flex-shrink: 0;
 }
@@ -1229,13 +1215,13 @@
 }
 
 .tt_btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
 .tt_btn_active,
 .tt_btn_active:hover {
-  background: rgba(10, 132, 255, 0.10);
+  background: var(--accent-bg-soft);
   color: var(--accent);
 }
 
@@ -1251,8 +1237,8 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 4px 8px;
-  background: rgba(20, 20, 20, 0.92);
-  color: #ffffff;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-fg);
   border-radius: 5px;
   font-size: 11px;
   font-weight: 500;
@@ -1274,7 +1260,7 @@
   height: 28px;
   padding: 0 8px;
   background: transparent;
-  border: 0.5px solid rgba(0, 0, 0, 0.10);
+  border: 0.5px solid var(--input-border);
   border-radius: 6px;
   font: inherit;
   font-size: 12.5px;
@@ -1284,7 +1270,7 @@
 }
 
 .tt_select:focus {
-  outline: 2px solid rgba(10, 132, 255, 0.30);
+  outline: 2px solid var(--accent-ring);
   outline-offset: 0;
 }
 
@@ -1292,7 +1278,7 @@
   display: inline-flex;
   align-items: center;
   height: 28px;
-  border: 0.5px solid rgba(0, 0, 0, 0.10);
+  border: 0.5px solid var(--input-border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -1319,7 +1305,7 @@
 .tt_sizeStep {
   display: inline-flex;
   flex-direction: column;
-  border-left: 0.5px solid rgba(0, 0, 0, 0.10);
+  border-left: 0.5px solid var(--input-border);
 }
 
 .tt_sizeStep button {
@@ -1337,16 +1323,16 @@
 }
 
 .tt_sizeStep button + button {
-  border-top: 0.5px solid rgba(0, 0, 0, 0.10);
+  border-top: 0.5px solid var(--input-border);
 }
 
 .tt_sizeStep button:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg-soft);
   color: var(--text-primary);
 }
 
 .tt_sizeStep button:active {
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--hover-bg-strong);
 }
 
 /* The color trigger is a solid swatch circle so it reads as
@@ -1386,7 +1372,7 @@
 }
 
 .tt_textColor:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
 }
 
 .tt_textColorStack {
@@ -1412,7 +1398,7 @@
 }
 
 .tt_color:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -1422,8 +1408,8 @@
   height: 16px;
   border-radius: 50%;
   background: var(--swatch, currentColor);
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--border-strong);
+  box-shadow: inset 0 0 0 1px var(--glass-from-hover);
 }
 
 /* Stroke variant — renders as a ring (transparent fill, colored
@@ -1468,12 +1454,12 @@
 }
 
 .tt_widthOption:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
 }
 
 .tt_widthOptionActive,
 .tt_widthOptionActive:hover {
-  background: rgba(10, 132, 255, 0.10);
+  background: var(--accent-bg-soft);
 }
 
 .tt_widthOption span {
@@ -1512,12 +1498,10 @@
   grid-template-columns: repeat(6, 1fr);
   gap: 4px;
   padding: 8px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   z-index: 1;
 }
 
@@ -1525,7 +1509,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 0.5px solid rgba(0, 0, 0, 0.10);
+  border: 0.5px solid var(--input-border);
   cursor: pointer;
   padding: 0;
 }

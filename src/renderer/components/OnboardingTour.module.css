@@ -40,13 +40,10 @@
   position: fixed;
   width: 280px;
   padding: 14px 16px 12px;
-  background: #ffffff;
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  background: var(--surface-1);
+  border: 0.5px solid var(--input-border);
   border-radius: 12px;
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.16),
-    0 2px 6px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 #fff;
+  box-shadow: var(--shadow-modal);
   pointer-events: auto;
   animation: tipIn 220ms cubic-bezier(0.32, 0.72, 0, 1);
   font-family: var(--font-ui);
@@ -125,10 +122,10 @@
   align-items: center;
   gap: 4px;
   padding: 5px 12px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--btn-border);
   border-radius: 10px;
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
-  box-shadow: 0 1px 0 1px #FFF inset;
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   color: var(--text-primary);
   font-family: inherit;
   font-size: 12px;
@@ -139,6 +136,10 @@
 
 .nextBtn:hover {
   filter: brightness(0.98);
+}
+
+:root[data-theme="dark"] .nextBtn:hover {
+  filter: brightness(1.15);
 }
 
 .nextBtn:active { transform: translateY(0.5px); }

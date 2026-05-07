@@ -78,7 +78,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.025);
+  background: var(--input-bg);
   border-bottom: 1px solid var(--border);
   /* 3D viewing distance for the imageWrap's rotateX / rotateY. Lower
      values exaggerate the tilt; 900px gives a soft, photographic feel. */
@@ -117,10 +117,10 @@
   top: 8px;
   right: 8px;
   padding: 3px 7px;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--glass-from);
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border: 0.5px solid var(--glass-border);
   border-radius: 5px;
   color: var(--text-primary);
   font-family: var(--font-mono);
@@ -137,7 +137,7 @@
   border-radius: 6px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   object-fit: contain;
-  background: #fff;
+  background: var(--surface-1);
 }
 
 .palette {
@@ -152,7 +152,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border: 0.5px solid var(--border-strong);
   cursor: pointer;
   padding: 0;
   box-shadow:
@@ -180,8 +180,8 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 4px 8px;
-  background: rgba(28, 28, 30, 0.92);
-  color: #fff;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-fg);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
@@ -201,7 +201,7 @@
   left: 50%;
   transform: translateX(-50%);
   border: 4px solid transparent;
-  border-top-color: rgba(28, 28, 30, 0.92);
+  border-top-color: var(--tooltip-bg);
 }
 
 /* The first two swatches sit close enough to the panel's left padding
@@ -256,8 +256,8 @@
 .metaInput {
   width: 100%;
   padding: 5px 10px;
-  background: rgba(0, 0, 0, 0.025);
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  background: var(--input-bg);
+  border: 0.5px solid var(--input-border);
   border-radius: 6px;
   font-family: var(--font-ui);
   font-size: 13px;
@@ -272,9 +272,9 @@
 }
 
 .metaInput:focus {
-  background: #ffffff;
+  background: var(--input-bg-focus);
   border-color: var(--accent);
-  box-shadow: 0 0 0 2.5px rgba(0, 122, 255, 0.18);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
 }
 
 /* Notes — collapsed-by-default. The "+ Add a note" link is the
@@ -295,14 +295,14 @@
 }
 
 .addNoteBtn:hover {
-  color: #000000;
+  color: var(--text-primary);
 }
 
 .notesInput {
   width: 100%;
   padding: 6px 10px;
-  background: rgba(0, 0, 0, 0.025);
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  background: var(--input-bg);
+  border: 0.5px solid var(--input-border);
   border-radius: 6px;
   font-family: var(--font-ui);
   font-size: 13px;
@@ -362,7 +362,7 @@
 }
 
 .openLinkBtn:hover {
-  background: rgba(0, 122, 255, 0.10);
+  background: var(--accent-bg-soft);
   color: var(--accent);
 }
 
@@ -400,7 +400,7 @@
   height: 22px;
   padding: 0 7px;
   background: transparent;
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border: 0.5px solid var(--input-border);
   border-radius: 5px;
   color: var(--text-secondary);
   font-family: var(--font-ui);
@@ -410,7 +410,7 @@
 }
 
 .promptIconBtn:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg-soft);
   color: var(--text-primary);
 }
 
@@ -421,8 +421,8 @@
 
 .promptBody {
   padding: 10px 12px;
-  background: rgba(108, 99, 255, 0.05);
-  border: 0.5px solid rgba(108, 99, 255, 0.18);
+  background: var(--ai-tint-bg);
+  border: 0.5px solid var(--ai-tint-border);
   border-radius: 8px;
   font-size: 12px;
   line-height: 1.55;
@@ -442,7 +442,7 @@
 }
 
 .promptBody::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--border-strong);
   border-radius: 3px;
 }
 
@@ -521,10 +521,10 @@
   align-items: center;
   gap: 5px;
   padding: 3px 4px 3px 8px;
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  border: 1px solid var(--btn-border);
   border-radius: 100vh;
-  box-shadow: 0 1px 0 1px #FFF inset;
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   font-size: 12px;
   color: var(--text-primary);
   max-width: 100%;
@@ -565,7 +565,7 @@
 }
 
 .collectionPillRemove:hover {
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--hover-bg-strong);
   color: var(--text-primary);
 }
 
@@ -574,7 +574,7 @@
   align-items: center;
   padding: 3px 10px;
   background: transparent;
-  border: 0.5px dashed rgba(0, 0, 0, 0.2);
+  border: 0.5px dashed var(--border-strong);
   border-radius: 999px;
   font-size: 12px;
   color: var(--text-secondary);
@@ -582,7 +582,7 @@
 }
 
 .addPillBtn:hover {
-  background: rgba(0, 122, 255, 0.06);
+  background: var(--accent-bg-faint);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -592,19 +592,23 @@
   align-items: center;
   gap: 4px;
   padding: 3px 11px 3px 9px;
-  background: linear-gradient(0deg, #EDE8FD 0%, #F1F1EE 100%);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: var(--ai-tint-bg);
+  border: 1px solid var(--btn-border);
   border-radius: 100px;
-  box-shadow: 0 1px 0 1px #FFF inset;
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   font-family: var(--font-ui);
   font-size: 11px;
-  color: #6c63ff;
+  color: var(--ai-tint);
   cursor: pointer;
-  transition: background 100ms ease, transform 80ms ease;
+  transition: background 100ms ease, transform 80ms ease, filter 100ms ease;
 }
 
 .autoTagBtn:hover:not(:disabled) {
-  background: linear-gradient(0deg, #E4DCFB 0%, #ECEAE5 100%);
+  filter: brightness(0.97);
+}
+
+:root[data-theme="dark"] .autoTagBtn:hover:not(:disabled) {
+  filter: brightness(1.2);
 }
 
 .autoTagBtn:active:not(:disabled) {
@@ -624,7 +628,7 @@
   display: inline-flex;
   width: 11px;
   height: 11px;
-  color: #6c63ff;
+  color: var(--ai-tint);
 }
 
 .autoTagIcon svg {
@@ -634,7 +638,7 @@
 
 .autoTagError {
   font-size: 11px;
-  color: #c1322a;
+  color: var(--status-error);
   margin-top: 6px;
 }
 
@@ -677,8 +681,8 @@
   align-items: center;
   gap: 1px;
   padding: 2px 2px 2px 6px;
-  background: rgba(0, 122, 255, 0.07);
-  border: 0.5px solid rgba(0, 122, 255, 0.18);
+  background: var(--accent-bg-faint);
+  border: 0.5px solid var(--accent-bg-medium);
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -687,7 +691,7 @@
 }
 
 .tagHash {
-  color: rgba(0, 122, 255, 0.55);
+  color: color-mix(in srgb, var(--accent) 70%, transparent);
   margin-right: 1px;
 }
 
@@ -706,7 +710,7 @@
   background: transparent;
   border: none;
   border-radius: 50%;
-  color: rgba(0, 122, 255, 0.55);
+  color: color-mix(in srgb, var(--accent) 70%, transparent);
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
@@ -715,7 +719,7 @@
 }
 
 .tagRemove:hover {
-  background: rgba(0, 122, 255, 0.15);
+  background: var(--accent-bg-active);
   color: var(--accent);
 }
 
@@ -738,7 +742,7 @@
   font-size: 12px;
   color: var(--text-primary);
   outline: none;
-  box-shadow: 0 0 0 2.5px rgba(0, 122, 255, 0.18);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
   field-sizing: content;
 }
 
@@ -785,8 +789,8 @@
 }
 
 .fontSectionRemove:hover {
-  background: rgba(193, 50, 42, 0.08);
-  color: #c1322a;
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
+  color: var(--status-error);
 }
 
 .fontField {
@@ -847,7 +851,7 @@
 }
 
 .fontOpenBtn:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg-soft);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -885,11 +889,11 @@
   border: none;
   border-radius: 7px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg-soft);
   cursor: pointer;
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.06),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+    inset 0 0 0 1px var(--border-subtle);
   transition: transform 100ms ease, box-shadow 120ms ease;
 }
 
@@ -897,7 +901,7 @@
   transform: translateY(-1px);
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.10),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+    inset 0 0 0 1px var(--border-hairline);
 }
 
 .similarTile img {

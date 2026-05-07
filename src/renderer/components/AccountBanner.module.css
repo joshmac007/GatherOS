@@ -14,11 +14,11 @@
   gap: 12px;
   padding: 6px 6px 6px 14px;
   border-radius: 999px;
-  background: #FAFAF9;
+  background: var(--surface-1);
   border: 0.5px solid var(--border);
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.08),
-    0 1px 0 #FFF inset;
+    0 1px 0 var(--inset-highlight) inset;
   font-family: var(--font-ui);
   font-size: 12.5px;
   color: var(--text-primary);
@@ -27,12 +27,12 @@
 }
 
 .bannerWarn {
-  background: linear-gradient(0deg, #FBF1EE 0%, #FCF3F0 100%);
-  border-color: rgba(193, 50, 42, 0.18);
+  background: color-mix(in srgb, var(--status-error) 8%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--status-error) 25%, transparent);
 }
 
 .bannerInfo {
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
 }
 
 .dot {
@@ -45,7 +45,10 @@
   flex-shrink: 0;
 }
 
-.dotWarn { background: #c1322a; box-shadow: 0 0 0 2px rgba(193, 50, 42, 0.18); }
+.dotWarn {
+  background: var(--status-error);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-error) 22%, transparent);
+}
 .dotInfo { background: var(--text-tertiary); }
 
 .text {
@@ -56,9 +59,9 @@
 .action {
   padding: 4px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
-  box-shadow: 0 1px 0 1px #FFF inset;
+  border: 1px solid var(--btn-border);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 500;
@@ -69,6 +72,10 @@
 
 .action:hover:not(:disabled) {
   filter: brightness(0.98);
+}
+
+:root[data-theme="dark"] .action:hover:not(:disabled) {
+  filter: brightness(1.15);
 }
 
 .action:active:not(:disabled) {

@@ -7,9 +7,17 @@ const appVersion = (() => {
   catch { return ''; }
 })();
 
+// Same pattern for the theme — applied to <html data-theme> before
+// React mounts so the user never sees the wrong palette flash in.
+const initialTheme = (() => {
+  try { return ipcRenderer.sendSync('app:get-theme') || 'light'; }
+  catch { return 'light'; }
+})();
+
 contextBridge.exposeInMainWorld('moodmark', {
   app: {
     version: appVersion,
+    theme: initialTheme,
   },
   saves: {
     getAll: (opts) => ipcRenderer.invoke('saves:get-all', opts ?? {}),

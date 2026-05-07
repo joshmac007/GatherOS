@@ -4,9 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.9), rgba(245, 245, 240, 0.95) 40%),
-    #F1F1EE;
+  background: var(--content-bg);
   z-index: 1000;
   -webkit-app-region: drag;
   font-family: var(--font-ui);
@@ -16,13 +14,10 @@
   width: 460px;
   max-width: 92vw;
   padding: 28px 28px 22px;
-  background: #FAFAF9;
+  background: var(--surface-1);
   border: 0.5px solid var(--border);
   border-radius: 16px;
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.08),
-    0 24px 60px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 #FFF;
+  box-shadow: var(--shadow-modal);
   -webkit-app-region: no-drag;
   text-align: center;
 }
@@ -67,10 +62,10 @@
   position: relative;
   padding: 14px 14px 13px;
   text-align: left;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--btn-border);
   border-radius: 10px;
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
-  box-shadow: 0 1px 0 1px #FFF inset;
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   cursor: pointer;
   font-family: var(--font-ui);
   color: var(--text-primary);
@@ -79,6 +74,10 @@
 
 .plan:hover:not(:disabled) {
   filter: brightness(0.98);
+}
+
+:root[data-theme="dark"] .plan:hover:not(:disabled) {
+  filter: brightness(1.15);
 }
 
 .plan:active:not(:disabled) {

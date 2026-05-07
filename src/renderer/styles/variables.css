@@ -1,14 +1,21 @@
-:root {
+:root,
+:root[data-theme="light"] {
   color-scheme: light;
 
   /* Surfaces */
   --sidebar-bg: rgba(244, 244, 246, 0.78);
   --content-bg: #FAFAF9;
   --titlebar-bg: #FAFAF9;
+  /* Generic elevated surface — sidebar, drawer, modal, popover.
+     Replaces the litany of hardcoded #FAFAF9 in component CSS so
+     dark mode flips them all in one place. */
+  --surface-1: #FAFAF9;
 
   /* Borders */
   --border: rgba(0, 0, 0, 0.07);
   --border-strong: rgba(0, 0, 0, 0.12);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --border-hairline: rgba(0, 0, 0, 0.06);
 
   /* Text */
   --text-primary: rgba(0, 0, 0, 0.85);
@@ -19,10 +26,79 @@
   /* Accent (macOS system blue) */
   --accent: #0a84ff;
   --accent-hover: #0070e8;
+  --accent-bg-faint: rgba(10, 132, 255, 0.06);
+  --accent-bg-soft: rgba(10, 132, 255, 0.10);
+  --accent-bg-active: rgba(10, 132, 255, 0.12);
+  --accent-bg-medium: rgba(10, 132, 255, 0.18);
+  --accent-ring: rgba(10, 132, 255, 0.25);
 
   /* Hover/active states */
   --hover-bg: rgba(0, 0, 0, 0.05);
+  --hover-bg-soft: rgba(0, 0, 0, 0.04);
+  --hover-bg-strong: rgba(0, 0, 0, 0.08);
   --active-bg: rgba(0, 0, 0, 0.08);
+
+  /* Apple-style soft button (gradient + inset highlight) */
+  --btn-from: #F6F6F3;
+  --btn-to: #F1F1EE;
+  --btn-border: rgba(0, 0, 0, 0.05);
+  --btn-inset: #FFF;
+
+  /* Liquid-glass pill (selection bar, sort FAB, update pill). The
+     token represents the *full* gradient so dark mode can flip the
+     entire stop list without callers knowing the recipe. */
+  --glass-from: rgba(255, 255, 255, 0.85);
+  --glass-to: rgba(255, 255, 255, 0.65);
+  --glass-from-hover: rgba(255, 255, 255, 0.95);
+  --glass-to-hover: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(0, 0, 0, 0.07);
+  --glass-inset: rgba(255, 255, 255, 0.9);
+  --glass-inset-hover: rgba(255, 255, 255, 0.95);
+
+  /* Inputs */
+  --input-bg: rgba(0, 0, 0, 0.025);
+  --input-bg-focus: #ffffff;
+  --input-border: rgba(0, 0, 0, 0.10);
+
+  /* Card highlight — used where a surface needs a 1px white inset
+     edge to read as "lifted off the page" in light mode. */
+  --inset-highlight: #FFF;
+
+  /* Composite shadows */
+  --shadow-card:
+    0 0 0 1px var(--inset-highlight) inset,
+    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  --shadow-modal:
+    0 4px 14px rgba(0, 0, 0, 0.08),
+    0 24px 60px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 var(--inset-highlight);
+  --shadow-glass:
+    inset 0 1px 0 var(--glass-inset),
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 12px 32px rgba(0, 0, 0, 0.14),
+    0 24px 60px rgba(0, 0, 0, 0.10);
+  --shadow-glass-hover:
+    inset 0 1px 0 var(--glass-inset-hover),
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 16px 38px rgba(0, 0, 0, 0.16),
+    0 28px 70px rgba(0, 0, 0, 0.12);
+
+  /* Status (used in Settings + DetailPanel) */
+  --status-success: #138636;
+  --status-success-dot: #34c759;
+  --status-success-halo: rgba(52, 199, 89, 0.18);
+  --status-error: #c1322a;
+
+  /* AI tint — used for the indexing affordance and the AI prompt
+     box. Keeps the soft purple identity in both themes. */
+  --ai-tint: #6c63ff;
+  --ai-tint-bg: rgba(108, 99, 255, 0.06);
+  --ai-tint-border: rgba(108, 99, 255, 0.18);
+
+  /* Tooltip pill (used by [data-tooltip] generic + DetailPanel
+     swatch tooltip + BoardView text-tool tooltip) */
+  --tooltip-bg: rgba(28, 28, 30, 0.94);
+  --tooltip-fg: #fff;
 
   /* Sidebar icon palette (matches Finder's section colors) */
   --icon-blue: #007aff;
@@ -33,7 +109,108 @@
   --icon-purple: #af52de;
   --icon-pink: #ff2d55;
 
+  /* Active-row chrome (selected sidebar entry) */
+  --active-row-bg: #E8E8E8;
+  --active-row-fg: #000;
+
   --titlebar-height: 44px;
   --font-ui: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+/* Dark theme — overrides the surface + ink + glass values from
+   :root. Picked to match macOS's "Dark" appearance: not pure black,
+   but a deep neutral that still lets the accent blue pop. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --sidebar-bg: rgba(28, 28, 30, 0.78);
+  --content-bg: #1C1C1E;
+  --titlebar-bg: #1C1C1E;
+  --surface-1: #242426;
+
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-hairline: rgba(255, 255, 255, 0.07);
+
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-tertiary: rgba(255, 255, 255, 0.42);
+  --text-on-accent: #ffffff;
+
+  /* Brighter accent reads better against dark surfaces. */
+  --accent: #409cff;
+  --accent-hover: #5aaaff;
+  --accent-bg-faint: rgba(64, 156, 255, 0.10);
+  --accent-bg-soft: rgba(64, 156, 255, 0.16);
+  --accent-bg-active: rgba(64, 156, 255, 0.20);
+  --accent-bg-medium: rgba(64, 156, 255, 0.28);
+  --accent-ring: rgba(64, 156, 255, 0.35);
+
+  --hover-bg: rgba(255, 255, 255, 0.06);
+  --hover-bg-soft: rgba(255, 255, 255, 0.05);
+  --hover-bg-strong: rgba(255, 255, 255, 0.10);
+  --active-bg: rgba(255, 255, 255, 0.10);
+
+  --btn-from: #2E2E30;
+  --btn-to: #292929;
+  --btn-border: rgba(255, 255, 255, 0.08);
+  --btn-inset: rgba(255, 255, 255, 0.06);
+
+  --glass-from: rgba(48, 48, 50, 0.88);
+  --glass-to: rgba(36, 36, 38, 0.78);
+  --glass-from-hover: rgba(60, 60, 62, 0.92);
+  --glass-to-hover: rgba(46, 46, 48, 0.84);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-inset: rgba(255, 255, 255, 0.06);
+  --glass-inset-hover: rgba(255, 255, 255, 0.08);
+
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-bg-focus: rgba(255, 255, 255, 0.07);
+  --input-border: rgba(255, 255, 255, 0.12);
+
+  --inset-highlight: rgba(255, 255, 255, 0.06);
+
+  --shadow-card:
+    0 0 0 1px var(--inset-highlight) inset,
+    0 4px 20px 0 rgba(0, 0, 0, 0.45);
+  --shadow-modal:
+    0 4px 14px rgba(0, 0, 0, 0.45),
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 var(--inset-highlight);
+  --shadow-glass:
+    inset 0 1px 0 var(--glass-inset),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    0 24px 60px rgba(0, 0, 0, 0.45);
+  --shadow-glass-hover:
+    inset 0 1px 0 var(--glass-inset-hover),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 16px 38px rgba(0, 0, 0, 0.6),
+    0 28px 70px rgba(0, 0, 0, 0.5);
+
+  --status-success: #30d158;
+  --status-success-dot: #30d158;
+  --status-success-halo: rgba(48, 209, 88, 0.22);
+  --status-error: #ff6961;
+
+  --ai-tint: #8a82ff;
+  --ai-tint-bg: rgba(138, 130, 255, 0.12);
+  --ai-tint-border: rgba(138, 130, 255, 0.26);
+
+  --tooltip-bg: rgba(50, 50, 52, 0.96);
+  --tooltip-fg: #fff;
+
+  /* macOS-flavoured dark icons that match Finder's dark sidebar. */
+  --icon-blue: #0a84ff;
+  --icon-yellow: #ffd60a;
+  --icon-orange: #ff9f0a;
+  --icon-red: #ff453a;
+  --icon-green: #30d158;
+  --icon-purple: #bf5af2;
+  --icon-pink: #ff375f;
+
+  --active-row-bg: rgba(255, 255, 255, 0.10);
+  --active-row-fg: #fff;
 }

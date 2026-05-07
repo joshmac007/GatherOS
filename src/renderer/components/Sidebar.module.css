@@ -13,11 +13,9 @@
      surface and the two halves look like separate panels. */
   z-index: 2;
   -webkit-app-region: drag;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
+  box-shadow: var(--shadow-card);
 }
 
 .collapseBtn {
@@ -46,7 +44,7 @@
 }
 
 .collapseBtn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -68,7 +66,7 @@
 }
 
 .footerBtnActive {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   border-radius: 7px;
   color: var(--text-primary);
 }
@@ -84,15 +82,12 @@
   pointer-events: auto;
   -webkit-app-region: no-drag;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.86) 100%);
+    linear-gradient(180deg, var(--glass-from-hover) 0%, var(--glass-from) 100%);
   backdrop-filter: blur(40px) saturate(1.6);
   -webkit-backdrop-filter: blur(40px) saturate(1.6);
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  border: 0.5px solid var(--glass-border);
   border-radius: 9px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 4px 14px rgba(0, 0, 0, 0.08),
-    0 16px 36px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-glass);
   animation: helpPopIn 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -183,7 +178,7 @@
 }
 
 .footerBtn:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg-soft);
   color: var(--text-primary);
 }
 
@@ -268,7 +263,7 @@
 }
 
 .addBtn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -280,8 +275,8 @@
 .newCollectionInput {
   width: 100%;
   padding: 5px 8px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 0.5px solid rgba(0, 0, 0, 0.18);
+  background: var(--input-bg-focus);
+  border: 0.5px solid var(--border-strong);
   border-radius: 6px;
   font-size: 13px;
   color: var(--text-primary);
@@ -292,7 +287,7 @@
 
 .newCollectionInput:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2.5px rgba(0, 122, 255, 0.22);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
 }
 
 .newCollectionBtns {
@@ -307,9 +302,9 @@
   border-radius: 10px;
   font-size: 12px;
   cursor: pointer;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
-  box-shadow: 0 1px 0 1px #FFF inset;
+  border: 1px solid var(--btn-border);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   color: var(--text-primary);
   font-family: var(--font-ui);
   transition: filter 100ms ease;
@@ -319,17 +314,21 @@
   filter: brightness(0.98);
 }
 
+:root[data-theme="dark"] .formBtn:hover { filter: brightness(1.15); }
+
 .formBtnPrimary {
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--btn-border);
   border-radius: 10px;
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
   color: var(--text-primary);
-  box-shadow: 0 1px 0 1px #FFF inset;
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
 }
 
 .formBtnPrimary:hover {
   filter: brightness(0.98);
 }
+
+:root[data-theme="dark"] .formBtnPrimary:hover { filter: brightness(1.15); }
 
 .renameInput {
   flex: 1 1 auto;
@@ -351,7 +350,7 @@
    shadow so it reads as "this is the thing moving". */
 .dragging {
   opacity: 1;
-  background: var(--titlebar-bg, #fff);
+  background: var(--surface-1);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.06),
     0 6px 18px rgba(0, 0, 0, 0.10);
@@ -373,7 +372,7 @@
   left: 8px;
   right: 8px;
   height: 1.5px;
-  background: rgba(0, 0, 0, 0.28);
+  background: color-mix(in srgb, var(--text-primary) 35%, transparent);
   border-radius: 1px;
   pointer-events: none;
 }
@@ -384,9 +383,9 @@
    "drop INSIDE" rather than "drop ABOVE". */
 .dropTargetNest {
   position: relative;
-  background: rgba(10, 132, 255, 0.06);
+  background: var(--accent-bg-faint);
   box-shadow:
-    inset 0 0 0 1px rgba(10, 132, 255, 0.55);
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: 7px;
 }
 
@@ -431,7 +430,7 @@
 }
 
 .disclosure:hover {
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--hover-bg-strong);
   color: var(--text-primary);
 }
 
@@ -467,13 +466,13 @@
   left: 8px;
   right: 8px;
   height: 1.5px;
-  background: rgba(0, 0, 0, 0.28);
+  background: color-mix(in srgb, var(--text-primary) 35%, transparent);
   border-radius: 1px;
   pointer-events: none;
 }
 
 .item:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg-soft);
 }
 
 /* Hover preview — bare fanned stack of up to four thumbnails that
@@ -502,13 +501,13 @@
   height: 48px;
   border-radius: 6px;
   object-fit: cover;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg-soft);
   /* Stronger shadow than the contained version — the cards need to
      read as floating now that they don't have a parent plate. */
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.10),
     0 6px 14px rgba(0, 0, 0, 0.18),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+    inset 0 0 0 1px var(--glass-inset);
   animation: bucketStackDeal 280ms cubic-bezier(0.18, 0.7, 0.32, 1) both;
 }
 
@@ -539,7 +538,7 @@
 
 /* Hover state when a grid card is dragged over a bucket. */
 .item.saveDropTarget {
-  background: rgba(0, 122, 255, 0.12);
+  background: var(--accent-bg-active);
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
@@ -556,13 +555,13 @@
    weight against the otherwise grayscale list. */
 .active,
 .active:hover {
-  background: #E8E8E8;
-  color: #000;
+  background: var(--active-row-bg);
+  color: var(--active-row-fg);
   box-shadow: none;
 }
 
 .active .icon {
-  color: #000;
+  color: var(--active-row-fg);
 }
 
 .icon {
@@ -648,7 +647,7 @@
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12) inset;
+  box-shadow: 0 0 0 1px var(--border-strong) inset;
 }
 
 .empty {

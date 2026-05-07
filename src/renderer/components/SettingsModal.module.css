@@ -16,13 +16,10 @@
   max-width: calc(100vw - 48px);
   max-height: calc(100vh - 48px);
   overflow-y: auto;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.07);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border);
   border-radius: 14px;
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.08),
-    0 24px 60px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 #FFF;
+  box-shadow: var(--shadow-modal);
   animation: rise 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -59,7 +56,7 @@
 }
 
 .closeBtn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -92,11 +89,11 @@
    regular .section (which is sized for an always-expanded body). */
 .drawerSection {
   padding: 2px 18px;
-  border-top: 0.5px solid rgba(0, 0, 0, 0.06);
+  border-top: 0.5px solid var(--border-hairline);
 }
 
 .drawerSection + .drawerSection {
-  border-top: 0.5px solid rgba(0, 0, 0, 0.06);
+  border-top: 0.5px solid var(--border-hairline);
 }
 
 /* Drawer-style section header — clickable row that toggles the
@@ -224,8 +221,8 @@
 .input {
   width: 100%;
   padding: 7px 10px;
-  background: rgba(0, 0, 0, 0.025);
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  background: var(--input-bg);
+  border: 0.5px solid var(--input-border);
   border-radius: 6px;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -240,9 +237,9 @@
 }
 
 .input:focus {
-  background: #ffffff;
+  background: var(--input-bg-focus);
   border-color: var(--accent);
-  box-shadow: 0 0 0 2.5px rgba(0, 122, 255, 0.18);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
 }
 
 .statusRow {
@@ -262,11 +259,11 @@
 }
 
 .statusOk {
-  color: #138636;
+  color: var(--status-success);
 }
 
 .statusError {
-  color: #c1322a;
+  color: var(--status-error);
 }
 
 .dot {
@@ -274,8 +271,8 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #34c759;
-  box-shadow: 0 0 0 2px rgba(52, 199, 89, 0.18);
+  background: var(--status-success-dot);
+  box-shadow: 0 0 0 2px var(--status-success-halo);
 }
 
 .actions {
@@ -288,13 +285,13 @@
 .btn {
   padding: 6px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
+  border: 1px solid var(--btn-border);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
   color: var(--text-primary);
   font-size: 12px;
   font-family: var(--font-ui);
   cursor: pointer;
-  box-shadow: 0 1px 0 1px #FFF inset;
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   transition: filter 100ms ease, transform 80ms ease;
 }
 
@@ -329,24 +326,29 @@
 }
 
 .btnPrimary {
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--btn-border);
   border-radius: 10px;
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
   color: var(--text-primary);
-  box-shadow: 0 1px 0 1px #FFF inset;
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
 }
 
 .btnPrimary:hover:not(:disabled) {
   filter: brightness(0.98);
 }
 
+:root[data-theme="dark"] .btnPrimary:hover:not(:disabled),
+:root[data-theme="dark"] .btn:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
 .btnDanger {
-  color: #c1322a;
+  color: var(--status-error);
 }
 
 .btnDanger:hover:not(:disabled) {
   filter: brightness(0.98);
-  border-color: rgba(193, 50, 42, 0.3);
+  border-color: color-mix(in srgb, var(--status-error) 30%, transparent);
 }
 
 /* Hairline rule for separating semantically distinct controls
@@ -374,8 +376,8 @@
   gap: 12px;
   padding: 6px 8px;
   border-radius: 7px;
-  background: rgba(0, 0, 0, 0.025);
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--input-bg);
+  border: 0.5px solid var(--border-subtle);
 }
 
 .snapshotMeta {
@@ -486,7 +488,7 @@
 .switchTrack {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--border-strong);
   border-radius: 999px;
   transition: background 200ms cubic-bezier(0.3, 0, 0, 1);
 }
@@ -515,7 +517,7 @@
 }
 
 .switch input:focus-visible ~ .switchTrack {
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .reindexBox {
@@ -524,8 +526,8 @@
   gap: 12px;
   padding: 10px 12px;
   margin-top: 8px;
-  background: rgba(108, 99, 255, 0.06);
-  border: 0.5px solid rgba(108, 99, 255, 0.18);
+  background: var(--ai-tint-bg);
+  border: 0.5px solid var(--ai-tint-border);
   border-radius: 8px;
 }
 
@@ -552,4 +554,62 @@
 @keyframes rise {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Light/Dark picker — two segmented chips with a preview swatch.
+   Selected state mirrors the soft button surface so it reads as
+   "this one is on" without a hard accent fill. */
+.themeRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 4px 0 6px;
+}
+
+.themeOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border: 0.5px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  color: var(--text-secondary);
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+}
+
+.themeOption:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.themeOptionActive,
+.themeOptionActive:hover {
+  background: var(--input-bg-focus);
+  border-color: var(--accent);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
+}
+
+.themeSwatch {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0.5px solid var(--border-strong);
+}
+
+.themeSwatchLight {
+  background: linear-gradient(135deg, #FFFFFF 0%, #F1F1EE 100%);
+}
+
+.themeSwatchDark {
+  background: linear-gradient(135deg, #2E2E30 0%, #1C1C1E 100%);
+}
+
+.themeLabel {
+  font-size: 13px;
+  font-weight: 500;
 }

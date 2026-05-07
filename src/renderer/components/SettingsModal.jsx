@@ -85,7 +85,8 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [draft, setDraft] = useState('');
   const [status, setStatus] = useState(STATUS_IDLE);
   const [errorMessage, setErrorMessage] = useState('');
-  const [prefs, setPrefs] = useState({ autoNameOnSave: true });
+  const [prefs, setPrefs] = useState({ autoNameOnSave: true, theme: 'light' });
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [unindexed, setUnindexed] = useState(0);
   const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
   const [exportState, setExportState] = useState({ running: false, message: null });
@@ -193,6 +194,19 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
     const updated = { ...prefs, [name]: next };
     setPrefs(updated);
     await window.moodmark.settings.setPref(name, next);
+    onPrefsChange?.(updated);
+  }
+
+  // Theme writes go through the same prefs file as the AI toggles, but
+  // also need to hit document.documentElement so the swap is instant
+  // — the boot-time read in main.jsx only runs on next launch.
+  async function setTheme(next) {
+    if (next !== 'light' && next !== 'dark') return;
+    if (prefs.theme === next) return;
+    const updated = { ...prefs, theme: next };
+    setPrefs(updated);
+    document.documentElement.setAttribute('data-theme', next);
+    await window.moodmark.settings.setPref('theme', next);
     onPrefsChange?.(updated);
   }
 
@@ -533,6 +547,44 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
                   {portalState.message}
                 </div>
               )}
+            </div>
+          )}
+        </section>
+
+        <section className={`${styles.section} ${styles.drawerSection}`}>
+          <button
+            type="button"
+            className={styles.drawerHeader}
+            onClick={() => setAppearanceOpen((v) => !v)}
+            aria-expanded={appearanceOpen}
+          >
+            <span className={styles.sectionTitle}>Appearance</span>
+            <span className={[styles.drawerChevron, appearanceOpen && styles.drawerChevronOpen].filter(Boolean).join(' ')}>
+              <DrawerChevron />
+            </span>
+          </button>
+          {appearanceOpen && (
+            <div className={styles.drawerBody}>
+              <div className={styles.themeRow}>
+                <button
+                  type="button"
+                  className={`${styles.themeOption} ${prefs.theme !== 'dark' ? styles.themeOptionActive : ''}`}
+                  onClick={() => setTheme('light')}
+                  aria-pressed={prefs.theme !== 'dark'}
+                >
+                  <span className={`${styles.themeSwatch} ${styles.themeSwatchLight}`} aria-hidden="true" />
+                  <span className={styles.themeLabel}>Light</span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.themeOption} ${prefs.theme === 'dark' ? styles.themeOptionActive : ''}`}
+                  onClick={() => setTheme('dark')}
+                  aria-pressed={prefs.theme === 'dark'}
+                >
+                  <span className={`${styles.themeSwatch} ${styles.themeSwatchDark}`} aria-hidden="true" />
+                  <span className={styles.themeLabel}>Dark</span>
+                </button>
+              </div>
             </div>
           )}
         </section>

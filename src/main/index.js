@@ -561,6 +561,13 @@ ipcMain.on('app:get-version', (event) => {
   event.returnValue = app.getVersion();
 });
 
+// Sync so the preload can hand a value to the renderer before first
+// paint, avoiding a flash of light theme on a dark-pref'd launch.
+ipcMain.on('app:get-theme', (event) => {
+  const settings = require('./settings');
+  event.returnValue = settings.getPref('theme', 'light');
+});
+
 // ── Library registry IPC ────────────────────────────────────────────
 // All five handlers are thin wrappers over library-registry. The
 // switch handler additionally closes the current DB, reopens it

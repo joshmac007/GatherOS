@@ -34,7 +34,7 @@
 }
 
 .iconBtn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -143,9 +143,9 @@
   width: 22px;
   height: 22px;
   border-radius: 100vh;
-  background: linear-gradient(0deg, #F6F6F3 0%, #F1F1EE 100%);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 1px 0 1px #FFF inset;
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  border: 1px solid var(--btn-border);
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   pointer-events: none;
   z-index: 0;
   transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -179,7 +179,7 @@
 /* Active state — text/icon color only. The metal surface is rendered
    by the sliding .layoutThumb behind both buttons. */
 .layoutBtn.layoutBtnActive {
-  color: #000;
+  color: var(--text-primary);
 }
 
 .layoutBtn svg {
@@ -211,7 +211,7 @@
 }
 
 .searchIconAi {
-  color: #6c63ff;
+  color: var(--ai-tint);
 }
 
 .colorChip {
@@ -219,8 +219,8 @@
   align-items: center;
   gap: 6px;
   padding: 3px 4px 3px 6px;
-  background: rgba(0, 0, 0, 0.04);
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  background: var(--hover-bg-soft);
+  border: 0.5px solid var(--input-border);
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -229,7 +229,7 @@
 }
 
 .colorChip:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -237,7 +237,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 0.5px solid rgba(0, 0, 0, 0.15);
+  border: 0.5px solid var(--border-strong);
   flex-shrink: 0;
 }
 
@@ -250,7 +250,7 @@
   border-radius: 4px;
   object-fit: cover;
   flex-shrink: 0;
-  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border: 0.5px solid var(--border-strong);
 }
 
 .colorChipLabel {
@@ -283,16 +283,14 @@
   appearance: none;
   width: 100%;
   padding: 6px 60px 6px 32px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
   color: var(--text-primary);
   font: inherit;
   font-size: 13px;
   outline: none;
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   transition: box-shadow 120ms ease;
 }
 
@@ -308,8 +306,8 @@
   align-items: center;
   gap: 2px;
   padding: 2px 5px;
-  background: rgba(0, 0, 0, 0.04);
-  border: 0.5px solid rgba(0, 0, 0, 0.07);
+  background: var(--hover-bg-soft);
+  border: 0.5px solid var(--border);
   border-radius: 999px;
   cursor: pointer;
   -webkit-app-region: no-drag;
@@ -331,18 +329,18 @@
   width: 18px;
   height: 18px;
   padding: 0;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--hover-bg-strong);
   border: none;
   border-radius: 50%;
-  color: rgba(0, 0, 0, 0.55);
+  color: var(--text-secondary);
   cursor: pointer;
   -webkit-app-region: no-drag;
   transition: background 100ms ease, color 100ms ease;
 }
 
 .clearSearchBtn:hover {
-  background: rgba(0, 0, 0, 0.16);
-  color: rgba(0, 0, 0, 0.78);
+  background: var(--border-strong);
+  color: var(--text-primary);
 }
 
 /* Recent-searches popover. Portaled to document.body and positioned
@@ -354,15 +352,12 @@
   z-index: 9000;
   padding: 4px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.86) 100%);
+    linear-gradient(180deg, var(--glass-from-hover) 0%, var(--glass-from) 100%);
   backdrop-filter: blur(40px) saturate(1.6);
   -webkit-backdrop-filter: blur(40px) saturate(1.6);
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  border: 0.5px solid var(--glass-border);
   border-radius: 9px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 4px 14px rgba(0, 0, 0, 0.08),
-    0 16px 36px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-glass);
   animation: recentsIn 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -419,7 +414,7 @@
 }
 
 .recentsItem:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--hover-bg);
 }
 
 .recentsIcon {
@@ -441,8 +436,8 @@
 }
 
 .qkChip:hover {
-  background: rgba(10, 132, 255, 0.10);
-  border-color: rgba(10, 132, 255, 0.30);
+  background: var(--accent-bg-soft);
+  border-color: var(--accent-ring);
 }
 
 /* Bare characters inside the .qkChip pill — no inner squared
@@ -470,9 +465,7 @@
 .search:focus {
   /* No accent halo — just preserve the resting shadow so the field
      keeps its lift but the focus state doesn't shout. */
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
 }
 
 /* Hide WebKit's native search ornaments so our custom icon stays visible
@@ -515,7 +508,7 @@
 
 .slider::-webkit-slider-runnable-track {
   height: 3px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--border-strong);
   border-radius: 2px;
 }
 

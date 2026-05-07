@@ -12,6 +12,7 @@ const PREFS_FILE = 'prefs.json';
 const DEFAULT_PREFS = {
   autoNameOnSave: true,
   semanticSearch: false,
+  theme: 'light',
 };
 
 function keyFilePath() {

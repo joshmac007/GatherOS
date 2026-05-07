@@ -102,17 +102,15 @@
   gap: 12px;
   width: 188px;
   padding: 14px 14px 12px;
-  background: #FAFAF9;
-  border: 0.5px solid rgba(0, 0, 0, 0.05);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
   border-radius: 14px;
   text-align: left;
   cursor: pointer;
   /* Same recipe as the sidebar + search so all three chrome
      surfaces sit at the same elevation. Ambient reach (~10px)
      still fits the scroller's 16/16/28px padding. */
-  box-shadow:
-    0 0 0 1px #FFF inset,
-    0 4px 20px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
@@ -219,9 +217,9 @@
 }
 
 .cardRenameInput:focus {
-  background: #ffffff;
-  border-color: rgba(10, 132, 255, 0.5);
-  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.18);
+  background: var(--input-bg-focus);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg-medium);
 }
 
 .count {
