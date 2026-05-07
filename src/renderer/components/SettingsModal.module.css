@@ -57,14 +57,23 @@
   color: var(--text-primary);
 }
 
+/* Floating sidebar — same recipe as the main app shell: subtle border,
+   soft drop-shadow, rounded corners, inset by 10px from the modal's
+   edges so it reads as a panel hovering above the content area
+   rather than a full-bleed nav rail. */
 .sidebar {
   width: 200px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  padding: 18px 8px 16px;
-  border-right: 0.5px solid var(--border);
+  padding: 16px 8px;
+  margin: 10px 0 10px 10px;
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   overflow-y: auto;
+  z-index: 1;
 }
 
 .sidebarLabel {
@@ -136,7 +145,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 32px 28px 24px;
+  padding: 32px 32px 24px;
   overflow-y: auto;
 }
 
