@@ -3,6 +3,7 @@ import { morphFocus } from './lib/morphFocus.js';
 import Sidebar, { CollectionIcon } from './components/Sidebar.jsx';
 import QuickSwitcher from './components/QuickSwitcher.jsx';
 import QuickLookOverlay from './components/QuickLookOverlay.jsx';
+import BulkTagPicker from './components/BulkTagPicker.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import WelcomeModal from './components/WelcomeModal.jsx';
@@ -32,6 +33,7 @@ import {
   ArrowUp,
   Clipboard,
   ExternalLink,
+  Hash,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -57,6 +59,7 @@ const MinusCircleIcon = () => <MinusCircle {...ICON} />;
 const SortFabIcon = () => <ArrowRightFromLine {...ICON} />;
 const ClipboardIcon = () => <Clipboard {...ICON} />;
 const ExternalLinkIcon = () => <ExternalLink {...ICON} />;
+const HashIcon = () => <Hash {...ICON} />;
 
 export default function App() {
   const {
@@ -841,6 +844,7 @@ export default function App() {
   const [cardCtx, setCardCtx] = useState(null); // { saveId, x, y, items }
   // Bulk "Add to Collection" picker, anchored above the selection bar.
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
+  const [bulkTagPicker, setBulkTagPicker] = useState(null); // { x, y } | null
 
   const buildCardMenuItems = useCallback((saveId, memberIds) => {
     // If the right-clicked save is part of an active multi-selection,
@@ -1757,6 +1761,33 @@ export default function App() {
     ];
   }, [bulkPicker, bulkAlreadyIn, selected, collections, saves, loadCollections, view, reload]);
 
+  // Bulk tag affordance — anchored to its trigger button in the
+  // selection bar, applied to every save in the current selection.
+  // Refreshes allTags after the writes so the picker (and any open
+  // detail panel) sees the new save_count immediately.
+  const openBulkTagPicker = useCallback((rect) => {
+    if (!rect || selected.size === 0) return;
+    setBulkTagPicker({ x: rect.left + rect.width / 2, y: rect.top });
+  }, [selected]);
+
+  const handleBulkApplyTag = useCallback(async (name) => {
+    if (selected.size === 0 || !name) return;
+    const ids = [...selected];
+    setBulkTagPicker(null);
+    for (const saveId of ids) {
+      try {
+        await window.moodmark.tags.addToSave({ saveId, name });
+      } catch (err) {
+        console.error('[bulk-tag] addToSave failed for', saveId, err);
+      }
+    }
+    await loadAllTags();
+    showActionToast({
+      message: `Tagged ${ids.length} ${ids.length === 1 ? 'save' : 'saves'} with #${name}`,
+      durationMs: 2000,
+    });
+  }, [selected, loadAllTags, showActionToast]);
+
   const goPrev = useCallback(() => {
     if (focusedIndex > 0) setFocusedId(displaySaves[focusedIndex - 1].id);
   }, [focusedIndex, displaySaves]);
@@ -2234,6 +2265,15 @@ export default function App() {
           <button
             type="button"
             className="selection-btn selection-btn-compact"
+            onClick={(e) => openBulkTagPicker(e.currentTarget.getBoundingClientRect())}
+            data-tooltip="Add tag"
+            aria-label="Add tag to selection"
+          >
+            <span className="selection-btn-icon"><HashIcon /></span>
+          </button>
+          <button
+            type="button"
+            className="selection-btn selection-btn-compact"
             onClick={openExportPicker}
             data-tooltip="Export"
             aria-label="Export selected images"
@@ -2431,6 +2471,16 @@ export default function App() {
           y={bulkPicker.y}
           items={bulkPickerItems}
           onClose={() => setBulkPicker(null)}
+        />
+      )}
+
+      {bulkTagPicker && (
+        <BulkTagPicker
+          anchor={bulkTagPicker}
+          allTags={allTags}
+          count={selected.size}
+          onApply={handleBulkApplyTag}
+          onClose={() => setBulkTagPicker(null)}
         />
       )}
 
