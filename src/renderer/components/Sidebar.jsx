@@ -221,6 +221,7 @@ export default function Sidebar({
   // Shuffle entry; the others currently render no items but the
   // hook is kept open for future actions.
   const [smartCtx, setSmartCtx] = useState(null); // { x, y, viewId }
+  const [boardCtx, setBoardCtx] = useState(null);  // { x, y, board }
 
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
@@ -709,6 +710,33 @@ export default function Sidebar({
   // Smart-view context menu items. All / Unsorted both support
   // shuffle; Trash gets none (it's already random and this surface
   // shouldn't add noise).
+  const boardCtxItems = boardCtx
+    ? [
+        {
+          label: 'Rename',
+          icon: <PencilIcon />,
+          onClick: () => {
+            const next = window.prompt(`Rename "${boardCtx.board.name}" to:`, boardCtx.board.name);
+            if (next == null) return;
+            const trimmed = next.trim();
+            if (trimmed && trimmed !== boardCtx.board.name) {
+              onRenameBoard?.({ id: boardCtx.board.id, name: trimmed });
+            }
+          },
+        },
+        {
+          label: 'Delete Board',
+          icon: <TrashIcon />,
+          danger: true,
+          onClick: () => {
+            if (window.confirm(`Delete "${boardCtx.board.name}"? This can't be undone.`)) {
+              onDeleteBoard?.(boardCtx.board.id);
+            }
+          },
+        },
+      ]
+    : [];
+
   const smartCtxItems = smartCtx && (smartCtx.viewId === 'all' || smartCtx.viewId === 'unsorted')
     ? [
         ...(typeof onShuffleView === 'function' ? [{
@@ -828,23 +856,7 @@ export default function Sidebar({
                 onClick={() => onViewChange?.({ type: 'board', id: b.id })}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  // Minimal contextual actions for boards: rename / delete.
-                  // Reuses window.prompt/confirm to keep this lean — we'll
-                  // graduate to a styled menu if/when boards get richer
-                  // metadata to hang affordances off.
-                  const choice = window.prompt(
-                    `Rename "${b.name}" to:\n(leave blank to delete)`,
-                    b.name,
-                  );
-                  if (choice === null) return;
-                  const trimmed = choice.trim();
-                  if (trimmed === '') {
-                    if (window.confirm(`Delete "${b.name}"? This can't be undone.`)) {
-                      onDeleteBoard?.(b.id);
-                    }
-                  } else if (trimmed !== b.name) {
-                    onRenameBoard?.({ id: b.id, name: trimmed });
-                  }
+                  setBoardCtx({ x: e.clientX, y: e.clientY, board: b });
                 }}
                 title={b.name}
               >
@@ -1199,6 +1211,14 @@ export default function Sidebar({
           y={ctxMenu.y}
           items={ctxItems}
           onClose={() => setCtxMenu(null)}
+        />
+      )}
+      {boardCtx && (
+        <ContextMenu
+          x={boardCtx.x}
+          y={boardCtx.y}
+          items={boardCtxItems}
+          onClose={() => setBoardCtx(null)}
         />
       )}
       {smartCtx && smartCtxItems.length > 0 && (
