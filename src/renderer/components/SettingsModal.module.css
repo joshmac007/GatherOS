@@ -678,8 +678,15 @@
 .tagSort {
   flex-shrink: 0;
   height: 28px;
-  padding: 0 8px;
-  background: var(--input-bg);
+  /* Right padding leaves room for the inline chevron painted via
+     background-image; the native arrow is suppressed by appearance:
+     none below so it doesn't double up against ours. */
+  padding: 0 26px 0 10px;
+  background-color: var(--input-bg);
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 10px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 3.5l3 3 3-3' fill='none' stroke='rgba(0,0,0,0.55)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   border: 0.5px solid var(--input-border);
   border-radius: 7px;
   font-family: var(--font-ui);
@@ -687,6 +694,14 @@
   color: var(--text-primary);
   cursor: pointer;
   outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Dark mode needs a brighter chevron — the inline SVG above bakes
+   in a black stroke, so override the background-image entirely. */
+:root[data-theme="dark"] .tagSort {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 3.5l3 3 3-3' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
 }
 
 .tagSummaryRow {
