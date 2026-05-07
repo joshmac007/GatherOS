@@ -574,6 +574,14 @@ ipcMain.on('app:get-theme', (event) => {
   event.returnValue = settings.getPref('theme', 'light');
 });
 
+// Reports the result of the PRAGMA integrity_check that ran during
+// initDatabase(). Renderer pulls this on mount and surfaces a
+// recoverable warning if the SQLite file came back damaged.
+ipcMain.handle('db:integrity', () => {
+  const { getIntegrityResult } = require('./db');
+  return getIntegrityResult();
+});
+
 // Renderer's Light/Dark switch fires this so the native chrome
 // (traffic lights, scrollbars, native dialogs) flips in lockstep
 // with the document. Pref persistence still happens via the regular

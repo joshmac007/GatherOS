@@ -572,6 +572,77 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Tag manager — flat list of every tag in the library with inline
+   rename + delete. Each row is a 3-column flex: clickable label,
+   save count, danger button. */
+.tagList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tagRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.tagRow:last-child { border-bottom: none; }
+
+.tagName {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 100ms ease;
+}
+
+.tagName:hover {
+  background: var(--hover-bg-soft);
+}
+
+.tagHash {
+  color: var(--text-tertiary);
+  margin-right: 1px;
+}
+
+.tagCount {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tagInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--input-bg-focus);
+  border: 0.5px solid var(--accent);
+  border-radius: 6px;
+  outline: none;
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
 /* Light/Dark picker — two segmented chips with a preview swatch.
    Selected state mirrors the soft button surface so it reads as
    "this one is on" without a hard accent fill. */

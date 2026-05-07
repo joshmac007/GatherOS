@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLicense } from './hooks/useLicense.js';
 import App from './App.jsx';
 import SigninScreen from './components/SigninScreen.jsx';
 import PaywallModal from './components/PaywallModal.jsx';
 import AccountBanner from './components/AccountBanner.jsx';
+import DbIntegrityBanner from './components/DbIntegrityBanner.jsx';
 
 // Top-level license gate. Decides whether the user sees the app, the
 // signin screen, or the paywall — based on the entitlement state
@@ -84,6 +85,16 @@ export default function AppGate() {
   return (
     <>
       <App />
+      <DbIntegrityBanner
+        onOpenBackups={() => {
+          // App.jsx listens for this and pops Settings open on the
+          // Data drawer so the user can pick a snapshot. Fire-and-
+          // forget — keeps AppGate from owning Settings UI state.
+          window.dispatchEvent(
+            new CustomEvent('moodmark:open-settings', { detail: { drawer: 'data' } }),
+          );
+        }}
+      />
       <AccountBanner
         license={state.license}
         onOpenCustomerPortal={() => window.moodmark.licensing.openCustomerPortal()}

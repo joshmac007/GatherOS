@@ -321,6 +321,14 @@ function registerIpcHandlers() {
   ipcMain.handle('tags:get-for-save', (_e, saveId) => getTagsForSave(saveId));
   ipcMain.handle('tags:add-to-save', (_e, payload) => addTagToSave(payload));
   ipcMain.handle('tags:remove-from-save', (_e, payload) => removeTagFromSave(payload));
+  ipcMain.handle('tags:rename', (_e, payload) => {
+    const { renameTag } = require('./db');
+    return renameTag(payload);
+  });
+  ipcMain.handle('tags:delete', (_e, id) => {
+    const { deleteTag } = require('./db');
+    return deleteTag(id);
+  });
 
   ipcMain.handle('capture:screenshot', () => {
     startScreenshotCapture();

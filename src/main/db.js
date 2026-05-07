@@ -95,7 +95,37 @@ function initDatabase() {
   // migrations on top to bring any older shape up to current.
   db.exec(SCHEMA);
   migrate();
+  // Cheap insurance against the SQLite-corruption stories that haunt
+  // local-first apps. Result is cached so the renderer can pull it on
+  // mount and surface a recoverable warning if anything turned up.
+  lastIntegrityResult = checkIntegrity(db);
   return db;
+}
+
+// Result of the most recent PRAGMA integrity_check, captured at init
+// time so the renderer can ask for it once on mount without rerunning
+// a full-table scan on every poll.
+let lastIntegrityResult = { ok: true, errors: [] };
+
+function checkIntegrity(database) {
+  try {
+    const rows = database.prepare('PRAGMA integrity_check').all();
+    const errors = rows
+      .map((r) => r.integrity_check)
+      .filter((s) => s && s !== 'ok');
+    if (errors.length > 0) {
+      console.error('[db] integrity_check found issues:', errors);
+      return { ok: false, errors };
+    }
+    return { ok: true, errors: [] };
+  } catch (err) {
+    console.error('[db] integrity_check threw:', err);
+    return { ok: false, errors: [err.message || String(err)] };
+  }
+}
+
+function getIntegrityResult() {
+  return lastIntegrityResult;
 }
 
 // ── Versioned migrations ───────────────────────────────────────────
@@ -799,6 +829,53 @@ function removeTagFromSave({ saveId, tagId } = {}) {
   return { ok: true };
 }
 
+// Rename a tag globally. If the new name already exists as another
+// tag, merge the two — every save that had the old tag now points at
+// the survivor and the renamed row is deleted. Idempotent on no-op.
+function renameTag({ id, name } = {}) {
+  const trimmed = (name || '').trim().toLowerCase().replace(/^#+/, '');
+  if (!id || !trimmed) return { ok: false, reason: 'invalid' };
+  const db = getDatabase();
+  const existing = db.prepare('SELECT * FROM tags WHERE id = ?').get(id);
+  if (!existing) return { ok: false, reason: 'not_found' };
+  if (existing.name === trimmed) return { ok: true, tag: existing };
+
+  const collision = db.prepare('SELECT * FROM tags WHERE name = ? AND id != ?').get(trimmed, id);
+  if (collision) {
+    // Merge: repoint every save_tags row from id → collision.id, then
+    // delete the now-empty source tag. INSERT OR IGNORE handles the
+    // case where a save already had both tags applied.
+    const merge = db.transaction(() => {
+      db.prepare(
+        'INSERT OR IGNORE INTO save_tags (save_id, tag_id) SELECT save_id, ? FROM save_tags WHERE tag_id = ?',
+      ).run(collision.id, id);
+      db.prepare('DELETE FROM save_tags WHERE tag_id = ?').run(id);
+      db.prepare('DELETE FROM tags WHERE id = ?').run(id);
+    });
+    merge();
+    return { ok: true, tag: collision, merged: true };
+  }
+  db.prepare('UPDATE tags SET name = ? WHERE id = ?').run(trimmed, id);
+  return { ok: true, tag: { ...existing, name: trimmed } };
+}
+
+// Hard-delete a tag everywhere — drops every save_tags edge first, then
+// the tag row. Returns the number of saves that lost the tag so the UI
+// can surface "removed from N saves" feedback.
+function deleteTag(tagId) {
+  if (!tagId) return { ok: false };
+  const db = getDatabase();
+  const txn = db.transaction(() => {
+    const { changes } = db
+      .prepare('DELETE FROM save_tags WHERE tag_id = ?')
+      .run(tagId);
+    db.prepare('DELETE FROM tags WHERE id = ?').run(tagId);
+    return changes;
+  });
+  const removed = txn();
+  return { ok: true, removed };
+}
+
 function reorderCollections(orderedIds) {
   const db = getDatabase();
   const stmt = db.prepare('UPDATE collections SET order_index = ? WHERE id = ?');
@@ -1028,6 +1105,9 @@ module.exports = {
   getTagsForSave,
   addTagToSave,
   removeTagFromSave,
+  renameTag,
+  deleteTag,
+  getIntegrityResult,
   // Boards
   listBoards,
   getBoard,

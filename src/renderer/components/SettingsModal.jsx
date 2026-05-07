@@ -80,7 +80,7 @@ function EraseIcon() {
   );
 }
 
-export default function SettingsModal({ open, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped, onKeySaved, onReplayOnboarding }) {
+export default function SettingsModal({ open, drawerHint, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped, onKeySaved, onReplayOnboarding }) {
   const [hasKey, setHasKey] = useState(false);
   const [draft, setDraft] = useState('');
   const [status, setStatus] = useState(STATUS_IDLE);
@@ -97,6 +97,10 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
   const [dataOpen, setDataOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [tags, setTags] = useState([]);
+  const [tagDraft, setTagDraft] = useState({ id: null, name: '' });
+  const [tagBusy, setTagBusy] = useState(false);
   const [acksOpen, setAcksOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [account, setAccount] = useState(null);
@@ -283,6 +287,62 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  // Auto-expand a specific drawer when the parent passes a hint
+  // (e.g. AppGate's DB-integrity banner aiming the user at Backups).
+  // The hint is { drawer, key } where key is bumped per dispatch so
+  // repeated triggers re-fire even if the drawer name didn't change.
+  useEffect(() => {
+    if (!open || !drawerHint) return;
+    const map = {
+      account: setAccountOpen,
+      ai: setAiOpen,
+      data: setDataOpen,
+      tags: setTagsOpen,
+      about: setAboutOpen,
+    };
+    const setter = map[drawerHint.drawer];
+    if (setter) setter(true);
+  }, [open, drawerHint]);
+
+  // Refresh the tag list whenever the drawer is opened so save_count
+  // reflects any tagging changes that happened mid-session.
+  useEffect(() => {
+    if (!open || !tagsOpen) return;
+    let cancelled = false;
+    window.moodmark?.tags?.getAll().then((rows) => {
+      if (!cancelled) setTags(Array.isArray(rows) ? rows : []);
+    });
+    return () => { cancelled = true; };
+  }, [open, tagsOpen]);
+
+  async function handleTagRenameCommit(tag) {
+    const next = tagDraft.name.trim().toLowerCase().replace(/^#+/, '');
+    if (!next || next === tag.name) {
+      setTagDraft({ id: null, name: '' });
+      return;
+    }
+    setTagBusy(true);
+    await window.moodmark.tags.rename({ id: tag.id, name: next });
+    const rows = await window.moodmark.tags.getAll();
+    setTags(Array.isArray(rows) ? rows : []);
+    setTagDraft({ id: null, name: '' });
+    setTagBusy(false);
+  }
+
+  async function handleTagDelete(tag) {
+    const ok = window.confirm(
+      tag.save_count > 0
+        ? `Delete the tag "${tag.name}"? It's currently on ${tag.save_count} ${tag.save_count === 1 ? 'save' : 'saves'} — they'll keep the save, just not the tag.`
+        : `Delete the unused tag "${tag.name}"?`,
+    );
+    if (!ok) return;
+    setTagBusy(true);
+    await window.moodmark.tags.delete(tag.id);
+    const rows = await window.moodmark.tags.getAll();
+    setTags(Array.isArray(rows) ? rows : []);
+    setTagBusy(false);
+  }
 
   if (!open) return null;
 
@@ -621,6 +681,74 @@ export default function SettingsModal({ open, onClose, onConfiguredChange, onPre
             </div>
           )}
           </div>
+          )}
+        </section>
+
+        <section className={`${styles.section} ${styles.drawerSection}`}>
+          <button
+            type="button"
+            className={styles.drawerHeader}
+            onClick={() => setTagsOpen((v) => !v)}
+            aria-expanded={tagsOpen}
+          >
+            <span className={styles.sectionTitle}>Tags</span>
+            <span className={[styles.drawerChevron, tagsOpen && styles.drawerChevronOpen].filter(Boolean).join(' ')}>
+              <DrawerChevron />
+            </span>
+          </button>
+          {tagsOpen && (
+            <div className={styles.drawerBody}>
+              {tags.length === 0 ? (
+                <div className={styles.sectionHint}>
+                  No tags yet. Add tags to a save from its detail panel.
+                </div>
+              ) : (
+                <ul className={styles.tagList}>
+                  {tags.map((t) => {
+                    const renaming = tagDraft.id === t.id;
+                    return (
+                      <li key={t.id} className={styles.tagRow}>
+                        {renaming ? (
+                          <input
+                            autoFocus
+                            className={styles.tagInput}
+                            value={tagDraft.name}
+                            disabled={tagBusy}
+                            onChange={(e) => setTagDraft({ id: t.id, name: e.target.value })}
+                            onBlur={() => handleTagRenameCommit(t)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleTagRenameCommit(t);
+                              if (e.key === 'Escape') setTagDraft({ id: null, name: '' });
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.tagName}
+                            onClick={() => setTagDraft({ id: t.id, name: t.name })}
+                            title="Rename tag"
+                          >
+                            <span className={styles.tagHash}>#</span>{t.name}
+                          </button>
+                        )}
+                        <span className={styles.tagCount}>
+                          {t.save_count} {t.save_count === 1 ? 'save' : 'saves'}
+                        </span>
+                        <button
+                          type="button"
+                          className={`${styles.btn} ${styles.btnDanger}`}
+                          onClick={() => handleTagDelete(t)}
+                          disabled={tagBusy}
+                          aria-label={`Delete tag ${t.name}`}
+                        >
+                          Delete
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           )}
         </section>
 

@@ -269,6 +269,21 @@ export default function App() {
     }
   }, []);
   useEffect(() => { refreshLibraries(); }, [refreshLibraries]);
+
+  // AppGate dispatches this when the DB-integrity banner's "View
+  // backups" button is clicked. Pop Settings open and tell it which
+  // drawer to auto-expand. Object identity changes per dispatch so
+  // SettingsModal's effect always re-runs even on a repeat click.
+  useEffect(() => {
+    function onOpenSettings(e) {
+      const drawer = e?.detail?.drawer || null;
+      setSettingsDrawerHint(drawer ? { drawer, key: Date.now() } : null);
+      setSettingsOpen(true);
+    }
+    window.addEventListener('moodmark:open-settings', onOpenSettings);
+    return () => window.removeEventListener('moodmark:open-settings', onOpenSettings);
+  }, []);
+
   // Splash that runs once per app launch. The LoadingScreen calls
   // onDone after its 0→100 count + exit animation completes, at which
   // point we unmount it for the rest of the session.
@@ -282,6 +297,11 @@ export default function App() {
   // once on mount and is updated whenever the user saves/clears via
   // SettingsModal's onConfiguredChange callback.
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Hint to SettingsModal — the name of the drawer to auto-open on
+  // launch (e.g. when the DB-integrity banner asks the user to look
+  // at backups). Bumped via a fresh object each time so SettingsModal
+  // can effect-listen for it without us tracking dirty flags here.
+  const [settingsDrawerHint, setSettingsDrawerHint] = useState(null);
   const [aiUnlockedOpen, setAiUnlockedOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [whatsNewNotes, setWhatsNewNotes] = useState(null);
@@ -2273,6 +2293,7 @@ export default function App() {
 
       <SettingsModal
         open={settingsOpen}
+        drawerHint={settingsDrawerHint}
         onClose={() => setSettingsOpen(false)}
         onConfiguredChange={setAiConfigured}
         onPrefsChange={setPrefs}
