@@ -187,6 +187,29 @@ const MIGRATIONS = [
       'CREATE INDEX IF NOT EXISTS idx_saves_content_hash ON saves(content_hash)',
     );
   },
+  // v2 → v3: precomputed LAB triplets for every palette swatch. The
+  // color filter and "find similar" path used to call hexToLab on
+  // every swatch on every save on every keystroke; storing the
+  // conversion once at save time turns those into a JSON.parse.
+  (database) => {
+    addColumnIfMissing(database, 'saves', 'palette_lab', 'TEXT');
+    const rows = database
+      .prepare('SELECT id, palette FROM saves WHERE palette IS NOT NULL AND palette_lab IS NULL')
+      .all();
+    if (rows.length === 0) return;
+    const upd = database.prepare('UPDATE saves SET palette_lab = ? WHERE id = ?');
+    const txn = database.transaction((items) => {
+      for (const r of items) {
+        let pal;
+        try { pal = JSON.parse(r.palette); } catch { continue; }
+        if (!Array.isArray(pal)) continue;
+        const labs = pal.map(hexToLab).filter(Boolean);
+        if (labs.length === 0) continue;
+        upd.run(JSON.stringify(labs), r.id);
+      }
+    });
+    txn(rows);
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -291,6 +314,13 @@ function insertSave({
   contentHash,
 } = {}) {
   const db = getDatabase();
+  const paletteArr = Array.isArray(palette) && palette.length ? palette : null;
+  // Pre-compute LAB once on insert. filterByColor and the similar-by-
+  // palette query both used to recompute these per swatch per call;
+  // doing it once at save time pays off on the second filter onwards.
+  const paletteLabArr = paletteArr
+    ? paletteArr.map(hexToLab).filter(Boolean)
+    : null;
   const record = {
     id: id || crypto.randomUUID(),
     file_path: filePath,
@@ -300,15 +330,18 @@ function insertSave({
     width: width || null,
     height: height || null,
     file_size: fileSize || null,
-    palette: Array.isArray(palette) && palette.length ? JSON.stringify(palette) : null,
+    palette: paletteArr ? JSON.stringify(paletteArr) : null,
+    palette_lab: paletteLabArr && paletteLabArr.length
+      ? JSON.stringify(paletteLabArr)
+      : null,
     content_hash: contentHash || null,
     created_at: Date.now(),
   };
   db.prepare(`
     INSERT INTO saves
-      (id, file_path, thumb_path, title, source_url, width, height, file_size, palette, content_hash, created_at)
+      (id, file_path, thumb_path, title, source_url, width, height, file_size, palette, palette_lab, content_hash, created_at)
     VALUES
-      (@id, @file_path, @thumb_path, @title, @source_url, @width, @height, @file_size, @palette, @content_hash, @created_at)
+      (@id, @file_path, @thumb_path, @title, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @created_at)
   `).run(record);
   return record;
 }
@@ -406,6 +439,28 @@ function hexToLab(hex) {
   return rgb ? rgbToLab(rgb[0], rgb[1], rgb[2]) : null;
 }
 
+// Parse the precomputed palette_lab JSON off a save row. Returns
+// null on malformed / missing data so callers can fall through to
+// regenerating from `palette`.
+function parseStoredLabs(row) {
+  if (!row || !row.palette_lab) return null;
+  try {
+    const parsed = JSON.parse(row.palette_lab);
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch { return null; }
+}
+
+// Fallback: rebuild the LAB triplets from the legacy `palette` JSON
+// for rows that haven't been backfilled yet.
+function labsFromPalette(paletteJson) {
+  if (!paletteJson) return null;
+  let pal;
+  try { pal = JSON.parse(paletteJson); } catch { return null; }
+  if (!Array.isArray(pal)) return null;
+  const labs = pal.map(hexToLab).filter(Boolean);
+  return labs.length ? labs : null;
+}
+
 // Returns id only — palette filter runs in JS over the parsed swatches,
 // applied as a post-filter on top of the SQL conditions below.
 //
@@ -417,15 +472,10 @@ function filterByColor(saves, hex, threshold = 22, paletteLimit = null) {
   const target = hexToLab(hex);
   if (!target) return saves;
   return saves.filter((s) => {
-    if (!s.palette) return false;
-    let palette;
-    try { palette = JSON.parse(s.palette); } catch { return false; }
-    if (!Array.isArray(palette)) return false;
-    const swatches = paletteLimit ? palette.slice(0, paletteLimit) : palette;
-    return swatches.some((c) => {
-      const lab = hexToLab(c);
-      return lab && deltaE76(target, lab) <= threshold;
-    });
+    const labs = parseStoredLabs(s) || labsFromPalette(s.palette);
+    if (!labs || labs.length === 0) return false;
+    const swatches = paletteLimit ? labs.slice(0, paletteLimit) : labs;
+    return swatches.some((lab) => deltaE76(target, lab) <= threshold);
   });
 }
 
@@ -439,27 +489,25 @@ function filterByColor(saves, hex, threshold = 22, paletteLimit = null) {
 function findSimilarByPalette(anchorId, limit = 24) {
   if (!anchorId) return [];
   const anchor = getSave(anchorId);
-  if (!anchor || !anchor.palette) return [];
-  let anchorPalette;
-  try { anchorPalette = JSON.parse(anchor.palette); } catch { return []; }
-  if (!Array.isArray(anchorPalette) || anchorPalette.length === 0) return [];
-  const anchorLabs = anchorPalette.map(hexToLab).filter(Boolean);
-  if (anchorLabs.length === 0) return [];
+  if (!anchor) return [];
+  // Pull anchor LABs from the precomputed column when available;
+  // otherwise reconstruct from `palette` (covers the brief window
+  // between schema upgrade and migration backfill, plus rows missing
+  // a palette entirely).
+  const anchorLabs = parseStoredLabs(anchor) || labsFromPalette(anchor.palette);
+  if (!anchorLabs || anchorLabs.length === 0) return [];
 
   const db = getDatabase();
   const rows = db
     .prepare(
-      'SELECT id, palette FROM saves WHERE deleted_at IS NULL AND id != ? AND palette IS NOT NULL',
+      'SELECT id, palette, palette_lab FROM saves WHERE deleted_at IS NULL AND id != ? AND palette IS NOT NULL',
     )
     .all(anchorId);
 
   const scored = [];
   for (const row of rows) {
-    let pal;
-    try { pal = JSON.parse(row.palette); } catch { continue; }
-    if (!Array.isArray(pal) || pal.length === 0) continue;
-    const labs = pal.map(hexToLab).filter(Boolean);
-    if (labs.length === 0) continue;
+    const labs = parseStoredLabs(row) || labsFromPalette(row.palette);
+    if (!labs || labs.length === 0) continue;
     let total = 0;
     for (const a of anchorLabs) {
       let best = Infinity;

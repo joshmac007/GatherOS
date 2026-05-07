@@ -241,6 +241,7 @@ export default function Grid({
                   src={fileUrl(s.thumb_path || s.file_path)}
                   alt=""
                   loading="lazy"
+                  decoding="async"
                   draggable={false}
                 />
               </div>

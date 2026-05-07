@@ -57,6 +57,35 @@ function bufferToFloat32(buf) {
   return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
 }
 
+// LRU-ish cache for embedding the current search query. Each
+// keystroke goes through saves:get-all and the renderer's 180ms
+// debouncer doesn't dedupe across backspace-retype or revisited
+// queries — paying $0.0001 + ~150ms per repeat is wasteful when
+// the vector is deterministic. Cap of 50 keeps memory negligible
+// (~300KB for 50 × 1536 × 4 bytes) and the eviction insertion-order
+// keeps recent queries warm without explicit LRU bookkeeping.
+const QUERY_EMBEDDING_CACHE = new Map();
+const QUERY_EMBEDDING_CACHE_MAX = 50;
+
+async function embedQueryCached(apiKey, queryText) {
+  const key = (queryText || '').trim().toLowerCase();
+  if (!key) throw new Error('Cannot embed empty text');
+  if (QUERY_EMBEDDING_CACHE.has(key)) {
+    // Refresh recency by re-inserting (Map iteration order = insertion).
+    const cached = QUERY_EMBEDDING_CACHE.get(key);
+    QUERY_EMBEDDING_CACHE.delete(key);
+    QUERY_EMBEDDING_CACHE.set(key, cached);
+    return cached;
+  }
+  const vec = await embedText(apiKey, queryText);
+  QUERY_EMBEDDING_CACHE.set(key, vec);
+  if (QUERY_EMBEDDING_CACHE.size > QUERY_EMBEDDING_CACHE_MAX) {
+    const oldest = QUERY_EMBEDDING_CACHE.keys().next().value;
+    QUERY_EMBEDDING_CACHE.delete(oldest);
+  }
+  return vec;
+}
+
 function registerIpcHandlers() {
   // Merges saves whose extracted palette is perceptually similar to a
   // named color in the query (e.g. "orange", "navy") into the existing
@@ -126,7 +155,7 @@ function registerIpcHandlers() {
       // The hybrid LIKE pass below is the recall safety net for
       // narrow queries; threshold + relative cap below is the
       // precision filter.
-      const queryVec = await embedText(apiKey, queryText);
+      const queryVec = await embedQueryCached(apiKey, queryText);
       const queryF32 = new Float32Array(queryVec);
       const dim = queryF32.length;
 

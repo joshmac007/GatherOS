@@ -393,10 +393,20 @@ export default function App() {
     return off;
   }, []);
 
-  // Splash that runs once per app launch. The LoadingScreen calls
-  // onDone after its 0→100 count + exit animation completes, at which
-  // point we unmount it for the rest of the session.
-  const [booting, setBooting] = useState(true);
+  // Splash runs once on the user's first-ever launch only. Subsequent
+  // launches go straight into the app — TTI under ~200ms is more
+  // important than a brand moment for a returning user. The
+  // localStorage flag persists alongside other UI prefs (cheap and
+  // user-scoped; no IPC needed).
+  const SPLASH_FLAG_KEY = 'moodmark.splashSeen';
+  const [booting, setBooting] = useState(() => {
+    try { return localStorage.getItem(SPLASH_FLAG_KEY) !== '1'; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    if (booting) return;
+    try { localStorage.setItem(SPLASH_FLAG_KEY, '1'); } catch {}
+  }, [booting]);
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((c) => !c);

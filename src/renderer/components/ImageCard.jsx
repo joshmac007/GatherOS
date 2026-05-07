@@ -87,8 +87,36 @@ export default function ImageCard({
 
   useEffect(() => () => { cancelOpen(); cancelClose(); }, []);
 
+  // Render windowing: hold the inner image + chrome out of the DOM
+  // until the card scrolls within ~600px of the viewport. The outer
+  // <button> with its aspect-ratio'd frame always renders so the
+  // masonry layout doesn't reflow. Once a card has been seen, it
+  // stays mounted — avoids re-mount flicker on scroll-back.
+  const wrapperRef = useRef(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    if (inView) return undefined;
+    const el = wrapperRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return undefined;
+    }
+    const obs = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          setInView(true);
+          obs.disconnect();
+          return;
+        }
+      }
+    }, { rootMargin: '600px 0px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [inView]);
+
   return (
     <button
+      ref={wrapperRef}
       type="button"
       data-save-id={record.id}
       draggable={!!onDragStart}
@@ -118,51 +146,56 @@ export default function ImageCard({
       }}
     >
       <div className={styles.frame} style={{ aspectRatio: aspect }}>
-        {src && (
+        {inView && src && (
           <img
             src={src}
             className={styles.image}
             alt={record.title || ''}
             loading="lazy"
+            decoding="async"
             draggable={false}
             style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
           />
         )}
-        <span
-          role="checkbox"
-          aria-checked={!!selected}
-          tabIndex={-1}
-          className={`${styles.checkbox} ${selected ? styles.checkboxOn : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(record.id, true);
-          }}
-          title={selected ? 'Deselect' : 'Select'}
-        >
-          {selected && <CheckIcon />}
-        </span>
-        <span
-          className={styles.peekBtn}
-          title="Peek"
-          aria-label="Peek"
-          onClick={(e) => e.stopPropagation()}
-          onMouseEnter={() => {
-            cancelClose();
-            // If the lightbox is already open (cursor came back from
-            // the image edge), keep it open instead of waiting again.
-            if (peeking) return;
-            scheduleOpen();
-          }}
-          onMouseLeave={() => {
-            // Cursor left before the open delay elapsed — abort the
-            // pending open. If it's already open, give the cursor a
-            // grace window to reach the image.
-            cancelOpen();
-            if (peeking) scheduleClose(CLOSE_GRACE);
-          }}
-        >
-          <PeekIcon />
-        </span>
+        {inView && (
+          <>
+            <span
+              role="checkbox"
+              aria-checked={!!selected}
+              tabIndex={-1}
+              className={`${styles.checkbox} ${selected ? styles.checkboxOn : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(record.id, true);
+              }}
+              title={selected ? 'Deselect' : 'Select'}
+            >
+              {selected && <CheckIcon />}
+            </span>
+            <span
+              className={styles.peekBtn}
+              title="Peek"
+              aria-label="Peek"
+              onClick={(e) => e.stopPropagation()}
+              onMouseEnter={() => {
+                cancelClose();
+                // If the lightbox is already open (cursor came back from
+                // the image edge), keep it open instead of waiting again.
+                if (peeking) return;
+                scheduleOpen();
+              }}
+              onMouseLeave={() => {
+                // Cursor left before the open delay elapsed — abort the
+                // pending open. If it's already open, give the cursor a
+                // grace window to reach the image.
+                cancelOpen();
+                if (peeking) scheduleClose(CLOSE_GRACE);
+              }}
+            >
+              <PeekIcon />
+            </span>
+          </>
+        )}
       </div>
 
       {peeking && src && createPortal(
@@ -177,6 +210,7 @@ export default function ImageCard({
             src={src}
             alt=""
             className={styles.lightboxImage}
+            decoding="async"
             onMouseEnter={cancelClose}
             onMouseLeave={() => setPeeking(false)}
             draggable={false}

@@ -159,6 +159,8 @@ export default function FeaturedBuckets({
                         key={s.id}
                         src={fileUrl(s.thumb_path || s.file_path)}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         draggable={false}
                       />
                     ))
@@ -219,6 +221,8 @@ export default function FeaturedBuckets({
                         key={s.id}
                         src={fileUrl(s.thumb_path || s.file_path)}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         draggable={false}
                       />
                     ))
