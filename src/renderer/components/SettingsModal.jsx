@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { History, User, Sparkles, Hash, Database, Info } from 'lucide-react';
+import { History, User, Sparkles, Hash, Database, Info, Trash2 } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
 import PrivacyModal from './PrivacyModal.jsx';
@@ -811,8 +811,9 @@ export default function SettingsModal({ open, drawerHint, onClose, onConfiguredC
                               onClick={() => handleTagDelete(t)}
                               disabled={tagBusy}
                               aria-label={`Delete tag ${t.name}`}
+                              title={`Delete tag ${t.name}`}
                             >
-                              Delete
+                              <Trash2 size={13} strokeWidth={1.7} aria-hidden="true" />
                             </button>
                           </li>
                         );
