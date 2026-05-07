@@ -62,7 +62,7 @@ function buildAppMenu({ getMainWindow }) {
         { type: 'separator' },
         {
           label: 'Capture Screenshot',
-          accelerator: 'CmdOrCtrl+Shift+5',
+          accelerator: 'CmdOrCtrl+Shift+S',
           click: () => send('capture-screenshot'),
         },
         { type: 'separator' },

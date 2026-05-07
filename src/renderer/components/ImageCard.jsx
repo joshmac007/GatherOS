@@ -38,6 +38,7 @@ export default function ImageCard({
   onOpen,
   onContextMenu,
   onDragStart,
+  onHover,
   fresh,
   staggerMs = 0,
   morphSource = false,
@@ -100,6 +101,8 @@ export default function ImageCard({
       style={staggerMs ? { '--card-stagger': `${staggerMs}ms` } : undefined}
       onClick={(e) => onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey)}
       onDoubleClick={() => onOpen(record)}
+      onMouseEnter={() => onHover?.(record.id)}
+      onMouseLeave={() => onHover?.(null, record.id)}
       onContextMenu={(e) => {
         if (onContextMenu) {
           e.preventDefault();

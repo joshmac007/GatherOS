@@ -234,6 +234,21 @@ export default function App() {
   // currently-focused save without opening the full focused view.
   // Holds a save id while the overlay is up, null when dismissed.
   const [peekedSaveId, setPeekedSaveId] = useState(null);
+  // Tracks the masonry card the cursor is currently over so spacebar
+  // can peek the right save. Single-click already opens the focused
+  // view here, so there's no "selected but unopened" middle state to
+  // anchor Quick Look to — hover is the only clean trigger.
+  const [hoveredSaveId, setHoveredSaveId] = useState(null);
+  // ImageCard fires (id) on enter and (null, leftId) on leave. The
+  // leftId guard avoids a race where a fast cursor sweep enters card
+  // B before card A's leave handler runs and stomps the new hover.
+  const handleCardHover = useCallback((id, leftId) => {
+    if (id != null) {
+      setHoveredSaveId(id);
+      return;
+    }
+    setHoveredSaveId((curr) => (curr === leftId ? null : curr));
+  }, []);
   // Tracks which save is currently morphing between grid and focused
   // view. Used to attach the matching view-transition-name on both
   // source (masonry image) and target (focused image) so the browser
@@ -1789,10 +1804,11 @@ export default function App() {
       // Single-key shortcuts: skip when typing so we don't eat real input.
       if (typing) return;
 
-      // Spacebar Quick Look. Mirrors Finder: select a card, hit
-      // space, get a peek; hit space (or Esc) again to dismiss. We
-      // bail when the focused view is up because it's already a
-      // full-screen render of the same image.
+      // Spacebar Quick Look. Hover a card, hit space, get a peek;
+      // space (or Esc) again to dismiss. Click already opens the
+      // focused view in this app, so hover is the trigger that
+      // doesn't fight existing behaviour. Falls back to the first
+      // selected save for keyboard-only users.
       if (e.code === 'Space') {
         if (peekedSaveId) {
           e.preventDefault();
@@ -1800,11 +1816,11 @@ export default function App() {
           return;
         }
         if (focusedId) return;
-        if (selected.size === 0) return;
-        const firstId = selected.values().next().value;
-        if (firstId) {
+        const target = hoveredSaveId
+          || (selected.size > 0 ? selected.values().next().value : null);
+        if (target) {
           e.preventDefault();
-          setPeekedSaveId(firstId);
+          setPeekedSaveId(target);
         }
         return;
       }
@@ -1831,7 +1847,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [focusedId, selected, handleDeleteSelected, goNext, goPrev, peekedSaveId]);
+  }, [focusedId, selected, handleDeleteSelected, goNext, goPrev, peekedSaveId, hoveredSaveId]);
 
   // Menu's "Quick Look" item (no accelerator on the menu side because
   // a menu-bound Space would steal keystrokes from text fields). The
@@ -1844,13 +1860,13 @@ export default function App() {
         setPeekedSaveId(null);
         return;
       }
-      if (selected.size === 0) return;
-      const firstId = selected.values().next().value;
-      if (firstId) setPeekedSaveId(firstId);
+      const target = hoveredSaveId
+        || (selected.size > 0 ? selected.values().next().value : null);
+      if (target) setPeekedSaveId(target);
     }
     window.addEventListener('moodmark:quick-look', onPeek);
     return () => window.removeEventListener('moodmark:quick-look', onPeek);
-  }, [focusedId, selected, peekedSaveId]);
+  }, [focusedId, selected, peekedSaveId, hoveredSaveId]);
 
   // Global Cmd+Z (Ctrl+Z on non-Mac). Pops the latest mutation off
   // the undo stack and surfaces a brief "Undid <label>" toast. Skips
@@ -2098,6 +2114,7 @@ export default function App() {
                   onOpen={handleOpenFromCard}
                   onContextMenu={handleCardContextMenu}
                   onDragStart={handleCardDragStart}
+                  onHover={handleCardHover}
                   columns={gridColumns}
                   loading={loading}
                   view={view}
