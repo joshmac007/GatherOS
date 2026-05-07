@@ -50,7 +50,7 @@ npm run deploy
 ```
 
 After deploy, point a custom domain at the Worker (e.g.
-`api.gatheros.app`) via the Cloudflare dashboard, then update
+`api.gatheros.co`) via the Cloudflare dashboard, then update
 `APP_BASE_URL` in any client code that points at the API.
 
 ## Local dev

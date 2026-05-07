@@ -20,10 +20,10 @@ APP_NAME = "GatherOS"
 # the Paddle dashboard) is the only trial the user ever sees.
 TRIAL_DAYS = "0"
 # Custom URL scheme the desktop app registers. Magic-link emails point
-# at https://api.gatheros.app/auth/verify?token=… which redirects
+# at https://api.gatheros.co/auth/verify?token=… which redirects
 # into this scheme so the app picks up the session token natively.
 APP_DEEP_LINK_SCHEME = "gatheros"
-EMAIL_FROM = "GatherOS <noreply@mail.gatheros.app>"
+EMAIL_FROM = "GatherOS <noreply@mail.gatheros.co>"
 # 'sandbox' | 'production' — controls which Paddle REST API host the
 # customer-portal endpoint hits. Webhook signature verification uses
 # the secret regardless of environment.

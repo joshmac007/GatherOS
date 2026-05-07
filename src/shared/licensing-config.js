@@ -9,11 +9,11 @@ const env = (typeof process !== 'undefined' && process.env) || {};
 
 // Where the licensing Worker lives. wrangler dev defaults to
 // http://localhost:8787; the production deploy will live at
-// (e.g.) https://api.gatheros.app.
+// (e.g.) https://api.gatheros.co.
 const API_BASE_URL =
   env.GATHEROS_API_BASE_URL ||
   (env.NODE_ENV === 'production'
-    ? 'https://api.gatheros.app'
+    ? 'https://api.gatheros.co'
     : 'http://localhost:8787');
 
 // Custom URL scheme registered by the desktop app — magic-link

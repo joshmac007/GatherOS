@@ -89,8 +89,8 @@ entitled = (now < user.trial_ends_at) OR sub.status IN ('active', 'past_due')
 
 ## Open questions / TODOs
 
-- Domain name for the API (`api.gatheros.app`?)
-- Sender domain for Resend (`mail.gatheros.app`?)
+- Domain name for the API (`api.gatheros.co`?)
+- Sender domain for Resend (`mail.gatheros.co`?)
 - Multi-machine policy: cap at 3 active machines per account, with a
   self-serve deactivation flow? Or unlimited and accept some sharing?
 - AI cost recovery: $5/mo barely covers a heavy auto-tag user. Need
