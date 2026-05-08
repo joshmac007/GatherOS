@@ -33,7 +33,12 @@ const settings = require('./settings');
 const { buildStarterPack } = require('./starterPack');
 const { quitAndInstall } = require('./updater');
 const {
-  testApiKey, autoTagImage, analyzeImage, embedText, generateImagePrompt,
+  hasSession: hasAiSession,
+  autoTagImage,
+  analyzeImage,
+  embedText,
+  generateImagePrompt,
+  getUsage: getAiUsage,
 } = require('./openai');
 const { detectColorName } = require('./colorNames');
 
@@ -67,7 +72,7 @@ function bufferToFloat32(buf) {
 const QUERY_EMBEDDING_CACHE = new Map();
 const QUERY_EMBEDDING_CACHE_MAX = 50;
 
-async function embedQueryCached(apiKey, queryText) {
+async function embedQueryCached(queryText) {
   const key = (queryText || '').trim().toLowerCase();
   if (!key) throw new Error('Cannot embed empty text');
   if (QUERY_EMBEDDING_CACHE.has(key)) {
@@ -77,7 +82,7 @@ async function embedQueryCached(apiKey, queryText) {
     QUERY_EMBEDDING_CACHE.set(key, cached);
     return cached;
   }
-  const vec = await embedText(apiKey, queryText);
+  const vec = await embedText(queryText);
   QUERY_EMBEDDING_CACHE.set(key, vec);
   if (QUERY_EMBEDDING_CACHE.size > QUERY_EMBEDDING_CACHE_MAX) {
     const oldest = QUERY_EMBEDDING_CACHE.keys().next().value;
@@ -128,7 +133,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('saves:get-all', async (_e, opts = {}) => {
     const semanticEnabled = settings.getPref('semanticSearch', false);
-    const haveKey = settings.hasOpenAIKey();
+    const haveAi = hasAiSession();
     const rawSearch = (opts.search || '').trim();
 
     // Pull out any tag:/bucket:/color:/before: etc. filters so the
@@ -143,19 +148,18 @@ function registerIpcHandlers() {
     // Falls back to the regular LIKE path if semantic search isn't
     // configured, isn't on, or there's no actual free text to embed
     // (a query of just `tag:foo` doesn't need embeddings).
-    if (!semanticEnabled || !haveKey || !queryText) {
+    if (!semanticEnabled || !haveAi || !queryText) {
       return mergeColorNameMatches(getAllSaves(opts), opts, queryText);
     }
 
     try {
-      const apiKey = settings.getOpenAIKey();
       // Single embedding call drives the cosine ranker. Query
       // expansion + LLM rerank were tried but each added 500-1500 ms
       // of latency to a search bar that needs to feel near-instant.
       // The hybrid LIKE pass below is the recall safety net for
       // narrow queries; threshold + relative cap below is the
       // precision filter.
-      const queryVec = await embedQueryCached(apiKey, queryText);
+      const queryVec = await embedQueryCached(queryText);
       const queryF32 = new Float32Array(queryVec);
       const dim = queryF32.length;
 
@@ -773,27 +777,16 @@ function registerIpcHandlers() {
     }
   });
 
-  // ── Settings: BYOK OpenAI key ──────────────────────────────────────────
-  // The plaintext key never crosses IPC outbound — the renderer can only
-  // ask whether one is configured, set a new one, clear it, or test it.
-  ipcMain.handle('settings:has-openai-key', () => settings.hasOpenAIKey());
+  // ── AI entitlement + monthly usage ────────────────────────────────────
+  // BYOK was retired — the licensing Worker proxies OpenAI calls on
+  // behalf of any signed-in user. The renderer just needs to know
+  // whether a session is present and what the monthly counter looks
+  // like so it can show "AI features unlocked" + remaining quota.
+  ipcMain.handle('ai:has-session', () => hasAiSession());
 
-  ipcMain.handle('settings:set-openai-key', async (_e, key) => {
-    if (typeof key !== 'string' || !/^sk-/.test(key.trim())) {
-      return { ok: false, reason: 'invalid-format' };
-    }
-    // Test before persisting — refuse a key that doesn't authenticate.
-    const test = await testApiKey(key.trim());
-    if (!test.ok) return { ok: false, reason: test.reason || 'test-failed' };
-    return settings.setOpenAIKey(key);
-  });
-
-  ipcMain.handle('settings:clear-openai-key', () => settings.clearOpenAIKey());
-
-  ipcMain.handle('settings:test-openai-key', async () => {
-    const key = settings.getOpenAIKey();
-    if (!key) return { ok: false, reason: 'no-key' };
-    return testApiKey(key);
+  ipcMain.handle('ai:usage', async () => {
+    const usage = await getAiUsage();
+    return usage || { ok: false };
   });
 
   ipcMain.handle('settings:get-prefs', () => settings.getPrefs());
@@ -880,8 +873,7 @@ function registerIpcHandlers() {
   // UI can show "Indexing N of M" in real time. Sequential to keep
   // memory bounded and to be polite to the API.
   ipcMain.handle('ai:reindex-library', async (event) => {
-    if (!settings.hasOpenAIKey()) return { ok: false, reason: 'no-key' };
-    const key = settings.getOpenAIKey();
+    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
     const targets = getUnindexedSaves();
     const total = targets.length;
 
@@ -891,7 +883,7 @@ function registerIpcHandlers() {
       const row = targets[i];
       event.sender.send('save:indexing-start', row.id);
       try {
-        const { title, description, text } = await analyzeImage(key, row.file_path);
+        const { title, description, text } = await analyzeImage(row.file_path);
         const updates = { id: row.id };
         if (description) updates.aiDescription = description;
         // Always set ocr_text (empty string for no text) so the
@@ -904,7 +896,7 @@ function registerIpcHandlers() {
         const ocrSnippet = text ? text.slice(0, 300) : '';
         const embedSource = [title, description, ocrSnippet, tags].filter(Boolean).join('. ');
         if (embedSource) {
-          const vec = await embedText(key, embedSource);
+          const vec = await embedText(embedSource);
           updates.embedding = Buffer.from(new Float32Array(vec).buffer);
         }
 
@@ -934,13 +926,13 @@ function registerIpcHandlers() {
   // emits save:updated so the renderer's local copy patches in place.
   ipcMain.handle('ai:generate-prompt', async (event, saveId) => {
     if (!saveId) return { ok: false, reason: 'no-save-id' };
-    if (!settings.hasOpenAIKey()) return { ok: false, reason: 'no-key' };
+    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
     const save = getSave(saveId);
     if (!save) return { ok: false, reason: 'save-not-found' };
 
     event.sender.send('save:indexing-start', saveId);
     try {
-      const prompt = await generateImagePrompt(settings.getOpenAIKey(), save.file_path);
+      const prompt = await generateImagePrompt(save.file_path);
       if (!prompt) return { ok: false, reason: 'empty-response' };
       updateSave({ id: saveId, aiPrompt: prompt });
       const updated = getSave(saveId);
@@ -956,12 +948,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle('ai:auto-tag', async (_e, saveId) => {
     if (!saveId) return { ok: false, reason: 'no-save-id' };
-    const key = settings.getOpenAIKey();
-    if (!key) return { ok: false, reason: 'no-key' };
+    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
     const save = getSave(saveId);
     if (!save) return { ok: false, reason: 'save-not-found' };
     try {
-      const tags = await autoTagImage(key, save.file_path);
+      const tags = await autoTagImage(save.file_path);
       // Persist via the existing tag pipeline so dedupe + creation
       // semantics match the manual flow.
       const added = [];

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { History, User, Sparkles, Hash, Database, Info, Trash2 } from 'lucide-react';
 import styles from './SettingsModal.module.css';
@@ -43,10 +43,74 @@ function formatPeriodEnd(ts) {
   });
 }
 
-const STATUS_IDLE = 'idle';
-const STATUS_TESTING = 'testing';
-const STATUS_OK = 'ok';
-const STATUS_ERROR = 'error';
+function formatTokens(n) {
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return String(n);
+}
+
+// Usage meter for the AI page. Shows the current monthly token total
+// against the soft cap as a thin bar — the bar tints amber as the
+// user nears the cap and red once they're over it. We're "fail-open":
+// requests still go through even past the cap, but the visual cue
+// nudges power users toward an upgrade path.
+function UsageMeter({ usage }) {
+  const total = usage?.total_tokens || 0;
+  const cap = usage?.soft_cap || 0;
+  const overCap = !!usage?.over_cap;
+  const ratio = cap > 0 ? Math.min(1, total / cap) : 0;
+  const requests = usage?.request_count || 0;
+  const bar = overCap
+    ? 'var(--status-error, #d33)'
+    : ratio > 0.8
+      ? '#d99'
+      : 'var(--accent, #0a84ff)';
+  return (
+    <div style={{ marginTop: 10, marginBottom: 4 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          fontSize: 12,
+          color: 'var(--text-secondary)',
+          marginBottom: 6,
+        }}
+      >
+        <span>This month · {requests} {requests === 1 ? 'request' : 'requests'}</span>
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {formatTokens(total)} / {formatTokens(cap)} tokens
+        </span>
+      </div>
+      <div
+        style={{
+          height: 4,
+          background: 'var(--hover-bg-strong, rgba(0,0,0,0.08))',
+          borderRadius: 2,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${Math.max(2, ratio * 100)}%`,
+            background: bar,
+            transition: 'width 200ms ease',
+          }}
+        />
+      </div>
+      {overCap && (
+        <div
+          style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}
+        >
+          Over the monthly soft cap. Requests are still going through —
+          we'll nudge you here if it becomes a pattern.
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DrawerChevron() {
   return (
@@ -93,11 +157,13 @@ function EraseIcon() {
   );
 }
 
-export default function SettingsModal({ open, drawerHint, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped, onKeySaved, onReplayOnboarding }) {
-  const [hasKey, setHasKey] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [status, setStatus] = useState(STATUS_IDLE);
-  const [errorMessage, setErrorMessage] = useState('');
+export default function SettingsModal({ open, drawerHint, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped, onReplayOnboarding }) {
+  // Whether the licensing session is present — proxy-mode AI is
+  // gated on it, not on a per-user OpenAI key. AppGate already shows
+  // the signin screen when this is false, so for the most part this
+  // flag stays true throughout Settings.
+  const [hasAi, setHasAi] = useState(false);
+  const [usage, setUsage] = useState(null);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, theme: 'light' });
   const [unindexed, setUnindexed] = useState(0);
   const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
@@ -119,7 +185,6 @@ export default function SettingsModal({ open, drawerHint, onClose, onConfiguredC
   const [account, setAccount] = useState(null);
   const [portalState, setPortalState] = useState({ running: false, message: null });
   const appVersion = window.moodmark?.app?.version || '';
-  const inputRef = useRef(null);
 
   async function handleWipeLibrary() {
     if (wipeState.running) return;
@@ -163,24 +228,26 @@ export default function SettingsModal({ open, drawerHint, onClose, onConfiguredC
     if (!open) return;
     let cancelled = false;
     Promise.all([
-      window.moodmark.settings.hasOpenAIKey(),
+      window.moodmark.ai.hasSession(),
+      window.moodmark.ai.usage(),
       window.moodmark.settings.getPrefs(),
       window.moodmark.ai.unindexedCount(),
-    ]).then(([keyExists, p, count]) => {
+    ]).then(([sessionExists, u, p, count]) => {
       if (cancelled) return;
-      setHasKey(!!keyExists);
+      setHasAi(!!sessionExists);
+      // Mirror up to App.jsx so AI buttons in DetailPanel etc. light
+      // up correctly when this is the first time AI is observed in
+      // the session.
+      onConfiguredChange?.(!!sessionExists);
+      setUsage(u && u.ok ? u : null);
       setPrefs(p);
       setUnindexed(count || 0);
     });
-    setDraft('');
-    setStatus(STATUS_IDLE);
-    setErrorMessage('');
     // Stale transient feedback (the "Erased X saves" / "Exported to
     // …" / etc. lines) shouldn't survive a close + reopen — reset
     // each time the user pops back in.
     setExportState({ running: false, message: null });
     setWipeState({ running: false, message: null });
-    requestAnimationFrame(() => inputRef.current?.focus());
     return () => { cancelled = true; };
   }, [open]);
 
@@ -392,65 +459,6 @@ export default function SettingsModal({ open, drawerHint, onClose, onConfiguredC
 
   if (!open) return null;
 
-  async function handleSave() {
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    setStatus(STATUS_TESTING);
-    setErrorMessage('');
-    const result = await window.moodmark.settings.setOpenAIKey(trimmed);
-    if (result.ok) {
-      setStatus(STATUS_OK);
-      setHasKey(true);
-      setDraft('');
-      // Auto-enable both AI features now that a key is configured.
-      // Toggles render as off whenever !hasKey, so the user expects
-      // them to flip on the moment the key is saved.
-      const enabled = { ...prefs, autoNameOnSave: true, semanticSearch: true };
-      setPrefs(enabled);
-      await Promise.all([
-        window.moodmark.settings.setPref('autoNameOnSave', true),
-        window.moodmark.settings.setPref('semanticSearch', true),
-      ]);
-      onPrefsChange?.(enabled);
-      onConfiguredChange?.(true);
-      // Brief success state, then close settings and hand off to the
-      // celebration modal. Two-stage timeout so the unlocked modal's
-      // entrance doesn't visually overlap the settings exit.
-      setTimeout(() => {
-        if (status === STATUS_ERROR) return;
-        onClose();
-        setTimeout(() => onKeySaved?.(), 140);
-      }, 700);
-    } else {
-      setStatus(STATUS_ERROR);
-      setErrorMessage(reasonToMessage(result.reason));
-    }
-  }
-
-  async function handleClear() {
-    await window.moodmark.settings.clearOpenAIKey();
-    setHasKey(false);
-    setStatus(STATUS_IDLE);
-    setErrorMessage('');
-    onConfiguredChange?.(false);
-  }
-
-  async function handleTest() {
-    setStatus(STATUS_TESTING);
-    setErrorMessage('');
-    const result = await window.moodmark.settings.testOpenAIKey();
-    if (result.ok) {
-      setStatus(STATUS_OK);
-    } else {
-      setStatus(STATUS_ERROR);
-      setErrorMessage(reasonToMessage(result.reason));
-    }
-  }
-
-  function handleKeyDown(e) {
-    if (e.key === 'Enter' && draft.trim()) handleSave();
-  }
-
   return ReactDOM.createPortal(
     <div
       className={styles.backdrop}
@@ -551,168 +559,98 @@ export default function SettingsModal({ open, drawerHint, onClose, onConfiguredC
           {activePage === 'ai' && (
             <div className={styles.page}>
               <p className={styles.sectionHint}>
-            Bring your own key for AI features like auto-tagging. It’s encrypted locally, and your images go straight to OpenAI—never through anyone else.
-          </p>
+                Auto-tagging, auto-titles, semantic search, and image-prompt
+                generation run on a managed OpenAI integration that ships
+                with your subscription — no API key to set up.
+              </p>
 
-          <div className={styles.fieldLabelRow}>
-            <label className={styles.fieldLabel} htmlFor="openai-key-input">
-              API Key
-            </label>
-            <button
-              type="button"
-              className={styles.helpLink}
-              onClick={() =>
-                window.moodmark.shell.openUrl(
-                  'https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key',
-                )
-              }
-            >
-              Where do I find this? ↗
-            </button>
-          </div>
-          <input
-            id="openai-key-input"
-            ref={inputRef}
-            className={styles.input}
-            type="password"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={hasKey ? '••••••••••••••••••••••••' : 'sk-...'}
-            autoComplete="off"
-            spellCheck={false}
-          />
+              <div className={styles.statusRow}>
+                {hasAi ? (
+                  <span className={`${styles.status} ${styles.statusOk}`}>
+                    <span className={styles.dot} aria-hidden="true" />
+                    AI features unlocked
+                  </span>
+                ) : (
+                  <span className={`${styles.status} ${styles.statusMuted}`}>
+                    Sign in to unlock AI features
+                  </span>
+                )}
+              </div>
 
-          <div className={styles.statusRow}>
-            {status === STATUS_IDLE && hasKey && (
-              <span className={`${styles.status} ${styles.statusOk}`}>
-                <span className={styles.dot} aria-hidden="true" />
-                Connected
-              </span>
-            )}
-            {status === STATUS_IDLE && !hasKey && (
-              <span className={`${styles.status} ${styles.statusMuted}`}>
-                Not configured
-              </span>
-            )}
-            {status === STATUS_TESTING && (
-              <span className={`${styles.status} ${styles.statusMuted}`}>
-                Testing…
-              </span>
-            )}
-            {status === STATUS_OK && (
-              <span className={`${styles.status} ${styles.statusOk}`}>
-                <span className={styles.dot} aria-hidden="true" />
-                Connected
-              </span>
-            )}
-            {status === STATUS_ERROR && (
-              <span className={`${styles.status} ${styles.statusError}`}>
-                {errorMessage}
-              </span>
-            )}
-          </div>
-
-          <div className={styles.actions}>
-            {hasKey && (
-              <button
-                type="button"
-                className={styles.btn}
-                onClick={handleTest}
-                disabled={status === STATUS_TESTING}
-              >
-                Test connection
-              </button>
-            )}
-            {hasKey && (
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnDanger}`}
-                onClick={handleClear}
-              >
-                Forget key
-              </button>
-            )}
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={handleSave}
-              disabled={!draft.trim() || status === STATUS_TESTING}
-            >
-              {hasKey ? 'Replace key' : 'Save key'}
-            </button>
-          </div>
+              {hasAi && usage && (
+                <UsageMeter usage={usage} />
+              )}
 
               <div className={styles.divider} />
 
               <label className={styles.toggleRow}>
-            <span className={styles.toggleText}>
-              <span className={styles.toggleLabel}>Auto-name new uploads</span>
-              <span className={styles.toggleSub}>
-                Generate a short title for each image you save. Runs in the background.
-              </span>
-            </span>
-            <span className={styles.switch}>
-              <input
-                type="checkbox"
-                checked={hasKey && !!prefs.autoNameOnSave}
-                onChange={() => togglePref('autoNameOnSave')}
-                disabled={!hasKey}
-              />
-              <span className={styles.switchTrack}>
-                <span className={styles.switchKnob} />
-              </span>
-            </span>
-          </label>
-          <label className={styles.toggleRow}>
-            <span className={styles.toggleText}>
-              <span className={styles.toggleLabel}>Visual search</span>
-              <span className={styles.toggleSub}>
-                Index new saves with vector embeddings so the search bar matches by meaning ("dark moody UI") instead of exact words.
-              </span>
-            </span>
-            <span className={styles.switch}>
-              <input
-                type="checkbox"
-                checked={hasKey && !!prefs.semanticSearch}
-                onChange={() => togglePref('semanticSearch')}
-                disabled={!hasKey}
-              />
-              <span className={styles.switchTrack}>
-                <span className={styles.switchKnob} />
-              </span>
-            </span>
-          </label>
+                <span className={styles.toggleText}>
+                  <span className={styles.toggleLabel}>Auto-name new uploads</span>
+                  <span className={styles.toggleSub}>
+                    Generate a short title for each image you save. Runs in the background.
+                  </span>
+                </span>
+                <span className={styles.switch}>
+                  <input
+                    type="checkbox"
+                    checked={hasAi && !!prefs.autoNameOnSave}
+                    onChange={() => togglePref('autoNameOnSave')}
+                    disabled={!hasAi}
+                  />
+                  <span className={styles.switchTrack}>
+                    <span className={styles.switchKnob} />
+                  </span>
+                </span>
+              </label>
+              <label className={styles.toggleRow}>
+                <span className={styles.toggleText}>
+                  <span className={styles.toggleLabel}>Visual search</span>
+                  <span className={styles.toggleSub}>
+                    Index new saves with vector embeddings so the search bar matches by meaning ("dark moody UI") instead of exact words.
+                  </span>
+                </span>
+                <span className={styles.switch}>
+                  <input
+                    type="checkbox"
+                    checked={hasAi && !!prefs.semanticSearch}
+                    onChange={() => togglePref('semanticSearch')}
+                    disabled={!hasAi}
+                  />
+                  <span className={styles.switchTrack}>
+                    <span className={styles.switchKnob} />
+                  </span>
+                </span>
+              </label>
 
-          {hasKey && (unindexed > 0 || reindexState.running) && (
-            <div className={styles.reindexBox}>
-              <div className={styles.reindexCopy}>
-                {reindexState.running ? (
-                  <>
-                    <strong>Indexing {reindexState.processed} of {reindexState.total}…</strong>
-                    <span className={styles.toggleSub}>
-                      Each save runs one vision call + one embedding (~$0.001 each). You can keep using the app.
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <strong>{unindexed} {unindexed === 1 ? 'save needs' : 'saves need'} indexing</strong>
-                    <span className={styles.toggleSub}>
-                      Older saves won't appear in semantic results until they're processed. Roughly ${(unindexed * 0.001).toFixed(3)} of API usage.
-                    </span>
-                  </>
-                )}
-              </div>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                onClick={handleReindex}
-                disabled={reindexState.running || unindexed === 0}
-              >
-                {reindexState.running ? 'Indexing…' : 'Index now'}
-              </button>
-            </div>
-          )}
+              {hasAi && (unindexed > 0 || reindexState.running) && (
+                <div className={styles.reindexBox}>
+                  <div className={styles.reindexCopy}>
+                    {reindexState.running ? (
+                      <>
+                        <strong>Indexing {reindexState.processed} of {reindexState.total}…</strong>
+                        <span className={styles.toggleSub}>
+                          Each save runs one vision call plus one embedding. You can keep using the app.
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <strong>{unindexed} {unindexed === 1 ? 'save needs' : 'saves need'} indexing</strong>
+                        <span className={styles.toggleSub}>
+                          Older saves won't appear in semantic results until they're processed.
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    onClick={handleReindex}
+                    disabled={reindexState.running || unindexed === 0}
+                  >
+                    {reindexState.running ? 'Indexing…' : 'Index now'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1057,19 +995,3 @@ function formatBackupSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function reasonToMessage(reason) {
-  switch (reason) {
-    case 'no-key': return 'No key configured';
-    case 'invalid': return 'Key was rejected by OpenAI (401)';
-    case 'invalid-format': return 'Key should start with sk-';
-    case 'no-encryption': return 'OS keychain encryption unavailable on this system';
-    case 'network': return 'Network error reaching OpenAI';
-    case 'write-failed': return 'Could not save the encrypted key to disk';
-    case 'test-failed': return 'Key test failed';
-    default:
-      if (typeof reason === 'string' && reason.startsWith('http-')) {
-        return `OpenAI returned ${reason.replace('http-', 'HTTP ')}`;
-      }
-      return 'Something went wrong';
-  }
-}

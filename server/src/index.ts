@@ -15,6 +15,7 @@ import type { Env } from './types';
 import { authRoutes } from './auth';
 import { licenseRoutes } from './license';
 import { webhookRoutes } from './lemonsqueezy';
+import { aiRoutes } from './ai';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -36,6 +37,7 @@ app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
 app.route('/auth', authRoutes);
 app.route('/license', licenseRoutes);
 app.route('/webhooks', webhookRoutes);
+app.route('/ai', aiRoutes);
 
 // 404 fallback — keep it tight, no body leak.
 app.notFound((c) => c.json({ ok: false, error: 'not_found' }, 404));

@@ -418,7 +418,7 @@ export default function App() {
     setSidebarCollapsed((c) => !c);
   }, []);
 
-  // Settings modal + AI configured-state. The hasOpenAIKey check runs
+  // Settings modal + AI configured-state. The ai.hasSession check runs
   // once on mount and is updated whenever the user saves/clears via
   // SettingsModal's onConfiguredChange callback.
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -558,11 +558,12 @@ export default function App() {
   // the inline form).
   const [createCollectionSignal, setCreateCollectionSignal] = useState(0);
   useEffect(() => {
-    window.moodmark.settings.hasOpenAIKey().then(setAiConfigured);
+    window.moodmark.ai.hasSession().then(setAiConfigured);
     window.moodmark.settings.getPrefs().then(setPrefs);
   }, []);
-  // True when both the toggle is on AND a key is configured — search will
-  // route through embeddings rather than LIKE.
+  // True when both the toggle is on AND the user is signed-in to a
+  // license session — search will route through embeddings rather
+  // than LIKE.
   const semanticSearchActive = aiConfigured && !!prefs.semanticSearch;
 
   // Set of save ids the main process is currently AI-indexing. Driven
@@ -2654,7 +2655,6 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onConfiguredChange={setAiConfigured}
         onPrefsChange={setPrefs}
-        onKeySaved={() => setAiUnlockedOpen(true)}
         onReplayOnboarding={() => {
           try { localStorage.removeItem('moodmark.onboardingTooltipsShown'); } catch {}
           onboardingTriggeredRef.current = false;

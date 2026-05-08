@@ -16,8 +16,8 @@ const { Readable } = require('node:stream');
 const {
   initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
 } = require('./db');
-const { hasOpenAIKey, getOpenAIKey, getPref } = require('./settings');
-const { analyzeImage, embedText } = require('./openai');
+const { getPref } = require('./settings');
+const { hasSession: hasAiSession, analyzeImage, embedText } = require('./openai');
 const licensing = require('./licensing');
 const { URL_SCHEME: LICENSE_URL_SCHEME } = require('../shared/licensing-config');
 
@@ -298,14 +298,13 @@ function notifyDuplicateInRenderer(existing) {
 // the user opted into get persisted; the rest are skipped to save cost.
 async function maybeAIIndexInBackground(record) {
   if (!record?.id || !record.file_path) return;
-  if (!hasOpenAIKey()) return;
+  // No license session = paywall is in front of the user; AI features
+  // would 401 at the proxy anyway, so skip the round-trip.
+  if (!hasAiSession()) return;
 
   const wantName = getPref('autoNameOnSave', true) && !(record.title && record.title.trim());
   const wantSemantic = getPref('semanticSearch', false);
   if (!wantName && !wantSemantic) return;
-
-  const key = getOpenAIKey();
-  if (!key) return;
 
   // Tell the renderer this save is being processed so the UI can show
   // a loading indicator. Mirrored on completion / failure in the
@@ -315,7 +314,7 @@ async function maybeAIIndexInBackground(record) {
   }
 
   try {
-    const { title, description, text } = await analyzeImage(key, record.file_path);
+    const { title, description, text } = await analyzeImage(record.file_path);
 
     const updates = { id: record.id };
     // Re-fetch before writing the AI title — the user may have typed
@@ -342,7 +341,7 @@ async function maybeAIIndexInBackground(record) {
       const embedSource = [title, description, ocrSnippet, tags].filter(Boolean).join('. ');
       if (embedSource) {
         try {
-          const vec = await embedText(key, embedSource);
+          const vec = await embedText(embedSource);
           updates.embedding = vectorToBuffer(vec);
         } catch (err) {
           console.error('Embed failed:', err.message);

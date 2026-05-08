@@ -1,12 +1,12 @@
-// Encrypted key storage backed by Electron's safeStorage. The key never
-// leaves the main process — IPC only exposes hasKey / set / clear / test
-// so the renderer can never read it directly.
+// Plain-JSON preferences store. AI key storage was retired when the
+// app moved from BYOK to a server-proxied OpenAI integration; the
+// licensing session token (handled in licensing.js) is the only
+// credential the renderer cares about now.
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, safeStorage } = require('electron');
+const { app } = require('electron');
 
-const FILE_NAME = 'openai-key.bin';
 const PREFS_FILE = 'prefs.json';
 
 const DEFAULT_PREFS = {
@@ -15,59 +15,9 @@ const DEFAULT_PREFS = {
   theme: 'light',
 };
 
-function keyFilePath() {
-  return path.join(app.getPath('userData'), FILE_NAME);
-}
-
 function prefsFilePath() {
   return path.join(app.getPath('userData'), PREFS_FILE);
 }
-
-function hasOpenAIKey() {
-  return fs.existsSync(keyFilePath());
-}
-
-function getOpenAIKey() {
-  const file = keyFilePath();
-  if (!fs.existsSync(file)) return null;
-  if (!safeStorage.isEncryptionAvailable()) return null;
-  try {
-    const buf = fs.readFileSync(file);
-    return safeStorage.decryptString(buf);
-  } catch (err) {
-    console.error('Failed to decrypt OpenAI key:', err.message);
-    return null;
-  }
-}
-
-function setOpenAIKey(plaintext) {
-  if (typeof plaintext !== 'string' || !plaintext.trim()) {
-    return { ok: false, reason: 'empty' };
-  }
-  if (!safeStorage.isEncryptionAvailable()) {
-    return { ok: false, reason: 'no-encryption' };
-  }
-  try {
-    const encrypted = safeStorage.encryptString(plaintext.trim());
-    fs.writeFileSync(keyFilePath(), encrypted, { mode: 0o600 });
-    return { ok: true };
-  } catch (err) {
-    console.error('Failed to encrypt OpenAI key:', err.message);
-    return { ok: false, reason: 'write-failed' };
-  }
-}
-
-function clearOpenAIKey() {
-  const file = keyFilePath();
-  try {
-    if (fs.existsSync(file)) fs.unlinkSync(file);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, reason: err.message };
-  }
-}
-
-// ── Prefs (plain JSON) ─────────────────────────────────────────────────────
 
 function getPrefs() {
   try {
@@ -97,10 +47,6 @@ function setPref(name, value) {
 }
 
 module.exports = {
-  hasOpenAIKey,
-  getOpenAIKey,
-  setOpenAIKey,
-  clearOpenAIKey,
   getPrefs,
   getPref,
   setPref,

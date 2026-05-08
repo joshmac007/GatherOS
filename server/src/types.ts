@@ -21,6 +21,10 @@ export type Env = {
   RESEND_API_KEY: string;
   LEMONSQUEEZY_WEBHOOK_SECRET: string;
   LEMONSQUEEZY_API_KEY: string;
+  // OpenAI master key. The desktop app calls /ai/* with its license
+  // session token; this Worker proxies to OpenAI using the master key
+  // so end users never need to manage one.
+  OPENAI_API_KEY: string;
 };
 
 // Row shapes — keep in sync with migrations/0001_initial.sql + later.

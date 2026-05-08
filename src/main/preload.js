@@ -137,15 +137,15 @@ contextBridge.exposeInMainWorld('moodmark', {
     start: (payload) => ipcRenderer.send('drag:start', payload),
   },
   settings: {
-    hasOpenAIKey: () => ipcRenderer.invoke('settings:has-openai-key'),
-    // Note: getter for the key itself is intentionally NOT exposed.
-    setOpenAIKey: (key) => ipcRenderer.invoke('settings:set-openai-key', key),
-    clearOpenAIKey: () => ipcRenderer.invoke('settings:clear-openai-key'),
-    testOpenAIKey: () => ipcRenderer.invoke('settings:test-openai-key'),
     getPrefs: () => ipcRenderer.invoke('settings:get-prefs'),
     setPref: (name, value) => ipcRenderer.invoke('settings:set-pref', { name, value }),
   },
   ai: {
+    // Server-proxied AI features. The licensing session token in
+    // licensing.js is what gates these — no per-feature key to manage
+    // on the renderer side anymore.
+    hasSession: () => ipcRenderer.invoke('ai:has-session'),
+    usage: () => ipcRenderer.invoke('ai:usage'),
     autoTag: (saveId) => ipcRenderer.invoke('ai:auto-tag', saveId),
     generatePrompt: (saveId) => ipcRenderer.invoke('ai:generate-prompt', saveId),
     unindexedCount: () => ipcRenderer.invoke('ai:unindexed-count'),
