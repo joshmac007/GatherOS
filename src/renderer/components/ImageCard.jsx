@@ -142,25 +142,31 @@ export default function ImageCard({
     if (springTimerRef.current) clearTimeout(springTimerRef.current);
   }, []);
 
+  // Pending placeholders are read-only: no select / open / drag /
+  // context menu — the card is a transient affordance, not a real
+  // library entry. The id is a `pending-*` synthetic that the
+  // backend doesn't know about; firing these would break.
+  const isPending = !!record.__pending;
   return (
     <button
       ref={wrapperRef}
       type="button"
       data-save-id={record.id}
-      draggable={!!onDragStart}
+      draggable={!isPending && !!onDragStart}
       className={[
         styles.card,
         selected && styles.selected,
         selectionActive && styles.showSelectables,
         fresh && styles.fresh,
         springback && styles.springback,
+        isPending && styles.cardPending,
       ].filter(Boolean).join(' ')}
       style={staggerMs ? { '--card-stagger': `${staggerMs}ms` } : undefined}
-      onClick={(e) => onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey)}
-      onDoubleClick={() => onOpen(record)}
-      onMouseEnter={() => onHover?.(record.id)}
-      onMouseLeave={() => onHover?.(null, record.id)}
-      onContextMenu={(e) => {
+      onClick={isPending ? undefined : (e) => onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey)}
+      onDoubleClick={isPending ? undefined : () => onOpen(record)}
+      onMouseEnter={isPending ? undefined : () => onHover?.(record.id)}
+      onMouseLeave={isPending ? undefined : () => onHover?.(null, record.id)}
+      onContextMenu={isPending ? undefined : (e) => {
         if (onContextMenu) {
           e.preventDefault();
           onContextMenu(record.id, e.clientX, e.clientY);
@@ -190,13 +196,21 @@ export default function ImageCard({
         {inView && src && (
           <img
             src={src}
-            className={styles.image}
+            className={`${styles.image}${record.__pending ? ' ' + styles.imagePending : ''}`}
             alt={record.title || ''}
             loading="lazy"
             decoding="async"
             draggable={false}
             style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
           />
+        )}
+        {record.__pending && (
+          <div className={styles.pendingOverlay} aria-label="Generating new version">
+            <div className={styles.pendingDots} aria-hidden="true">
+              <span /><span /><span />
+            </div>
+            <div className={styles.pendingLabel}>Generating new version</div>
+          </div>
         )}
         {inView && (
           <>

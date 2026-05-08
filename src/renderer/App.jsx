@@ -258,6 +258,14 @@ export default function App() {
   const [selected, setSelected] = useState(() => new Set());
   const [gridColumns, setGridColumns] = useState(3);
 
+  // In-flight image variant generations. Each entry is a placeholder
+  // that prepends to the masonry while the OpenAI call is running so
+  // the user sees an immediate "something is happening" affordance.
+  // The card shows the source image at reduced opacity with a loading
+  // overlay; the entry is dropped from this list on success or
+  // failure.
+  const [pendingVariants, setPendingVariants] = useState([]);
+
   // Active sort mode for the masonry. Persisted per-app (not per-
   // view) — the user's preference is a global setting, not a
   // per-folder toggle. Shuffle takes precedence when active.
@@ -1025,8 +1033,31 @@ export default function App() {
         label: 'Generate new version',
         icon: <SparklesIcon />,
         onClick: async () => {
-          showActionToast({ message: 'Generating new version…', durationMs: 0 });
+          // Push a placeholder card to the top of the masonry
+          // immediately so the user has visual feedback that the
+          // generation is running. Tagged with __pending so
+          // ImageCard knows to render the loading overlay.
+          const source = saves.find((s) => s.id === saveId);
+          const pendingId = `pending-${saveId}-${Date.now()}`;
+          if (source) {
+            setPendingVariants((prev) => [
+              ...prev,
+              {
+                id: pendingId,
+                __pending: true,
+                file_path: source.file_path,
+                thumb_path: source.thumb_path,
+                width: source.width,
+                height: source.height,
+                title: source.title,
+                created_at: Date.now(),
+              },
+            ]);
+          }
           const result = await window.moodmark.ai.generateVariant(saveId);
+          // Drop the placeholder; the real save (or none, on failure)
+          // arrives via reload().
+          setPendingVariants((prev) => prev.filter((p) => p.id !== pendingId));
           if (result?.ok) {
             await reload();
             const cap = result.quota?.image_soft_cap;
@@ -1543,6 +1574,17 @@ export default function App() {
     }
     return sorted;
   }, [saves, shuffleSeed, shuffleAt, sortMode]);
+
+  // Prepend in-flight variant placeholders to the visible list so
+  // they appear at the top of the masonry while generation runs.
+  // The __pending flag tells ImageCard to render a loading overlay
+  // over the source thumb instead of the normal image. New saves
+  // arrive at the top via the recent sort, so the placeholder's
+  // position predicts where the real save will land.
+  const visibleSaves = useMemo(() => {
+    if (pendingVariants.length === 0) return displaySaves;
+    return [...pendingVariants, ...displaySaves];
+  }, [pendingVariants, displaySaves]);
 
   const focusedIndex = useMemo(
     () => (focusedId ? displaySaves.findIndex((s) => s.id === focusedId) : -1),
@@ -2368,7 +2410,7 @@ export default function App() {
                   />
                 )}
                 <Grid
-                  saves={displaySaves}
+                  saves={visibleSaves}
                   selected={selected}
                   onSelect={handleSelect}
                   onSetSelection={(ids) => setSelected(new Set(ids))}
