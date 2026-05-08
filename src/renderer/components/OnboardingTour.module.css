@@ -56,14 +56,14 @@
 }
 
 .title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0 0 4px;
 }
 
 .body {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--text-secondary);
   margin: 0 0 12px;
@@ -80,7 +80,7 @@
   background: rgba(0, 0, 0, 0.06);
   border-radius: 4px;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -92,7 +92,7 @@
 }
 
 .progress {
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -109,7 +109,7 @@
   border: none;
   padding: 4px 8px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-tertiary);
   cursor: pointer;
   border-radius: 6px;
@@ -128,7 +128,7 @@
   box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: filter 120ms ease, transform 80ms ease;

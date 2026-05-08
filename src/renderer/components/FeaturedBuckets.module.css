@@ -189,7 +189,7 @@
 }
 
 .name {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -201,7 +201,7 @@
 /* Inline rename input — matches the .name typography exactly so the
    visual swap from label to input is barely perceptible. */
 .cardRenameInput {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -224,7 +224,7 @@
 
 .count {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -314,5 +314,5 @@
 }
 
 .pillCard .count {
-  font-size: 10.5px;
+  font-size: var(--text-xs);
 }

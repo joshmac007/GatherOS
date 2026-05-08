@@ -40,7 +40,7 @@
   right: 18px;
   z-index: 2;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: rgba(0, 0, 0, 0.32);
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
@@ -140,7 +140,7 @@
 
 .percent {
   font-family: var(--font-mono);
-  font-size: 36px;
+  font-size: var(--text-display);
   font-weight: 500;
   letter-spacing: -0.03em;
   color: var(--text-primary);
@@ -149,7 +149,7 @@
 }
 
 .percent .sign {
-  font-size: 20px;
+  font-size: var(--text-lg);
   color: var(--text-tertiary);
   margin-left: 2px;
   vertical-align: 2px;
@@ -171,7 +171,7 @@
 }
 
 .label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-tertiary);
   letter-spacing: 0.04em;
   text-transform: uppercase;

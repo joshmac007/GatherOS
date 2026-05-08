@@ -109,7 +109,7 @@
 }
 
 .cardTitle {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: -0.005em;
   color: var(--text-primary);
@@ -120,7 +120,7 @@
 }
 
 .cardDesc {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.4;
   color: var(--text-secondary);
   text-wrap: pretty;

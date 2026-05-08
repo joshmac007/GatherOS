@@ -61,49 +61,27 @@ function UsageMeter({ usage }) {
   const overCap = !!usage?.over_cap;
   const ratio = cap > 0 ? Math.min(1, total / cap) : 0;
   const requests = usage?.request_count || 0;
-  const bar = overCap
-    ? 'var(--status-error, #d33)'
+  const fillClass = overCap
+    ? styles.usageMeterFillOver
     : ratio > 0.8
-      ? '#d99'
-      : 'var(--accent, #0a84ff)';
+      ? styles.usageMeterFillWarn
+      : '';
   return (
-    <div style={{ marginTop: 10, marginBottom: 4 }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'baseline',
-          fontSize: 12,
-          color: 'var(--text-secondary)',
-          marginBottom: 6,
-        }}
-      >
+    <div className={styles.usageMeter}>
+      <div className={styles.usageMeterRow}>
         <span>This month · {requests} {requests === 1 ? 'request' : 'requests'}</span>
-        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+        <span className={styles.usageMeterTokens}>
           {formatTokens(total)} / {formatTokens(cap)} tokens
         </span>
       </div>
-      <div
-        style={{
-          height: 4,
-          background: 'var(--hover-bg-strong, rgba(0,0,0,0.08))',
-          borderRadius: 2,
-          overflow: 'hidden',
-        }}
-      >
+      <div className={styles.usageMeterTrack}>
         <div
-          style={{
-            height: '100%',
-            width: `${Math.max(2, ratio * 100)}%`,
-            background: bar,
-            transition: 'width 200ms ease',
-          }}
+          className={`${styles.usageMeterFill} ${fillClass}`}
+          style={{ width: `${Math.max(2, ratio * 100)}%` }}
         />
       </div>
       {overCap && (
-        <div
-          style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}
-        >
+        <div className={styles.usageMeterOverNote}>
           Over the monthly soft cap. Requests are still going through —
           we'll nudge you here if it becomes a pattern.
         </div>

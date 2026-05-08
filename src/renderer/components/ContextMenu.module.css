@@ -22,7 +22,7 @@
   border: none;
   border-radius: 6px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-md);
   text-align: left;
   cursor: pointer;
 }
@@ -170,7 +170,7 @@
 
 .header {
   padding: 4px 10px 2px;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
