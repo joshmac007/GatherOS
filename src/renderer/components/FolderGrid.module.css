@@ -1,0 +1,204 @@
+/* Folders-mode tile grid. Replaces the masonry when the user is on
+   the Folders segment of the mode pill. Each tile is a folder
+   rendered with its existing top-3 thumbs as a fanned stack — the
+   same idiom that previously lived as a hover-only sidebar Easter
+   egg, promoted to primary navigation artwork. */
+
+.scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.grid {
+  display: grid;
+  gap: 24px 20px;
+  padding: 24px 32px 40px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  align-items: start;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  animation: tileIn var(--dur-medium) var(--ease-out) both;
+}
+
+@keyframes tileIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile { animation: none; }
+}
+
+/* Artwork plate. Fixed aspect so a row of tiles aligns regardless
+   of how many thumbs each folder has. The tile reads as a card,
+   not a free-floating set of images. */
+.tileArt {
+  position: relative;
+  aspect-ratio: 16 / 11;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--hover-bg-soft);
+  border: 0.5px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.tile:hover .tileArt {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+/* Three-card fan inside the artwork plate. Sized as percentages of
+   the plate so the fan scales with tile width. */
+.tileStack {
+  position: absolute;
+  inset: 0;
+}
+
+.tileStackImg {
+  position: absolute;
+  width: 50%;
+  height: 70%;
+  top: 50%;
+  left: 50%;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background: var(--hover-bg-soft);
+  border: 0.5px solid var(--border-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10);
+  transition: transform var(--dur-medium) var(--ease-out);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.tileStackImg:nth-child(1) {
+  transform: translate(-65%, -52%) rotate(-8deg);
+  z-index: 1;
+}
+.tileStackImg:nth-child(2) {
+  transform: translate(-50%, -50%) rotate(0deg);
+  z-index: 2;
+}
+.tileStackImg:nth-child(3) {
+  transform: translate(-35%, -52%) rotate(8deg);
+  z-index: 3;
+}
+
+/* Hover spreads the fan and lifts it slightly — same reward signal
+   the bucket fan-out preview uses elsewhere. */
+.tile:hover .tileStackImg:nth-child(1) {
+  transform: translate(-72%, -55%) rotate(-12deg);
+}
+.tile:hover .tileStackImg:nth-child(3) {
+  transform: translate(-28%, -55%) rotate(12deg);
+}
+
+.tileEmpty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.tileMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.tileName {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tileCount {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* Empty state — first-launch / brand-new library. The CTA mirrors
+   the sidebar's "+ New folder" affordance so the user has a clear
+   way to start. */
+.empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 40px;
+  gap: 8px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+
+.emptyTitle {
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+}
+
+.emptyHint {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  max-width: 320px;
+  text-wrap: pretty;
+}
+
+.emptyAction {
+  margin-top: 14px;
+  padding: 7px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--btn-border);
+  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
+  transition: filter var(--dur-instant) ease;
+}
+
+.emptyAction:hover {
+  filter: brightness(0.98);
+}
+
+:root[data-theme="dark"] .emptyAction:hover {
+  filter: brightness(1.15);
+}

@@ -15,6 +15,7 @@ import ShortcutsModal from './components/ShortcutsModal.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import Grid from './components/Grid.jsx';
 import FeaturedBuckets from './components/FeaturedBuckets.jsx';
+import FolderGrid from './components/FolderGrid.jsx';
 import DetailPanel from './components/DetailPanel.jsx';
 import FocusedView from './components/FocusedView.jsx';
 import BoardView from './components/BoardView.jsx';
@@ -630,7 +631,9 @@ export default function App() {
 
   const loadCollections = useCallback(async () => {
     const [cols, counts] = await Promise.all([
-      window.moodmark.collections.getAll(),
+      // Pulls thumbs in the same query so the Folders-mode tile
+      // grid can render its stack-fans without a per-tile round-trip.
+      window.moodmark.collections.getAllWithThumbs(),
       window.moodmark.saves.counts(),
     ]);
     setCollections(cols);
@@ -2278,15 +2281,21 @@ export default function App() {
                 mode={appMode}
                 onModeChange={setAppMode}
               />
-              {appMode !== 'library' ? (
+              {appMode === 'folders' && view.type === 'all' ? (
+                // Folders mode, no folder picked yet → tile grid of
+                // root-level folders. Clicking a tile sets view to
+                // that collection; back-to-all returns here.
+                <FolderGrid
+                  folders={collections}
+                  parentId={null}
+                  onPickFolder={(id) => handleViewChange({ type: 'collection', id })}
+                  onCreateFolder={() => setCreateCollectionSignal((n) => n + 1)}
+                />
+              ) : appMode === 'boards' ? (
                 <div className="mode-placeholder">
-                  <div className="mode-placeholder-title">
-                    {appMode === 'folders' ? 'Folders' : 'Boards'}
-                  </div>
+                  <div className="mode-placeholder-title">Boards</div>
                   <div className="mode-placeholder-hint">
-                    {appMode === 'folders'
-                      ? 'A tile grid of every folder is coming next.'
-                      : 'A tile grid of every board is coming next.'}
+                    A tile grid of every board is coming next.
                   </div>
                 </div>
               ) : (
