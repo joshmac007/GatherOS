@@ -131,6 +131,17 @@ export default function ImageCard({
     return () => obs.disconnect();
   }, [inView]);
 
+  // Brief "spring-back" pulse when a drag is released without a
+  // successful drop. e.dataTransfer.dropEffect === 'none' on dragend
+  // means the OS-level drop didn't land anywhere accepting; we
+  // bounce the source card so the user feels the snap-back instead
+  // of the card silently going un-changed.
+  const [springback, setSpringback] = useState(false);
+  const springTimerRef = useRef(null);
+  useEffect(() => () => {
+    if (springTimerRef.current) clearTimeout(springTimerRef.current);
+  }, []);
+
   return (
     <button
       ref={wrapperRef}
@@ -142,6 +153,7 @@ export default function ImageCard({
         selected && styles.selected,
         selectionActive && styles.showSelectables,
         fresh && styles.fresh,
+        springback && styles.springback,
       ].filter(Boolean).join(' ')}
       style={staggerMs ? { '--card-stagger': `${staggerMs}ms` } : undefined}
       onClick={(e) => onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey)}
@@ -160,6 +172,18 @@ export default function ImageCard({
         // sidebar buckets) and OS drag-out (Alt-drag), and is the
         // one that calls preventDefault when needed.
         onDragStart(e, record);
+      }}
+      onDragEnd={(e) => {
+        // dropEffect === 'none' means the user released over a
+        // non-accepting target — fire the spring-back animation so
+        // the source card visibly snaps back into place. A successful
+        // drop sets dropEffect to 'copy' / 'move' and we leave the
+        // card alone since the parent state will reflect the change.
+        if (e.dataTransfer?.dropEffect === 'none') {
+          setSpringback(true);
+          if (springTimerRef.current) clearTimeout(springTimerRef.current);
+          springTimerRef.current = setTimeout(() => setSpringback(false), 360);
+        }
       }}
     >
       <div className={styles.frame} style={{ aspectRatio: aspect }}>

@@ -1128,46 +1128,53 @@ export default function App() {
       const aspect = cardImg.naturalWidth / cardImg.naturalHeight;
       const previewH = Math.max(40, Math.min(72, Math.round(PREVIEW_W / aspect)));
 
+      // Canvas leaves 12px of padding on the top/right so the badge
+      // can overhang the thumbnail like Finder's red drag count.
+      const PAD = 12;
       const canvas = document.createElement('canvas');
-      canvas.width = PREVIEW_W;
-      canvas.height = previewH;
+      canvas.width = PREVIEW_W + PAD;
+      canvas.height = previewH + PAD;
       const ctx = canvas.getContext('2d');
-      // Round corners by clipping to a rounded path before drawing.
+      // Round corners on the image by clipping inside a save/restore
+      // so the badge below isn't constrained to the same path.
       const r = 6;
+      ctx.save();
       ctx.beginPath();
-      ctx.moveTo(r, 0);
-      ctx.arcTo(PREVIEW_W, 0, PREVIEW_W, previewH, r);
-      ctx.arcTo(PREVIEW_W, previewH, 0, previewH, r);
-      ctx.arcTo(0, previewH, 0, 0, r);
-      ctx.arcTo(0, 0, PREVIEW_W, 0, r);
+      ctx.moveTo(r, PAD);
+      ctx.arcTo(PREVIEW_W, PAD, PREVIEW_W, previewH + PAD, r);
+      ctx.arcTo(PREVIEW_W, previewH + PAD, 0, previewH + PAD, r);
+      ctx.arcTo(0, previewH + PAD, 0, PAD, r);
+      ctx.arcTo(0, PAD, PREVIEW_W, PAD, r);
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(cardImg, 0, 0, PREVIEW_W, previewH);
+      ctx.drawImage(cardImg, 0, PAD, PREVIEW_W, previewH);
+      ctx.restore();
 
-      // Multi-select: paint a +N pill in the top-right corner.
+      // Multi-select: paint a Finder-style total-count badge in the
+      // top-right corner that overhangs the image. Total (not delta)
+      // so the user reads it as "I'm dragging 5 things", matching
+      // macOS's drag-count convention.
       if (ids.length > 1) {
-        const label = `+${ids.length - 1}`;
-        ctx.font = 'bold 11px -apple-system, system-ui, sans-serif';
+        const label = String(ids.length);
+        ctx.font = 'bold 12px -apple-system, system-ui, sans-serif';
         const textW = ctx.measureText(label).width;
-        const pillH = 17;
-        const pillW = Math.max(pillH, textW + 10);
-        const px = PREVIEW_W - pillW - 4;
-        const py = 4;
-        // White outline ring
+        const pillH = 20;
+        const pillW = Math.max(pillH, textW + 12);
+        const px = PREVIEW_W - pillW + 8;
+        const py = 0;
+        // White outline ring so the pill reads against any image.
         ctx.fillStyle = '#fff';
         ctx.beginPath();
-        ctx.roundRect(px - 1.5, py - 1.5, pillW + 3, pillH + 3, (pillH + 3) / 2);
+        ctx.roundRect(px - 2, py - 2, pillW + 4, pillH + 4, (pillH + 4) / 2);
         ctx.fill();
-        // Blue pill
-        ctx.fillStyle = '#0a84ff';
+        ctx.fillStyle = '#ff3b30';
         ctx.beginPath();
         ctx.roundRect(px, py, pillW, pillH, pillH / 2);
         ctx.fill();
-        // Number
         ctx.fillStyle = '#fff';
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'center';
-        ctx.fillText(label, px + pillW / 2, py + pillH / 2 + 0.5);
+        ctx.fillText(label, px + pillW / 2, py + pillH / 2 + 1);
       }
 
       // Wrapper carries the transparent left gap; cursor anchors at
