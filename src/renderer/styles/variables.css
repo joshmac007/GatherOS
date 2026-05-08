@@ -65,6 +65,13 @@
   --inset-highlight: #FFF;
 
   /* Composite shadows */
+  /* Subtle 1-pixel shadow used by interactive surface controls
+     (dropdowns, segmented controls, the inline slider track frame).
+     Matches the spec'd recipe: `0 1px 3px -1px rgba(16,16,19,0.05)`.
+     Compose with --surface-1 + --border-strong + --radius-lg for
+     the canonical "control surface" look. */
+  --shadow-control:
+    0 1px 3px -1px rgba(16, 16, 19, 0.05);
   --shadow-card:
     0 0 0 1px var(--inset-highlight) inset,
     0 4px 20px 0 rgba(0, 0, 0, 0.05);
@@ -240,6 +247,8 @@
 
   --inset-highlight: rgba(255, 255, 255, 0.06);
 
+  --shadow-control:
+    0 1px 3px -1px rgba(0, 0, 0, 0.40);
   --shadow-card:
     0 0 0 1px var(--inset-highlight) inset,
     0 4px 20px 0 rgba(0, 0, 0, 0.45);

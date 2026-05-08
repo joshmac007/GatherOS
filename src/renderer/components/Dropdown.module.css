@@ -1,0 +1,114 @@
+/* Reusable dropdown control. The trigger is a flat pill with the
+   canonical "control surface" treatment: --surface-1 + --border-
+   strong + --radius-lg + --shadow-control. Every dropdown in the
+   app shares this recipe so the visual vocabulary stays tight. */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-control);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition:
+    background var(--dur-instant) ease,
+    border-color var(--dur-instant) ease;
+}
+
+.trigger:hover {
+  background: var(--hover-bg-soft);
+}
+
+.triggerOpen,
+.triggerOpen:hover {
+  border-color: var(--text-tertiary);
+}
+
+.triggerLabel {
+  white-space: nowrap;
+}
+
+.triggerChevron {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: transform var(--dur-instant) ease;
+}
+
+.triggerOpen .triggerChevron {
+  transform: rotate(180deg);
+}
+
+/* Popover menu — same surface recipe, slightly heavier shadow so
+   it reads as elevated over the trigger. */
+.menu {
+  position: fixed;
+  z-index: 9000;
+  padding: 4px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    var(--shadow-control),
+    0 8px 24px -4px rgba(16, 16, 19, 0.10);
+  -webkit-app-region: no-drag;
+  animation: dropdownIn var(--dur-quick) var(--ease-pop);
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 10px 7px 12px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-instant) ease;
+}
+
+.option:hover {
+  background: var(--hover-bg);
+}
+
+.optionActive {
+  color: var(--text-primary);
+}
+
+.optionLabel {
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.optionCheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}

@@ -256,6 +256,20 @@ export default function App() {
 
   const [selected, setSelected] = useState(() => new Set());
   const [gridColumns, setGridColumns] = useState(3);
+
+  // Active sort mode for the masonry. Persisted per-app (not per-
+  // view) — the user's preference is a global setting, not a
+  // per-folder toggle. Shuffle takes precedence when active.
+  const [sortMode, setSortMode] = useState(() => {
+    try {
+      const raw = localStorage.getItem('moodmark.sortMode');
+      if (raw === 'oldest' || raw === 'name_asc' || raw === 'name_desc') return raw;
+    } catch {}
+    return 'recent';
+  });
+  useEffect(() => {
+    try { localStorage.setItem('moodmark.sortMode', sortMode); } catch {}
+  }, [sortMode]);
   const [gridLayout, setGridLayout] = useState(() => {
     try { return localStorage.getItem('moodmark.gridLayout') || 'masonry'; }
     catch { return 'masonry'; }
@@ -1494,20 +1508,42 @@ export default function App() {
   // seed is null this is a no-op; the same seed always produces the
   // same permutation so the order stays stable across re-renders.
   const displaySaves = useMemo(() => {
-    if (!shuffleSeed) return saves;
-    // Pull saves added AFTER the shuffle to the top in newest-first
-    // order so freshly-dropped images always show at position #1.
-    // Saves that existed when shuffle was applied keep the seeded
-    // random order behind them.
-    const fresh = [];
-    const settled = [];
-    for (const s of saves) {
-      if ((s.created_at || 0) > shuffleAt) fresh.push(s);
-      else settled.push(s);
+    if (shuffleSeed) {
+      // Pull saves added AFTER the shuffle to the top in newest-first
+      // order so freshly-dropped images always show at position #1.
+      // Saves that existed when shuffle was applied keep the seeded
+      // random order behind them.
+      const fresh = [];
+      const settled = [];
+      for (const s of saves) {
+        if ((s.created_at || 0) > shuffleAt) fresh.push(s);
+        else settled.push(s);
+      }
+      fresh.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+      return [...fresh, ...seededShuffle(settled, shuffleSeed)];
     }
-    fresh.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-    return [...fresh, ...seededShuffle(settled, shuffleSeed)];
-  }, [saves, shuffleSeed, shuffleAt]);
+    if (sortMode === 'recent') return saves;
+    // Clone before sorting so the underlying saves array (memoized
+    // higher up) isn't mutated.
+    const sorted = saves.slice();
+    if (sortMode === 'oldest') {
+      sorted.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+    } else if (sortMode === 'name_asc' || sortMode === 'name_desc') {
+      const dir = sortMode === 'name_asc' ? 1 : -1;
+      // Untitled saves sort to the bottom regardless of direction so
+      // a wall of "Untitled" entries doesn't flood the top of the
+      // grid when sorting alphabetically.
+      sorted.sort((a, b) => {
+        const an = (a.title || '').trim();
+        const bn = (b.title || '').trim();
+        if (!an && !bn) return 0;
+        if (!an) return 1;
+        if (!bn) return -1;
+        return an.localeCompare(bn) * dir;
+      });
+    }
+    return sorted;
+  }, [saves, shuffleSeed, shuffleAt, sortMode]);
 
   const focusedIndex = useMemo(
     () => (focusedId ? displaySaves.findIndex((s) => s.id === focusedId) : -1),
@@ -2309,12 +2345,16 @@ export default function App() {
                 {appMode === 'library' && (
                   <SmartChipRail
                     activeViewType={
-                      ['all', 'unsorted', 'onThisDay', 'trash'].includes(view.type)
+                      ['all', 'unsorted', 'trash'].includes(view.type)
                         ? view.type
                         : 'all'
                     }
                     counts={smartCounts}
                     onPick={(v) => handleViewChange(v)}
+                    sortMode={sortMode}
+                    onSortChange={setSortMode}
+                    columns={gridColumns}
+                    onColumnsChange={setGridColumns}
                   />
                 )}
                 {view.type === 'all' && collections.length > 0 && !search && (
