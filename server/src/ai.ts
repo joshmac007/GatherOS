@@ -17,17 +17,18 @@ type AiContext = Context<{ Bindings: Env }>;
 
 export const aiRoutes = new Hono<{ Bindings: Env }>();
 
-// Soft monthly cap (combined chat + embedding tokens). Over the cap we
-// keep serving requests but flag the response so the renderer can warn
-// the user. Tuned for an "average" power user: ~2000 saves analyzed +
-// many semantic searches stays comfortably under this.
+// Monthly token cap (combined chat input + completion + embedding).
+// Hard cap — over the limit, requests are rejected with 429
+// rather than allowed to roll forward. Tuned for an "average"
+// power user: ~2000 saves analyzed plus many semantic searches
+// stays comfortably under this.
 const MONTHLY_TOKEN_CAP = 4_000_000;
 
 // Image generation lives on a separate cost axis from chat / embed —
 // per-image, not per-token. Tracked + capped independently so the two
-// dimensions don't interfere. 30/month at medium quality covers
-// everyday creative iteration without exposing the per-image cost
-// curve that would let one user run up a noticeable bill.
+// dimensions don't interfere. Hard cap; 30/month at medium quality
+// covers everyday creative iteration without exposing the per-image
+// cost curve that would let one user run up a noticeable bill.
 const MONTHLY_IMAGE_CAP = 30;
 
 // Allowlists keep the proxy from being abused as a generic OpenAI
@@ -203,6 +204,24 @@ aiRoutes.post('/chat', async (c) => {
     return c.json({ ok: false, error: 'missing_messages' }, 400);
   }
 
+  // Hard cap pre-flight. We block at-or-over so users who hit the
+  // limit can still see the meter at exactly the cap rather than
+  // an overshoot. Returns 429 with the same quota shape the renderer
+  // already reads so it can surface a friendly "cap reached" toast.
+  const bucket = yyyymm(Date.now());
+  const before = await readUsage(c.env, auth.userId, bucket);
+  if (before.total_tokens >= MONTHLY_TOKEN_CAP) {
+    return c.json({
+      ok: false,
+      error: 'monthly_cap_reached',
+      quota: {
+        total_tokens: before.total_tokens,
+        soft_cap: MONTHLY_TOKEN_CAP,
+        over_cap: true,
+      },
+    }, 429);
+  }
+
   // Forward to OpenAI verbatim so the caller controls every field
   // (response_format, image_url detail, max_tokens, etc.) without the
   // proxy needing to know about each variant.
@@ -247,7 +266,6 @@ aiRoutes.post('/chat', async (c) => {
   }
 
   const usage = data.usage || {};
-  const bucket = yyyymm(Date.now());
   await recordUsage(c.env, auth.userId, bucket, {
     prompt: usage.prompt_tokens || 0,
     completion: usage.completion_tokens || 0,
@@ -285,6 +303,20 @@ aiRoutes.post('/embed', async (c) => {
     return c.json({ ok: false, error: 'missing_input' }, 400);
   }
 
+  const bucket = yyyymm(Date.now());
+  const before = await readUsage(c.env, auth.userId, bucket);
+  if (before.total_tokens >= MONTHLY_TOKEN_CAP) {
+    return c.json({
+      ok: false,
+      error: 'monthly_cap_reached',
+      quota: {
+        total_tokens: before.total_tokens,
+        soft_cap: MONTHLY_TOKEN_CAP,
+        over_cap: true,
+      },
+    }, 429);
+  }
+
   const upstream = await fetch(`${OPENAI_BASE}/embeddings`, {
     method: 'POST',
     headers: {
@@ -318,7 +350,6 @@ aiRoutes.post('/embed', async (c) => {
 
   // Embedding API reports usage as prompt_tokens (no completion).
   const tokens = data.usage?.total_tokens ?? data.usage?.prompt_tokens ?? 0;
-  const bucket = yyyymm(Date.now());
   await recordUsage(c.env, auth.userId, bucket, {
     prompt: 0,
     completion: 0,
@@ -369,10 +400,21 @@ aiRoutes.post('/image', async (c) => {
     return c.json({ ok: false, error: 'prompt_too_long' }, 400);
   }
 
+  // Hard cap pre-flight. Image generation is the most expensive
+  // surface (~$0.05 per call) so over-cap is enforced strictly.
   const bucket = yyyymm(Date.now());
-  // Cap is checked AFTER the request. Soft-fail: we serve the
-  // generation but flag over_cap so the renderer can warn. Hard-stop
-  // would feel punitive on a creative tool.
+  const before = await readUsage(c.env, auth.userId, bucket);
+  if (before.image_count >= MONTHLY_IMAGE_CAP) {
+    return c.json({
+      ok: false,
+      error: 'monthly_cap_reached',
+      quota: {
+        image_count: before.image_count,
+        image_soft_cap: MONTHLY_IMAGE_CAP,
+        image_over_cap: true,
+      },
+    }, 429);
+  }
 
   let upstream: Response | null;
   if (body.image_b64) {

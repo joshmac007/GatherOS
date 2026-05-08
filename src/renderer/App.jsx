@@ -1060,16 +1060,13 @@ export default function App() {
           setPendingVariants((prev) => prev.filter((p) => p.id !== pendingId));
           if (result?.ok) {
             await reload();
-            const cap = result.quota?.image_soft_cap;
-            const used = result.quota?.image_count;
-            if (result.quota?.image_over_cap) {
-              showActionToast({
-                message: `Variant created · ${used} of ${cap} this month (over cap)`,
-                durationMs: 3200,
-              });
-            } else {
-              showActionToast({ message: 'Variant created', durationMs: 1800 });
-            }
+            showActionToast({ message: 'Variant created', durationMs: 1800 });
+          } else if (result?.reason === 'monthly_cap_reached') {
+            showActionToast({
+              message:
+                'Monthly image limit reached. Resets at the start of next month.',
+              durationMs: 3200,
+            });
           } else {
             showActionToast({
               message: result?.detail || 'Could not generate variant',

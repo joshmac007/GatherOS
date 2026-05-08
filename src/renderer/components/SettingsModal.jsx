@@ -113,8 +113,8 @@ function UsageMeter({ usage }) {
       )}
       {(overCap || imageOverCap) && (
         <div className={styles.usageMeterOverNote}>
-          Over the monthly soft cap. Requests are still going through —
-          we'll nudge you here if it becomes a pattern.
+          Monthly limit reached. New requests will be blocked until the
+          start of next month.
         </div>
       )}
     </div>

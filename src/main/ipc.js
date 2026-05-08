@@ -943,7 +943,7 @@ function registerIpcHandlers() {
       return { ok: true, prompt };
     } catch (err) {
       console.error('Generate prompt failed:', err.message);
-      return { ok: false, reason: 'api-error', detail: err.message };
+      return { ok: false, reason: err.code || "api-error", detail: err.message };
     } finally {
       event.sender.send('save:indexing-end', saveId);
     }
@@ -998,7 +998,7 @@ function registerIpcHandlers() {
       return { ok: true, save: record, quota };
     } catch (err) {
       console.error('Generate variant failed:', err.message);
-      return { ok: false, reason: 'api-error', detail: err.message };
+      return { ok: false, reason: err.code || "api-error", detail: err.message };
     } finally {
       event.sender.send('save:indexing-end', saveId);
     }
@@ -1021,7 +1021,7 @@ function registerIpcHandlers() {
       return { ok: true, tags: added };
     } catch (err) {
       console.error('Auto-tag failed:', err.message);
-      return { ok: false, reason: 'api-error', detail: err.message };
+      return { ok: false, reason: err.code || "api-error", detail: err.message };
     }
   });
 
