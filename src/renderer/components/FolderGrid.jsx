@@ -1,20 +1,55 @@
-import React from 'react';
-import { FolderClosed } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { FolderClosed, Pencil, Trash2, Plus } from 'lucide-react';
 import styles from './FolderGrid.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+import ContextMenu from './ContextMenu.jsx';
+
+const SAVE_DROP_MIME = 'application/x-moodmark-save-ids';
+
+function PencilIcon() { return <Pencil size={14} strokeWidth={1.6} aria-hidden="true" />; }
+function TrashIcon()  { return <Trash2 size={14} strokeWidth={1.6} aria-hidden="true" />; }
 
 // One tile per folder. Promotes the bucketStackDeal hover-fan from
 // an Easter egg in the sidebar into the primary navigation artwork.
 // On hover the back/front cards spread further apart so the row
 // reads as alive — same idiom we use everywhere a stack appears.
-function FolderTile({ folder, onClick, onContextMenu }) {
+function FolderTile({
+  folder,
+  isRenaming,
+  renameDraft,
+  renameInputRef,
+  onClick,
+  onContextMenu,
+  onRenameDraftChange,
+  onRenameCommit,
+  onRenameCancel,
+  isDropTarget,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}) {
   const thumbs = Array.isArray(folder.thumbs) ? folder.thumbs.slice(0, 3) : [];
   return (
-    <button
-      type="button"
-      className={styles.tile}
-      onClick={onClick}
+    <div
+      className={`${styles.tile}${isDropTarget ? ' ' + styles.tileDropTarget : ''}`}
+      role="button"
+      tabIndex={isRenaming ? -1 : 0}
+      onClick={(e) => {
+        if (isRenaming) return;
+        if (e.target.closest(`.${styles.tileRenameInput}`)) return;
+        onClick?.();
+      }}
+      onKeyDown={(e) => {
+        if (isRenaming) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
       onContextMenu={onContextMenu}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       <div className={styles.tileArt}>
         {thumbs.length > 0 ? (
@@ -38,30 +73,124 @@ function FolderTile({ folder, onClick, onContextMenu }) {
         )}
       </div>
       <div className={styles.tileMeta}>
-        <span className={styles.tileName}>{folder.name}</span>
-        {folder.save_count > 0 && (
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            autoFocus
+            className={styles.tileRenameInput}
+            value={renameDraft}
+            onChange={(e) => onRenameDraftChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                onRenameCommit();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                onRenameCancel();
+              }
+            }}
+            onBlur={onRenameCommit}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span className={styles.tileName}>{folder.name}</span>
+        )}
+        {!isRenaming && folder.save_count > 0 && (
           <span className={styles.tileCount}>{folder.save_count}</span>
         )}
+      </div>
+    </div>
+  );
+}
+
+// "+" affordance rendered as the first tile in the grid. Always
+// available (alongside the empty-state CTA) so creating a new folder
+// doesn't depend on sidebar chrome that's no longer there.
+function NewFolderTile({ onActivate }) {
+  return (
+    <button
+      type="button"
+      className={`${styles.tile} ${styles.tileNew}`}
+      onClick={onActivate}
+      title="New folder"
+    >
+      <div className={`${styles.tileArt} ${styles.tileArtNew}`}>
+        <Plus size={28} strokeWidth={1.4} aria-hidden="true" />
+      </div>
+      <div className={styles.tileMeta}>
+        <span className={`${styles.tileName} ${styles.tileNameMuted}`}>
+          New folder
+        </span>
       </div>
     </button>
   );
 }
 
-// Renders all collections at a given parent level as a tile grid.
-// `parentId === null` shows root-level folders; non-null drills into
-// a parent's children. Click handler escalates to the App layer
-// which decides what "open this folder" actually means (drill into
-// children vs. switch to masonry of saves).
 export default function FolderGrid({
   folders,
   parentId = null,
   onPickFolder,
   onCreateFolder,
-  onContextMenu,
+  onRenameFolder,
+  onDeleteFolder,
+  onAddSavesToBucket,
 }) {
   const visible = (folders || []).filter(
     (f) => (f.parent_id || null) === parentId,
   );
+
+  const [ctxMenu, setCtxMenu] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const renameInputRef = useRef(null);
+  const [dropTargetId, setDropTargetId] = useState(null);
+
+  function startRename(folder) {
+    setRenamingId(folder.id);
+    setRenameDraft(folder.name);
+    requestAnimationFrame(() => renameInputRef.current?.select());
+  }
+
+  async function commitRename() {
+    const next = renameDraft.trim();
+    const id = renamingId;
+    setRenamingId(null);
+    setRenameDraft('');
+    if (!id || !next) return;
+    const original = folders.find((f) => f.id === id);
+    if (!original || next === original.name) return;
+    await onRenameFolder?.({ id, name: next });
+  }
+
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameDraft('');
+  }
+
+  function isSaveDrag(e) {
+    return e.dataTransfer.types.includes(SAVE_DROP_MIME);
+  }
+
+  function handleTileDragOver(e, id) {
+    if (!isSaveDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (dropTargetId !== id) setDropTargetId(id);
+  }
+  function handleTileDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) setDropTargetId(null);
+  }
+  async function handleTileDrop(e, id) {
+    if (!isSaveDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDropTargetId(null);
+    let ids;
+    try { ids = JSON.parse(e.dataTransfer.getData(SAVE_DROP_MIME) || '[]'); }
+    catch { return; }
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    await onAddSavesToBucket?.(id, ids);
+  }
 
   if (visible.length === 0) {
     return (
@@ -87,15 +216,51 @@ export default function FolderGrid({
   return (
     <div className={styles.scroll}>
       <div className={styles.grid}>
+        {onCreateFolder && (
+          <NewFolderTile onActivate={onCreateFolder} />
+        )}
         {visible.map((folder) => (
           <FolderTile
             key={folder.id}
             folder={folder}
+            isRenaming={renamingId === folder.id}
+            renameDraft={renameDraft}
+            renameInputRef={renameInputRef}
             onClick={() => onPickFolder(folder.id)}
-            onContextMenu={onContextMenu ? (e) => onContextMenu(e, folder) : undefined}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCtxMenu({ x: e.clientX, y: e.clientY, folder });
+            }}
+            onRenameDraftChange={setRenameDraft}
+            onRenameCommit={commitRename}
+            onRenameCancel={cancelRename}
+            isDropTarget={dropTargetId === folder.id}
+            onDragOver={(e) => handleTileDragOver(e, folder.id)}
+            onDragLeave={handleTileDragLeave}
+            onDrop={(e) => handleTileDrop(e, folder.id)}
           />
         ))}
       </div>
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          items={[
+            {
+              label: 'Rename',
+              icon: <PencilIcon />,
+              onClick: () => startRename(ctxMenu.folder),
+            },
+            {
+              label: 'Delete Folder',
+              icon: <TrashIcon />,
+              danger: true,
+              onClick: () => onDeleteFolder?.(ctxMenu.folder.id),
+            },
+          ]}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
     </div>
   );
 }

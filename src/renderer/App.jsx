@@ -1889,6 +1889,17 @@ export default function App() {
 
       // Cmd/Ctrl combos always claim the key, even from inputs — these
       // are global app commands.
+
+      // Cmd+1 / Cmd+2 / Cmd+3 — flip the toolbar mode pill. Don't
+      // claim digits when typing into a field (input rename, new-
+      // folder name, search bar, etc.) so users can still type "1".
+      if (cmd && !e.shiftKey && !typing && (e.key === '1' || e.key === '2' || e.key === '3')) {
+        e.preventDefault();
+        const target = e.key === '1' ? 'library' : e.key === '2' ? 'folders' : 'boards';
+        handleModeChange(target);
+        return;
+      }
+
       if (cmd && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         setQuickSwitcherOpen((v) => !v);
@@ -1952,7 +1963,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [focusedId, selected, handleDeleteSelected, goNext, goPrev, peekedSaveId, hoveredSaveId]);
+  }, [focusedId, selected, handleDeleteSelected, goNext, goPrev, peekedSaveId, hoveredSaveId, handleModeChange]);
 
   // Menu's "Quick Look" item (no accelerator on the menu side because
   // a menu-bound Space would steal keystrokes from text fields). The
@@ -2268,7 +2279,14 @@ export default function App() {
                   folders={collections}
                   parentId={null}
                   onPickFolder={(id) => handleViewChange({ type: 'collection', id })}
-                  onCreateFolder={() => setCreateCollectionSignal((n) => n + 1)}
+                  onCreateFolder={async () => {
+                    const result = await window.moodmark.collections.create({ name: 'New folder' });
+                    await loadCollections();
+                    return result;
+                  }}
+                  onRenameFolder={handleRenameCollection}
+                  onDeleteFolder={handleDeleteCollection}
+                  onAddSavesToBucket={handleAddSavesToBucket}
                 />
               ) : appMode === 'boards' ? (
                 // Boards mode → tile grid of every board. Clicking
@@ -2282,6 +2300,8 @@ export default function App() {
                     const board = await handleCreateBoard();
                     if (board?.id) handleViewChange({ type: 'board', id: board.id });
                   }}
+                  onRenameBoard={handleRenameBoard}
+                  onDeleteBoard={handleDeleteBoard}
                 />
               ) : (
               <div className="grid-scroll" ref={setGridScrollNode}>

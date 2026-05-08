@@ -180,3 +180,57 @@
 :root[data-theme="dark"] .emptyAction:hover {
   filter: brightness(1.15);
 }
+
+/* Inline rename input — same recipe as FolderGrid so the two grid
+   surfaces feel unified during editing. */
+.tileRenameInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  background: var(--input-bg-focus);
+  border: 0.5px solid var(--accent-ring);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--text-primary);
+  outline: none;
+  letter-spacing: -0.005em;
+}
+
+.tileRenameInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
+}
+
+/* "+" new-board tile — same footprint as a real tile so the grid
+   rhythm doesn't break. */
+.tileNew {
+  background: transparent;
+}
+
+.tileArtNew {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0.5px dashed var(--border-strong);
+  color: var(--text-tertiary);
+  box-shadow: none;
+}
+
+.tileNew:hover .tileArtNew {
+  background: var(--hover-bg-soft);
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+  transform: translateY(-2px);
+}
+
+.tileNameMuted {
+  color: var(--text-tertiary);
+}
+
+.tileNew:hover .tileNameMuted {
+  color: var(--text-primary);
+}
