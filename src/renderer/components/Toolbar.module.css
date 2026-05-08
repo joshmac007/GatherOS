@@ -147,9 +147,9 @@
   width: 22px;
   height: 22px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  background: var(--surface-1);
   border: 1px solid var(--btn-border);
-  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
+  box-shadow: var(--shadow-control);
   pointer-events: none;
   z-index: 0;
   transition: transform var(--dur-medium) var(--ease-out);

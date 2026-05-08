@@ -94,10 +94,10 @@
   align-items: center;
   gap: 4px;
   padding: 0 12px 0 8px;
-  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  background: var(--surface-1);
   border: 1px solid var(--btn-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
+  box-shadow: var(--shadow-control);
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-primary);
@@ -128,14 +128,15 @@
   gap: 0;
   /* Fixed height keeps the pill from "breathing" vertically when
      the pencil reveals — only the width should change. */
-  height: 28px;
+  height: 32px;
   padding: 0 14px;
   background: var(--surface-1);
-  border: 0.5px solid var(--border-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-card);
-  font-size: var(--text-sm);
+  box-shadow: var(--shadow-control);
+  font-size: var(--text-md);
   font-weight: 500;
+  letter-spacing: -0.005em;
   color: var(--text-primary);
   z-index: 5;
 }
@@ -248,9 +249,9 @@
   gap: 4px;
   padding: 6px;
   background: var(--surface-1);
-  border: 0.5px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-control);
   z-index: 6;
 }
 
@@ -269,14 +270,17 @@
 }
 
 .toolBtn:hover {
-  background: var(--hover-bg-soft);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
+/* Active tool fills with ink — same idiom as the mode pill's
+   active segment and the smart-chip rail underline. Reads as
+   "this mode is on" without leaning on the accent color. */
 .toolBtnActive,
 .toolBtnActive:hover {
-  background: var(--accent-bg-soft);
-  color: var(--accent);
+  background: var(--text-primary);
+  color: var(--surface-1);
 }
 
 .toolBtn:disabled {
@@ -305,11 +309,15 @@
   padding: 4px;
   min-width: 168px;
   background: var(--surface-1);
-  border: 0.5px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.05);
   z-index: 7;
   animation: shapeToolFlyoutIn var(--dur-quick) var(--ease-out);
+}
+
+:root[data-theme="dark"] .shapeToolFlyout {
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.45);
 }
 
 @keyframes shapeToolFlyoutIn {
@@ -398,11 +406,15 @@
   display: flex;
   flex-direction: column;
   background: var(--surface-1);
-  border: 0.5px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.05);
   z-index: 6;
   overflow: hidden;
+}
+
+:root[data-theme="dark"] .drawer {
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.45);
 }
 
 .drawerHeader {
@@ -454,18 +466,20 @@
   position: relative;
   display: flex;
   align-items: center;
-  height: 30px;
+  height: 32px;
   padding: 0 8px 0 28px;
-  background: var(--hover-bg-soft);
-  border: 0.5px solid var(--border-hairline);
-  border-radius: var(--radius-md);
-  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-control);
+  transition:
+    border-color var(--dur-instant) ease,
+    box-shadow var(--dur-instant) ease;
 }
 
 .drawerSearch:focus-within {
-  background: var(--input-bg-focus);
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  box-shadow: 0 0 0 2px var(--accent-bg-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
 }
 
 .drawerSearchIcon {

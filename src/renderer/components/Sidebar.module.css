@@ -340,8 +340,8 @@
   font-size: var(--text-sm);
   cursor: pointer;
   border: 1px solid var(--btn-border);
-  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
-  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-control);
   color: var(--text-primary);
   font-family: var(--font-ui);
   transition: filter var(--dur-instant) ease;
@@ -356,9 +356,9 @@
 .formBtnPrimary {
   border: 1px solid var(--btn-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  background: var(--surface-1);
   color: var(--text-primary);
-  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
+  box-shadow: var(--shadow-control);
 }
 
 .formBtnPrimary:hover {

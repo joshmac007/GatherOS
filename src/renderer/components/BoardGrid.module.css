@@ -159,27 +159,28 @@
   text-wrap: pretty;
 }
 
+/* Black primary CTA — same recipe as FolderGrid's empty-state
+   action and the toolbar's "+ Add" button. Filled ink, white
+   label, no border. */
 .emptyAction {
   margin-top: 14px;
-  padding: 7px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--btn-border);
-  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
-  color: var(--text-primary);
+  padding: 9px 18px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--text-primary);
+  color: var(--surface-1);
   font-size: var(--text-md);
+  font-weight: 500;
+  letter-spacing: -0.005em;
   font-family: var(--font-ui);
   cursor: pointer;
-  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
-  transition: filter var(--dur-instant) ease;
+  transition:
+    opacity var(--dur-instant) ease,
+    transform var(--dur-instant) ease;
 }
 
-.emptyAction:hover {
-  filter: brightness(0.98);
-}
-
-:root[data-theme="dark"] .emptyAction:hover {
-  filter: brightness(1.15);
-}
+.emptyAction:hover { opacity: 0.92; }
+.emptyAction:active { transform: scale(0.98); }
 
 /* Inline rename input — same recipe as FolderGrid so the two grid
    surfaces feel unified during editing. */

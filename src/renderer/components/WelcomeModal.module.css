@@ -135,7 +135,7 @@
   padding: 0 22px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--btn-border);
-  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
+  background: var(--surface-1);
   color: var(--text-primary);
   font-size: var(--text-md);
   font-weight: 500;
@@ -143,7 +143,7 @@
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
+  box-shadow: var(--shadow-control);
   transition: filter var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 

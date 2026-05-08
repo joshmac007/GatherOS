@@ -42,8 +42,8 @@
   padding: 4px 12px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--btn-border);
-  background: linear-gradient(0deg, var(--btn-from) 0%, var(--btn-to) 100%);
-  box-shadow: 0 1px 0 1px var(--btn-inset) inset;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-control);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   font-weight: 500;
