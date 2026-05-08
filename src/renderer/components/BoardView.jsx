@@ -871,42 +871,57 @@ export default function BoardView({
   // the canvas DOM rect for the PNG capture region.
   const canvasNodeRef = useRef(null);
 
+  // Both export paths flip body[data-board-print] before sampling
+  // the page so the print-mode CSS rules can hide the board's
+  // chrome (left tool rail, title pill, drawer, back button, etc.)
+  // while leaving the canvas and its items visible. Two animation
+  // frames is enough for the new layout to settle.
+  const withPrintMode = useCallback(async (run) => {
+    document.body.dataset.boardPrint = 'true';
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    try {
+      await run();
+    } finally {
+      delete document.body.dataset.boardPrint;
+    }
+  }, []);
+
   const exportBoardPng = useCallback(async () => {
     if (exporting) return;
     const el = canvasNodeRef.current;
     if (!el) return;
     setExporting(true);
     try {
-      const r = el.getBoundingClientRect();
-      // window.devicePixelRatio is baked into capturePage's output;
-      // pass the CSS-pixel rect and it returns a higher-resolution
-      // image automatically.
-      await window.moodmark.boards.exportPng({
-        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-        defaultName: `${(board?.name || 'board').replace(/[/\\?*:|"<>]/g, '_')}.png`,
+      await withPrintMode(async () => {
+        // Re-measure inside the print-mode pass so the rect reflects
+        // the post-hide layout. capturePage samples whatever's
+        // currently painted, so chrome that was visible at click time
+        // would otherwise leak into the PNG.
+        const r = el.getBoundingClientRect();
+        await window.moodmark.boards.exportPng({
+          rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+          defaultName: `${(board?.name || 'board').replace(/[/\\?*:|"<>]/g, '_')}.png`,
+        });
       });
     } finally {
       setExporting(false);
     }
-  }, [exporting, board]);
+  }, [exporting, board, withPrintMode]);
 
   const exportBoardPdf = useCallback(async () => {
     if (exporting) return;
     setExporting(true);
-    document.body.dataset.boardPrint = 'true';
-    // Yield two animation frames so the print stylesheet hides chrome
-    // before printToPDF samples the renderer's layout.
-    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
     try {
-      await window.moodmark.boards.exportPdf({
-        defaultName: `${(board?.name || 'board').replace(/[/\\?*:|"<>]/g, '_')}.pdf`,
-        landscape: true,
+      await withPrintMode(async () => {
+        await window.moodmark.boards.exportPdf({
+          defaultName: `${(board?.name || 'board').replace(/[/\\?*:|"<>]/g, '_')}.pdf`,
+          landscape: true,
+        });
       });
     } finally {
-      delete document.body.dataset.boardPrint;
       setExporting(false);
     }
-  }, [exporting, board]);
+  }, [exporting, board, withPrintMode]);
   const [editingItemId, setEditingItemId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');

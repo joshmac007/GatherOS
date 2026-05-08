@@ -9,6 +9,43 @@
   -webkit-app-region: drag;
 }
 
+/* Print-mode toggle: hide every floating UI affordance the board
+   layers over the canvas so PNG / PDF exports capture only the
+   canvas + its items. The body attribute is flipped from BoardView
+   immediately before we hand off to capturePage / printToPDF. */
+:global(body[data-board-print="true"]) .backBtn,
+:global(body[data-board-print="true"]) .titleBar,
+:global(body[data-board-print="true"]) .toolbar,
+:global(body[data-board-print="true"]) .zoomReadout,
+:global(body[data-board-print="true"]) .drawer,
+:global(body[data-board-print="true"]) .textToolbar,
+:global(body[data-board-print="true"]) .marquee,
+:global(body[data-board-print="true"]) .groupBbox,
+:global(body[data-board-print="true"]) .handle,
+:global(body[data-board-print="true"]) .lockBadge,
+:global(body[data-board-print="true"]) .arrowEndpoint,
+:global(body[data-board-print="true"]) .arrowMidpoint,
+:global(body[data-board-print="true"]) .arrowMidpointInsert,
+:global(body[data-board-print="true"]) .snapLineH,
+:global(body[data-board-print="true"]) .snapLineV,
+:global(body[data-board-print="true"]) .framePreview,
+:global(body[data-board-print="true"]) .arrowPreview {
+  display: none !important;
+}
+
+/* Selection outline lives on .item.itemSelected via outline; nuke it
+   so the export doesn't end up with a blue ring on whichever item
+   was active at capture time. */
+:global(body[data-board-print="true"]) .item.itemSelected {
+  outline: none !important;
+}
+
+/* Drop the canvas dot grid + content background so the export sits
+   on a clean white page (matches PDF page colour). */
+:global(body[data-board-print="true"]) .canvas {
+  background: #ffffff !important;
+}
+
 /* The drag region exists so the user can grab the empty top edge to
    move the window, but every interactive child needs no-drag so
    clicks register. */
