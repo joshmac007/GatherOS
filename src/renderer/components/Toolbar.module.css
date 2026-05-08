@@ -25,7 +25,7 @@
   padding: 0;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .iconBtn svg {
@@ -54,7 +54,7 @@
   cursor: pointer;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
-  transition: color 100ms ease, transform 80ms ease;
+  transition: color var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .backBtn svg {
@@ -148,7 +148,7 @@
   box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   pointer-events: none;
   z-index: 0;
-  transition: transform 280ms var(--ease-out);
+  transition: transform var(--dur-medium) var(--ease-out);
 }
 
 .layoutThumb[data-pos='list'] {
@@ -169,7 +169,7 @@
   cursor: pointer;
   padding: 0;
   z-index: 1;
-  transition: color 200ms ease;
+  transition: color var(--dur-medium) ease;
 }
 
 .layoutBtn:hover {
@@ -291,7 +291,7 @@
   font-size: var(--text-md);
   outline: none;
   box-shadow: var(--shadow-card);
-  transition: box-shadow 120ms ease;
+  transition: box-shadow var(--dur-instant) ease;
 }
 
 /* ⌘K hint inside the search input — clickable chip that opens the
@@ -311,7 +311,7 @@
   border-radius: 999px;
   cursor: pointer;
   -webkit-app-region: no-drag;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 /* Replaces the ⌘K chip when the input has text. Same right-edge
@@ -335,7 +335,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   -webkit-app-region: no-drag;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .clearSearchBtn:hover {
@@ -358,7 +358,7 @@
   border: 0.5px solid var(--glass-border);
   border-radius: 9px;
   box-shadow: var(--shadow-glass);
-  animation: recentsIn 140ms var(--ease-pop);
+  animation: recentsIn var(--dur-quick) var(--ease-pop);
 }
 
 @keyframes recentsIn {
@@ -388,7 +388,7 @@
   text-transform: uppercase;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: color 100ms ease;
+  transition: color var(--dur-instant) ease;
 }
 
 .recentsClear:hover {
@@ -410,7 +410,7 @@
   text-align: left;
   cursor: pointer;
   -webkit-app-region: no-drag;
-  transition: background 100ms ease;
+  transition: background var(--dur-instant) ease;
 }
 
 .recentsItem:hover {

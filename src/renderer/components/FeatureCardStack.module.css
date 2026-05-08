@@ -37,9 +37,9 @@
     0 6px 16px rgba(0, 0, 0, 0.06),
     0 14px 30px rgba(0, 0, 0, 0.05);
   transition:
-    transform 520ms var(--ease-out),
-    opacity 380ms ease,
-    box-shadow 380ms ease;
+    transform var(--dur-long) var(--ease-out),
+    opacity var(--dur-pronounced) ease,
+    box-shadow var(--dur-pronounced) ease;
   will-change: transform, opacity;
 }
 
@@ -147,7 +147,7 @@
   border: none;
   padding: 0;
   cursor: pointer;
-  transition: background 220ms ease, width 220ms ease;
+  transition: background var(--dur-medium) ease, width var(--dur-medium) ease;
 }
 
 .dot:hover {

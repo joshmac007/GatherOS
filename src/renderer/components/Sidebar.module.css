@@ -38,7 +38,7 @@
   padding: 0;
   z-index: 1;
   -webkit-app-region: no-drag;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .collapseBtn svg {
@@ -89,7 +89,7 @@
   cursor: pointer;
   padding: 0;
   -webkit-app-region: no-drag;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .themeToggle:hover {
@@ -125,7 +125,7 @@
   border: 0.5px solid var(--glass-border);
   border-radius: 9px;
   box-shadow: var(--shadow-glass);
-  animation: helpPopIn 140ms var(--ease-pop);
+  animation: helpPopIn var(--dur-quick) var(--ease-pop);
 }
 
 @keyframes helpPopIn {
@@ -161,7 +161,7 @@
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
-  transition: background 100ms ease;
+  transition: background var(--dur-instant) ease;
 }
 
 .helpItem:hover {
@@ -211,7 +211,7 @@
   font-size: var(--text-md);
   text-align: left;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .footerBtn:hover {
@@ -344,7 +344,7 @@
   box-shadow: 0 1px 0 1px var(--btn-inset) inset;
   color: var(--text-primary);
   font-family: var(--font-ui);
-  transition: filter 100ms ease;
+  transition: filter var(--dur-instant) ease;
 }
 
 .formBtn:hover {
@@ -442,9 +442,9 @@
   outline: none;
   -webkit-app-region: no-drag;
   transition:
-    background 100ms ease,
-    box-shadow 100ms ease,
-    transform 120ms var(--ease-out);
+    background var(--dur-instant) ease,
+    box-shadow var(--dur-instant) ease,
+    transform var(--dur-instant) var(--ease-out);
 }
 
 /* Disclosure column on the left of every bucket row. Width is fixed
@@ -466,7 +466,7 @@
   color: var(--text-tertiary);
   border-radius: 4px;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .disclosure:hover {
@@ -548,7 +548,7 @@
     0 1px 2px rgba(0, 0, 0, 0.10),
     0 6px 14px rgba(0, 0, 0, 0.18),
     inset 0 0 0 1px var(--glass-inset);
-  animation: bucketStackDeal 280ms var(--ease-out) both;
+  animation: bucketStackDeal var(--dur-medium) var(--ease-out) both;
 }
 
 /* Each card has its own keyframes so the resting transform (rotate +
@@ -556,8 +556,8 @@
    animate from a stacked-and-flat starting state into the fan. */
 .bucketPreviewStack img:nth-child(1) { z-index: 1; animation-name: bucketStackDeal1; animation-delay: 0ms; }
 .bucketPreviewStack img:nth-child(2) { z-index: 2; animation-name: bucketStackDeal2; animation-delay: 40ms; }
-.bucketPreviewStack img:nth-child(3) { z-index: 3; animation-name: bucketStackDeal3; animation-delay: 80ms; }
-.bucketPreviewStack img:nth-child(4) { z-index: 4; animation-name: bucketStackDeal4; animation-delay: 120ms; }
+.bucketPreviewStack img:nth-child(3) { z-index: 3; animation-name: bucketStackDeal3; animation-delay: var(--dur-instant); }
+.bucketPreviewStack img:nth-child(4) { z-index: 4; animation-name: bucketStackDeal4; animation-delay: var(--dur-instant); }
 
 @keyframes bucketStackDeal1 {
   from { opacity: 0; transform: rotate(0deg)  translate(-12px, 0) scale(0.86); }
@@ -586,9 +586,9 @@
     0 0 0 2px var(--accent-bg-soft),
     0 6px 18px var(--accent-bg-medium);
   transform: scale(1.02);
-  transition: transform 100ms var(--ease-out),
-              background 100ms ease,
-              box-shadow 100ms ease;
+  transition: transform var(--dur-instant) var(--ease-out),
+              background var(--dur-instant) ease,
+              box-shadow var(--dur-instant) ease;
 }
 
 .item.saveDropTarget * {
@@ -674,7 +674,7 @@
   height: 16px;
   margin-left: auto;
   color: var(--text-tertiary);
-  animation: inboxZeroIn 220ms ease-out;
+  animation: inboxZeroIn var(--dur-medium) ease-out;
 }
 
 .inboxZero svg {
@@ -710,7 +710,7 @@
    the start. Inline-block so the transform actually applies. */
 .countBump {
   display: inline-block;
-  animation: countBump 360ms var(--ease-out);
+  animation: countBump var(--dur-pronounced) var(--ease-out);
 }
 
 @keyframes countBump {

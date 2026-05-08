@@ -44,7 +44,7 @@
   opacity: 0;
   animation:
     skeletonShimmer 1.4s linear infinite,
-    skeletonFade 200ms ease-out forwards;
+    skeletonFade var(--dur-medium) ease-out forwards;
 }
 
 @keyframes skeletonShimmer {
@@ -59,7 +59,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
-    animation: skeletonFade 200ms ease-out forwards;
+    animation: skeletonFade var(--dur-medium) ease-out forwards;
     background: rgba(0, 0, 0, 0.05);
   }
 }
@@ -112,7 +112,7 @@
   cursor: pointer;
   user-select: none;
   border: 1px solid transparent;
-  transition: background 90ms ease, border-color 90ms ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
 
 .listRow:hover {

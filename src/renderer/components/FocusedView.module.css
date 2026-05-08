@@ -7,7 +7,7 @@
      as a transition rather than a hard cut. Skipped when the View
      Transitions API is driving a morph (.focusedMorphing) so its
      initial opacity:0 frame doesn't get baked into the new snapshot. */
-  animation: focusedIn 200ms var(--ease-out);
+  animation: focusedIn var(--dur-medium) var(--ease-out);
 }
 
 .focused.focusedMorphing {
@@ -71,7 +71,7 @@
   cursor: pointer;
   padding: 0;
   -webkit-app-region: no-drag;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .iconBtn svg {
@@ -204,7 +204,7 @@
   color: var(--text-tertiary);
   cursor: pointer;
   -webkit-app-region: no-drag;
-  transition: color 100ms ease, transform 80ms ease;
+  transition: color var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .backBtn:hover {

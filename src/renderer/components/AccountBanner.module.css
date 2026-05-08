@@ -23,7 +23,7 @@
   font-size: var(--text-sm);
   color: var(--text-primary);
   -webkit-app-region: no-drag;
-  animation: bannerIn 200ms var(--ease-pop);
+  animation: bannerIn var(--dur-medium) var(--ease-pop);
 }
 
 .bannerWarn {
@@ -67,7 +67,7 @@
   font-weight: 500;
   color: var(--text-primary);
   cursor: pointer;
-  transition: filter 100ms ease, transform 80ms ease;
+  transition: filter var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .action:hover:not(:disabled) {

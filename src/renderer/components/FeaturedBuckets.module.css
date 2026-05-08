@@ -41,8 +41,8 @@
   opacity: 0;
   transform: translateY(-4px);
   transition:
-    opacity 220ms var(--ease-out),
-    transform 220ms var(--ease-out);
+    opacity var(--dur-medium) var(--ease-out),
+    transform var(--dur-medium) var(--ease-out);
 }
 
 .pillBar.pillBarVisible {
@@ -111,7 +111,7 @@
      surfaces sit at the same elevation. Ambient reach (~10px)
      still fits the scroller's 16/16/28px padding. */
   box-shadow: var(--shadow-card);
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  transition: transform var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
 }
 
 .card:hover {
@@ -141,7 +141,7 @@
   object-fit: cover;
   background: rgba(0, 0, 0, 0.04);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
-  transition: transform 320ms var(--ease-out);
+  transition: transform var(--dur-pronounced) var(--ease-out);
 }
 
 /* Default stacked-and-tilted positions. nth-child for a static

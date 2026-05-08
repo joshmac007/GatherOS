@@ -10,7 +10,7 @@
   backdrop-filter: blur(10px) saturate(1.1);
   -webkit-backdrop-filter: blur(10px) saturate(1.1);
   font-family: var(--font-ui);
-  animation: scrimIn 140ms ease-out;
+  animation: scrimIn var(--dur-quick) ease-out;
 }
 
 @keyframes scrimIn {
@@ -47,7 +47,7 @@
   gap: 14px;
   max-width: 88vw;
   max-height: 78vh;
-  animation: cardIn 200ms var(--ease-out);
+  animation: cardIn var(--dur-medium) var(--ease-out);
 }
 
 @keyframes cardIn {
@@ -55,9 +55,9 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.leaving_left  { animation: leaveLeft 180ms ease-in forwards; }
-.leaving_right { animation: leaveRight 180ms ease-in forwards; }
-.leaving_up    { animation: leaveUp 180ms ease-in forwards; }
+.leaving_left  { animation: leaveLeft var(--dur-quick) ease-in forwards; }
+.leaving_right { animation: leaveRight var(--dur-quick) ease-in forwards; }
+.leaving_up    { animation: leaveUp var(--dur-quick) ease-in forwards; }
 
 @keyframes leaveLeft {
   to { opacity: 0; transform: translateX(-80px) rotate(-2deg); }
@@ -128,7 +128,7 @@
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .hintBtn:hover {
@@ -174,7 +174,7 @@
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.35),
     0 24px 60px rgba(0, 0, 0, 0.45);
-  animation: pickerIn 140ms var(--ease-pop);
+  animation: pickerIn var(--dur-quick) var(--ease-pop);
 }
 
 @keyframes pickerIn {
@@ -258,7 +258,7 @@
   border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   text-align: center;
-  animation: cardIn 200ms var(--ease-out);
+  animation: cardIn var(--dur-medium) var(--ease-out);
 }
 
 .emptyTitle {
@@ -285,7 +285,7 @@
   font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
-  transition: background 100ms ease;
+  transition: background var(--dur-instant) ease;
 }
 
 .doneBtn:hover {

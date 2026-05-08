@@ -148,6 +148,23 @@
   --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-bounce: cubic-bezier(0.2, 1.4, 0.3, 1);
+
+  /* ── Durations ──────────────────────────────────────────────────────
+     Five tiers. Stagger delays (40ms × N) and ambient infinite loops
+     (1.4s shimmer, 1.6s pulse, 18s float) stay raw — they're a
+     different concept than transition / one-shot animation duration.
+
+       --dur-instant     hover, focus, color flips
+       --dur-quick       drawers, popovers, small-modal entrance
+       --dur-medium      panel slides, choreographed sequences
+       --dur-pronounced  page transitions, masonry settle, stagger
+       --dur-long        celebration moments (rediscover, sphereIn)
+  */
+  --dur-instant: 80ms;
+  --dur-quick: 160ms;
+  --dur-medium: 240ms;
+  --dur-pronounced: 380ms;
+  --dur-long: 600ms;
 }
 
 /* Dark theme — overrides the surface + ink + glass values from

@@ -7,7 +7,7 @@
   justify-content: center;
   padding-top: 18vh;
   z-index: 10000;
-  animation: scrimIn 120ms ease-out;
+  animation: scrimIn var(--dur-instant) ease-out;
   -webkit-app-region: no-drag;
 }
 
@@ -30,7 +30,7 @@
   border-radius: 14px;
   box-shadow: var(--shadow-glass);
   overflow: hidden;
-  animation: panelIn 140ms var(--ease-pop);
+  animation: panelIn var(--dur-quick) var(--ease-pop);
 }
 
 @keyframes panelIn {
@@ -126,7 +126,7 @@
   font-size: var(--text-md);
   text-align: left;
   cursor: pointer;
-  transition: background 80ms ease, color 80ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .rowActive,

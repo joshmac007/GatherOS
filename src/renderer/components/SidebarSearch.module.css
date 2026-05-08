@@ -18,7 +18,7 @@
   letter-spacing: -0.005em;
   text-align: left;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
   -webkit-app-region: no-drag;
 }
 
@@ -50,7 +50,7 @@
   font-size: var(--text-sm);
   letter-spacing: -0.005em;
   box-shadow: 0 0 0 2px var(--hover-bg);
-  animation: expandIn 140ms var(--ease-out);
+  animation: expandIn var(--dur-quick) var(--ease-out);
   -webkit-app-region: no-drag;
 }
 

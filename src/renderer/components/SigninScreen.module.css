@@ -67,7 +67,7 @@
   border-radius: 8px;
   outline: none;
   box-sizing: border-box;
-  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
 }
 
 .input::placeholder {
@@ -91,7 +91,7 @@
   font-weight: 500;
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: filter 100ms ease, transform 80ms ease;
+  transition: filter var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .submit:hover:not(:disabled) {
@@ -133,7 +133,7 @@
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
-  transition: color 100ms ease;
+  transition: color var(--dur-instant) ease;
 }
 
 .linkBtn:hover {

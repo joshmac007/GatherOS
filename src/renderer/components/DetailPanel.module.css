@@ -15,20 +15,20 @@
    into. fill-mode: both holds the from-state until the delay expires
    so items don't flash visible-then-hidden on first render. */
 .panel > * {
-  animation: detailItemIn 360ms var(--ease-out) both;
+  animation: detailItemIn var(--dur-pronounced) var(--ease-out) both;
 }
 .panel > :nth-child(1)  { animation-delay: 0ms; }
 .panel > :nth-child(2)  { animation-delay: 40ms; }
-.panel > :nth-child(3)  { animation-delay: 80ms; }
-.panel > :nth-child(4)  { animation-delay: 120ms; }
-.panel > :nth-child(5)  { animation-delay: 160ms; }
-.panel > :nth-child(6)  { animation-delay: 200ms; }
-.panel > :nth-child(7)  { animation-delay: 240ms; }
-.panel > :nth-child(8)  { animation-delay: 280ms; }
-.panel > :nth-child(9)  { animation-delay: 320ms; }
-.panel > :nth-child(10) { animation-delay: 360ms; }
-.panel > :nth-child(11) { animation-delay: 400ms; }
-.panel > :nth-child(12) { animation-delay: 440ms; }
+.panel > :nth-child(3)  { animation-delay: var(--dur-instant); }
+.panel > :nth-child(4)  { animation-delay: var(--dur-instant); }
+.panel > :nth-child(5)  { animation-delay: var(--dur-quick); }
+.panel > :nth-child(6)  { animation-delay: var(--dur-medium); }
+.panel > :nth-child(7)  { animation-delay: var(--dur-medium); }
+.panel > :nth-child(8)  { animation-delay: var(--dur-medium); }
+.panel > :nth-child(9)  { animation-delay: var(--dur-pronounced); }
+.panel > :nth-child(10) { animation-delay: var(--dur-pronounced); }
+.panel > :nth-child(11) { animation-delay: var(--dur-pronounced); }
+.panel > :nth-child(12) { animation-delay: var(--dur-pronounced); }
 
 @keyframes detailItemIn {
   from { opacity: 0; transform: translateY(6px); }
@@ -97,12 +97,12 @@
      instead of laggy. */
   transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
   transform-style: preserve-3d;
-  transition: transform 360ms var(--ease-out);
+  transition: transform var(--dur-pronounced) var(--ease-out);
   will-change: transform;
 }
 
 .imageWrapTilting {
-  transition: transform 80ms linear;
+  transition: transform var(--dur-instant) linear;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -159,7 +159,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
     0 1px 2px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
-  transition: transform 80ms ease;
+  transition: transform var(--dur-instant) ease;
   /* Lift the swatch above sibling sections so its absolutely-positioned
      tooltip isn't painted behind .preview / .imageWrap when it extends
      above the swatch row. */
@@ -190,7 +190,7 @@
   white-space: nowrap;
   pointer-events: none;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-  animation: tooltipIn 120ms ease;
+  animation: tooltipIn var(--dur-instant) ease;
   z-index: 10;
 }
 
@@ -214,7 +214,7 @@
 .swatch:nth-child(-n+2) .swatchTooltip {
   left: 0;
   transform: translateX(0);
-  animation: tooltipInLeft 120ms ease;
+  animation: tooltipInLeft var(--dur-instant) ease;
 }
 
 .swatch:nth-child(-n+2) .swatchTooltip::after {
@@ -264,7 +264,7 @@
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
-  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
 }
 
 .metaInput::placeholder {
@@ -291,7 +291,7 @@
   font-size: var(--text-sm);
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: color 100ms ease;
+  transition: color var(--dur-instant) ease;
 }
 
 .addNoteBtn:hover {
@@ -313,7 +313,7 @@
   field-sizing: content;
   min-height: 28px;
   box-sizing: border-box;
-  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
 }
 
 .notesInput::placeholder {
@@ -353,7 +353,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .openLinkBtn svg {
@@ -406,7 +406,7 @@
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .promptIconBtn:hover:not(:disabled) {
@@ -600,7 +600,7 @@
   font-size: var(--text-xs);
   color: var(--ai-tint);
   cursor: pointer;
-  transition: background 100ms ease, transform 80ms ease, filter 100ms ease;
+  transition: background var(--dur-instant) ease, transform var(--dur-instant) ease, filter var(--dur-instant) ease;
 }
 
 .autoTagBtn:hover:not(:disabled) {
@@ -792,7 +792,7 @@
   font-size: var(--text-lg);
   line-height: 1;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .fontSectionRemove:hover {
@@ -821,7 +821,7 @@
   font-size: var(--text-md);
   color: var(--text-primary);
   outline: none;
-  transition: border-color 100ms ease;
+  transition: border-color var(--dur-instant) ease;
   box-sizing: border-box;
 }
 
@@ -854,7 +854,7 @@
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background 100ms ease, border-color 100ms ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
 
 .fontOpenBtn:hover {
@@ -901,7 +901,7 @@
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.06),
     inset 0 0 0 1px var(--border-subtle);
-  transition: transform 100ms ease, box-shadow 120ms ease;
+  transition: transform var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
 }
 
 .similarTile:hover {

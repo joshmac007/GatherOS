@@ -8,7 +8,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: fadeIn 200ms ease;
+  animation: fadeIn var(--dur-medium) ease;
 }
 
 .modal {
@@ -20,7 +20,7 @@
   border: 0.5px solid var(--border);
   border-radius: 16px;
   box-shadow: var(--shadow-modal);
-  animation: rise 240ms var(--ease-pop);
+  animation: rise var(--dur-medium) var(--ease-pop);
 }
 
 /* ── Hero ────────────────────────────────────────────────────────────── */
@@ -44,7 +44,7 @@
   user-select: none;
   -webkit-user-drag: none;
   pointer-events: none;
-  animation: heroPop 480ms var(--ease-bounce) 80ms both;
+  animation: heroPop var(--dur-long) var(--ease-bounce) var(--dur-instant) both;
 }
 
 .title {
@@ -144,7 +144,7 @@
   appearance: none;
   -webkit-appearance: none;
   box-shadow: 0 1px 0 1px var(--btn-inset) inset;
-  transition: filter 120ms ease, transform 80ms ease;
+  transition: filter var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .gotItBtn:hover {

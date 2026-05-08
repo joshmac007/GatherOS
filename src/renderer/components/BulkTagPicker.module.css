@@ -14,7 +14,7 @@
     0 4px 14px rgba(0, 0, 0, 0.10),
     0 16px 36px rgba(0, 0, 0, 0.16);
   transform: translate(-50%, calc(-100% - 8px));
-  animation: popIn 140ms var(--ease-pop);
+  animation: popIn var(--dur-quick) var(--ease-pop);
 }
 
 @keyframes popIn {
@@ -34,7 +34,7 @@
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
-  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
 }
 
 .input::placeholder { color: var(--text-tertiary); }

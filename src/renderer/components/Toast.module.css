@@ -13,7 +13,7 @@
   -webkit-backdrop-filter: blur(40px) saturate(1.9);
   box-shadow: var(--shadow-glass);
   animation: slideIn 0.22s var(--ease-pop);
-  transition: background 120ms ease, transform 80ms ease;
+  transition: background var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .toast:hover {
@@ -38,7 +38,7 @@
   background: var(--hover-bg-soft);
   display: block;
   box-shadow: 0 0 0 0.5px var(--border);
-  animation: thumbSwap 240ms var(--ease-pop);
+  animation: thumbSwap var(--dur-medium) var(--ease-pop);
 }
 
 .badge {
@@ -61,7 +61,7 @@
   box-shadow:
     0 0 0 1.5px var(--surface-1),
     0 1px 2px rgba(0, 0, 0, 0.2);
-  animation: badgePop 200ms var(--ease-bounce);
+  animation: badgePop var(--dur-medium) var(--ease-bounce);
 }
 
 @keyframes thumbSwap {

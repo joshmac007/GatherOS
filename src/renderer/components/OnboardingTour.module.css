@@ -21,10 +21,10 @@
     0 0 0 8px rgba(10, 132, 255, 0.18),
     0 12px 32px rgba(10, 132, 255, 0.18);
   animation: spotlightPulse 1.6s ease-in-out infinite alternate;
-  transition: top 220ms var(--ease-out),
-              left 220ms var(--ease-out),
-              width 220ms var(--ease-out),
-              height 220ms var(--ease-out);
+  transition: top var(--dur-medium) var(--ease-out),
+              left var(--dur-medium) var(--ease-out),
+              width var(--dur-medium) var(--ease-out),
+              height var(--dur-medium) var(--ease-out);
 }
 
 @keyframes spotlightPulse {
@@ -45,7 +45,7 @@
   border-radius: 12px;
   box-shadow: var(--shadow-modal);
   pointer-events: auto;
-  animation: tipIn 220ms var(--ease-out);
+  animation: tipIn var(--dur-medium) var(--ease-out);
   font-family: var(--font-ui);
   color: var(--text-primary);
 }
@@ -131,7 +131,7 @@
   font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: filter 120ms ease, transform 80ms ease;
+  transition: filter var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .nextBtn:hover {

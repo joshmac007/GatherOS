@@ -103,7 +103,7 @@
   color: var(--text-primary);
   cursor: pointer;
   z-index: 5;
-  transition: filter 100ms ease, transform 80ms ease;
+  transition: filter var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .backBtn:hover {
@@ -168,10 +168,10 @@
   opacity: 0;
   overflow: hidden;
   transition:
-    width 140ms ease,
-    margin-left 140ms ease,
-    opacity 120ms ease,
-    background 100ms ease;
+    width var(--dur-quick) ease,
+    margin-left var(--dur-quick) ease,
+    opacity var(--dur-instant) ease,
+    background var(--dur-instant) ease;
 }
 
 .titleBar:hover .titleEditBtn,
@@ -265,7 +265,7 @@
   color: var(--text-secondary);
   border-radius: 8px;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
 .toolBtn:hover {
@@ -309,7 +309,7 @@
   border-radius: 14px;
   box-shadow: var(--shadow-card);
   z-index: 7;
-  animation: shapeToolFlyoutIn 140ms var(--ease-out);
+  animation: shapeToolFlyoutIn var(--dur-quick) var(--ease-out);
 }
 
 @keyframes shapeToolFlyoutIn {
@@ -332,7 +332,7 @@
   font: inherit;
   font-size: var(--text-md);
   text-align: left;
-  transition: background 100ms ease;
+  transition: background var(--dur-instant) ease;
 }
 
 .shapeToolFlyoutBtn:hover {
@@ -459,7 +459,7 @@
   background: var(--hover-bg-soft);
   border: 0.5px solid var(--border-hairline);
   border-radius: 7px;
-  transition: background 100ms ease, border-color 100ms ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
 
 .drawerSearch:focus-within {
@@ -542,7 +542,7 @@
   cursor: pointer;
   padding: 0 6px;
   border-radius: 6px;
-  transition: background 100ms ease;
+  transition: background var(--dur-instant) ease;
 }
 
 .drawerFolder:hover {
@@ -584,7 +584,7 @@
   box-shadow: var(--shadow-card);
   max-height: 280px;
   overflow-y: auto;
-  animation: drawerMenuIn 120ms var(--ease-out);
+  animation: drawerMenuIn var(--dur-instant) var(--ease-out);
 }
 
 @keyframes drawerMenuIn {
@@ -698,8 +698,8 @@
   overflow: hidden;
   cursor: grab;
   flex-shrink: 0;
-  transition: transform 120ms var(--ease-out),
-              box-shadow 120ms ease;
+  transition: transform var(--dur-instant) var(--ease-out),
+              box-shadow var(--dur-instant) ease;
 }
 
 .drawerThumb:hover {
@@ -734,7 +734,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity var(--dur-instant) ease;
   pointer-events: none;
 }
 
@@ -988,7 +988,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   pointer-events: none;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition: border-color var(--dur-instant) ease, background-color var(--dur-instant) ease;
 }
 
 /* Drop-target hint: applied while a drag is hovering over this frame.
@@ -1127,7 +1127,7 @@
   transform: translate(-50%, -50%);
   cursor: default;
   z-index: 2;
-  transition: opacity 80ms ease, transform 80ms ease;
+  transition: opacity var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .arrowMidpointInsert:hover {
@@ -1313,12 +1313,12 @@
   pointer-events: none;
   z-index: 10;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-  transition: opacity 100ms ease 0ms;
+  transition: opacity var(--dur-instant) ease 0ms;
 }
 
 .tt_btn[data-tooltip]:hover::before {
   opacity: 1;
-  transition: opacity 100ms ease 350ms;
+  transition: opacity var(--dur-instant) ease var(--dur-pronounced);
 }
 
 .tt_select {

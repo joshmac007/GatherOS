@@ -13,11 +13,11 @@
   -webkit-app-region: drag;
   user-select: none;
   overflow: hidden;
-  animation: overlayIn 240ms ease-out both;
+  animation: overlayIn var(--dur-medium) ease-out both;
 }
 
 .overlay.exiting {
-  animation: overlayOut 720ms var(--ease-out) forwards;
+  animation: overlayOut var(--dur-long) var(--ease-out) forwards;
   pointer-events: none;
 }
 
@@ -59,7 +59,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  animation: sphereIn 800ms var(--ease-out) both;
+  animation: sphereIn var(--dur-long) var(--ease-out) both;
 }
 
 @keyframes sphereIn {
@@ -107,7 +107,7 @@
    scale up 1.5x, fade out, blur slightly. Reads as the sphere
    rushing toward / past the camera. */
 .overlay.exiting .sphere {
-  animation: sphereOut 720ms var(--ease-out) forwards;
+  animation: sphereOut var(--dur-long) var(--ease-out) forwards;
 }
 
 @keyframes sphereOut {
@@ -130,7 +130,7 @@
   align-items: flex-start;
   gap: 10px;
   -webkit-app-region: no-drag;
-  animation: counterIn 600ms var(--ease-out) both;
+  animation: counterIn var(--dur-long) var(--ease-out) both;
 }
 
 @keyframes counterIn {
@@ -167,7 +167,7 @@
   height: 100%;
   background: linear-gradient(90deg, var(--accent), #6c63ff);
   border-radius: 2px;
-  transition: width 80ms linear;
+  transition: width var(--dur-instant) linear;
 }
 
 .label {
@@ -178,7 +178,7 @@
 }
 
 .overlay.exiting .counter {
-  animation: counterOut 320ms ease-out forwards;
+  animation: counterOut var(--dur-pronounced) ease-out forwards;
 }
 
 @keyframes counterOut {
