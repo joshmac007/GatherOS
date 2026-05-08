@@ -62,7 +62,7 @@ function hostnameOf(url) {
 }
 
 export default function Grid({
-  saves, selected, onSelect, onSetSelection, onOpen, onContextMenu, onDragStart, onHover,
+  saves, selected, onSelect, onSetSelection, onOpen, onContextMenu, onDragStart, onHover, onForceClick,
   columns, loading, view, search, semanticSearchActive, colorFilter,
   freshIds, layout = 'masonry', morphId = null,
 }) {
@@ -297,6 +297,7 @@ export default function Grid({
               onContextMenu={onContextMenu}
               onDragStart={onDragStart}
               onHover={onHover}
+              onForceClick={onForceClick}
               fresh={freshIds?.has(s.id)}
               staggerMs={staggerMs}
               morphSource={morphId === s.id}

@@ -1,4 +1,4 @@
-const { ipcMain, shell, dialog, BrowserWindow, nativeImage, clipboard, app } = require('electron');
+const { ipcMain, shell, dialog, BrowserWindow, nativeImage, clipboard, app, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -400,6 +400,32 @@ function registerIpcHandlers() {
 
   ipcMain.handle('image:open-in-preview', (_e, filePath) => {
     shell.openPath(filePath);
+    return { ok: true };
+  });
+
+  // Native macOS Share sheet for a single save. Builds an Electron
+  // native menu containing the system share submenu (role:'shareMenu'
+  // with sharingItem) and pops it at the cursor. The user gets the
+  // standard AirDrop / Messages / Mail / Notes / Photos / Reminders
+  // / Add to Reading List etc. options the OS provides for whatever
+  // types we hand it.
+  ipcMain.handle('share:save', (event, payload = {}) => {
+    if (process.platform !== 'darwin') return { ok: false, reason: 'macos_only' };
+    const filePath = typeof payload.filePath === 'string' ? payload.filePath : null;
+    const sourceUrl = typeof payload.sourceUrl === 'string' ? payload.sourceUrl : null;
+    if (!filePath && !sourceUrl) return { ok: false, reason: 'nothing_to_share' };
+    const sharingItem = {};
+    if (filePath) sharingItem.filePaths = [filePath];
+    if (sourceUrl) sharingItem.urls = [sourceUrl];
+    const menu = Menu.buildFromTemplate([
+      { role: 'shareMenu', label: 'Share', sharingItem },
+    ]);
+    const win = BrowserWindow.fromWebContents(event.sender) || undefined;
+    menu.popup({
+      window: win,
+      x: typeof payload.x === 'number' ? Math.round(payload.x) : undefined,
+      y: typeof payload.y === 'number' ? Math.round(payload.y) : undefined,
+    });
     return { ok: true };
   });
 

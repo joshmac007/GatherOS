@@ -13,7 +13,10 @@
      surface and the two halves look like separate panels. */
   z-index: 2;
   -webkit-app-region: drag;
-  background: var(--surface-1);
+  /* Transparent so the BrowserWindow vibrancy: 'sidebar' material
+     shows through. The border + shadow still anchor the floating
+     panel; vibrancy is what fills the inside. */
+  background: transparent;
   border: 0.5px solid var(--border-subtle);
   box-shadow: var(--shadow-card);
 }

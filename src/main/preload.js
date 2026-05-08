@@ -106,6 +106,9 @@ contextBridge.exposeInMainWorld('moodmark', {
   shell: {
     openUrl: (url) => ipcRenderer.invoke('shell:open-url', url),
   },
+  share: {
+    save: (payload) => ipcRenderer.invoke('share:save', payload),
+  },
   library: {
     exportZip: () => ipcRenderer.invoke('library:export-zip'),
     installStarter: () => ipcRenderer.invoke('library:install-starter'),

@@ -837,7 +837,7 @@ export default function Sidebar({
                   onClick={onOpenRediscover}
                   title="Random save full-screen — ←→↑ to swipe / bucket / skip"
                 >
-                  <span className={styles.icon} style={{ color: 'var(--icon-purple)' }}>
+                  <span className={styles.icon}>
                     <ShuffleIcon />
                   </span>
                   <span className={styles.label}>Rediscover</span>

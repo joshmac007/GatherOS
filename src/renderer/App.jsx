@@ -35,6 +35,7 @@ import {
   Clipboard,
   ExternalLink,
   Hash,
+  Share,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -61,6 +62,7 @@ const SortFabIcon = () => <ArrowRightFromLine {...ICON} />;
 const ClipboardIcon = () => <Clipboard {...ICON} />;
 const ExternalLinkIcon = () => <ExternalLink {...ICON} />;
 const HashIcon = () => <Hash {...ICON} />;
+const ShareIcon = () => <Share {...ICON} />;
 
 export default function App() {
   const {
@@ -1021,6 +1023,21 @@ export default function App() {
           },
         });
       }
+      // Native Share sheet — Messages / Mail / AirDrop / Notes / etc.
+      // macOS only; the IPC bails on other platforms so the menu
+      // entry just no-ops there.
+      if (anchor?.file_path && window.moodmark.share?.save) {
+        items.push({
+          label: 'Share…',
+          icon: <ShareIcon />,
+          onClick: () => {
+            window.moodmark.share.save({
+              filePath: anchor.file_path,
+              sourceUrl: anchor.source_url || null,
+            });
+          },
+        });
+      }
     }
 
     // Delete: soft-delete with the same undo toast as the bulk path.
@@ -1940,6 +1957,81 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undoStack, showActionToast]);
 
+  // Trackpad gestures on the masonry surface:
+  //   - Pinch-to-zoom: Chromium fires `wheel` with ctrlKey set on
+  //     trackpad pinch. We accumulate deltaY and bump gridColumns
+  //     by ±1 once we cross a threshold so the column count steps
+  //     in discrete units rather than ramping smoothly with the
+  //     gesture (the masonry can't fluidly inter-column).
+  //   - Two-finger horizontal swipe: navigate between smart views
+  //     and top-level buckets, in their sidebar order. Cooldown
+  //     prevents rapid-fire when the trackpad coasts on inertia.
+  useEffect(() => {
+    if (focused) return undefined;
+    if (view.type === 'board') return undefined; // board has its own pan/zoom
+    const layout = document.querySelector('.layout');
+    if (!layout) return undefined;
+
+    const PINCH_THRESHOLD = 30;
+    const SWIPE_DELTA_X = 80;
+    const SWIPE_DELTA_Y_MAX = 20;
+    const SWIPE_COOLDOWN_MS = 700;
+    let pinchAccum = 0;
+    let lastSwipe = 0;
+
+    const navTargets = [
+      { type: 'all' },
+      { type: 'unsorted' },
+      { type: 'onThisDay' },
+      { type: 'trash' },
+      ...collections
+        .filter((c) => !c.parent_id)
+        .map((c) => ({ type: 'collection', id: c.id })),
+    ];
+
+    function indexOfCurrent() {
+      return navTargets.findIndex((t) => {
+        if (t.type !== view.type) return false;
+        if (t.type === 'collection') return t.id === view.id;
+        return true;
+      });
+    }
+
+    function navigate(direction) {
+      const i = indexOfCurrent();
+      if (i < 0) return;
+      const next = (i + direction + navTargets.length) % navTargets.length;
+      setView(navTargets[next]);
+    }
+
+    function onWheel(e) {
+      // Pinch — Chromium synthesises ctrlKey on trackpad pinch.
+      if (e.ctrlKey) {
+        e.preventDefault();
+        pinchAccum += e.deltaY;
+        if (Math.abs(pinchAccum) >= PINCH_THRESHOLD) {
+          // Pinch out (deltaY < 0) = zoom in = fewer columns.
+          // Pinch in (deltaY > 0) = zoom out = more columns.
+          setGridColumns((c) => Math.max(1, Math.min(8, c + (pinchAccum > 0 ? 1 : -1))));
+          pinchAccum = 0;
+        }
+        return;
+      }
+      // Horizontal swipe — only fire when the gesture is clearly
+      // sideways and we're not in the middle of an inertial scroll
+      // following a vertical one.
+      if (Math.abs(e.deltaX) > SWIPE_DELTA_X && Math.abs(e.deltaY) < SWIPE_DELTA_Y_MAX) {
+        const now = Date.now();
+        if (now - lastSwipe < SWIPE_COOLDOWN_MS) return;
+        lastSwipe = now;
+        navigate(e.deltaX > 0 ? 1 : -1);
+      }
+    }
+
+    layout.addEventListener('wheel', onWheel, { passive: false });
+    return () => layout.removeEventListener('wheel', onWheel);
+  }, [collections, view, focused, setView]);
+
   const onDragOver = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2164,6 +2256,7 @@ export default function App() {
                   onContextMenu={handleCardContextMenu}
                   onDragStart={handleCardDragStart}
                   onHover={handleCardHover}
+                  onForceClick={(id) => setPeekedSaveId(id)}
                   columns={gridColumns}
                   loading={loading}
                   view={view}

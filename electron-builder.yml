@@ -91,6 +91,23 @@ mac:
           - http
           - https
         LSHandlerRank: None
+    # macOS Services menu — registers a "Save to GatherOS" item that
+    # appears under Services in any app's menu / right-click when the
+    # selection is an image or URL. The runtime handler reads the
+    # incoming pasteboard via NSApplication's openFile / openURL
+    # paths (ports of the same drag-drop receivers above), so files
+    # selected and sent through Services drop into the Save flow
+    # exactly like a Finder drag-on-Dock.
+    NSServices:
+      - NSMenuItem:
+          default: Save to GatherOS
+        NSMessage: saveToGatherOS
+        NSPortName: GatherOS
+        NSSendTypes:
+          - public.image
+          - public.url
+          - public.file-url
+        NSReturnTypes: []
 publish:
   provider: github
   owner: BrettfromDJ

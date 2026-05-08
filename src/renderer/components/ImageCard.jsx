@@ -39,6 +39,7 @@ export default function ImageCard({
   onContextMenu,
   onDragStart,
   onHover,
+  onForceClick,
   fresh,
   staggerMs = 0,
   morphSource = false,
@@ -86,6 +87,22 @@ export default function ImageCard({
   };
 
   useEffect(() => () => { cancelOpen(); cancelClose(); }, []);
+
+  // Force Touch on macOS — the trackpad fires webkitmouseforceclick
+  // when the user presses harder past the second click stage. React
+  // doesn't have a synthetic for this WebKit-only event, so we
+  // attach via ref. Treats it as a request to peek the card,
+  // matching Mac convention (Force Click on Finder = Quick Look).
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || !onForceClick) return undefined;
+    const handler = (e) => {
+      e.preventDefault();
+      onForceClick(record.id);
+    };
+    el.addEventListener('webkitmouseforceclick', handler);
+    return () => el.removeEventListener('webkitmouseforceclick', handler);
+  }, [onForceClick, record.id]);
 
   // Render windowing: hold the inner image + chrome out of the DOM
   // until the card scrolls within ~600px of the viewport. The outer

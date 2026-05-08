@@ -388,6 +388,14 @@ function createMainWindow() {
     // (10px padding-top + 14px half-icon = center at y ≈ 24).
     trafficLightPosition: { x: 22, y: 18 },
     backgroundColor: isDark ? '#1C1C1E' : '#FAFAF9',
+    // macOS sidebar vibrancy material — same one Finder / Mail use
+    // for their floating sidebars. Renderer keeps the .sidebar
+    // background transparent so this material shows through; the
+    // main content pane explicitly paints var(--content-bg) over it.
+    ...(process.platform === 'darwin' ? {
+      vibrancy: 'sidebar',
+      visualEffectState: 'active',
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

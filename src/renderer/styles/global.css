@@ -59,7 +59,11 @@ a:focus-visible,
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--content-bg);
+  /* Transparent so the BrowserWindow vibrancy material shows in
+     the negative space around the floating sidebar. The main
+     content column (.main-col) paints its own opaque background
+     so vibrancy only ends up visible behind the sidebar. */
+  background: transparent;
 }
 
 .layout {
