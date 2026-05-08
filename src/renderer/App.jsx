@@ -470,6 +470,15 @@ export default function App() {
     if (booting) return;
     if (welcomeOpen) return;
     if (loading) return;
+    // Don't run the tour over a board canvas — the sidebar auto-
+    // collapses for board views, so the spotlight would anchor onto
+    // elements the user can't see. Mark the flag as written so the
+    // tour doesn't re-trigger on the next launch either.
+    if (view?.type === 'board') {
+      onboardingTriggeredRef.current = true;
+      try { localStorage.setItem('moodmark.onboardingTooltipsShown', '1'); } catch {}
+      return;
+    }
     onboardingTriggeredRef.current = true;
     // Write the flag immediately so the tour never re-appears even if
     // the app quits before OnboardingTour mounts (e.g. within the
@@ -480,7 +489,7 @@ export default function App() {
     // (sidebar layout settles after the first frame).
     const t = setTimeout(() => setOnboardingActive(true), 280);
     return () => clearTimeout(t);
-  }, [booting, welcomeOpen, loading]);
+  }, [booting, welcomeOpen, loading, view?.type]);
 
   // Show "What's new" once after an auto-update lands the user on a
   // newer build. Brand-new installs (no lastSeenVersion stored) get
