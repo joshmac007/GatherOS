@@ -35,7 +35,10 @@
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
-  padding: 0;
+  /* Internal horizontal padding extends the hit area beyond the
+     text and gives the active underline room to sit visibly inset
+     from the chip's outer edge. */
+  padding: 0 8px;
   background: transparent;
   border: none;
   color: var(--text-tertiary);
@@ -66,8 +69,10 @@
 .chipActive::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
+  /* Inset to match the chip's horizontal padding so the underline
+     aligns with the text, not the chip's outer hit area. */
+  left: 8px;
+  right: 8px;
   bottom: -15px;
   height: 3px;
   background: var(--text-primary);
