@@ -471,6 +471,11 @@ export default function App() {
     if (welcomeOpen) return;
     if (loading) return;
     onboardingTriggeredRef.current = true;
+    // Write the flag immediately so the tour never re-appears even if
+    // the app quits before OnboardingTour mounts (e.g. within the
+    // 280ms settle delay below). Settings → Replay clears the flag
+    // before calling setOnboardingActive directly, so replays still work.
+    try { localStorage.setItem('moodmark.onboardingTooltipsShown', '1'); } catch {}
     // Slight delay so the spotlight lands on already-rendered targets
     // (sidebar layout settles after the first frame).
     const t = setTimeout(() => setOnboardingActive(true), 280);
