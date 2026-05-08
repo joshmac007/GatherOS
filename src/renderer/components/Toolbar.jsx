@@ -417,6 +417,7 @@ export default function Toolbar({
   onCreateLibrary,
   onRenameLibrary,
   onDeleteLibrary,
+  onManageLibraries,
   onUpload,
 }) {
   // Slider is inverted so dragging right = bigger cards = fewer columns.
@@ -440,8 +441,7 @@ export default function Toolbar({
               activeId={activeLibraryId}
               onSwitch={onSwitchLibrary}
               onCreate={onCreateLibrary}
-              onRename={onRenameLibrary}
-              onDelete={onDeleteLibrary}
+              onOpenManage={onManageLibraries}
             />
           </div>
         )}

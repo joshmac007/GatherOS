@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { History, User, Sparkles, Hash, Database, Info, Trash2 } from 'lucide-react';
+import { History, User, Sparkles, Hash, Database, Info, Trash2, Library, Pencil, Plus } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
 import PrivacyModal from './PrivacyModal.jsx';
@@ -13,11 +13,12 @@ const SUPPORT_EMAIL = 'hello@designjoy.co';
 // in the content switch below — beats the old drawer accordion as
 // the surface area grows.
 const NAV_ITEMS = [
-  { id: 'account', label: 'Account', Icon: User },
-  { id: 'ai',      label: 'AI',      Icon: Sparkles },
-  { id: 'tags',    label: 'Tags',    Icon: Hash },
-  { id: 'data',    label: 'Data',    Icon: Database },
-  { id: 'about',   label: 'About',   Icon: Info },
+  { id: 'account',   label: 'Account',   Icon: User },
+  { id: 'libraries', label: 'Libraries', Icon: Library },
+  { id: 'ai',        label: 'AI',        Icon: Sparkles },
+  { id: 'tags',      label: 'Tags',      Icon: Hash },
+  { id: 'data',      label: 'Data',      Icon: Database },
+  { id: 'about',     label: 'About',     Icon: Info },
 ];
 
 function formatPlanLabel(account) {
@@ -90,6 +91,161 @@ function UsageMeter({ usage }) {
   );
 }
 
+// Libraries settings page — replaces the inline rename/delete
+// affordances that used to live next to the LibrarySwitcher trigger.
+// Renders one row per library: name (rename inline), Switch button
+// when not active, Delete button (gated when only one exists).
+function LibrariesPage({
+  libraries = [],
+  activeId,
+  onSwitch,
+  onCreate,
+  onRename,
+  onDelete,
+}) {
+  const [renamingId, setRenamingId] = React.useState(null);
+  const [renameDraft, setRenameDraft] = React.useState('');
+  const [creatingDraft, setCreatingDraft] = React.useState('');
+  const [creating, setCreating] = React.useState(false);
+
+  function startRename(lib) {
+    setRenamingId(lib.id);
+    setRenameDraft(lib.name);
+  }
+
+  async function commitRename() {
+    const next = renameDraft.trim();
+    const id = renamingId;
+    setRenamingId(null);
+    setRenameDraft('');
+    if (!id || !next) return;
+    const orig = libraries.find((l) => l.id === id);
+    if (!orig || orig.name === next) return;
+    await onRename?.(id, next);
+  }
+
+  async function commitCreate() {
+    const next = creatingDraft.trim();
+    setCreating(false);
+    setCreatingDraft('');
+    if (!next) return;
+    await onCreate?.(next);
+  }
+
+  return (
+    <>
+      <div className={styles.libraryList}>
+        {libraries.map((lib) => {
+          const isActive = lib.id === activeId;
+          const isRenaming = renamingId === lib.id;
+          return (
+            <div
+              key={lib.id}
+              className={`${styles.libraryRow} ${isActive ? styles.libraryRowActive : ''}`}
+            >
+              <div className={styles.libraryRowMain}>
+                {isRenaming ? (
+                  <input
+                    autoFocus
+                    className={styles.libraryRenameInput}
+                    value={renameDraft}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitRename();
+                      } else if (e.key === 'Escape') {
+                        setRenamingId(null);
+                        setRenameDraft('');
+                      }
+                    }}
+                    onBlur={commitRename}
+                  />
+                ) : (
+                  <span className={styles.libraryRowName}>
+                    {lib.name}
+                    {isActive && (
+                      <span className={styles.libraryRowActiveTag}>Active</span>
+                    )}
+                  </span>
+                )}
+                <span className={styles.libraryRowMeta}>
+                  {lib.save_count != null ? `${lib.save_count} saves` : ''}
+                </span>
+              </div>
+              <div className={styles.libraryRowActions}>
+                {!isRenaming && !isActive && (
+                  <button
+                    type="button"
+                    className={styles.btn}
+                    onClick={() => onSwitch?.(lib.id)}
+                  >
+                    Switch
+                  </button>
+                )}
+                {!isRenaming && (
+                  <button
+                    type="button"
+                    className={styles.btn}
+                    onClick={() => startRename(lib)}
+                    aria-label={`Rename ${lib.name}`}
+                  >
+                    <Pencil size={13} strokeWidth={1.7} aria-hidden="true" />
+                    Rename
+                  </button>
+                )}
+                {!isRenaming && libraries.length > 1 && (
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnDanger}`}
+                    onClick={() => onDelete?.(lib.id)}
+                    aria-label={`Delete ${lib.name}`}
+                  >
+                    <Trash2 size={13} strokeWidth={1.7} aria-hidden="true" />
+                    Delete
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {creating ? (
+          <div className={styles.libraryRow}>
+            <div className={styles.libraryRowMain}>
+              <input
+                autoFocus
+                className={styles.libraryRenameInput}
+                placeholder="New library name"
+                value={creatingDraft}
+                onChange={(e) => setCreatingDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitCreate();
+                  } else if (e.key === 'Escape') {
+                    setCreating(false);
+                    setCreatingDraft('');
+                  }
+                }}
+                onBlur={commitCreate}
+              />
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={styles.libraryAddBtn}
+            onClick={() => setCreating(true)}
+          >
+            <Plus size={14} strokeWidth={1.7} aria-hidden="true" />
+            New library
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
 function DrawerChevron() {
   return (
     <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
@@ -135,7 +291,21 @@ function EraseIcon() {
   );
 }
 
-export default function SettingsModal({ open, drawerHint, onClose, onConfiguredChange, onPrefsChange, onLibraryWiped, onReplayOnboarding }) {
+export default function SettingsModal({
+  open,
+  drawerHint,
+  onClose,
+  onConfiguredChange,
+  onPrefsChange,
+  onLibraryWiped,
+  onReplayOnboarding,
+  libraries = [],
+  activeLibraryId = null,
+  onSwitchLibrary,
+  onCreateLibrary,
+  onRenameLibrary,
+  onDeleteLibrary,
+}) {
   // Whether the licensing session is present — proxy-mode AI is
   // gated on it, not on a per-user OpenAI key. AppGate already shows
   // the signin screen when this is false, so for the most part this
@@ -531,6 +701,24 @@ export default function SettingsModal({ open, drawerHint, onClose, onConfiguredC
                   {portalState.message}
                 </div>
               )}
+            </div>
+          )}
+
+          {activePage === 'libraries' && (
+            <div className={styles.page}>
+              <p className={styles.sectionHint}>
+                Each library is its own collection of saves, folders, and
+                spaces. Switch between them from the toolbar; rename or
+                delete any of them here.
+              </p>
+              <LibrariesPage
+                libraries={libraries}
+                activeId={activeLibraryId}
+                onSwitch={onSwitchLibrary}
+                onCreate={onCreateLibrary}
+                onRename={onRenameLibrary}
+                onDelete={onDeleteLibrary}
+              />
             </div>
           )}
 

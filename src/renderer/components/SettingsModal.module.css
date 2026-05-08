@@ -970,3 +970,120 @@
   color: var(--text-tertiary);
   margin-top: 6px;
 }
+
+/* Libraries settings page — replaces the inline rename / delete
+   affordances that used to hang off the LibrarySwitcher trigger.
+   One row per library; meta on the left, actions on the right.
+   Same control-surface family as the rest of Settings (border +
+   subtle shadow, --radius-md) for visual consistency. */
+.libraryList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.libraryRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-control);
+}
+
+.libraryRowActive {
+  border-color: var(--border-strong);
+}
+
+.libraryRowMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.libraryRowName {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.libraryRowActiveTag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.libraryRowMeta {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.libraryRowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.libraryRowActions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.libraryRenameInput {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--input-bg-focus);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  font-weight: 500;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
+}
+
+.libraryAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+  font-weight: 500;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition:
+    background var(--dur-instant) ease,
+    color var(--dur-instant) ease,
+    border-color var(--dur-instant) ease;
+}
+
+.libraryAddBtn:hover {
+  background: var(--hover-bg-soft);
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}

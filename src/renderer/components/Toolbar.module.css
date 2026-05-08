@@ -737,7 +737,6 @@
    so a long library name truncates instead of pushing the mode
    pill off-center. */
 .librarySwitcherSlot {
-  max-width: 180px;
   -webkit-app-region: no-drag;
 }
 
@@ -785,12 +784,6 @@
   white-space: nowrap;
 }
 
-/* Library-switcher slot widens slightly in the new toolbar and no
-   longer needs the iconCluster divider — its left position is the
-   logo's neighbor, not part of a control cluster. */
-.left .librarySwitcherSlot {
-  max-width: 220px;
-}
 
 /* Brand mark — sits at the leftmost edge of the toolbar, ahead of
    the library switcher. Placeholder triangle in --text-primary;

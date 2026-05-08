@@ -2306,6 +2306,10 @@ export default function App() {
                 onCreateLibrary={handleCreateLibrary}
                 onRenameLibrary={handleRenameLibrary}
                 onDeleteLibrary={handleDeleteLibrary}
+                onManageLibraries={() => {
+                  setSettingsDrawerHint({ drawer: 'libraries', key: Date.now() });
+                  setSettingsOpen(true);
+                }}
                 onUpload={handleUploadClick}
               />
               {appMode === 'folders' && view.type === 'all' ? (
@@ -2754,6 +2758,12 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onConfiguredChange={setAiConfigured}
         onPrefsChange={setPrefs}
+        libraries={libraries}
+        activeLibraryId={activeLibraryId}
+        onSwitchLibrary={handleSwitchLibrary}
+        onCreateLibrary={handleCreateLibrary}
+        onRenameLibrary={handleRenameLibrary}
+        onDeleteLibrary={handleDeleteLibrary}
         onReplayOnboarding={() => {
           try { localStorage.removeItem('moodmark.onboardingTooltipsShown'); } catch {}
           onboardingTriggeredRef.current = false;
