@@ -20,7 +20,7 @@
   border: 0.5px solid var(--border);
   border-radius: 16px;
   box-shadow: var(--shadow-modal);
-  animation: rise 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: rise 240ms var(--ease-pop);
 }
 
 .hero {
@@ -36,7 +36,7 @@
   align-items: center;
   justify-content: center;
   color: var(--text-primary);
-  animation: heroPop 420ms cubic-bezier(0.2, 1.4, 0.3, 1) 80ms both;
+  animation: heroPop 420ms var(--ease-bounce) 80ms both;
 }
 
 .heroIcon svg {

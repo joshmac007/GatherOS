@@ -47,7 +47,7 @@
   gap: 14px;
   max-width: 88vw;
   max-height: 78vh;
-  animation: cardIn 200ms cubic-bezier(0.18, 0.7, 0.32, 1);
+  animation: cardIn 200ms var(--ease-out);
 }
 
 @keyframes cardIn {
@@ -174,7 +174,7 @@
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.35),
     0 24px 60px rgba(0, 0, 0, 0.45);
-  animation: pickerIn 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: pickerIn 140ms var(--ease-pop);
 }
 
 @keyframes pickerIn {
@@ -258,7 +258,7 @@
   border: 0.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   text-align: center;
-  animation: cardIn 200ms cubic-bezier(0.18, 0.7, 0.32, 1);
+  animation: cardIn 200ms var(--ease-out);
 }
 
 .emptyTitle {

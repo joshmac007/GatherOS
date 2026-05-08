@@ -309,7 +309,7 @@
   border-radius: 14px;
   box-shadow: var(--shadow-card);
   z-index: 7;
-  animation: shapeToolFlyoutIn 140ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: shapeToolFlyoutIn 140ms var(--ease-out);
 }
 
 @keyframes shapeToolFlyoutIn {
@@ -584,7 +584,7 @@
   box-shadow: var(--shadow-card);
   max-height: 280px;
   overflow-y: auto;
-  animation: drawerMenuIn 120ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: drawerMenuIn 120ms var(--ease-out);
 }
 
 @keyframes drawerMenuIn {
@@ -698,7 +698,7 @@
   overflow: hidden;
   cursor: grab;
   flex-shrink: 0;
-  transition: transform 120ms cubic-bezier(0.32, 0.72, 0, 1),
+  transition: transform 120ms var(--ease-out),
               box-shadow 120ms ease;
 }
 

@@ -7,7 +7,7 @@
      as a transition rather than a hard cut. Skipped when the View
      Transitions API is driving a morph (.focusedMorphing) so its
      initial opacity:0 frame doesn't get baked into the new snapshot. */
-  animation: focusedIn 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: focusedIn 200ms var(--ease-out);
 }
 
 .focused.focusedMorphing {

@@ -17,7 +17,7 @@
 }
 
 .overlay.exiting {
-  animation: overlayOut 720ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: overlayOut 720ms var(--ease-out) forwards;
   pointer-events: none;
 }
 
@@ -59,7 +59,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  animation: sphereIn 800ms cubic-bezier(0.18, 0.7, 0.32, 1) both;
+  animation: sphereIn 800ms var(--ease-out) both;
 }
 
 @keyframes sphereIn {
@@ -107,7 +107,7 @@
    scale up 1.5x, fade out, blur slightly. Reads as the sphere
    rushing toward / past the camera. */
 .overlay.exiting .sphere {
-  animation: sphereOut 720ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: sphereOut 720ms var(--ease-out) forwards;
 }
 
 @keyframes sphereOut {
@@ -130,7 +130,7 @@
   align-items: flex-start;
   gap: 10px;
   -webkit-app-region: no-drag;
-  animation: counterIn 600ms cubic-bezier(0.18, 0.7, 0.32, 1) both;
+  animation: counterIn 600ms var(--ease-out) both;
 }
 
 @keyframes counterIn {

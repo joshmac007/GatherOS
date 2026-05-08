@@ -134,6 +134,20 @@
   --text-lg: 18px;
   --text-xl: 22px;
   --text-display: 32px;
+
+  /* ── Easing ──────────────────────────────────────────────────────────
+     Three curves. Don't introduce a fourth without removing one.
+
+       --ease-out     standard ease — UI chrome, hover, focus, panel
+                      slides, masonry transitions. macOS-flavoured.
+       --ease-pop     gentler enter — popovers, tooltips, dropdowns,
+                      menu surfaces landing.
+       --ease-bounce  subtle overshoot — celebration only. Restrict to
+                      hero-icon arrivals + drag-springback.
+  */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.2, 1.4, 0.3, 1);
 }
 
 /* Dark theme — overrides the surface + ink + glass values from

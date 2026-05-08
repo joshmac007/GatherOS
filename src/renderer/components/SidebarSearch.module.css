@@ -50,7 +50,7 @@
   font-size: var(--text-sm);
   letter-spacing: -0.005em;
   box-shadow: 0 0 0 2px var(--hover-bg);
-  animation: expandIn 140ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: expandIn 140ms var(--ease-out);
   -webkit-app-region: no-drag;
 }
 

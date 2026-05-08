@@ -20,7 +20,7 @@
   border: 0.5px solid var(--border);
   border-radius: 16px;
   box-shadow: var(--shadow-modal);
-  animation: rise 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: rise 240ms var(--ease-pop);
 }
 
 /* ── Hero ────────────────────────────────────────────────────────────── */
@@ -44,7 +44,7 @@
   user-select: none;
   -webkit-user-drag: none;
   pointer-events: none;
-  animation: heroPop 480ms cubic-bezier(0.2, 1.2, 0.3, 1) 80ms both;
+  animation: heroPop 480ms var(--ease-bounce) 80ms both;
 }
 
 .title {

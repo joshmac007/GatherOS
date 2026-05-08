@@ -12,7 +12,7 @@
   backdrop-filter: blur(40px) saturate(1.9);
   -webkit-backdrop-filter: blur(40px) saturate(1.9);
   box-shadow: var(--shadow-glass);
-  animation: slideIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: slideIn 0.22s var(--ease-pop);
   transition: background 120ms ease, transform 80ms ease;
 }
 
@@ -38,7 +38,7 @@
   background: var(--hover-bg-soft);
   display: block;
   box-shadow: 0 0 0 0.5px var(--border);
-  animation: thumbSwap 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: thumbSwap 240ms var(--ease-pop);
 }
 
 .badge {
@@ -61,7 +61,7 @@
   box-shadow:
     0 0 0 1.5px var(--surface-1),
     0 1px 2px rgba(0, 0, 0, 0.2);
-  animation: badgePop 200ms cubic-bezier(0.2, 1.4, 0.4, 1);
+  animation: badgePop 200ms var(--ease-bounce);
 }
 
 @keyframes thumbSwap {

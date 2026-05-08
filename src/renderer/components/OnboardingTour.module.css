@@ -21,10 +21,10 @@
     0 0 0 8px rgba(10, 132, 255, 0.18),
     0 12px 32px rgba(10, 132, 255, 0.18);
   animation: spotlightPulse 1.6s ease-in-out infinite alternate;
-  transition: top 220ms cubic-bezier(0.32, 0.72, 0, 1),
-              left 220ms cubic-bezier(0.32, 0.72, 0, 1),
-              width 220ms cubic-bezier(0.32, 0.72, 0, 1),
-              height 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  transition: top 220ms var(--ease-out),
+              left 220ms var(--ease-out),
+              width 220ms var(--ease-out),
+              height 220ms var(--ease-out);
 }
 
 @keyframes spotlightPulse {
@@ -45,7 +45,7 @@
   border-radius: 12px;
   box-shadow: var(--shadow-modal);
   pointer-events: auto;
-  animation: tipIn 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: tipIn 220ms var(--ease-out);
   font-family: var(--font-ui);
   color: var(--text-primary);
 }

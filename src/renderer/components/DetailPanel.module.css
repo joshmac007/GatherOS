@@ -15,7 +15,7 @@
    into. fill-mode: both holds the from-state until the delay expires
    so items don't flash visible-then-hidden on first render. */
 .panel > * {
-  animation: detailItemIn 360ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: detailItemIn 360ms var(--ease-out) both;
 }
 .panel > :nth-child(1)  { animation-delay: 0ms; }
 .panel > :nth-child(2)  { animation-delay: 40ms; }
@@ -97,7 +97,7 @@
      instead of laggy. */
   transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
   transform-style: preserve-3d;
-  transition: transform 360ms cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform 360ms var(--ease-out);
   will-change: transform;
 }
 
