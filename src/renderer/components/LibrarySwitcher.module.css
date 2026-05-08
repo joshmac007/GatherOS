@@ -23,10 +23,7 @@
     color var(--dur-instant) ease;
 }
 
-.trigger:hover {
-  background: var(--hover-bg-soft);
-}
-
+.trigger:hover,
 .triggerOpen,
 .triggerOpen:hover {
   background: var(--hover-bg);

@@ -33,8 +33,14 @@
   --accent-bg-medium: rgba(10, 132, 255, 0.18);
   --accent-ring: rgba(10, 132, 255, 0.25);
 
-  /* Hover/active states */
-  --hover-bg: rgba(0, 0, 0, 0.05);
+  /* Hover/active states. --hover-bg is the canonical hover surface
+     for any interactive control — mode pill segments, icon buttons,
+     library switcher trigger, sidebar items, etc. Pinned to a
+     literal #EAEAEA so it renders identically across components
+     instead of compositing differently against varied backgrounds.
+     -soft and -strong stay rgba for places that genuinely want a
+     softer or stronger overlay (skeletons, selected rows). */
+  --hover-bg: #EAEAEA;
   --hover-bg-soft: rgba(0, 0, 0, 0.04);
   --hover-bg-strong: rgba(0, 0, 0, 0.08);
   --active-bg: rgba(0, 0, 0, 0.08);
@@ -224,7 +230,7 @@
   --accent-bg-medium: rgba(64, 156, 255, 0.28);
   --accent-ring: rgba(64, 156, 255, 0.35);
 
-  --hover-bg: rgba(255, 255, 255, 0.06);
+  --hover-bg: rgba(255, 255, 255, 0.08);
   --hover-bg-soft: rgba(255, 255, 255, 0.05);
   --hover-bg-strong: rgba(255, 255, 255, 0.10);
   --active-bg: rgba(255, 255, 255, 0.10);

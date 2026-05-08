@@ -579,24 +579,28 @@
   padding: 0 28px;
   background: transparent;
   border: none;
+  border-radius: var(--radius-pill);
   font-family: var(--font-ui);
   font-size: var(--text-lg);
   font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--text-primary);
   cursor: pointer;
-  transition: color var(--dur-medium) var(--ease-out);
+  transition:
+    color var(--dur-medium) var(--ease-out),
+    background var(--dur-instant) ease;
 }
 
-.modeSegment:hover {
-  color: var(--text-primary);
-  opacity: 0.85;
+/* Hover only the inactive segments — the active one is filled by
+   the sliding ink thumb behind it, so giving it a hover bg too
+   would double-paint. */
+.modeSegment:not(.modeSegmentActive):hover {
+  background: var(--hover-bg);
 }
 
 .modeSegmentActive,
 .modeSegmentActive:hover {
   color: var(--surface-1);
-  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
