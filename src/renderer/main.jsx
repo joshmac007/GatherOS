@@ -1,6 +1,12 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import AppGate from './AppGate.jsx';
+// Geist variable fonts — bundled locally via @fontsource-variable
+// so the app works fully offline. Loaded before our own styles so
+// the @font-face declarations are registered before anything tries
+// to use --font-ui / --font-mono.
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
 import './styles/variables.css';
 import './styles/global.css';
 

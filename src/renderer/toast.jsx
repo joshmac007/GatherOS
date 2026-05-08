@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
 import Toast from './components/Toast.jsx';
 
 const TOAST_TTL_MS = 2500;

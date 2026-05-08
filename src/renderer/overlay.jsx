@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
 
 function normalizeRect(a, b) {
   return {

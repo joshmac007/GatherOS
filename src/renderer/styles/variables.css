@@ -128,8 +128,12 @@
   --active-row-fg: #000;
 
   --titlebar-height: 44px;
-  --font-ui: 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Geist Variable is bundled via @fontsource-variable in the
+     renderer entry. Falls back through the macOS / Windows system
+     stack so anything that mounts before the font file resolves
+     still gets clean ink. */
+  --font-ui: 'Geist Variable', 'Geist', 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   /* ── Type scale ──────────────────────────────────────────────────────
      Six steps, no half-pixels. Components reach for these tokens; if a
