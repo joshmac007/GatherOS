@@ -389,6 +389,10 @@ aiRoutes.post('/image', async (c) => {
     // Optional MIME type for the source image. Defaults to image/jpeg
     // since the desktop client downsizes via sharp before encoding.
     image_mime?: string;
+    // Allowed aspect ratios — square / wide / tall — locked
+    // server-side so the client can't request a non-supported size
+    // or one that costs noticeably more.
+    size?: string;
   };
   const body: ImageBody = await c.req.json<ImageBody>().catch(() => ({}));
 
@@ -399,6 +403,9 @@ aiRoutes.post('/image', async (c) => {
   if (prompt.length > 4000) {
     return c.json({ ok: false, error: 'prompt_too_long' }, 400);
   }
+
+  const ALLOWED_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536']);
+  const size = ALLOWED_SIZES.has(body.size || '') ? (body.size as string) : '1024x1024';
 
   // Hard cap pre-flight. Image generation is the most expensive
   // surface (~$0.05 per call) so over-cap is enforced strictly.
@@ -428,7 +435,7 @@ aiRoutes.post('/image', async (c) => {
     const form = new FormData();
     form.append('model', 'gpt-image-1');
     form.append('prompt', prompt);
-    form.append('size', '1024x1024');
+    form.append('size', size);
     form.append('quality', 'medium');
     form.append('n', '1');
     form.append('image', blob, `source.${ext}`);
@@ -453,7 +460,7 @@ aiRoutes.post('/image', async (c) => {
         model: 'gpt-image-1',
         prompt,
         n: 1,
-        size: '1024x1024',
+        size,
         quality: 'medium',
       }),
     }).catch((err) => {
