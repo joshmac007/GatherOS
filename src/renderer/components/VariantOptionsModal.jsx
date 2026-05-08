@@ -1,37 +1,52 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { Sparkles, X } from 'lucide-react';
+import { Sparkles, X, Check, ChevronDown } from 'lucide-react';
 import styles from './VariantOptionsModal.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 
 // Default prompt is short and editable — gives the user a sensible
-// starting point ("keep the bones") that they can extend ("…and add
-// neon highlights" / "…as watercolor"). The source image carries
-// most of the visual information through /v1/images/edits, so the
-// prompt is mostly intent.
+// starting point that they can extend ("…and add neon highlights" /
+// "…as watercolor"). The source image carries most of the visual
+// information through /v1/images/edits, so the prompt is mostly
+// intent.
 const DEFAULT_PROMPT =
   'Create a fresh variation of this image. Keep the composition and palette.';
 
-const SIZES = [
-  { value: '1024x1024', label: 'Square', aspect: '1:1', tile: { w: 36, h: 36 } },
-  { value: '1536x1024', label: 'Wide',   aspect: '3:2', tile: { w: 48, h: 32 } },
-  { value: '1024x1536', label: 'Tall',   aspect: '2:3', tile: { w: 32, h: 48 } },
+// Aspect picker mirrors ChatGPT's image-generation menu: a single
+// dropdown with named ratios + a small proportional preview tile.
+// gpt-image-1 only natively supports 1024x1024 / 1536x1024 /
+// 1024x1536 / 'auto', so the non-native aspects (3:4, 9:16, 4:3,
+// 16:9) generate at the closest native size and the main process
+// crops the result to the requested ratio before saving.
+const ASPECTS = [
+  { id: 'auto',       label: 'Auto',       ratio: null,   tile: { w: 16, h: 12 } },
+  { id: '1:1',        label: 'Square',     ratio: '1:1',  tile: { w: 14, h: 14 } },
+  { id: '3:4',        label: 'Portrait',   ratio: '3:4',  tile: { w: 12, h: 16 } },
+  { id: '9:16',       label: 'Story',      ratio: '9:16', tile: { w: 9,  h: 16 } },
+  { id: '4:3',        label: 'Landscape',  ratio: '4:3',  tile: { w: 16, h: 12 } },
+  { id: '16:9',       label: 'Widescreen', ratio: '16:9', tile: { w: 16, h: 9  } },
 ];
+
+function findAspect(id) {
+  return ASPECTS.find((a) => a.id === id) || ASPECTS[0];
+}
 
 export default function VariantOptionsModal({ open, record, onCancel, onConfirm }) {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
-  const [size, setSize] = useState('1024x1024');
+  const [aspectId, setAspectId] = useState('auto');
+  const [menuOpen, setMenuOpen] = useState(false);
   const promptRef = useRef(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
 
   // Reset draft state every time the modal opens for a new save so
-  // the user always starts from the default prompt + square. Avoids
-  // surprise "I edited this for a different image" carry-over.
+  // the user always starts from the default prompt + Auto aspect.
+  // Avoids surprise "I edited this for a different image" carry-over.
   useEffect(() => {
     if (open) {
       setPrompt(DEFAULT_PROMPT);
-      setSize('1024x1024');
-      // Focus + select-all so a quick edit (overwrite the default
-      // entirely) is one keystroke away.
+      setAspectId('auto');
+      setMenuOpen(false);
       requestAnimationFrame(() => {
         const el = promptRef.current;
         if (el) {
@@ -42,14 +57,14 @@ export default function VariantOptionsModal({ open, record, onCancel, onConfirm 
     }
   }, [open]);
 
-  // Esc closes; Cmd/Ctrl-Enter submits. Mounted at the document
-  // level so the textarea doesn't have to re-implement either.
+  // Esc closes the menu first, then the modal. Cmd/Ctrl-Enter submits.
   useEffect(() => {
     if (!open) return undefined;
     function onKey(e) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onCancel?.();
+        if (menuOpen) setMenuOpen(false);
+        else onCancel?.();
       } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         confirm();
@@ -58,15 +73,32 @@ export default function VariantOptionsModal({ open, record, onCancel, onConfirm 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, prompt, size]);
+  }, [open, prompt, aspectId, menuOpen]);
+
+  // Close the aspect menu on outside click.
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    function onClick(e) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target) &&
+        triggerRef.current && !triggerRef.current.contains(e.target)
+      ) {
+        setMenuOpen(false);
+      }
+    }
+    window.addEventListener('mousedown', onClick);
+    return () => window.removeEventListener('mousedown', onClick);
+  }, [menuOpen]);
 
   function confirm() {
     const trimmed = prompt.trim();
     if (!trimmed) return;
-    onConfirm?.({ prompt: trimmed, size });
+    onConfirm?.({ prompt: trimmed, aspect: aspectId });
   }
 
   if (!open || !record) return null;
+
+  const current = findAspect(aspectId);
 
   return ReactDOM.createPortal(
     <div
@@ -114,35 +146,67 @@ export default function VariantOptionsModal({ open, record, onCancel, onConfirm 
             rows={3}
             placeholder="Describe the variation you want…"
           />
-          <div className={styles.fieldHint}>
-            ⌘+Enter to generate · Esc to cancel
-          </div>
         </div>
 
         <div className={styles.field}>
-          <span className={styles.fieldLabel}>Aspect</span>
-          <div className={styles.aspectRow} role="radiogroup" aria-label="Aspect ratio">
-            {SIZES.map((opt) => {
-              const active = size === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  className={`${styles.aspectBtn} ${active ? styles.aspectBtnActive : ''}`}
-                  onClick={() => setSize(opt.value)}
-                >
-                  <span
-                    className={styles.aspectTile}
-                    style={{ width: opt.tile.w, height: opt.tile.h }}
-                    aria-hidden="true"
-                  />
-                  <span className={styles.aspectLabel}>{opt.label}</span>
-                  <span className={styles.aspectMeta}>{opt.aspect}</span>
-                </button>
-              );
-            })}
+          <span className={styles.fieldLabel}>Aspect ratio</span>
+          <div className={styles.aspectWrap}>
+            <button
+              ref={triggerRef}
+              type="button"
+              className={styles.aspectTrigger}
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={menuOpen}
+            >
+              <span
+                className={styles.aspectTile}
+                style={{ width: current.tile.w, height: current.tile.h }}
+                aria-hidden="true"
+              />
+              <span className={styles.aspectTriggerLabel}>{current.label}</span>
+              {current.ratio && (
+                <span className={styles.aspectTriggerMeta}>{current.ratio}</span>
+              )}
+              <span className={styles.aspectChevron} aria-hidden="true">
+                <ChevronDown size={14} strokeWidth={1.8} />
+              </span>
+            </button>
+
+            {menuOpen && (
+              <div ref={menuRef} className={styles.aspectMenu} role="listbox">
+                <div className={styles.aspectMenuHeader}>Choose image aspect ratio</div>
+                {ASPECTS.map((opt) => {
+                  const active = opt.id === aspectId;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      className={styles.aspectMenuItem}
+                      onClick={() => {
+                        setAspectId(opt.id);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <span
+                        className={styles.aspectTile}
+                        style={{ width: opt.tile.w, height: opt.tile.h }}
+                        aria-hidden="true"
+                      />
+                      <span className={styles.aspectMenuLabel}>{opt.label}</span>
+                      {opt.ratio && (
+                        <span className={styles.aspectMenuMeta}>{opt.ratio}</span>
+                      )}
+                      <span className={styles.aspectMenuCheck} aria-hidden="true">
+                        {active && <Check size={14} strokeWidth={2} />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

@@ -759,18 +759,13 @@ export default function SettingsModal({
                 with your subscription — no API key to set up.
               </p>
 
-              <div className={styles.statusRow}>
-                {hasAi ? (
-                  <span className={`${styles.status} ${styles.statusOk}`}>
-                    <span className={styles.dot} aria-hidden="true" />
-                    AI features unlocked
-                  </span>
-                ) : (
+              {!hasAi && (
+                <div className={styles.statusRow}>
                   <span className={`${styles.status} ${styles.statusMuted}`}>
                     Sign in to unlock AI features
                   </span>
-                )}
-              </div>
+                </div>
+              )}
 
               {hasAi && usage && (
                 <UsageMeter usage={usage} />

@@ -118,13 +118,6 @@
   color: var(--text-tertiary);
 }
 
-.fieldHint {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  letter-spacing: 0.02em;
-}
-
 /* Canonical input recipe + a slight bump in line-height for the
    multi-line nature of a prompt. Auto-grows via field-sizing on
    modern browsers; falls back to fixed rows={3} otherwise. */
@@ -158,78 +151,131 @@
   box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
 }
 
-/* Three-button aspect picker — each button shows a tile sized to
-   its actual aspect ratio so the user can read the option visually
-   without parsing "1:1". Active button fills with ink (consistent
-   with the active mode-pill and toolbtn idiom). */
-.aspectRow {
-  display: flex;
-  gap: 8px;
+/* ChatGPT-style aspect dropdown — single trigger that opens a menu
+   listing all named ratios with proportional preview tiles. Same
+   canonical popover recipe as the other dropdowns in the app
+   (white surface, 1px hairline, soft shadow). */
+.aspectWrap {
+  position: relative;
 }
 
-.aspectBtn {
-  flex: 1 1 0;
+.aspectTrigger {
+  width: 100%;
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 14px 10px 10px;
+  gap: 10px;
+  padding: 9px 11px;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow-control);
   font-family: var(--font-ui);
+  font-size: var(--text-md);
+  color: var(--text-primary);
   cursor: pointer;
-  transition:
-    background var(--dur-instant) ease,
-    border-color var(--dur-instant) ease,
-    color var(--dur-instant) ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
 
-.aspectBtn:hover {
+.aspectTrigger:hover {
   background: var(--hover-bg);
 }
 
-.aspectBtnActive,
-.aspectBtnActive:hover {
-  background: var(--text-primary);
-  border-color: var(--text-primary);
-  color: var(--surface-1);
-}
-
-.aspectTile {
-  display: inline-block;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-
-.aspectBtnActive .aspectTile {
-  opacity: 1;
-}
-
-.aspectLabel {
-  font-size: var(--text-sm);
+.aspectTriggerLabel {
+  font-size: var(--text-md);
   font-weight: 500;
   letter-spacing: -0.005em;
-  color: inherit;
+  color: var(--text-primary);
 }
 
-.aspectMeta {
+.aspectTriggerMeta {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
-.aspectBtnActive .aspectMeta {
-  color: rgba(255, 255, 255, 0.65);
+.aspectChevron {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
 }
 
-:root[data-theme="dark"] .aspectBtnActive .aspectMeta {
-  color: rgba(0, 0, 0, 0.55);
+.aspectTile {
+  display: inline-block;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  flex-shrink: 0;
+  opacity: 0.85;
+  color: var(--text-secondary);
+}
+
+.aspectMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  z-index: 1;
+  animation: rise var(--dur-quick) var(--ease-pop);
+}
+
+:root[data-theme="dark"] .aspectMenu {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.aspectMenuHeader {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  padding: 6px 10px 8px;
+  letter-spacing: -0.005em;
+}
+
+.aspectMenuItem {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-instant) ease;
+}
+
+.aspectMenuItem:hover {
+  background: var(--hover-bg);
+}
+
+.aspectMenuLabel {
+  font-size: var(--text-md);
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+}
+
+.aspectMenuMeta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.aspectMenuCheck {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  color: var(--text-primary);
 }
 
 .actions {

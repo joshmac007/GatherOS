@@ -404,8 +404,8 @@ aiRoutes.post('/image', async (c) => {
     return c.json({ ok: false, error: 'prompt_too_long' }, 400);
   }
 
-  const ALLOWED_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536']);
-  const size = ALLOWED_SIZES.has(body.size || '') ? (body.size as string) : '1024x1024';
+  const ALLOWED_SIZES = new Set(['auto', '1024x1024', '1536x1024', '1024x1536']);
+  const size = ALLOWED_SIZES.has(body.size || '') ? (body.size as string) : 'auto';
 
   // Hard cap pre-flight. Image generation is the most expensive
   // surface (~$0.05 per call) so over-cap is enforced strictly.

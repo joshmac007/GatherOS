@@ -962,15 +962,53 @@ function registerIpcHandlers() {
 
     event.sender.send('save:indexing-start', saveId);
     try {
-      // Prompt + size come from the modal the user filled in; we
-      // fall back to a sensible default prompt if the renderer ever
-      // dispatched without one.
+      // Prompt + aspect come from the modal. gpt-image-1 only
+      // generates at 1024x1024 / 1536x1024 / 1024x1536 / auto, so
+      // non-native aspects (3:4, 9:16, 4:3, 16:9) generate at the
+      // closest native size and we crop the result with sharp.
+      const ASPECT_MAP = {
+        'auto':  { size: 'auto',       crop: null },
+        '1:1':   { size: '1024x1024',  crop: null },
+        '3:4':   { size: '1024x1536',  crop: 3 / 4 },
+        '9:16':  { size: '1024x1536',  crop: 9 / 16 },
+        '4:3':   { size: '1536x1024',  crop: 4 / 3 },
+        '16:9':  { size: '1536x1024',  crop: 16 / 9 },
+      };
+      const aspect = ASPECT_MAP[options.aspect] || ASPECT_MAP.auto;
       const prompt = (options.prompt || '').trim() ||
         'Create a fresh variation of this image. Keep the composition and palette.';
-      const { bytes, quota } = await generateImage(prompt, {
+      const { bytes: rawBytes, quota } = await generateImage(prompt, {
         sourceFilePath: save.file_path,
-        size: options.size,
+        size: aspect.size,
       });
+      // Center-crop the generated PNG to the exact requested aspect
+      // when it differs from the native generation size. Skipped for
+      // 'auto' and 1:1 / 3:2 / 2:3 native matches.
+      let bytes = rawBytes;
+      if (aspect.crop) {
+        const sharp = require('sharp');
+        const meta = await sharp(rawBytes).metadata();
+        const gw = meta.width || 0;
+        const gh = meta.height || 0;
+        if (gw && gh) {
+          const generated = gw / gh;
+          let cw = gw;
+          let ch = gh;
+          if (aspect.crop > generated) {
+            ch = Math.round(gw / aspect.crop);
+          } else if (aspect.crop < generated) {
+            cw = Math.round(gh * aspect.crop);
+          }
+          if (cw !== gw || ch !== gh) {
+            const left = Math.round((gw - cw) / 2);
+            const top = Math.round((gh - ch) / 2);
+            bytes = await sharp(rawBytes)
+              .extract({ left, top, width: cw, height: ch })
+              .png()
+              .toBuffer();
+          }
+        }
+      }
       const { saveImageFromBuffer } = require('./storage');
       const imgData = await saveImageFromBuffer(bytes, 'png');
       if (imgData.duplicateOf) {

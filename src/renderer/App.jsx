@@ -894,7 +894,7 @@ export default function App() {
   const [variantOptions, setVariantOptions] = useState(null);
 
   const handleGenerateVariant = useCallback(async (saveId, opts = {}) => {
-    const { prompt, size, openOnComplete = false } = opts;
+    const { prompt, aspect, openOnComplete = false } = opts;
     const source = saves.find((s) => s.id === saveId);
     const pendingId = `pending-${saveId}-${Date.now()}`;
     if (source) {
@@ -912,7 +912,7 @@ export default function App() {
         },
       ]);
     }
-    const result = await window.moodmark.ai.generateVariant(saveId, { prompt, size });
+    const result = await window.moodmark.ai.generateVariant(saveId, { prompt, aspect });
     setPendingVariants((prev) => prev.filter((p) => p.id !== pendingId));
     if (result?.ok) {
       await reload();
@@ -2468,10 +2468,10 @@ export default function App() {
         open={!!variantOptions}
         record={variantOptions ? saves.find((s) => s.id === variantOptions.saveId) : null}
         onCancel={() => setVariantOptions(null)}
-        onConfirm={({ prompt, size }) => {
+        onConfirm={({ prompt, aspect }) => {
           const { saveId, openOnComplete } = variantOptions;
           setVariantOptions(null);
-          handleGenerateVariant(saveId, { prompt, size, openOnComplete });
+          handleGenerateVariant(saveId, { prompt, aspect, openOnComplete });
         }}
       />
 
