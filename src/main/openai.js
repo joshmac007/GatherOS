@@ -227,11 +227,29 @@ async function getUsage() {
   }
 }
 
+// Generate a fresh image from a text prompt. Returns a Buffer of
+// PNG bytes that the caller writes into the library's saves
+// directory. Server-side the model + quality + size are locked
+// (gpt-image-1 / medium / 1024x1024) so the per-image cost curve
+// is predictable; this client doesn't get to ask for 'high'.
+async function generateImage(prompt) {
+  const trimmed = (prompt || '').trim();
+  if (!trimmed) throw new Error('Cannot generate from empty prompt');
+  const data = await postProxy('/ai/image', { prompt: trimmed.slice(0, 4000) });
+  const b64 = data.image?.b64_json;
+  if (!b64) throw new Error('No image in proxy response');
+  return {
+    bytes: Buffer.from(b64, 'base64'),
+    quota: data.quota || null,
+  };
+}
+
 module.exports = {
   hasSession,
   autoTagImage,
   analyzeImage,
   generateImagePrompt,
+  generateImage,
   embedText,
   getUsage,
 };

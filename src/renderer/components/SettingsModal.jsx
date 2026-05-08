@@ -67,6 +67,20 @@ function UsageMeter({ usage }) {
     : ratio > 0.8
       ? styles.usageMeterFillWarn
       : '';
+
+  // Image generation lives on its own cost axis (per-image, not
+  // per-token), so it gets its own meter rather than being lumped
+  // into the token total.
+  const imageCount = usage?.image_count || 0;
+  const imageCap = usage?.image_soft_cap || 0;
+  const imageOverCap = !!usage?.image_over_cap;
+  const imageRatio = imageCap > 0 ? Math.min(1, imageCount / imageCap) : 0;
+  const imageFillClass = imageOverCap
+    ? styles.usageMeterFillOver
+    : imageRatio > 0.8
+      ? styles.usageMeterFillWarn
+      : '';
+
   return (
     <div className={styles.usageMeter}>
       <div className={styles.usageMeterRow}>
@@ -81,7 +95,23 @@ function UsageMeter({ usage }) {
           style={{ width: `${Math.max(2, ratio * 100)}%` }}
         />
       </div>
-      {overCap && (
+      {imageCap > 0 && (
+        <>
+          <div className={`${styles.usageMeterRow} ${styles.usageMeterRowSpaced}`}>
+            <span>Image generations</span>
+            <span className={styles.usageMeterTokens}>
+              {imageCount} / {imageCap} this month
+            </span>
+          </div>
+          <div className={styles.usageMeterTrack}>
+            <div
+              className={`${styles.usageMeterFill} ${imageFillClass}`}
+              style={{ width: `${Math.max(2, imageRatio * 100)}%` }}
+            />
+          </div>
+        </>
+      )}
+      {(overCap || imageOverCap) && (
         <div className={styles.usageMeterOverNote}>
           Over the monthly soft cap. Requests are still going through —
           we'll nudge you here if it becomes a pattern.

@@ -150,6 +150,7 @@ contextBridge.exposeInMainWorld('moodmark', {
     usage: () => ipcRenderer.invoke('ai:usage'),
     autoTag: (saveId) => ipcRenderer.invoke('ai:auto-tag', saveId),
     generatePrompt: (saveId) => ipcRenderer.invoke('ai:generate-prompt', saveId),
+    generateVariant: (saveId) => ipcRenderer.invoke('ai:generate-variant', saveId),
     unindexedCount: () => ipcRenderer.invoke('ai:unindexed-count'),
     reindexLibrary: () => ipcRenderer.invoke('ai:reindex-library'),
     similarSaves: (saveId, limit) => ipcRenderer.invoke('ai:similar-saves', saveId, limit),

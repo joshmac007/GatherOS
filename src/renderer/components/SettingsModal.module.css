@@ -947,6 +947,12 @@
   margin-bottom: 6px;
 }
 
+/* Second meter row (image generations) needs a gap above so the
+   two meters don't visually run together. */
+.usageMeterRowSpaced {
+  margin-top: 14px;
+}
+
 .usageMeterTokens {
   font-variant-numeric: tabular-nums;
 }

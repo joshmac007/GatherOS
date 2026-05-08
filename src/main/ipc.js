@@ -38,6 +38,7 @@ const {
   analyzeImage,
   embedText,
   generateImagePrompt,
+  generateImage,
   getUsage: getAiUsage,
 } = require('./openai');
 const { detectColorName } = require('./colorNames');
@@ -942,6 +943,63 @@ function registerIpcHandlers() {
       return { ok: true, prompt };
     } catch (err) {
       console.error('Generate prompt failed:', err.message);
+      return { ok: false, reason: 'api-error', detail: err.message };
+    } finally {
+      event.sender.send('save:indexing-end', saveId);
+    }
+  });
+
+  // Generate a fresh image inspired by an existing save. Uses the
+  // save's stored ai_prompt if present (cached from a prior
+  // "Generate prompt" call); otherwise calls generateImagePrompt
+  // first to produce one. Resulting PNG is saved as a new entry in
+  // the user's library — not as a replacement of the source.
+  ipcMain.handle('ai:generate-variant', async (event, saveId) => {
+    if (!saveId) return { ok: false, reason: 'no-save-id' };
+    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
+    const save = getSave(saveId);
+    if (!save) return { ok: false, reason: 'save-not-found' };
+
+    event.sender.send('save:indexing-start', saveId);
+    try {
+      // Use cached ai_prompt if we already have one; otherwise
+      // generate it on demand. This avoids a second token-billed
+      // call on subsequent variants of the same source image.
+      let prompt = (save.ai_prompt || '').trim();
+      if (!prompt) {
+        const fresh = await generateImagePrompt(save.file_path);
+        if (!fresh) return { ok: false, reason: 'no-prompt' };
+        updateSave({ id: saveId, aiPrompt: fresh });
+        prompt = fresh.trim();
+      }
+
+      const { bytes, quota } = await generateImage(prompt);
+      const { saveImageFromBuffer } = require('./storage');
+      const imgData = await saveImageFromBuffer(bytes, 'png');
+      if (imgData.duplicateOf) {
+        // Identical pixels to an existing save (very unlikely for a
+        // generation but cheap to handle). Surface the existing one
+        // and don't re-insert.
+        return { ok: true, save: imgData.existing, quota, duplicate: true };
+      }
+      const record = insertSave({
+        ...imgData,
+        // Carry the source's title onto the variant so the new save
+        // reads as related, not blank. The renderer can rename it
+        // freely afterwards.
+        title: save.title ? `${save.title} (variant)` : null,
+      });
+      // Notify the renderer so the masonry refreshes with the new
+      // save in place. Reuses the same save:created channel that
+      // drag-and-drop uses.
+      try {
+        notifySaved(record);
+      } catch {
+        /* best-effort */
+      }
+      return { ok: true, save: record, quota };
+    } catch (err) {
+      console.error('Generate variant failed:', err.message);
       return { ok: false, reason: 'api-error', detail: err.message };
     } finally {
       event.sender.send('save:indexing-end', saveId);

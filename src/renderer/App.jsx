@@ -42,6 +42,7 @@ import {
   ExternalLink,
   Hash,
   Share,
+  Sparkles,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -69,6 +70,7 @@ const ClipboardIcon = () => <Clipboard {...ICON} />;
 const ExternalLinkIcon = () => <ExternalLink {...ICON} />;
 const HashIcon = () => <Hash {...ICON} />;
 const ShareIcon = () => <Share {...ICON} />;
+const SparklesIcon = () => <Sparkles {...ICON} />;
 
 export default function App() {
   const {
@@ -1012,6 +1014,41 @@ export default function App() {
       });
     }
 
+    // Generate a new image inspired by this one. Single-save AI
+    // action; gated on the licensing session being present (the
+    // worker proxies the OpenAI call). Per-image cost is tracked
+    // separately from the token meter — see ai_usage_monthly's
+    // image_count column.
+    if (!isMulti && aiConfigured) {
+      if (items.length > 0) items.push({ type: 'separator' });
+      items.push({
+        label: 'Generate new version',
+        icon: <SparklesIcon />,
+        onClick: async () => {
+          showActionToast({ message: 'Generating new version…', durationMs: 0 });
+          const result = await window.moodmark.ai.generateVariant(saveId);
+          if (result?.ok) {
+            await reload();
+            const cap = result.quota?.image_soft_cap;
+            const used = result.quota?.image_count;
+            if (result.quota?.image_over_cap) {
+              showActionToast({
+                message: `Variant created · ${used} of ${cap} this month (over cap)`,
+                durationMs: 3200,
+              });
+            } else {
+              showActionToast({ message: 'Variant created', durationMs: 1800 });
+            }
+          } else {
+            showActionToast({
+              message: result?.detail || 'Could not generate variant',
+              durationMs: 2400,
+            });
+          }
+        },
+      });
+    }
+
     // Copy image bytes to the system clipboard so the user can
     // paste into Figma / Slack / Mail / etc. Single-save only — the
     // clipboard holds one image at a time.
@@ -1069,7 +1106,7 @@ export default function App() {
       },
     });
     return items;
-  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack, similarTo, setSimilarTo, showActionToast]);
+  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack, similarTo, setSimilarTo, showActionToast, aiConfigured]);
 
   const handleCardContextMenu = useCallback(async (saveId, x, y) => {
     // Resolve the bucket memberships used to filter the Add-to-Bucket

@@ -23,6 +23,13 @@ export const aiRoutes = new Hono<{ Bindings: Env }>();
 // many semantic searches stays comfortably under this.
 const MONTHLY_TOKEN_CAP = 4_000_000;
 
+// Image generation lives on a separate cost axis from chat / embed —
+// per-image, not per-token. Tracked + capped independently so the two
+// dimensions don't interfere. 30/month at medium quality covers
+// everyday creative iteration without exposing the per-image cost
+// curve that would let one user run up a noticeable bill.
+const MONTHLY_IMAGE_CAP = 30;
+
 // Allowlists keep the proxy from being abused as a generic OpenAI
 // gateway. Anything not on these lists is rejected with 400.
 const ALLOWED_CHAT_MODELS = new Set(['gpt-4o-mini', 'gpt-4o']);
@@ -80,6 +87,7 @@ interface UsageRow {
   embedding_tokens: number;
   total_tokens: number;
   request_count: number;
+  image_count: number;
 }
 
 async function readUsage(
@@ -89,7 +97,7 @@ async function readUsage(
 ): Promise<UsageRow> {
   const row = await env.DB.prepare(
     `SELECT prompt_tokens, completion_tokens, embedding_tokens,
-            total_tokens, request_count
+            total_tokens, request_count, image_count
        FROM ai_usage_monthly
       WHERE user_id = ? AND yyyymm = ?`,
   )
@@ -102,8 +110,37 @@ async function readUsage(
       embedding_tokens: 0,
       total_tokens: 0,
       request_count: 0,
+      image_count: 0,
     }
   );
+}
+
+async function recordImage(
+  env: Env,
+  userId: string,
+  bucket: string,
+): Promise<void> {
+  const now = Date.now();
+  // Same upsert pattern as recordUsage but bumping image_count
+  // instead of token columns. token columns stay zero on this row
+  // when an image generation is the only action — they accumulate
+  // independently when chat/embed runs.
+  await env.DB.prepare(
+    `INSERT INTO ai_usage_monthly
+       (user_id, yyyymm,
+        prompt_tokens, completion_tokens, embedding_tokens,
+        total_tokens, request_count, image_count, updated_at)
+     VALUES (?, ?, 0, 0, 0, 0, 1, 1, ?)
+     ON CONFLICT(user_id, yyyymm) DO UPDATE SET
+       request_count = request_count + 1,
+       image_count   = image_count + 1,
+       updated_at    = excluded.updated_at`,
+  )
+    .bind(userId, bucket, now)
+    .run()
+    .catch((err) => {
+      console.error('[ai] recordImage failed:', err);
+    });
 }
 
 async function recordUsage(
@@ -301,6 +338,85 @@ aiRoutes.post('/embed', async (c) => {
   });
 });
 
+// Image generation. Forwarded to OpenAI's gpt-image-1, returned as
+// base64 PNG. Quality is locked to 'medium' on the server side so a
+// client can't ask for 'high' (which is ~4x more expensive); when /
+// if we ever expose tier choice it'll be a separate authorised
+// endpoint. Size is locked to 1024x1024 for the same reason.
+aiRoutes.post('/image', async (c) => {
+  const auth = await requireEntitled(c);
+  if (auth instanceof Response) return auth;
+
+  type ImageBody = { prompt?: string };
+  const body: ImageBody = await c.req.json<ImageBody>().catch(() => ({}));
+
+  const prompt = (body.prompt || '').trim();
+  if (!prompt) {
+    return c.json({ ok: false, error: 'missing_prompt' }, 400);
+  }
+  if (prompt.length > 4000) {
+    return c.json({ ok: false, error: 'prompt_too_long' }, 400);
+  }
+
+  const bucket = yyyymm(Date.now());
+  // Cap is checked AFTER the request. Soft-fail: we serve the
+  // generation but flag over_cap so the renderer can warn. Hard-stop
+  // would feel punitive on a creative tool.
+  const upstream = await fetch(`${OPENAI_BASE}/images/generations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${c.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-image-1',
+      prompt,
+      n: 1,
+      size: '1024x1024',
+      quality: 'medium',
+    }),
+  }).catch((err) => {
+    console.error('[ai] image upstream network error:', err);
+    return null;
+  });
+  if (!upstream) return c.json({ ok: false, error: 'upstream_network' }, 502);
+
+  const data = (await upstream.json().catch(() => ({}))) as {
+    data?: Array<{ b64_json?: string; url?: string }>;
+    error?: { message?: string };
+  };
+
+  if (!upstream.ok) {
+    return c.json(
+      {
+        ok: false,
+        error: 'upstream_error',
+        status: upstream.status,
+        detail: data.error?.message,
+      },
+      502,
+    );
+  }
+
+  const first = data.data?.[0];
+  if (!first?.b64_json) {
+    return c.json({ ok: false, error: 'upstream_response' }, 502);
+  }
+
+  await recordImage(c.env, auth.userId, bucket);
+  const after = await readUsage(c.env, auth.userId, bucket);
+
+  return c.json({
+    ok: true,
+    image: { b64_json: first.b64_json },
+    quota: {
+      image_count: after.image_count,
+      image_soft_cap: MONTHLY_IMAGE_CAP,
+      image_over_cap: after.image_count > MONTHLY_IMAGE_CAP,
+    },
+  });
+});
+
 aiRoutes.get('/usage', async (c) => {
   const auth = await requireEntitled(c);
   if (auth instanceof Response) return auth;
@@ -317,5 +433,8 @@ aiRoutes.get('/usage', async (c) => {
     request_count: row.request_count,
     soft_cap: MONTHLY_TOKEN_CAP,
     over_cap: row.total_tokens > MONTHLY_TOKEN_CAP,
+    image_count: row.image_count,
+    image_soft_cap: MONTHLY_IMAGE_CAP,
+    image_over_cap: row.image_count > MONTHLY_IMAGE_CAP,
   });
 });
