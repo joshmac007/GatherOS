@@ -80,7 +80,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 10px;
+  padding: 6px 10px;
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
@@ -176,7 +176,7 @@
 .divider {
   height: 0.5px;
   background: var(--border-hairline);
-  margin: 4px 6px;
+  margin: 2px 6px;
 }
 
 @keyframes rise {
