@@ -69,7 +69,12 @@
 .tileArt {
   position: relative;
   width: 100%;
-  height: 140px;
+  /* 122px — chosen so the folder tile total (padding 14+12 + art
+     122 + gap 12 + 2-line meta 36 = 196) matches the boards/spaces
+     tile total (single-line meta, art 140 → same 196). The fan
+     thumbs below shrink proportionally to keep the composition
+     balanced inside the slimmer plate. */
+  height: 122px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -87,17 +92,17 @@
 }
 
 /* Square thumbs anchored to plate center; the per-child transforms
-   below tilt + offset each one to form the fan. Sized larger than
-   FeaturedBuckets' 92px so the card-relative fan reads at a similar
-   visual weight even though the tile is wider. */
+   below tilt + offset each one to form the fan. Sized to fit the
+   122px plate — the fan with its hover spread now lives within the
+   plate's height instead of reaching down into the meta gap. */
 .tileStackImg {
   position: absolute;
-  width: 120px;
-  height: 120px;
+  width: 104px;
+  height: 104px;
   top: 50%;
   left: 50%;
-  margin-top: -60px;
-  margin-left: -60px;
+  margin-top: -52px;
+  margin-left: -52px;
   border-radius: var(--radius-md);
   object-fit: cover;
   background: rgba(0, 0, 0, 0.04);
@@ -110,17 +115,17 @@
 }
 
 /* Static stacked-and-tilted positions — same fan recipe as
-   FeaturedBuckets, offsets scaled ~1.3x to suit the 120px thumb. */
-.tileStackImg:nth-child(1) { transform: rotate(-7deg) translate(-13px, 5px); z-index: 1; }
-.tileStackImg:nth-child(2) { transform: rotate(-2deg) translate(-4px, 0);    z-index: 2; }
-.tileStackImg:nth-child(3) { transform: rotate(3deg)  translate(7px, 0);     z-index: 3; }
-.tileStackImg:nth-child(4) { transform: rotate(8deg)  translate(15px, 5px);  z-index: 4; }
+   FeaturedBuckets, offsets scaled to suit the slimmer 104px thumb. */
+.tileStackImg:nth-child(1) { transform: rotate(-7deg) translate(-11px, 4px); z-index: 1; }
+.tileStackImg:nth-child(2) { transform: rotate(-2deg) translate(-3px, 0);    z-index: 2; }
+.tileStackImg:nth-child(3) { transform: rotate(3deg)  translate(6px, 0);     z-index: 3; }
+.tileStackImg:nth-child(4) { transform: rotate(8deg)  translate(13px, 4px);  z-index: 4; }
 
 /* Hover spreads the fan — same reward signal FeaturedBuckets uses. */
-.tile:hover .tileStackImg:nth-child(1) { transform: rotate(-16deg) translate(-38px, 10px); }
-.tile:hover .tileStackImg:nth-child(2) { transform: rotate(-6deg)  translate(-15px, -2px); }
-.tile:hover .tileStackImg:nth-child(3) { transform: rotate(7deg)   translate(18px, -2px); }
-.tile:hover .tileStackImg:nth-child(4) { transform: rotate(18deg)  translate(40px, 10px); }
+.tile:hover .tileStackImg:nth-child(1) { transform: rotate(-16deg) translate(-33px, 8px);  }
+.tile:hover .tileStackImg:nth-child(2) { transform: rotate(-6deg)  translate(-13px, -2px); }
+.tile:hover .tileStackImg:nth-child(3) { transform: rotate(7deg)   translate(15px, -2px); }
+.tile:hover .tileStackImg:nth-child(4) { transform: rotate(18deg)  translate(34px, 8px);  }
 
 /* Empty bucket — bare folder icon, no surrounding tile. Reads as a
    placeholder, not a card. */
