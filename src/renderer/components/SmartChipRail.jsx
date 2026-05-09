@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChevronLeft } from 'lucide-react';
 import styles from './SmartChipRail.module.css';
 import Dropdown from './Dropdown.jsx';
 
@@ -30,33 +31,58 @@ export default function SmartChipRail({
   onSortChange,
   columns,
   onColumnsChange,
+  // When the user drills into a folder, the rail's left cluster
+  // swaps the All/Unsorted/Trash chips for a back button + folder
+  // title. Sort + zoom on the right stay regardless.
+  viewTitle = null,
+  onBack = null,
 }) {
   // Slider is inverted so dragging right = bigger cards = fewer columns.
   const sliderValue = (typeof columns === 'number')
     ? COLS_MAX + COLS_MIN - columns
     : COLS_MIN;
+  const inFolder = !!viewTitle;
   return (
-    <div className={styles.rail} role="tablist" aria-label="Smart views">
+    <div className={styles.rail} role={inFolder ? undefined : 'tablist'} aria-label={inFolder ? undefined : 'Smart views'}>
       <div className={styles.left}>
-        {CHIPS.map(({ id, label }) => {
-          const isActive = activeViewType === id;
-          const count = counts[id] ?? 0;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              className={`${styles.chip} ${isActive ? styles.chipActive : ''}`}
-              onClick={() => onPick({ type: id })}
-            >
-              <span className={styles.chipLabel}>{label}</span>
-              {count > 0 && (
-                <span className={styles.chipBadge}>{count}</span>
-              )}
-            </button>
-          );
-        })}
+        {inFolder ? (
+          <>
+            {onBack && (
+              <button
+                type="button"
+                className={styles.backBtn}
+                onClick={onBack}
+                title="Back to all"
+                aria-label="Back to all"
+              >
+                <ChevronLeft size={18} strokeWidth={1.6} aria-hidden="true" />
+              </button>
+            )}
+            <span className={styles.title} title={viewTitle}>
+              {viewTitle}
+            </span>
+          </>
+        ) : (
+          CHIPS.map(({ id, label }) => {
+            const isActive = activeViewType === id;
+            const count = counts[id] ?? 0;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className={`${styles.chip} ${isActive ? styles.chipActive : ''}`}
+                onClick={() => onPick({ type: id })}
+              >
+                <span className={styles.chipLabel}>{label}</span>
+                {count > 0 && (
+                  <span className={styles.chipBadge}>{count}</span>
+                )}
+              </button>
+            );
+          })
+        )}
       </div>
       <div className={styles.right}>
         {onSortChange && (

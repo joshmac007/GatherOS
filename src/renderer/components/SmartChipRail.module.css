@@ -22,6 +22,58 @@
   gap: 28px;
 }
 
+/* When the left cluster is rendering the folder-view title +
+   back button instead of the smart-view chips, tighten the gap
+   so the chevron sits close to the name. */
+.left:has(.title) {
+  gap: 6px;
+}
+
+/* Folder-view variant of the left cluster: back chevron + folder
+   title. Replaces the All/Unsorted/Trash chips when the user has
+   drilled into a folder. Title type matches the LibrarySwitcher
+   trigger so the two header surfaces feel like the same family. */
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  /* Center against the title in the folder-variant of the rail
+     even though .left is flex-end for the chips variant. */
+  align-self: center;
+  transition: color var(--dur-instant) ease, transform var(--dur-instant) ease;
+}
+
+.backBtn:hover {
+  color: var(--text-primary);
+}
+
+.backBtn:active {
+  transform: scale(0.92);
+}
+
+.title {
+  font-family: var(--font-ui);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Pull the title up to baseline-line of the chips' text so the
+     back-button + title row vertically aligns with where the chips
+     used to sit, and the rail height stays steady. */
+  align-self: center;
+}
+
 .right {
   display: flex;
   align-items: center;

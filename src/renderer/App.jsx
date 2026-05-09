@@ -2342,17 +2342,9 @@ export default function App() {
                 similarTo={similarTo}
                 onClearSimilar={() => setSimilarTo(null)}
                 searchInputRef={searchInputRef}
-                viewTitle={(() => {
-                  // Only drilled-into-collection shows a title here.
-                  // Smart views (unsorted / trash) advertise themselves
-                  // via the underlined chip in the rail below.
-                  if (view.type === 'collection') {
-                    return collections.find((c) => c.id === view.id)?.name ?? null;
-                  }
-                  return null;
-                })()}
+                viewTitle={null}
                 viewIcon={null}
-                onBackToAll={view.type === 'collection' ? () => handleViewChange({ type: 'all' }) : null}
+                onBackToAll={null}
                 mode={appMode}
                 onModeChange={handleModeChange}
                 modePillCompact={scrolledOff}
@@ -2419,6 +2411,12 @@ export default function App() {
                     onSortChange={setSortMode}
                     columns={gridColumns}
                     onColumnsChange={setGridColumns}
+                    viewTitle={view.type === 'collection'
+                      ? collections.find((c) => c.id === view.id)?.name ?? null
+                      : null}
+                    onBack={view.type === 'collection'
+                      ? () => handleViewChange({ type: 'all' })
+                      : null}
                   />
                 )}
                 {view.type === 'all' && collections.length > 0 && !search && (
