@@ -138,12 +138,12 @@ function SearchField({
       }}
     >
       <span
-        className={[styles.searchIcon, semanticSearchActive && styles.searchIconAi]
+        className={[styles.searchIcon, expanded && semanticSearchActive && styles.searchIconAi]
           .filter(Boolean)
           .join(' ')}
-        title={semanticSearchActive ? 'Visual search (AI)' : undefined}
+        title={expanded && semanticSearchActive ? 'Visual search (AI)' : undefined}
       >
-        {semanticSearchActive ? <SearchSparkleIcon /> : <SearchIcon />}
+        {expanded && semanticSearchActive ? <SearchSparkleIcon /> : <SearchIcon />}
       </span>
       <input
         ref={searchInputRef}

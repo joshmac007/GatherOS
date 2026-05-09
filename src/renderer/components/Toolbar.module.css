@@ -219,21 +219,27 @@
   transition: width var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1);
 }
 
-/* Collapsed form — only the search icon is visible, dressed as an
-   icon button (~32px square pill). Clicking the wrap expands it
-   back to the full input. Escape or blur-with-empty-query collapses
-   it again. */
+/* Collapsed form — bare magnifying glass, no surrounding container.
+   Strips the input's background / border / shadow so what the user
+   sees is just the icon, sized to match the toolbar's other glyphs.
+   Clicking the (still-clickable) wrap expands into the full pill. */
 .searchWrapCollapsed {
-  flex: 0 0 32px;
-  width: 32px;
+  flex: 0 0 28px;
+  width: 28px;
   cursor: pointer;
 }
 
 .searchWrapCollapsed .search {
-  padding-left: 32px;
-  padding-right: 8px;
-  border-radius: var(--radius-circle);
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
   cursor: pointer;
+  /* Hide the cursor / typed text frame when the field is hidden;
+     the input is still focusable so keyboard-driven expansion via
+     Tab still lands here. */
+  color: transparent;
 }
 
 .searchWrapCollapsed .search::placeholder {
@@ -249,6 +255,13 @@
 .searchWrapCollapsed .searchIcon {
   left: 50%;
   transform: translate(-50%, -50%);
+  /* Resting glyph stays neutral ink even if semanticSearchActive
+     is on; the sparkle variant is reserved for the expanded form. */
+  color: var(--text-secondary);
+}
+
+.searchWrapCollapsed:hover .searchIcon {
+  color: var(--text-primary);
 }
 
 @media (prefers-reduced-motion: reduce) {
