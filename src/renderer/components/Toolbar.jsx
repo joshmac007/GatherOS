@@ -16,6 +16,9 @@ import {
   Keyboard,
   Megaphone,
   Plus,
+  Library as LibraryIcon,
+  Folder as FolderIcon,
+  Layers as LayersIcon,
 } from 'lucide-react';
 import styles from './Toolbar.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -242,9 +245,9 @@ const COLS_MAX = 8;
 // 'boards' so the DB / IPC / view-state layer doesn't have to
 // migrate; this is purely a relabel at the surface.
 const MODE_SEGMENTS = [
-  { id: 'library', label: 'Library' },
-  { id: 'folders', label: 'Folders' },
-  { id: 'boards',  label: 'Spaces'  },
+  { id: 'library', label: 'Library', Icon: LibraryIcon },
+  { id: 'folders', label: 'Folders', Icon: FolderIcon  },
+  { id: 'boards',  label: 'Spaces',  Icon: LayersIcon  },
 ];
 
 // Anchored popover-menu attached to the toolbar's help icon. Lifted
@@ -377,7 +380,10 @@ function ModePill({ mode, onModeChange }) {
           className={`${styles.modeSegment} ${mode === seg.id ? styles.modeSegmentActive : ''}`}
           onClick={() => onModeChange(seg.id)}
         >
-          {seg.label}
+          <span className={styles.modeSegmentIcon} aria-hidden="true">
+            <seg.Icon size={16} strokeWidth={2} />
+          </span>
+          <span className={styles.modeSegmentLabel}>{seg.label}</span>
         </button>
       ))}
     </div>
