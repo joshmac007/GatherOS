@@ -66,4 +66,20 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_results_user ON race_results(user_id);
   CREATE INDEX IF NOT EXISTS idx_results_race ON race_results(race_id);
   CREATE INDEX IF NOT EXISTS idx_races_season ON races(season_id);
+
+  CREATE TABLE IF NOT EXISTS teams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#5b8def',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS team_members (
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (team_id, user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_teams_season ON teams(season_id);
 `);

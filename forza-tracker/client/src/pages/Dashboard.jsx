@@ -7,6 +7,7 @@ export default function Dashboard() {
   const [seasons, setSeasons] = useState([]);
   const [seasonId, setSeasonId] = useState(null);
   const [standings, setStandings] = useState([]);
+  const [teamStandings, setTeamStandings] = useState([]);
   const [races, setRaces] = useState([]);
   const [records, setRecords] = useState([]);
 
@@ -21,13 +22,16 @@ export default function Dashboard() {
   useEffect(() => {
     if (!seasonId) return;
     api.standings(seasonId).then(setStandings);
+    api.teamStandings(seasonId).then(setTeamStandings);
     api.races({ season_id: seasonId, limit: 5 }).then(setRaces);
     api.records().then(setRecords);
   }, [seasonId]);
 
   const season = useMemo(() => seasons.find(s => s.id === seasonId), [seasons, seasonId]);
   const totalRaces = standings.reduce((acc, s) => Math.max(acc, s.races || 0), 0);
-  const leader = standings[0];
+  const teamLeader = teamStandings[0];
+  const indivLeader = standings[0];
+  const teamGap = teamStandings.length === 2 ? teamStandings[0].points - teamStandings[1].points : 0;
 
   return (
     <>
@@ -44,17 +48,66 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {teamStandings.length === 0 ? (
+        <div className="notice" style={{ marginBottom: 18 }}>
+          No teams set up yet for this season. <Link to="/teams">Configure teams →</Link>
+        </div>
+      ) : (
+        <TeamHeadline teams={teamStandings} gap={teamGap} />
+      )}
+
       <div className="grid four" style={{ marginBottom: 18 }}>
         <Stat label="Races this season" value={totalRaces} />
-        <Stat label="Current leader" value={leader?.display_name || '—'} sub={leader ? `${leader.points} pts` : ''} />
-        <Stat label="Most wins" value={topBy(standings, 'wins')?.display_name || '—'} sub={topBy(standings, 'wins')?.wins ? `${topBy(standings, 'wins').wins} wins` : ''} />
+        <Stat label="Team in front" value={teamLeader?.name || '—'} sub={teamLeader ? `${teamLeader.points} team pts` : ''} accent={teamLeader?.color} />
+        <Stat label="Individual leader" value={indivLeader?.display_name || '—'} sub={indivLeader ? `${indivLeader.points} pts` : ''} accent={indivLeader?.color} />
         <Stat label="Records held" value={records.length} sub="across all tracks" />
       </div>
 
+      {teamStandings.length > 0 && (
+        <div className="panel">
+          <h2 style={{ marginTop: 0 }}>Team standings</h2>
+          <table>
+            <thead>
+              <tr>
+                <th style={{ width: 40 }}>#</th>
+                <th>Team</th>
+                <th>Drivers</th>
+                <th className="num">Race wins</th>
+                <th className="num">1-2 finishes</th>
+                <th className="num">Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {teamStandings.map((t, i) => (
+                <tr key={t.id}>
+                  <td><span className={`pos p${i + 1}`}>{i + 1}</span></td>
+                  <td>
+                    <span className="driver">
+                      <span className="dot" style={{ background: t.color, width: 14, height: 14 }} />
+                      <strong>{t.name}</strong>
+                    </span>
+                  </td>
+                  <td>
+                    {t.members.map(m => (
+                      <span key={m.id} className="driver" style={{ marginRight: 10 }}>
+                        <span className="dot" style={{ background: m.color }} />{m.display_name}
+                      </span>
+                    ))}
+                  </td>
+                  <td className="num">{t.race_wins}</td>
+                  <td className="num">{t.one_twos}</td>
+                  <td className="num"><strong style={{ fontSize: 16 }}>{t.points}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="panel">
         <div className="row spread" style={{ marginBottom: 10 }}>
-          <h2 style={{ margin: 0 }}>Standings</h2>
-          <span className="badge"><span className="dot" style={{ background: 'var(--accent)' }} />Points: {(season?.point_system || []).join(' / ')}{' '}+{season?.fastest_lap_bonus || 0} FL</span>
+          <h2 style={{ margin: 0 }}>Individual standings</h2>
+          <span className="badge"><span className="dot" style={{ background: 'var(--accent)' }} />Points: {(season?.point_system || []).join(' / ')} +{season?.fastest_lap_bonus || 0} FL</span>
         </div>
         {standings.length === 0 ? <div className="empty">No standings yet.</div> : (
           <table>
@@ -62,6 +115,7 @@ export default function Dashboard() {
               <tr>
                 <th style={{ width: 40 }}>#</th>
                 <th>Driver</th>
+                <th>Team</th>
                 <th className="num">Races</th>
                 <th className="num">Wins</th>
                 <th className="num">Podiums</th>
@@ -75,6 +129,11 @@ export default function Dashboard() {
                   <td><span className={`pos p${i + 1}`}>{i + 1}</span></td>
                   <td>
                     <span className="driver"><span className="dot" style={{ background: s.color }} />{s.display_name}</span>
+                  </td>
+                  <td>
+                    {s.team_name && (
+                      <span className="badge"><span className="dot" style={{ background: s.team_color }} />{s.team_name}</span>
+                    )}
                   </td>
                   <td className="num">{s.races}</td>
                   <td className="num">{s.wins}</td>
@@ -103,14 +162,55 @@ export default function Dashboard() {
   );
 }
 
-function topBy(rows, key) {
-  if (!rows.length) return null;
-  return [...rows].sort((a, b) => (b[key] || 0) - (a[key] || 0))[0];
+function TeamHeadline({ teams, gap }) {
+  if (teams.length < 2) {
+    const t = teams[0];
+    return (
+      <div className="panel" style={{ borderLeft: `4px solid ${t.color}`, marginBottom: 18 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Team in front</div>
+        <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{t.name}</div>
+        <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t.points} pts</div>
+      </div>
+    );
+  }
+  const [a, b] = teams;
+  const total = Math.max(a.points + b.points, 1);
+  const aPct = (a.points / total) * 100;
+  return (
+    <div className="panel" style={{ marginBottom: 18, padding: '20px 22px' }}>
+      <div style={{ color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+        Season scoreboard
+      </div>
+      <div className="row spread" style={{ marginBottom: 12, alignItems: 'baseline' }}>
+        <div>
+          <span className="dot" style={{ background: a.color, width: 12, height: 12, display: 'inline-block', marginRight: 8 }} />
+          <strong style={{ fontSize: 20 }}>{a.name}</strong>
+          <span style={{ marginLeft: 10, fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{a.points}</span>
+        </div>
+        <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+          {gap === 0 ? 'tied' : `${a.name} leads by ${Math.abs(gap)} pt${Math.abs(gap) === 1 ? '' : 's'}`}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ marginRight: 10, fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{b.points}</span>
+          <strong style={{ fontSize: 20 }}>{b.name}</strong>
+          <span className="dot" style={{ background: b.color, width: 12, height: 12, display: 'inline-block', marginLeft: 8 }} />
+        </div>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, overflow: 'hidden', display: 'flex', background: 'var(--panel-2)' }}>
+        <div style={{ width: `${aPct}%`, background: a.color, transition: 'width 0.3s ease' }} />
+        <div style={{ width: `${100 - aPct}%`, background: b.color, transition: 'width 0.3s ease' }} />
+      </div>
+      <div className="row spread" style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
+        <div>Race wins: {a.race_wins} · 1-2s: {a.one_twos}</div>
+        <div>Race wins: {b.race_wins} · 1-2s: {b.one_twos}</div>
+      </div>
+    </div>
+  );
 }
 
-function Stat({ label, value, sub }) {
+function Stat({ label, value, sub, accent }) {
   return (
-    <div className="stat">
+    <div className="stat" style={accent ? { borderTop: `2px solid ${accent}` } : undefined}>
       <div className="label">{label}</div>
       <div className="value">{value}</div>
       {sub && <div className="sub">{sub}</div>}
@@ -132,9 +232,16 @@ function RaceCard({ race }) {
       </div>
       <div className="results-list">
         {race.results.map(r => (
-          <div key={r.id} className={`result-row ${r.fastest_lap_ms === fastestMs && fastestMs ? 'fastest' : ''}`}>
+          <div
+            key={r.id}
+            className={`result-row ${r.fastest_lap_ms === fastestMs && fastestMs ? 'fastest' : ''}`}
+            style={r.team_color ? { borderLeft: `3px solid ${r.team_color}` } : undefined}
+          >
             <span className={`pos ${r.dnf ? 'dnf' : `p${r.position}`}`}>{r.dnf ? 'DNF' : r.position}</span>
-            <span className="driver"><span className="dot" style={{ background: r.color }} />{r.display_name}</span>
+            <span className="driver">
+              <span className="dot" style={{ background: r.color }} />{r.display_name}
+              {r.team_name && <span className="badge" style={{ marginLeft: 8 }}><span className="dot" style={{ background: r.team_color }} />{r.team_name}</span>}
+            </span>
             <span className="lap">{formatLap(r.fastest_lap_ms)}</span>
             <span style={{ fontWeight: 600 }}>{r.points} pt</span>
           </div>

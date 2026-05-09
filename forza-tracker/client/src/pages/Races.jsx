@@ -48,9 +48,16 @@ export default function Races() {
           </div>
           <div className="results-list">
             {r.results.map(res => (
-              <div key={res.id} className="result-row">
+              <div
+                key={res.id}
+                className="result-row"
+                style={res.team_color ? { borderLeft: `3px solid ${res.team_color}` } : undefined}
+              >
                 <span className={`pos ${res.dnf ? 'dnf' : `p${res.position}`}`}>{res.dnf ? 'DNF' : res.position}</span>
-                <span className="driver"><span className="dot" style={{ background: res.color }} />{res.display_name}</span>
+                <span className="driver">
+                  <span className="dot" style={{ background: res.color }} />{res.display_name}
+                  {res.team_name && <span className="badge" style={{ marginLeft: 8 }}><span className="dot" style={{ background: res.team_color }} />{res.team_name}</span>}
+                </span>
                 <span className="lap">{formatLap(res.fastest_lap_ms)}</span>
                 <span style={{ fontWeight: 600 }}>{res.points} pt</span>
               </div>

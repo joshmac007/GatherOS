@@ -30,6 +30,9 @@ export const api = {
   createSeason: (body) => request('/api/seasons', { method: 'POST', body }),
   updateSeason: (id, body) => request(`/api/seasons/${id}`, { method: 'PATCH', body }),
   standings: (id) => request(`/api/seasons/${id}/standings`),
+  teams: (id) => request(`/api/seasons/${id}/teams`),
+  saveTeams: (id, teams) => request(`/api/seasons/${id}/teams`, { method: 'PUT', body: { teams } }),
+  teamStandings: (id) => request(`/api/seasons/${id}/team-standings`),
 
   tracks: () => request('/api/tracks'),
   createTrack: (body) => request('/api/tracks', { method: 'POST', body }),

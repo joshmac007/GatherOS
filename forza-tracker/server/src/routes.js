@@ -135,6 +135,9 @@ export default async function routes(app) {
         u.display_name,
         u.gamertag,
         u.color,
+        t.id AS team_id,
+        t.name AS team_name,
+        t.color AS team_color,
         COUNT(rr.id) AS races,
         COALESCE(SUM(rr.points), 0) AS points,
         COALESCE(SUM(CASE WHEN rr.position = 1 AND rr.dnf = 0 THEN 1 ELSE 0 END), 0) AS wins,
@@ -143,9 +146,113 @@ export default async function routes(app) {
       FROM users u
       LEFT JOIN race_results rr ON rr.user_id = u.id
       LEFT JOIN races r ON r.id = rr.race_id AND r.season_id = ?
+      LEFT JOIN team_members tm ON tm.user_id = u.id
+      LEFT JOIN teams t ON t.id = tm.team_id AND t.season_id = ?
       GROUP BY u.id
       ORDER BY points DESC, wins DESC, podiums DESC, races ASC
-    `).all(seasonId);
+    `).all(seasonId, seasonId);
+  });
+
+  app.get('/api/seasons/:id/teams', async (req) => {
+    const seasonId = Number(req.params.id);
+    const teams = db.prepare('SELECT * FROM teams WHERE season_id = ? ORDER BY id').all(seasonId);
+    const memberStmt = db.prepare(`
+      SELECT u.id, u.display_name, u.gamertag, u.color
+      FROM team_members tm JOIN users u ON u.id = tm.user_id
+      WHERE tm.team_id = ?
+      ORDER BY u.id
+    `);
+    return teams.map(t => ({ ...t, members: memberStmt.all(t.id) }));
+  });
+
+  app.put('/api/seasons/:id/teams', async (req, reply) => {
+    const me = requireAuth(req, reply);
+    if (!me) return;
+    const seasonId = Number(req.params.id);
+    const { teams } = req.body || {};
+    if (!Array.isArray(teams)) {
+      return reply.code(400).send({ error: 'teams array required' });
+    }
+    const allUserIds = teams.flatMap(t => t.member_ids || []);
+    const dupe = allUserIds.find((id, i) => allUserIds.indexOf(id) !== i);
+    if (dupe) {
+      return reply.code(400).send({ error: 'driver_on_multiple_teams', message: `Driver ${dupe} is on more than one team.` });
+    }
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM teams WHERE season_id = ?').run(seasonId);
+      const insertTeam = db.prepare('INSERT INTO teams (season_id, name, color) VALUES (?, ?, ?)');
+      const insertMember = db.prepare('INSERT INTO team_members (team_id, user_id) VALUES (?, ?)');
+      for (const t of teams) {
+        const info = insertTeam.run(seasonId, t.name || 'Team', t.color || '#5b8def');
+        for (const userId of t.member_ids || []) {
+          insertMember.run(info.lastInsertRowid, userId);
+        }
+      }
+    });
+    tx();
+    const out = db.prepare('SELECT * FROM teams WHERE season_id = ? ORDER BY id').all(seasonId);
+    const memberStmt = db.prepare(`
+      SELECT u.id, u.display_name, u.gamertag, u.color
+      FROM team_members tm JOIN users u ON u.id = tm.user_id
+      WHERE tm.team_id = ? ORDER BY u.id
+    `);
+    return out.map(t => ({ ...t, members: memberStmt.all(t.id) }));
+  });
+
+  app.get('/api/seasons/:id/team-standings', async (req) => {
+    const seasonId = Number(req.params.id);
+    const teams = db.prepare('SELECT * FROM teams WHERE season_id = ? ORDER BY id').all(seasonId);
+    if (teams.length === 0) return [];
+
+    const memberStmt = db.prepare(`
+      SELECT u.id, u.display_name, u.gamertag, u.color
+      FROM team_members tm JOIN users u ON u.id = tm.user_id
+      WHERE tm.team_id = ? ORDER BY u.id
+    `);
+    const teamPointsStmt = db.prepare(`
+      SELECT COALESCE(SUM(rr.points), 0) AS points
+      FROM race_results rr
+      JOIN races r ON r.id = rr.race_id
+      JOIN team_members tm ON tm.user_id = rr.user_id
+      WHERE r.season_id = ? AND tm.team_id = ?
+    `);
+
+    const races = db.prepare('SELECT id FROM races WHERE season_id = ?').all(seasonId);
+    const raceTeamPointsStmt = db.prepare(`
+      SELECT COALESCE(SUM(rr.points), 0) AS points,
+             SUM(CASE WHEN rr.position <= 2 AND rr.dnf = 0 THEN 1 ELSE 0 END) AS top2
+      FROM race_results rr
+      JOIN team_members tm ON tm.user_id = rr.user_id
+      WHERE rr.race_id = ? AND tm.team_id = ?
+    `);
+
+    const out = teams.map(t => ({
+      ...t,
+      members: memberStmt.all(t.id),
+      points: teamPointsStmt.get(seasonId, t.id).points,
+      race_wins: 0,
+      one_twos: 0,
+      races: races.length,
+    }));
+
+    for (const r of races) {
+      const perTeam = teams.map(t => ({ team_id: t.id, ...raceTeamPointsStmt.get(r.id, t.id) }));
+      const max = Math.max(...perTeam.map(p => p.points));
+      const winners = perTeam.filter(p => p.points === max);
+      if (winners.length === 1) {
+        const t = out.find(x => x.id === winners[0].team_id);
+        if (t) t.race_wins += 1;
+      }
+      for (const p of perTeam) {
+        if (p.top2 === 2) {
+          const t = out.find(x => x.id === p.team_id);
+          if (t) t.one_twos += 1;
+        }
+      }
+    }
+
+    out.sort((a, b) => b.points - a.points || b.race_wins - a.race_wins || b.one_twos - a.one_twos);
+    return out;
   });
 
   app.get('/api/tracks', async () => {
@@ -182,9 +289,14 @@ export default async function routes(app) {
       ? db.prepare(sql).all(seasonId, limit)
       : db.prepare(sql).all(limit);
     const results = db.prepare(`
-      SELECT rr.*, u.display_name, u.gamertag, u.color
+      SELECT rr.*, u.display_name, u.gamertag, u.color,
+             t.id AS team_id, t.name AS team_name, t.color AS team_color
       FROM race_results rr
       JOIN users u ON u.id = rr.user_id
+      LEFT JOIN team_members tm ON tm.user_id = u.id
+      LEFT JOIN teams t ON t.id = tm.team_id AND t.season_id = (
+        SELECT season_id FROM races WHERE id = rr.race_id
+      )
       WHERE rr.race_id = ?
       ORDER BY rr.position ASC
     `);

@@ -8,6 +8,7 @@ import LogRace from './pages/LogRace.jsx';
 import Seasons from './pages/Seasons.jsx';
 import Roster from './pages/Roster.jsx';
 import Records from './pages/Records.jsx';
+import Teams from './pages/Teams.jsx';
 
 const SessionContext = createContext(null);
 export const useSession = () => useContext(SessionContext);
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/races" element={<Races />} />
           <Route path="/log" element={<LogRace />} />
           <Route path="/seasons" element={<Seasons />} />
+          <Route path="/teams" element={<Teams />} />
           <Route path="/roster" element={<Roster />} />
           <Route path="/records" element={<Records />} />
         </Route>
@@ -62,6 +64,7 @@ function Layout() {
         <NavLink to="/log">Log a Race</NavLink>
         <NavLink to="/records">Records</NavLink>
         <NavLink to="/seasons">Seasons</NavLink>
+        <NavLink to="/teams">Teams</NavLink>
         <NavLink to="/roster">Roster</NavLink>
         <div className="me">
           <span className="dot" style={{ background: user.color }} />
