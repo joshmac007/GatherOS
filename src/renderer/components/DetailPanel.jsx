@@ -773,6 +773,15 @@ export default function DetailPanel({
           Folders
         </div>
         <div className={styles.collectionPills}>
+          {availableToAdd.length > 0 && (
+            <button
+              type="button"
+              className={styles.addPillBtn}
+              onClick={openPicker}
+            >
+              + Add
+            </button>
+          )}
           {memberships.map((c) => (
             <span key={c.id} className={styles.collectionPill}>
               <span className={styles.collectionPillIcon}>
@@ -789,15 +798,6 @@ export default function DetailPanel({
               </button>
             </span>
           ))}
-          {availableToAdd.length > 0 && (
-            <button
-              type="button"
-              className={styles.addPillBtn}
-              onClick={openPicker}
-            >
-              + Add
-            </button>
-          )}
           {memberships.length === 0 && availableToAdd.length === 0 && (
             <span className={styles.collectionsEmpty}>No buckets yet</span>
           )}
@@ -810,20 +810,6 @@ export default function DetailPanel({
           Tags
         </div>
         <div className={styles.tagPills}>
-          {tags.map((t) => (
-            <span key={t.id} className={styles.tagPill}>
-              <span className={styles.tagHash}>#</span>
-              <span className={styles.tagName}>{t.name}</span>
-              <button
-                type="button"
-                className={styles.tagRemove}
-                onClick={() => removeTag(t.id)}
-                title="Remove tag"
-              >
-                ×
-              </button>
-            </span>
-          ))}
           {addingTag ? (
             <span className={styles.tagInputAnchor}>
               <input
@@ -855,6 +841,20 @@ export default function DetailPanel({
               + Add
             </button>
           )}
+          {tags.map((t) => (
+            <span key={t.id} className={styles.tagPill}>
+              <span className={styles.tagHash}>#</span>
+              <span className={styles.tagName}>{t.name}</span>
+              <button
+                type="button"
+                className={styles.tagRemove}
+                onClick={() => removeTag(t.id)}
+                title="Remove tag"
+              >
+                ×
+              </button>
+            </span>
+          ))}
           <button
             type="button"
             className={[styles.autoTagBtn, autoTagging && styles.autoTagBtnLoading].filter(Boolean).join(' ')}
