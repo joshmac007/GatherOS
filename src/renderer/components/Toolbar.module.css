@@ -827,11 +827,36 @@
   cursor: pointer;
   -webkit-app-region: no-drag;
   margin-left: 6px;
-  transition: opacity var(--dur-instant) ease, transform var(--dur-instant) ease;
+  transform-origin: center top;
+  /* Springy compact ⇄ full transition shared with .modePill so the
+     two ride the same easing when the grid scrolls past the top.
+     :active overrides this with an instant transition below so the
+     press flash stays snappy. */
+  transition:
+    transform var(--dur-pronounced) cubic-bezier(0.34, 1.18, 0.40, 1),
+    opacity var(--dur-instant) ease;
+}
+
+/* Compact form — matches .modePillCompact's scale so both elements
+   shrink and pop back together on scroll. */
+.addBtnCompact {
+  transform: scale(0.86);
 }
 
 .addBtn:hover { opacity: 0.92; }
-.addBtn:active { transform: scale(0.985); }
+
+.addBtn:active {
+  transition: transform var(--dur-instant) ease, opacity var(--dur-instant) ease;
+  transform: scale(0.985);
+}
+
+.addBtnCompact:active {
+  transform: scale(0.847); /* 0.86 × 0.985 */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .addBtn { transition: opacity var(--dur-instant) ease; }
+}
 
 .addBtnIcon {
   display: inline-flex;

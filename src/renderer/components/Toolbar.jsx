@@ -495,7 +495,9 @@ export default function Toolbar({
         {onUpload && (
           <button
             type="button"
-            className={styles.addBtn}
+            className={[styles.addBtn, modePillCompact && styles.addBtnCompact]
+              .filter(Boolean)
+              .join(' ')}
             onClick={onUpload}
             title="Add image"
             aria-label="Add image"
