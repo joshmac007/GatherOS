@@ -8,7 +8,7 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 24px;
-  padding: 18px 24px 14px var(--titlebar-left-pad, 24px);
+  padding: 28px 24px 14px var(--titlebar-left-pad, 24px);
   background: var(--content-bg);
   flex: 0 0 auto;
   -webkit-app-region: drag;
