@@ -540,12 +540,6 @@
   color: var(--accent);
 }
 
-.search:focus {
-  /* No accent halo — just preserve the resting shadow so the field
-     keeps its lift but the focus state doesn't shout. */
-  box-shadow: var(--shadow-card);
-}
-
 /* Hide WebKit's native search ornaments so our custom icon stays visible
    and there's no extra widget once the user starts typing. */
 .search::-webkit-search-decoration,
