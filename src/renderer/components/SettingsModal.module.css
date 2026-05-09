@@ -992,23 +992,31 @@
 .libraryList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   margin-top: 8px;
 }
 
+/* Hairline-divided rows. Card chrome (border / radius / shadow)
+   was removed in favour of a single bottom divider so the list
+   reads as a continuous register rather than a stack of tiles —
+   the screen stays calmer when more libraries get added. */
 .libraryRow {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 14px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-control);
+  padding: 16px 4px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.libraryRow:not(:last-of-type) {
+  border-bottom: 1px solid var(--border);
 }
 
 .libraryRowActive {
-  border-color: var(--border-strong);
+  /* Active state is now carried entirely by the "Active" tag next
+     to the name; no surrounding chrome to recolour. */
 }
 
 .libraryRowMain {
@@ -1079,7 +1087,7 @@
   align-items: center;
   gap: 8px;
   align-self: flex-start;
-  margin-top: 4px;
+  margin-top: 14px;
   padding: 8px 14px;
   background: transparent;
   border: 1px dashed var(--border-strong);

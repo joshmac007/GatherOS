@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { History, User, Sparkles, Hash, Database, Info, Trash2, Library, Pencil, Plus } from 'lucide-react';
+import { History, User, Sparkles, Hash, Database, Info, Trash2, Library, Pencil, Plus, ArrowRight } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
 import PrivacyModal from './PrivacyModal.jsx';
@@ -210,6 +210,7 @@ function LibrariesPage({
                     className={styles.btn}
                     onClick={() => onSwitch?.(lib.id)}
                   >
+                    <ArrowRight size={13} strokeWidth={1.7} aria-hidden="true" />
                     Switch
                   </button>
                 )}
