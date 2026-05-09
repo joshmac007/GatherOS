@@ -105,11 +105,13 @@
   --status-success-halo: rgba(52, 199, 89, 0.18);
   --status-error: #c1322a;
 
-  /* AI tint — used for the indexing affordance and the AI prompt
-     box. Keeps the soft purple identity in both themes. */
-  --ai-tint: #6c63ff;
-  --ai-tint-bg: rgba(108, 99, 255, 0.06);
-  --ai-tint-border: rgba(108, 99, 255, 0.18);
+  /* AI tint — collapsed onto monochrome ink alongside the rest of
+     the accent palette so AI-related affordances read as part of
+     the same restrained type system instead of a separate purple
+     channel. */
+  --ai-tint: var(--text-primary);
+  --ai-tint-bg: rgba(0, 0, 0, 0.05);
+  --ai-tint-border: rgba(0, 0, 0, 0.10);
 
   /* Tooltip pill (used by [data-tooltip] generic + DetailPanel
      swatch tooltip + BoardView text-tool tooltip) */
@@ -296,9 +298,9 @@
   --status-success-halo: rgba(48, 209, 88, 0.22);
   --status-error: #ff6961;
 
-  --ai-tint: #8a82ff;
-  --ai-tint-bg: rgba(138, 130, 255, 0.12);
-  --ai-tint-border: rgba(138, 130, 255, 0.26);
+  --ai-tint: var(--text-primary);
+  --ai-tint-bg: rgba(255, 255, 255, 0.06);
+  --ai-tint-border: rgba(255, 255, 255, 0.10);
 
   --tooltip-bg: rgba(50, 50, 52, 0.96);
   --tooltip-fg: #fff;

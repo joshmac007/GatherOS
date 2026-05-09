@@ -981,11 +981,11 @@
 
 
 /* Generate-variation CTA — anchored at the bottom of the preview
-   section so it reads as the primary action for *this image*
-   rather than as a tail on the prompt block. Picks up the same
-   --ai-tint family as the "Generate prompt" autoTagBtn so both
-   AI affordances feel related, but is wider, taller, and stronger
-   so it leads the hierarchy of buttons in the section. */
+   section so it reads as the primary action for *this image*.
+   Same white-button recipe used elsewhere in the app (surface
+   fill, hairline border, soft ambient shadow) so AI affordances
+   read as plain typographic controls instead of a separate
+   coloured channel. */
 .variantBtn {
   display: inline-flex;
   align-items: center;
@@ -993,26 +993,22 @@
   gap: 8px;
   width: 100%;
   padding: 9px 14px;
-  background: var(--ai-tint-bg);
-  border: 1px solid var(--ai-tint-border);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-control);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   font-weight: 500;
   letter-spacing: -0.005em;
-  color: var(--ai-tint);
+  color: var(--text-primary);
   cursor: pointer;
   transition:
     background var(--dur-instant) ease,
-    border-color var(--dur-instant) ease,
     transform var(--dur-instant) ease;
 }
 
-.variantBtn:hover {
-  background: color-mix(in srgb, var(--ai-tint) 14%, transparent);
-  border-color: color-mix(in srgb, var(--ai-tint) 36%, transparent);
-}
-
+.variantBtn:hover { background: var(--hover-bg); }
 .variantBtn:active { transform: scale(0.98); }
 
 .variantBtnIcon {
@@ -1021,7 +1017,7 @@
   justify-content: center;
   width: 14px;
   height: 14px;
-  color: var(--ai-tint);
+  color: var(--text-primary);
 }
 
 .variantBtnIcon svg {
