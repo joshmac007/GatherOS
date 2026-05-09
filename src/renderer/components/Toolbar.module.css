@@ -220,9 +220,8 @@
 }
 
 /* Collapsed form — bare magnifying glass, no surrounding container.
-   Strips the input's background / border / shadow so what the user
-   sees is just the icon, sized to match the toolbar's other glyphs.
-   Clicking the (still-clickable) wrap expands into the full pill. */
+   The input is the same bare element it is when expanded; only the
+   wrap's width and the icon's centering differ. */
 .searchWrapCollapsed {
   flex: 0 0 28px;
   width: 28px;
@@ -231,32 +230,12 @@
 
 .searchWrapCollapsed .search {
   padding: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  border-radius: 0;
   cursor: pointer;
-  /* Hide the cursor / typed text frame when the field is hidden;
-     the input is still focusable so keyboard-driven expansion via
-     Tab still lands here. */
-  color: transparent;
-}
-
-.searchWrapCollapsed .search::placeholder {
-  opacity: 0;
-}
-
-.searchWrapCollapsed .clearSearchBtn,
-.searchWrapCollapsed .qkChip {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .searchWrapCollapsed .searchIcon {
   left: 50%;
   transform: translate(-50%, -50%);
-  /* Resting glyph stays neutral ink even if semanticSearchActive
-     is on; the sparkle variant is reserved for the expanded form. */
   color: var(--text-secondary);
 }
 
@@ -351,20 +330,23 @@
   height: 14px;
 }
 
+/* Bare-cursor search field. No surrounding container at any state
+   — clicking the icon just reveals an inline cursor next to the
+   glyph. The input keeps its absolute-positioned icon on the left
+   via padding-left:24px (icon width + breathing). */
 .search {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  padding: 6px 60px 6px 32px;
-  background: var(--surface-1);
-  border: 0.5px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
+  padding: 6px 8px 6px 28px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   color: var(--text-primary);
   font: inherit;
   font-size: var(--text-md);
   outline: none;
-  box-shadow: var(--shadow-card);
-  transition: box-shadow var(--dur-instant) ease;
+  box-shadow: none;
 }
 
 /* ⌘K hint inside the search input — clickable chip that opens the
