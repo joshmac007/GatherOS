@@ -880,7 +880,7 @@ function getAllCollectionsWithThumbs() {
   `).all();
   return rows.map((row) => {
     const { thumbs_blob, ...rest } = row;
-    return { ...rest, thumbs: thumbs_blob ? thumbs_blob.split('') : [] };
+    return { ...rest, thumbs: thumbs_blob ? thumbs_blob.split('\x01') : [] };
   });
 }
 
@@ -1160,7 +1160,7 @@ function listBoardsWithThumbs() {
   `).all();
   return rows.map((row) => {
     const { thumbs_blob, ...rest } = row;
-    return { ...rest, thumbs: thumbs_blob ? thumbs_blob.split('') : [] };
+    return { ...rest, thumbs: thumbs_blob ? thumbs_blob.split('\x01') : [] };
   });
 }
 
