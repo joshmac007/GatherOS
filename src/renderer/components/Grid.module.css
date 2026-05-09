@@ -24,10 +24,14 @@
 .marquee {
   position: fixed;
   pointer-events: none;
-  background: rgba(10, 132, 255, 0.10);
-  border: 1px solid rgba(10, 132, 255, 0.55);
+  background: var(--accent-bg-soft);
+  border: 1px solid rgba(0, 0, 0, 0.55);
   border-radius: var(--radius-sm);
   z-index: 50;
+}
+
+:root[data-theme="dark"] .marquee {
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 /* Loading skeleton — masonry-aspect placeholders with a soft
@@ -120,8 +124,8 @@
 }
 
 .listRow.listRowSelected {
-  background: rgba(10, 132, 255, 0.08);
-  border-color: rgba(10, 132, 255, 0.35);
+  background: var(--accent-bg-faint);
+  border-color: var(--accent-ring);
 }
 
 .listThumb {
@@ -197,6 +201,6 @@
 }
 
 @keyframes listRowFresh {
-  0%   { background: rgba(10, 132, 255, 0.18); }
+  0%   { background: var(--accent-bg-medium); }
   100% { background: transparent; }
 }

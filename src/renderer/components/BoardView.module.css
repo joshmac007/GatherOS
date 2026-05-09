@@ -820,7 +820,7 @@
 .marquee {
   position: absolute;
   background: var(--accent-bg-soft);
-  border: calc(1px / var(--board-zoom, 1)) solid var(--accent, #0a84ff);
+  border: calc(1px / var(--board-zoom, 1)) solid var(--accent, #000000);
   pointer-events: none;
   z-index: 999;
 }
@@ -833,7 +833,7 @@
    so the user can grab them. */
 .groupBbox {
   position: absolute;
-  outline: calc(1.5px / var(--board-zoom, 1)) solid var(--accent, #0a84ff);
+  outline: calc(1.5px / var(--board-zoom, 1)) solid var(--accent, #000000);
   outline-offset: 0;
   pointer-events: none;
   z-index: 998;
@@ -863,7 +863,7 @@
    doesn't change the item's box model — drag/move math stays
    accurate, and the handles sit exactly on the corners. */
 .item.itemSelected {
-  outline: calc(1.5px / var(--board-zoom, 1)) solid var(--accent, #0a84ff);
+  outline: calc(1.5px / var(--board-zoom, 1)) solid var(--accent, #000000);
   outline-offset: 0;
 }
 
@@ -1103,7 +1103,7 @@
   width: calc(11px / var(--board-zoom, 1));
   height: calc(11px / var(--board-zoom, 1));
   background: var(--surface-1);
-  border: calc(1.5px / var(--board-zoom, 1)) solid var(--accent, #0a84ff);
+  border: calc(1.5px / var(--board-zoom, 1)) solid var(--accent, #000000);
   border-radius: var(--radius-circle);
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(2px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.18);
   transform: translate(-50%, -50%);
@@ -1119,7 +1119,7 @@
   position: absolute;
   width: calc(10px / var(--board-zoom, 1));
   height: calc(10px / var(--board-zoom, 1));
-  background: var(--accent, #0a84ff);
+  background: var(--accent, #000000);
   border: calc(1.5px / var(--board-zoom, 1)) solid var(--surface-1);
   border-radius: var(--radius-circle);
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(3px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.22);
@@ -1135,7 +1135,7 @@
   position: absolute;
   width: calc(7px / var(--board-zoom, 1));
   height: calc(7px / var(--board-zoom, 1));
-  background: var(--accent, #0a84ff);
+  background: var(--accent, #000000);
   border-radius: var(--radius-circle);
   opacity: 0.6;
   transform: translate(-50%, -50%);

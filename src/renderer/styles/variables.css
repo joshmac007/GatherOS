@@ -24,14 +24,16 @@
   --text-tertiary: rgba(0, 0, 0, 0.4);
   --text-on-accent: #ffffff;
 
-  /* Accent (macOS system blue) */
-  --accent: #0a84ff;
-  --accent-hover: #0070e8;
-  --accent-bg-faint: rgba(10, 132, 255, 0.06);
-  --accent-bg-soft: rgba(10, 132, 255, 0.10);
-  --accent-bg-active: rgba(10, 132, 255, 0.12);
-  --accent-bg-medium: rgba(10, 132, 255, 0.18);
-  --accent-ring: rgba(10, 132, 255, 0.25);
+  /* Accent — monochrome ink. The product reads as a typographic
+     tool, not a system app, so the accent collapses to the same
+     primary ink the rest of the UI uses instead of macOS blue. */
+  --accent: #000000;
+  --accent-hover: #1f1f1f;
+  --accent-bg-faint: rgba(0, 0, 0, 0.06);
+  --accent-bg-soft: rgba(0, 0, 0, 0.10);
+  --accent-bg-active: rgba(0, 0, 0, 0.12);
+  --accent-bg-medium: rgba(0, 0, 0, 0.18);
+  --accent-ring: rgba(0, 0, 0, 0.25);
 
   /* Hover/active states. --hover-bg is the canonical hover surface
      for any interactive control — mode pill segments, icon buttons,
@@ -228,16 +230,20 @@
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.6);
   --text-tertiary: rgba(255, 255, 255, 0.42);
-  --text-on-accent: #ffffff;
+  /* Accent flips to the primary ink in dark mode (white) so
+     accented surfaces stay visible on the dark canvas. Text on top
+     of the accent flips back to black to keep contrast. Alphas a
+     touch heavier than light mode since rgba-white over the dark
+     canvas reads thinner than rgba-black over light. */
+  --text-on-accent: #000000;
 
-  /* Brighter accent reads better against dark surfaces. */
-  --accent: #409cff;
-  --accent-hover: #5aaaff;
-  --accent-bg-faint: rgba(64, 156, 255, 0.10);
-  --accent-bg-soft: rgba(64, 156, 255, 0.16);
-  --accent-bg-active: rgba(64, 156, 255, 0.20);
-  --accent-bg-medium: rgba(64, 156, 255, 0.28);
-  --accent-ring: rgba(64, 156, 255, 0.35);
+  --accent: #ffffff;
+  --accent-hover: #f0f0f0;
+  --accent-bg-faint: rgba(255, 255, 255, 0.08);
+  --accent-bg-soft: rgba(255, 255, 255, 0.14);
+  --accent-bg-active: rgba(255, 255, 255, 0.18);
+  --accent-bg-medium: rgba(255, 255, 255, 0.24);
+  --accent-ring: rgba(255, 255, 255, 0.30);
 
   --hover-bg: rgba(255, 255, 255, 0.08);
   --hover-bg-soft: rgba(255, 255, 255, 0.05);

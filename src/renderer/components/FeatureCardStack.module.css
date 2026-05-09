@@ -5,7 +5,7 @@
 }
 
 .wrapAccent {
-  --chip-bg: rgba(10, 132, 255, 0.1);
+  --chip-bg: var(--accent-bg-soft);
   --chip-color: var(--accent);
 }
 

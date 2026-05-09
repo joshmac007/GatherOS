@@ -263,7 +263,7 @@
   width: 80px;
   height: 80px;
   border-radius: var(--radius-circle);
-  background: linear-gradient(135deg, #34c759, #0a84ff);
+  background: linear-gradient(135deg, #34c759, var(--accent));
   display: inline-flex;
   align-items: center;
   justify-content: center;

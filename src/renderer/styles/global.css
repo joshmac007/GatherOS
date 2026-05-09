@@ -131,7 +131,7 @@ body[data-board-print="true"] .main-col {
   inset: 12px;
   border: 2px dashed var(--accent);
   border-radius: var(--radius-lg);
-  background: rgba(10, 132, 255, 0.08);
+  background: var(--accent-bg-faint);
   display: flex;
   align-items: center;
   justify-content: center;
