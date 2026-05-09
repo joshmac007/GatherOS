@@ -436,7 +436,11 @@ export default function Toolbar({
   // Slider is inverted so dragging right = bigger cards = fewer columns.
   const sliderValue = COLS_MAX + COLS_MIN - columns;
   return (
-    <div className={styles.toolbar}>
+    <div
+      className={[styles.toolbar, modePillCompact && styles.toolbarScrolled]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <div className={styles.left}>
         <span className={styles.brand} aria-hidden="true">
           {/* Minimal triangle brand mark — placeholder for the

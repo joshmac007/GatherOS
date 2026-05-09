@@ -12,6 +12,24 @@
   background: var(--content-bg);
   flex: 0 0 auto;
   -webkit-app-region: drag;
+  /* z-index lifts the toolbar above the grid scroll body so the
+     scroll-shadow below doesn't get clipped by content underneath. */
+  position: relative;
+  z-index: 2;
+  /* Soft shadow that fades in once the grid scrolls past its top.
+     Driven by .toolbarScrolled, toggled from App.jsx via the same
+     near-top scroll state used by the mode pill / Add button. The
+     property starts at 0 so the unscrolled state stays edge-flat. */
+  box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+  transition: box-shadow var(--dur-medium) var(--ease-out);
+}
+
+.toolbarScrolled {
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.10);
+}
+
+:root[data-theme="dark"] .toolbarScrolled {
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.55);
 }
 
 .iconBtn {
