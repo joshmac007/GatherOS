@@ -18,6 +18,7 @@ import {
   Library as LibraryIcon,
   Folder as FolderIcon,
   Layers as LayersIcon,
+  Telescope as TelescopeIcon,
 } from 'lucide-react';
 import styles from './Toolbar.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -146,9 +147,10 @@ const COLS_MAX = 8;
 // 'boards' so the DB / IPC / view-state layer doesn't have to
 // migrate; this is purely a relabel at the surface.
 const MODE_SEGMENTS = [
-  { id: 'library', label: 'Library', Icon: LibraryIcon },
-  { id: 'folders', label: 'Folders', Icon: FolderIcon  },
-  { id: 'boards',  label: 'Spaces',  Icon: LayersIcon  },
+  { id: 'library',       label: 'Library',       Icon: LibraryIcon   },
+  { id: 'folders',       label: 'Folders',       Icon: FolderIcon    },
+  { id: 'boards',        label: 'Spaces',        Icon: LayersIcon    },
+  { id: 'constellation', label: 'Constellation', Icon: TelescopeIcon },
 ];
 
 // Anchored popover-menu attached to the toolbar's help icon. Lifted

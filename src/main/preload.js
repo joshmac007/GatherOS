@@ -155,6 +155,9 @@ contextBridge.exposeInMainWorld('moodmark', {
     reindexLibrary: () => ipcRenderer.invoke('ai:reindex-library'),
     similarSaves: (saveId, limit) => ipcRenderer.invoke('ai:similar-saves', saveId, limit),
   },
+  constellation: {
+    getPoints: (opts) => ipcRenderer.invoke('constellation:get-points', opts || {}),
+  },
   updater: {
     install: () => ipcRenderer.invoke('updater:install'),
   },
