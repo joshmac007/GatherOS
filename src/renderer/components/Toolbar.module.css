@@ -211,25 +211,30 @@
   z-index: 1;
 }
 
-/* No container at any state — the wrap is just a positioning
-   anchor for the icon + input + clear-X. Click the magnifying
-   glass and a cursor appears next to it; type, then clear with
-   the trailing × or with Escape. */
+/* Flex row, no container chrome. Icon sits as the first flex
+   item with a fixed left padding so its screen x doesn't depend
+   on the wrap's overall width — clicking the search icon only
+   stretches the input area to the right, the icon itself stays
+   put. */
 .searchWrap {
   position: relative;
+  display: inline-flex;
+  align-items: center;
   flex: 0 0 240px;
   width: 240px;
+  padding-left: 7px;
   -webkit-app-region: no-drag;
   background: transparent;
   border: none;
   border-radius: 0;
   box-shadow: none;
-  padding: 0;
   transition: width var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1);
 }
 
-/* Collapsed form — just the magnifying glass, centered in a 28px
-   slot so it sits like the other toolbar icons. */
+/* Collapsed form — wrap shrinks to just enough room for the
+   glyph (7px padding + 14px icon + 7px breathing). The input is
+   still part of the row but its content area is squeezed to
+   zero, which is fine since it's fully transparent. */
 .searchWrapCollapsed {
   flex: 0 0 28px;
   width: 28px;
@@ -237,7 +242,6 @@
 }
 
 .searchWrapCollapsed .search {
-  padding: 0;
   cursor: pointer;
 }
 
@@ -250,14 +254,7 @@
 }
 
 .searchIcon {
-  position: absolute;
-  /* 7px lands the 14px glyph perfectly centered inside the 28px
-     collapsed slot AND keeps it at the same screen x once the
-     wrap expands to 240px — so the icon doesn't drift sideways
-     between the two states. */
-  left: 7px;
-  top: 50%;
-  transform: translateY(-50%);
+  flex: 0 0 auto;
   width: 14px;
   height: 14px;
   display: inline-flex;
@@ -265,7 +262,6 @@
   justify-content: center;
   color: var(--text-secondary);
   pointer-events: none;
-  z-index: 1;
 }
 
 .searchIconAi {
@@ -336,15 +332,15 @@
   height: 14px;
 }
 
-/* Bare-cursor search field. No surrounding container at any state
-   — clicking the icon just reveals an inline cursor next to the
-   glyph. The input keeps its absolute-positioned icon on the left
-   via padding-left:24px (icon width + breathing). */
+/* Bare-cursor input. Flex child of .searchWrap, sits to the
+   right of .searchIcon. min-width:0 keeps the input from forcing
+   the wrap wider than its declared width when text overflows. */
 .search {
   -webkit-appearance: none;
   appearance: none;
-  width: 100%;
-  padding: 6px 32px 6px 28px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 24px 6px 7px;
   background: transparent;
   border: none;
   border-radius: 0;
