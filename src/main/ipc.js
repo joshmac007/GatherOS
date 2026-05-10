@@ -915,32 +915,29 @@ function registerIpcHandlers() {
         });
       } else {
         const { UMAP } = require('umap-js');
+        // nNeighbors must be < rows.length. 15 is the umap default
+        // but we clamp for small libraries.
         const nNeighbors = Math.max(2, Math.min(15, rows.length - 1));
         const umap = new UMAP({
           nComponents: 2,
           nNeighbors,
           minDist: 0.1,
           spread: 1.0,
+          random: () => 0.42,
         });
-        console.log(`[constellation] umap initializeFit (n=${rows.length}, k=${nNeighbors})…`);
+        console.log(`[constellation] umap fitAsync (n=${rows.length}, k=${nNeighbors})…`);
         const t0 = Date.now();
-        // Step-by-step API. initializeFit() builds the kNN graph
-        // and returns the planned epoch count; we then call step()
-        // ourselves so we can yield to the event loop between
-        // iterations (fitAsync's progress callback runs after the
-        // graph build, which is where small-library hangs sit).
-        const nEpochs = umap.initializeFit(matrix);
-        console.log(`[constellation] umap graph built in ${Date.now() - t0}ms, ${nEpochs} epochs to run`);
-        for (let i = 0; i < nEpochs; i += 1) {
-          umap.step();
-          if (i === 0 || (i + 1) % 25 === 0 || i === nEpochs - 1) {
-            console.log(`[constellation] umap epoch ${i + 1}/${nEpochs}`);
-            event.sender.send('constellation:progress', { epoch: i + 1, total: nEpochs });
-            // Yield so renderer can paint + IPC can pump.
+        embedding2D = await umap.fitAsync(matrix, async (epoch) => {
+          // Yield every 25 epochs so the main process event loop
+          // can pump IPC, garbage collect, paint, etc. Without this
+          // even fitAsync runs effectively synchronously.
+          if (epoch % 25 === 0) {
+            console.log(`[constellation] umap epoch ${epoch}`);
+            event.sender.send('constellation:progress', { epoch });
             await new Promise((r) => setImmediate(r));
           }
-        }
-        embedding2D = umap.getEmbedding();
+          return true;  // keep going
+        });
         console.log(`[constellation] umap done in ${Date.now() - t0}ms`);
       }
 
