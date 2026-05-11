@@ -206,7 +206,11 @@ export default function ImageCard({
         )}
         {record.__pending && (
           <div className={styles.pendingOverlay} aria-label="Generating variation">
-            <span className={styles.pendingScan} aria-hidden="true" />
+            <div className={styles.pendingParticles} aria-hidden="true">
+              {Array.from({ length: 14 }).map((_, i) => (
+                <span key={i} className={styles.pendingParticle} style={{ '--i': i }} />
+              ))}
+            </div>
             <div className={styles.pendingLabel}>Generating variation</div>
           </div>
         )}

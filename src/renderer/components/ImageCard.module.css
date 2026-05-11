@@ -244,15 +244,17 @@
   pointer-events: none;
 }
 
-/* Dim + heavily blur the source thumb so the overlay reads as
-   the hero element and the user perceives the image as being
-   actively composed rather than just dimmed. */
+/* Source thumb sits at full opacity but heavily blurred — the
+   blur alone signals "actively composing", no flat dim needed. */
 .imagePending {
-  opacity: 0.5;
+  opacity: 1;
   filter: saturate(0.6) blur(18px);
   transform: scale(1.08);
 }
 
+/* No tint over the image itself — just a dark gradient at the
+   bottom so the white label has contrast. The top 60% of the
+   card stays as just-the-blurred-thumb. */
 .pendingOverlay {
   position: absolute;
   inset: 0;
@@ -262,64 +264,66 @@
   justify-content: flex-end;
   padding-bottom: 18px;
   overflow: hidden;
-  /* Subtle vertical gradient so the label has contrast at the
-     bottom of the card without dimming the rest of the source. */
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0) 50%,
-    rgba(255, 255, 255, 0.55) 100%
+    rgba(0, 0, 0, 0) 55%,
+    rgba(0, 0, 0, 0.75) 100%
   );
-}
-
-:root[data-theme="dark"] .pendingOverlay {
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0) 50%,
-    rgba(0, 0, 0, 0.5) 100%
-  );
-}
-
-/* Midjourney-style scan line — a soft glowing horizontal beam that
-   sweeps top→bottom over ~3.6s and loops, hinting at progressive
-   creation. The beam is wider than 1px to read as light, with a
-   blur to soften its edges; fades in at the start and out at the
-   bottom so the loop seam is invisible. */
-.pendingScan {
-  position: absolute;
-  left: -8%;
-  right: -8%;
-  top: 0;
-  height: 6px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.95) 30%,
-    rgba(255, 255, 255, 1) 50%,
-    rgba(255, 255, 255, 0.95) 70%,
-    transparent 100%
-  );
-  filter: blur(2.5px);
-  mix-blend-mode: plus-lighter;
   pointer-events: none;
-  animation: pendingScan 3.6s ease-in-out infinite;
-}
-
-@keyframes pendingScan {
-  0%   { top: 0%;   opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { top: 100%; opacity: 0; }
 }
 
 .pendingLabel {
   position: relative;
   font-size: var(--text-sm);
   font-weight: 500;
-  color: var(--text-primary);
+  color: #fff;
   letter-spacing: -0.005em;
+  z-index: 2;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Particle layer — rising white motes that suggest the image is
+   coalescing from underneath. 14 particles spread horizontally
+   via the --i custom prop, each with a staggered animation delay
+   so they form a continuous gentle stream rather than a synced
+   pulse. */
+.pendingParticles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   z-index: 1;
 }
 
+.pendingParticle {
+  position: absolute;
+  bottom: -5%;
+  /* Distribute across the card width: i=0 → 4%, i=13 → 96%. */
+  left: calc(4% + var(--i, 0) * 7%);
+  /* Tiny size variation by index: 3–6px alternating. */
+  width: calc(3px + (var(--i, 0) % 4) * 1px);
+  height: calc(3px + (var(--i, 0) % 4) * 1px);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 0 6px rgba(255, 255, 255, 0.65),
+    0 0 14px rgba(255, 255, 255, 0.35);
+  mix-blend-mode: plus-lighter;
+  opacity: 0;
+  animation: pendingParticleRise 4.5s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * -340ms);
+}
+
+/* Rise from below the card to above, with a small horizontal
+   sway and a fade-in / fade-out at the seams so the loop is
+   invisible. */
+@keyframes pendingParticleRise {
+  0%   { bottom: -5%;  transform: translateX(0)     scale(0.6); opacity: 0; }
+  12%  {                                                       opacity: 0.9; }
+  50%  { transform: translateX(8px)                 scale(1);   }
+  88%  {                                                       opacity: 0.6; }
+  100% { bottom: 105%; transform: translateX(-4px) scale(0.5); opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .pendingScan { animation: none; opacity: 0.7; top: 50%; }
+  .pendingParticle { animation: none; opacity: 0.4; }
 }
