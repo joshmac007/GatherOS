@@ -6,7 +6,11 @@
    FocusedView's top bar span the full app width below it. */
 .panel {
   position: fixed;
-  top: 70px;
+  /* Sits below the FocusedView top bar (38 padding + 28 button +
+     10 padding + 1 border ≈ 77) with ~11px breathing. Bumping the
+     top bar's clearance for the traffic lights pushed this down
+     from 70 → 88. */
+  top: 88px;
   right: 16px;
   bottom: 16px;
   width: 300px;
