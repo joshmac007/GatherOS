@@ -294,36 +294,38 @@
   z-index: 1;
 }
 
+/* Each particle's x / y / size / duration / delay / sway are
+   randomized in ImageCard.jsx (useMemo at mount) and passed in
+   as custom props, so the field reads as a chaotic stream rather
+   than a regular row of dots. */
 .pendingParticle {
   position: absolute;
+  left: var(--x, 50%);
   bottom: -5%;
-  /* Distribute across the card width: i=0 → 4%, i=13 → 95%. */
-  left: calc(4% + var(--i, 0) * 7%);
-  /* Uniform 6px circles. Earlier attempt used calc(--i % 4) for
-     size variation; CSS treats `%` as the percentage unit inside
-     calc — not a modulo operator — so the rule resolved to 0px
-     and the particles were invisible. */
-  width: 6px;
-  height: 6px;
+  width: var(--size, 5px);
+  height: var(--size, 5px);
   border-radius: 50%;
   background: #fff;
   box-shadow:
     0 0 8px rgba(255, 255, 255, 0.85),
     0 0 18px rgba(255, 255, 255, 0.45);
   opacity: 0;
-  animation: pendingParticleRise 4.5s ease-in-out infinite;
-  animation-delay: calc(var(--i, 0) * -340ms);
+  animation: pendingParticleRise var(--duration, 4500ms) ease-in-out infinite;
+  animation-delay: var(--delay, 0ms);
 }
 
-/* Rise from below the card to above, with a small horizontal
-   sway and a fade-in / fade-out at the seams so the loop is
-   invisible. */
+/* `bottom` animates from -5% (below the card) to 110% (above it)
+   so each particle traverses the full card height regardless of
+   the card's pixel dimensions. The transform handles the
+   horizontal sway, counter-swaying near the top so the path
+   curves rather than going dead-straight. Opacity fades at both
+   seams so the loop is invisible. */
 @keyframes pendingParticleRise {
-  0%   { bottom: -5%;  transform: translateX(0)     scale(0.6); opacity: 0; }
-  12%  {                                                       opacity: 0.9; }
-  50%  { transform: translateX(8px)                 scale(1);   }
-  88%  {                                                       opacity: 0.6; }
-  100% { bottom: 105%; transform: translateX(-4px) scale(0.5); opacity: 0; }
+  0%   { bottom: -5%;  transform: translateX(0)                                scale(0.5); opacity: 0; }
+  10%  {                                                                                   opacity: 0.95; }
+  50%  { transform: translateX(var(--sway, 0))                                 scale(1);   }
+  90%  {                                                                                   opacity: 0.5; }
+  100% { bottom: 110%; transform: translateX(calc(var(--sway, 0) * -0.4))      scale(0.4); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './ImageCard.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -147,6 +147,22 @@ export default function ImageCard({
   // library entry. The id is a `pending-*` synthetic that the
   // backend doesn't know about; firing these would break.
   const isPending = !!record.__pending;
+  // Pre-generate the rising-particle field for pending cards: random
+  // x positions, sizes, durations, delays, and horizontal sway so
+  // they don't form vertical lanes. useMemo with [] keeps the same
+  // distribution for the lifetime of this placeholder — re-rendering
+  // doesn't reshuffle the field mid-animation.
+  const particles = useMemo(() => {
+    if (!isPending) return [];
+    return Array.from({ length: 36 }, () => ({
+      x: Math.random() * 100,
+      size: 3 + Math.random() * 4,
+      duration: 3500 + Math.random() * 2800,
+      delay: -Math.random() * 6000,
+      sway: (Math.random() * 36 - 18),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending]);
   return (
     <button
       ref={wrapperRef}
@@ -207,8 +223,18 @@ export default function ImageCard({
         {record.__pending && (
           <div className={styles.pendingOverlay} aria-label="Generating variation">
             <div className={styles.pendingParticles} aria-hidden="true">
-              {Array.from({ length: 14 }).map((_, i) => (
-                <span key={i} className={styles.pendingParticle} style={{ '--i': i }} />
+              {particles.map((p, i) => (
+                <span
+                  key={i}
+                  className={styles.pendingParticle}
+                  style={{
+                    '--x': `${p.x}%`,
+                    '--size': `${p.size}px`,
+                    '--duration': `${p.duration}ms`,
+                    '--delay': `${p.delay}ms`,
+                    '--sway': `${p.sway}px`,
+                  }}
+                />
               ))}
             </div>
             <div className={styles.pendingLabel}>Generating variation</div>
