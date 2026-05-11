@@ -80,8 +80,8 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-tertiary);
   padding: 0 10px 12px;
 }
@@ -172,8 +172,8 @@
 .sectionTitle {
   font-size: var(--text-xs);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   margin-bottom: 6px;
   display: flex;
@@ -269,7 +269,7 @@
   font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--text-secondary);
-  margin: 0 0 6px;
+  margin: 0 0 20px;
 }
 
 .fieldLabelRow {
@@ -280,12 +280,14 @@
   margin-bottom: 5px;
 }
 
+/* Legacy .fieldLabel — duplicates the canonical rule below.
+   Kept identical so removing this block later is a no-op. */
 .fieldLabel {
   display: block;
   font-size: var(--text-xs);
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
 }
 
@@ -365,8 +367,8 @@
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 /* Secondary button — white surface, hairline border, soft shadow.
@@ -1061,8 +1063,8 @@
 .libraryRowActiveTag {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-secondary);
   font-weight: 500;
 }
@@ -1135,24 +1137,36 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 28px;
 }
 
+/* Canonical input label — kept deliberately small + quiet so the
+   actual control is the hero of the row. Matches the DetailPanel's
+   metaFieldLabel. No uppercase, no letter-spacing tracking. */
 .fieldLabel {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .fieldHint {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+/* When a hint sits as a sibling under the input (description /
+   caption variant) — give it a touch of space above so it reads
+   as a caption, not a stuck-to-input footnote. */
+.field > .fieldHint {
+  margin-top: 2px;
 }
 
 .select {
@@ -1249,11 +1263,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--border);
 }
 
-.toggleRow:last-child {
+.toggleRow:last-of-type {
   border-bottom: none;
 }
 

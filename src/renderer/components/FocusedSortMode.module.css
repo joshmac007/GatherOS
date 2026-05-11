@@ -109,7 +109,7 @@
   border: 0.5px solid rgba(255, 255, 255, 0.14);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -207,8 +207,8 @@
   left: 50%;
   transform: translateX(-50%);
   font-size: var(--text-xs);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: rgba(255, 255, 255, 0.45);
   z-index: 2;
 }

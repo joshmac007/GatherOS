@@ -106,8 +106,8 @@
   padding: 6px 10px 4px;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   user-select: none;
 }
@@ -187,8 +187,8 @@
 .rowKind {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   flex-shrink: 0;
 }

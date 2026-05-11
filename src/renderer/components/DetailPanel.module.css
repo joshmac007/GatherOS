@@ -83,8 +83,8 @@
 .headerLabel {
   font-size: var(--text-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
 }
 
@@ -170,8 +170,8 @@
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   margin: 0;
 }
 
@@ -240,7 +240,7 @@
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
   box-shadow: var(--shadow-control);
 }
 
@@ -307,7 +307,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   border-radius: var(--radius-sm);
   white-space: nowrap;
   pointer-events: none;
@@ -369,8 +369,8 @@
   display: block;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   margin-bottom: 5px;
 }
@@ -512,8 +512,8 @@
   flex: 1 1 auto;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
 }
 
@@ -622,8 +622,8 @@
   gap: 5px;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   margin-bottom: 8px;
 }
@@ -798,8 +798,8 @@
   gap: 5px;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   margin-bottom: 8px;
 }
@@ -902,8 +902,8 @@
   justify-content: space-between;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
 }
 
@@ -1010,8 +1010,8 @@
   gap: 5px;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   margin-bottom: 8px;
 }

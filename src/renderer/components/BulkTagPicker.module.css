@@ -103,8 +103,8 @@
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   margin-right: 2px;
 }

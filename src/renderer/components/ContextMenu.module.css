@@ -172,8 +172,8 @@
   padding: 4px 10px 2px;
   font-size: var(--text-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   user-select: none;
 }

@@ -137,8 +137,8 @@
   padding: 6px 8px 2px;
   font-size: var(--text-xs);
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
 }
 
@@ -255,8 +255,8 @@
   padding: 6px 8px 4px;
   font-size: var(--text-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   -webkit-app-region: no-drag;
 }
@@ -277,8 +277,8 @@
   flex: 1 1 auto;
   font-size: var(--text-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-tertiary);
 }
 
