@@ -23,6 +23,14 @@
   z-index: 50;
 }
 
+/* Each panel section ends with its own border-bottom, which made
+   the last visible section's divider sit adjacent to the panel's
+   own bottom border and read as a doubled stroke. Strip it off
+   whichever section happens to be last. */
+.panel > :last-child {
+  border-bottom: none;
+}
+
 /* Stagger-in compressed to three stages: header + image arrive
    together (the hero), the editable metadata block follows, and
    everything below (tags, similar, meta dl) lands as the third
