@@ -18,13 +18,8 @@
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.05);
   overflow-y: auto;
   z-index: 50;
-}
-
-:root[data-theme="dark"] .panel {
-  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.45);
 }
 
 /* Stagger-in compressed to three stages: header + image arrive
