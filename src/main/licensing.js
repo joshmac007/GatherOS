@@ -169,14 +169,6 @@ async function exchangeMagicToken(token) {
 //   state: 'error'      → unrecoverable (bad sessionToken, etc.) →
 //                         clear local state and show signin
 async function verifyLicense({ force = false } = {}) {
-  // Dev short-circuit: when running unpackaged (npm run dev), the
-  // licensing Worker isn't running locally and every fetch would
-  // log a noisy ECONNREFUSED. Treat dev sessions as entitled so the
-  // renderer behaves identically to a real paid user without spam.
-  if (!app.isPackaged) {
-    return { state: 'entitled', plan: 'dev', source: 'dev-shortcircuit' };
-  }
-
   const sessionToken = getSessionToken();
   if (!sessionToken) return { state: 'unauth' };
 
@@ -208,7 +200,14 @@ async function verifyLicense({ force = false } = {}) {
     writeCache(body);
     return cachedToState(body);
   } catch (err) {
-    console.error('[licensing] verifyLicense network error:', err);
+    // The licensing Worker isn't running in `npm run dev`, so an
+    // ECONNREFUSED here is expected and noisy. Production builds
+    // still log so genuine outages surface. Cache fallback runs
+    // either way, which is what populates email + usage from prior
+    // successful verifies.
+    if (app.isPackaged) {
+      console.error('[licensing] verifyLicense network error:', err);
+    }
     return fallbackOrError();
   }
 }
