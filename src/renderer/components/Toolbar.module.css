@@ -622,33 +622,40 @@
   .modePill { transition: none; }
 }
 
-/* Sliding ink thumb. Each segment is 140px wide; the index drives
-   the X translation in 140px steps. (Segment width grew from 120 to
-   140 to make room for the inline icon that pops in for the active
-   / hovered segment without forcing a label shift.) */
+/* Sliding ink thumb. Width + x are written by JS (ModePill in
+   Toolbar.jsx) from the active segment's live bounding rect so it
+   stays glued under whichever segment is selected, even when a
+   neighbor widens on hover. Springy easing for both axes makes
+   the slide feel like a physical card moving. */
 .modeThumb {
   position: absolute;
   top: 4px;
   bottom: 4px;
-  left: 4px;
-  width: 140px;
+  left: 0;
+  width: var(--thumb-width, 0px);
+  transform: translateX(var(--thumb-x, 0px));
   background: var(--text-primary);
   border-radius: var(--radius-pill);
   pointer-events: none;
-  transform: translateX(calc(var(--mode-thumb-index, 0) * 140px));
-  transition: transform var(--dur-medium) var(--ease-out);
+  transition:
+    width var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1),
+    transform var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1);
   z-index: 0;
 }
 
+/* Each segment auto-sizes to its content. Inactive = just the
+   icon (≈46px), active = icon + label (≈140px). Hovering an
+   inactive widens it to icon + label so the label reveals.
+   Padding transitions so the whole pill grows/shrinks smoothly. */
 .modeSegment {
   position: relative;
   z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 140px;
+  gap: 8px;
   height: 46px;
-  padding: 0 18px;
+  padding: 0 14px;
   background: transparent;
   border: none;
   border-radius: var(--radius-pill);
@@ -660,14 +667,15 @@
   cursor: pointer;
   transition:
     color var(--dur-medium) var(--ease-out),
-    background var(--dur-instant) ease;
+    padding var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1);
 }
 
-/* Hover only the inactive segments — the active one is filled by
-   the sliding ink thumb behind it, so giving it a hover bg too
-   would double-paint. */
-.modeSegment:not(.modeSegmentActive):hover {
-  background: var(--hover-bg);
+/* When the segment is hovered or active, give it the bigger pill
+   padding so the label has breathing room. Inactive sits tight
+   around just the icon. */
+.modeSegmentActive,
+.modeSegment:hover {
+  padding: 0 18px;
 }
 
 .modeSegmentActive,
@@ -675,26 +683,20 @@
   color: var(--surface-1);
 }
 
-/* Icon slot. Collapsed (zero width / opacity / sub-scale) by default
-   so inactive, unhovered segments are pure type. When the segment
-   goes active or is hovered, the icon expands inline and "pops" in
-   with a slight overshoot — opacity + width drive the reveal,
-   transform handles the bounce. */
+/* Icon — always visible. Subtle "lean" on hover for inactive
+   segments so the icon tilts toward the label as it reveals,
+   and a slow breathing pulse on the active segment so the
+   selected state feels alive (not throbbing). */
 .modeSegmentIcon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 0;
-  margin-right: 0;
-  opacity: 0;
-  transform: scale(0.4) rotate(-14deg);
-  transform-origin: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
   pointer-events: none;
-  transition:
-    width var(--dur-medium) var(--ease-out),
-    margin-right var(--dur-medium) var(--ease-out),
-    opacity var(--dur-medium) var(--ease-out),
-    transform var(--dur-medium) cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center;
+  transition: transform var(--dur-medium) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .modeSegmentIcon svg {
@@ -703,19 +705,59 @@
   display: block;
 }
 
-.modeSegmentActive .modeSegmentIcon,
-.modeSegment:hover .modeSegmentIcon {
-  width: 16px;
-  margin-right: 8px;
+.modeSegment:not(.modeSegmentActive):hover .modeSegmentIcon {
+  transform: rotate(6deg);
+}
+
+.modeSegmentActive .modeSegmentIcon {
+  animation: modeIconBreathe 4.2s ease-in-out infinite;
+}
+
+@keyframes modeIconBreathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+/* Label — hidden by default. Reveals on hover or when this is
+   the active segment via a coordinated max-width + opacity +
+   slide. The negative initial translateX makes the word feel
+   like it's stepping in from behind the icon rather than just
+   fading in place. */
+.modeSegmentLabel {
+  display: inline-block;
+  max-width: 0;
+  opacity: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  transform: translateX(-6px);
+  transition:
+    max-width var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1),
+    opacity var(--dur-quick) ease,
+    transform var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1);
+}
+
+.modeSegmentActive .modeSegmentLabel,
+.modeSegment:hover .modeSegmentLabel {
+  max-width: 140px;
   opacity: 1;
-  transform: scale(1) rotate(0);
+  transform: translateX(0);
+}
+
+/* Tiny tap-confirm — the segment compresses 2% on click so the
+   activation feels mechanical. Combined with the thumb's spring,
+   the selection lands with a beat. */
+.modeSegment:active {
+  transform: scale(0.97);
+  transition: transform 80ms ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .modeThumb { transition: none; }
-  .modeSegmentIcon { transition: opacity var(--dur-instant) ease; transform: none; }
-  .modeSegmentActive .modeSegmentIcon,
-  .modeSegment:hover .modeSegmentIcon { transform: none; }
+  .modeThumb,
+  .modeSegment,
+  .modeSegmentIcon,
+  .modeSegmentLabel { transition: none; }
+  .modeSegmentActive .modeSegmentIcon { animation: none; }
+  .modeSegment:not(.modeSegmentActive):hover .modeSegmentIcon { transform: none; }
 }
 
 /* Right-edge cluster of single-icon affordances — relocated from
