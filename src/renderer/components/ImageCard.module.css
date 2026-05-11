@@ -297,17 +297,19 @@
 .pendingParticle {
   position: absolute;
   bottom: -5%;
-  /* Distribute across the card width: i=0 → 4%, i=13 → 96%. */
+  /* Distribute across the card width: i=0 → 4%, i=13 → 95%. */
   left: calc(4% + var(--i, 0) * 7%);
-  /* Tiny size variation by index: 3–6px alternating. */
-  width: calc(3px + (var(--i, 0) % 4) * 1px);
-  height: calc(3px + (var(--i, 0) % 4) * 1px);
+  /* Uniform 6px circles. Earlier attempt used calc(--i % 4) for
+     size variation; CSS treats `%` as the percentage unit inside
+     calc — not a modulo operator — so the rule resolved to 0px
+     and the particles were invisible. */
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
+  background: #fff;
   box-shadow:
-    0 0 6px rgba(255, 255, 255, 0.65),
-    0 0 14px rgba(255, 255, 255, 0.35);
-  mix-blend-mode: plus-lighter;
+    0 0 8px rgba(255, 255, 255, 0.85),
+    0 0 18px rgba(255, 255, 255, 0.45);
   opacity: 0;
   animation: pendingParticleRise 4.5s ease-in-out infinite;
   animation-delay: calc(var(--i, 0) * -340ms);
