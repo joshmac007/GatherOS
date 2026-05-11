@@ -973,7 +973,7 @@ export default function App() {
     }
     if (view.type === 'collection') {
       items.push({
-        label: `Remove from Folder${suffix}`,
+        label: `Remove from collection${suffix}`,
         icon: <MinusCircleIcon />,
         danger: true,
         onClick: async () => {
@@ -1035,7 +1035,7 @@ export default function App() {
           // In Unsorted view the saves no longer match the filter
           // (they now belong to a bucket), so refresh to drop them.
           if (view.type === 'unsorted') reload();
-          undoStack.push('add to folder', async () => {
+          undoStack.push('add to collection', async () => {
             for (const id of targetIds) {
               await window.moodmark.collections.removeSave({ collectionId: col.id, saveId: id });
             }
@@ -1049,7 +1049,7 @@ export default function App() {
         return { ...buildAddItem(parent), children: childItems };
       });
       items.push({
-        label: `Add to Folder${suffix}`,
+        label: `Add to collection${suffix}`,
         icon: <CollectionIcon />,
         submenu,
       });
@@ -1309,7 +1309,7 @@ export default function App() {
     // a move-from-A-to-B reverses with remove-from-target plus
     // re-add to the source bucket.
     undoStack.push(
-      saveIds.length === 1 ? 'add to folder' : 'add to folder',
+      saveIds.length === 1 ? 'add to collection' : 'add to collection',
       async () => {
         for (const saveId of saveIds) {
           await window.moodmark.collections.removeSave({ collectionId: bucketId, saveId });
@@ -1431,7 +1431,7 @@ export default function App() {
     const created = await window.moodmark.collections.create(payload);
     loadCollections();
     if (created?.id) {
-      undoStack.push('new folder', async () => {
+      undoStack.push('new collection', async () => {
         await window.moodmark.collections.delete(created.id);
         loadCollections();
       });
@@ -1823,7 +1823,7 @@ export default function App() {
     // an empty menu floating over the selection bar.
     const offerable = collections.filter((c) => !already.has(c.id));
     if (offerable.length === 0) {
-      showActionToast({ message: 'Already in every folder', durationMs: 1800 });
+      showActionToast({ message: 'Already in every collection', durationMs: 1800 });
       return;
     }
     setBulkAlreadyIn(already);
@@ -1907,7 +1907,7 @@ export default function App() {
     // header here anymore.
     const offer = collections.filter((c) => !bulkAlreadyIn.has(c.id));
     return [
-      { type: 'header', label: `Add ${ids.length} to Folder` },
+      { type: 'header', label: `Add ${ids.length} to collection` },
       ...offer.map((c) => ({
         label: c.name,
         icon: (
@@ -2396,7 +2396,7 @@ export default function App() {
                   parentId={null}
                   onPickFolder={(id) => handleViewChange({ type: 'collection', id })}
                   onCreateFolder={async () => {
-                    const result = await window.moodmark.collections.create({ name: 'New folder' });
+                    const result = await window.moodmark.collections.create({ name: 'New collection' });
                     await loadCollections();
                     return result;
                   }}
@@ -2587,7 +2587,7 @@ export default function App() {
               type="button"
               className="selection-btn selection-btn-compact"
               onClick={openBulkPicker}
-              data-tooltip="Add to folder"
+              data-tooltip="Add to collection"
               aria-label="Add to folder"
             >
               <span className="selection-btn-icon"><CollectionIcon /></span>

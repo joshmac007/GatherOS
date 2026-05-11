@@ -114,14 +114,14 @@ function NewFolderTile({ onActivate }) {
       type="button"
       className={`${styles.tile} ${styles.tileNew}`}
       onClick={onActivate}
-      title="New folder"
+      title="New collection"
     >
       <div className={`${styles.tileArt} ${styles.tileArtNew}`}>
         <Plus size={28} strokeWidth={1.4} aria-hidden="true" />
       </div>
       <div className={styles.tileMeta}>
         <span className={`${styles.tileName} ${styles.tileNameMuted}`}>
-          New folder
+          New collection
         </span>
       </div>
     </button>
@@ -206,9 +206,9 @@ export default function FolderGrid({
     return (
       <div className={styles.empty}>
         <FolderClosed size={36} strokeWidth={1.3} className={styles.emptyIcon} />
-        <div className={styles.emptyTitle}>No folders yet</div>
+        <div className={styles.emptyTitle}>No collections yet</div>
         <div className={styles.emptyHint}>
-          Folders organise saves by project, mood, or anything else.
+          Collections organise saves by project, mood, or anything else.
         </div>
         {onCreateFolder && (
           <button
@@ -216,7 +216,7 @@ export default function FolderGrid({
             className={styles.emptyAction}
             onClick={onCreateFolder}
           >
-            Create your first folder
+            Create your first collection
           </button>
         )}
       </div>
@@ -262,7 +262,7 @@ export default function FolderGrid({
               onClick: () => startRename(ctxMenu.folder),
             },
             {
-              label: 'Delete Folder',
+              label: 'Delete collection',
               icon: <TrashIcon />,
               danger: true,
               onClick: () => onDeleteFolder?.(ctxMenu.folder.id),

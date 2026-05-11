@@ -147,7 +147,7 @@ const COLS_MAX = 8;
 // migrate; this is purely a relabel at the surface.
 const MODE_SEGMENTS = [
   { id: 'library', label: 'Library', Icon: LibraryIcon },
-  { id: 'folders', label: 'Folders', Icon: FolderIcon  },
+  { id: 'folders', label: 'Collections', Icon: FolderIcon  },
   { id: 'boards',  label: 'Spaces',  Icon: LayersIcon  },
 ];
 

@@ -518,7 +518,7 @@ export default function DetailPanel({
 
   const pickerItems = availableToAdd.length > 0
     ? [
-        { type: 'header', label: 'Add to Folder' },
+        { type: 'header', label: 'Add to collection' },
         ...availableToAdd.map((c) => ({
           label: c.name,
           onClick: () => addToCollection(c.id),
@@ -770,7 +770,7 @@ export default function DetailPanel({
       <div className={styles.collectionsSection}>
         <div className={styles.collectionsLabel}>
           <span className={styles.sectionLabelIcon}><CollectionIcon /></span>
-          Folders
+          Collections
         </div>
         <div className={styles.collectionPills}>
           {availableToAdd.length > 0 && (
@@ -792,7 +792,7 @@ export default function DetailPanel({
                 type="button"
                 className={styles.collectionPillRemove}
                 onClick={() => removeFromCollection(c.id)}
-                title="Remove from folder"
+                title="Remove from collection"
               >
                 ×
               </button>

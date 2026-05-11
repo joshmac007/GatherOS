@@ -743,7 +743,7 @@ export default function SettingsModal({
           {activePage === 'libraries' && (
             <div className={styles.page}>
               <p className={styles.sectionHint}>
-                Each library is its own collection of saves, folders, and
+                Each library is its own set of saves, collections, and
                 spaces. Switch between them from the toolbar; rename or
                 delete any of them here.
               </p>
@@ -1073,7 +1073,7 @@ export default function SettingsModal({
           <div className={styles.divider} />
 
           <p className={styles.sectionHint}>
-            Erase your entire library — every save, folder, and tag. The
+            Erase your entire library — every save, collection, and tag. The
             underlying image files are deleted from disk. This cannot be
             undone.
           </p>

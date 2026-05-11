@@ -180,11 +180,11 @@ export default function Grid({
       title = 'No saves match that color';
       hint = 'Click the chip in the toolbar to clear the filter.';
     } else if (isCollection) {
-      title = 'Folder is empty';
+      title = 'Collection is empty';
       hint = 'Drop an image, paste a URL, or ⌘⇧S to capture.';
     } else if (isUnsorted) {
       title = 'Nothing unsorted';
-      hint = 'Every save belongs to at least one folder.';
+      hint = 'Every save belongs to at least one collection.';
       EmptyIcon = InboxIcon;
       emptyIconColor = 'var(--text-tertiary)';
     } else if (isTrash) {
