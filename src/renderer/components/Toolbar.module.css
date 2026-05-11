@@ -648,7 +648,7 @@
   justify-content: center;
   min-width: 140px;
   height: 46px;
-  padding: 0 18px;
+  padding: 0;
   background: transparent;
   border: none;
   border-radius: var(--radius-pill);
