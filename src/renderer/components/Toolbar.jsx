@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Search,
@@ -265,33 +265,6 @@ function HelpMenu({
 
 function ModePill({ mode, onModeChange, compact = false }) {
   const activeIndex = Math.max(0, MODE_SEGMENTS.findIndex((s) => s.id === mode));
-  const segmentRefs = useRef([]);
-  const thumbRef = useRef(null);
-
-  // Track the active segment's live position + width so the ink
-  // thumb glides under it whenever neighbors widen/shrink on hover.
-  // Segment widths now vary with state (icon-only ⇄ icon + label),
-  // so the old "index × 140px" math no longer matches reality.
-  const updateThumb = useCallback(() => {
-    const seg = segmentRefs.current[activeIndex];
-    const thumb = thumbRef.current;
-    if (!seg || !thumb) return;
-    thumb.style.setProperty('--thumb-x', `${seg.offsetLeft}px`);
-    thumb.style.setProperty('--thumb-width', `${seg.offsetWidth}px`);
-  }, [activeIndex]);
-
-  useLayoutEffect(() => { updateThumb(); }, [updateThumb]);
-
-  useEffect(() => {
-    const observers = segmentRefs.current.map((el) => {
-      if (!el) return null;
-      const ro = new ResizeObserver(() => updateThumb());
-      ro.observe(el);
-      return ro;
-    });
-    return () => observers.forEach((o) => o?.disconnect());
-  }, [updateThumb]);
-
   return (
     <div
       className={[styles.modePill, compact && styles.modePillCompact]
@@ -301,19 +274,16 @@ function ModePill({ mode, onModeChange, compact = false }) {
       aria-label="App mode"
     >
       <span
-        ref={thumbRef}
         className={styles.modeThumb}
+        style={{ '--mode-thumb-index': activeIndex }}
         aria-hidden="true"
       />
-      {MODE_SEGMENTS.map((seg, i) => (
+      {MODE_SEGMENTS.map((seg) => (
         <button
           key={seg.id}
-          ref={(el) => { segmentRefs.current[i] = el; }}
           type="button"
           role="tab"
           aria-selected={mode === seg.id}
-          aria-label={seg.label}
-          title={seg.label}
           className={`${styles.modeSegment} ${mode === seg.id ? styles.modeSegmentActive : ''}`}
           onClick={() => onModeChange(seg.id)}
         >
