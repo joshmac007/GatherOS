@@ -119,6 +119,9 @@ export default function LibrarySwitcher({
                     <LibraryRowIcon />
                   </span>
                   <span className={styles.rowLabel}>{lib.name}</span>
+                  <span className={styles.rowCount}>
+                    {typeof lib.save_count === 'number' ? lib.save_count : ''}
+                  </span>
                   <span className={styles.rowCheck}>
                     {isActive ? <CheckIcon /> : null}
                   </span>

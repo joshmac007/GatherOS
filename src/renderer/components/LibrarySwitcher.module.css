@@ -123,6 +123,18 @@
   color: var(--text-primary);
 }
 
+/* Save count, anchored to the right edge of the row just before
+   the active check. Mono so multi-digit counts stay tabular-aligned
+   between rows; tertiary tint so it doesn't compete with the name. */
+.rowCount {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
 /* Leading library glyph for each library row. Same 16x16 slot as
    the trailing check so the row gets a balanced [icon][name][check]
    layout. Tertiary tint so the name stays the primary read; the

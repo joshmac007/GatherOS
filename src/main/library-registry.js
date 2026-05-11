@@ -212,9 +212,39 @@ function listLibraries() {
   return {
     activeId: reg.active,
     libraries: reg.libraries
-      .map((l) => ({ id: l.id, name: l.name, createdAt: l.createdAt }))
+      .map((l) => ({
+        id: l.id,
+        name: l.name,
+        createdAt: l.createdAt,
+        save_count: countSavesInLibrary(l.id),
+      }))
       .sort((a, b) => a.createdAt - b.createdAt),
   };
+}
+
+// Cheap COUNT(*) from each library's DB so the switcher dropdown +
+// Libraries settings page can render a save count next to each
+// row. Opens a transient readonly handle so we don't fight the
+// active library's writer, and gracefully returns 0 for any
+// library whose DB file doesn't exist yet or fails to query.
+function countSavesInLibrary(id) {
+  try {
+    const dbPath = path.join(libraryRoot(id), 'moodmark.db');
+    if (!fs.existsSync(dbPath)) return 0;
+    const Database = require('better-sqlite3');
+    const handle = new Database(dbPath, { readonly: true, fileMustExist: true });
+    try {
+      const row = handle
+        .prepare('SELECT COUNT(*) AS n FROM saves WHERE deleted_at IS NULL')
+        .get();
+      return row?.n || 0;
+    } finally {
+      handle.close();
+    }
+  } catch (err) {
+    console.warn('[library-registry] count failed for', id, err.message);
+    return 0;
+  }
 }
 
 function createLibrary(name) {
