@@ -154,9 +154,9 @@ export default function ImageCard({
   // doesn't reshuffle the field mid-animation.
   const particles = useMemo(() => {
     if (!isPending) return [];
-    return Array.from({ length: 36 }, () => ({
+    return Array.from({ length: 96 }, () => ({
       x: Math.random() * 100,
-      size: 3 + Math.random() * 4,
+      size: 1 + Math.random() * 2,
       duration: 3500 + Math.random() * 2800,
       delay: -Math.random() * 6000,
       sway: (Math.random() * 36 - 18),
