@@ -40,13 +40,48 @@ function prefsFilePath() {
 
 function getPrefs() {
   try {
-    if (!fs.existsSync(prefsFilePath())) return { ...DEFAULT_PREFS };
+    if (!fs.existsSync(prefsFilePath())) {
+      // First launch — seed defaults and write to disk so the user's
+      // initial state is concrete (their Desktop path is captured
+      // here so subsequent clears can actually clear it).
+      const seed = { ...DEFAULT_PREFS, ...resolveAutoDefaults() };
+      try { fs.writeFileSync(prefsFilePath(), JSON.stringify(seed, null, 2)); } catch {}
+      return seed;
+    }
     const raw = fs.readFileSync(prefsFilePath(), 'utf8');
     const parsed = JSON.parse(raw);
+    // If a key that has a resolved-at-runtime default (e.g.
+    // captureDropFolder = ~/Desktop) wasn't in the stored prefs yet
+    // — upgrading from an older build — fill it in once and persist
+    // so future writes start from a concrete value the user can
+    // explicitly clear.
+    let migrated = false;
+    for (const [key, value] of Object.entries(resolveAutoDefaults())) {
+      if (!(key in parsed)) {
+        parsed[key] = value;
+        migrated = true;
+      }
+    }
+    if (migrated) {
+      try { fs.writeFileSync(prefsFilePath(), JSON.stringify(parsed, null, 2)); } catch {}
+    }
     return { ...DEFAULT_PREFS, ...parsed };
   } catch {
-    return { ...DEFAULT_PREFS };
+    return { ...DEFAULT_PREFS, ...resolveAutoDefaults() };
   }
+}
+
+// Values that DEFAULT_PREFS can't carry because they depend on the
+// running OS environment (paths, locale, etc.). Resolved lazily so
+// requiring this module before app.ready() doesn't crash.
+function resolveAutoDefaults() {
+  const out = {};
+  try {
+    out.captureDropFolder = app.getPath('desktop');
+  } catch {
+    /* app not ready yet — caller will re-resolve on next get */
+  }
+  return out;
 }
 
 function getPref(name, fallback) {
