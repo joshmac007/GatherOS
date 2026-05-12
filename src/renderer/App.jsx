@@ -45,6 +45,7 @@ import {
   Hash,
   Share,
   Sparkles,
+  Frame,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -71,6 +72,7 @@ const SortFabIcon = () => <ArrowRightFromLine {...ICON} />;
 const ClipboardIcon = () => <Clipboard {...ICON} />;
 const ExternalLinkIcon = () => <ExternalLink {...ICON} />;
 const HashIcon = () => <Hash {...ICON} />;
+const FrameIcon = () => <Frame {...ICON} />;
 const ShareIcon = () => <Share {...ICON} />;
 const SparklesIcon = () => <Sparkles {...ICON} />;
 
@@ -826,6 +828,7 @@ export default function App() {
   // Bulk "Add to Collection" picker, anchored above the selection bar.
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
   const [bulkTagPicker, setBulkTagPicker] = useState(null); // { x, y } | null
+  const [bulkSpacePicker, setBulkSpacePicker] = useState(null); // { x, y } | null
   const [rediscoverOpen, setRediscoverOpen] = useState(false);
 
   // Modal-backed variant generation. The opener (right-click or
@@ -1885,6 +1888,72 @@ export default function App() {
     setBulkTagPicker({ x: rect.left + rect.width / 2, y: rect.top });
   }, [selected]);
 
+  // Bulk add the selected saves to a space (board). Opens a small
+  // anchored menu listing every board; clicking one drops each save
+  // onto the canvas as an image item in a wrapping grid near the
+  // origin so they're easy to grab and rearrange.
+  const openBulkSpacePicker = useCallback((e) => {
+    if (selected.size === 0) return;
+    if (!boards || boards.length === 0) {
+      showActionToast({ message: 'No spaces yet — create one first.', durationMs: 1800 });
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setBulkSpacePicker({ x: rect.left, y: rect.top - 4 });
+  }, [selected, boards, showActionToast]);
+
+  const handleBulkAddToBoard = useCallback(async (boardId) => {
+    setBulkSpacePicker(null);
+    const ids = [...selected];
+    if (ids.length === 0 || !boardId) return;
+    const cols = Math.min(ids.length, 5);
+    const cell = 240;
+    const gap = 24;
+    let zBase = Date.now() / 1000;
+    for (let i = 0; i < ids.length; i += 1) {
+      const saveId = ids[i];
+      const save = saves.find((s) => s.id === saveId);
+      if (!save) continue;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = col * (cell + gap);
+      const y = row * (cell + gap);
+      const aspect = save.width && save.height ? save.width / save.height : 1;
+      const w = aspect >= 1 ? cell : Math.round(cell * aspect);
+      const h = aspect >= 1 ? Math.round(cell / aspect) : cell;
+      const now = Date.now();
+      const item = {
+        id: crypto.randomUUID(),
+        board_id: boardId,
+        type: 'image',
+        x, y, width: w, height: h,
+        rotation: 0,
+        z_index: Math.floor(zBase + i),
+        data: {
+          saveId,
+          fileUrl: fileUrl(save.file_path),
+          intrinsicWidth: save.width || null,
+          intrinsicHeight: save.height || null,
+        },
+        created_at: now,
+        updated_at: now,
+      };
+      try {
+        await window.moodmark.boards.upsertItem({ boardId, item });
+      } catch (err) {
+        console.error('Add to space failed for', saveId, err);
+      }
+    }
+    const board = boards.find((b) => b.id === boardId);
+    const label = `Added ${ids.length} to ${board?.name || 'space'}`;
+    showActionToast({
+      message: label,
+      action: { label: 'Open', run: () => handleViewChange({ type: 'board', id: boardId }) },
+      durationMs: 3200,
+    });
+    setSelected(new Set());
+  }, [selected, saves, boards, showActionToast, handleViewChange, setSelected]);
+
   const handleBulkApplyTag = useCallback(async (name) => {
     if (selected.size === 0 || !name) return;
     const ids = [...selected];
@@ -2583,6 +2652,17 @@ export default function App() {
               <span className="selection-btn-icon"><CollectionIcon /></span>
             </button>
           )}
+          {boards && boards.length > 0 && (
+            <button
+              type="button"
+              className="selection-btn selection-btn-compact"
+              onClick={openBulkSpacePicker}
+              data-tooltip="Add to space"
+              aria-label="Add to space"
+            >
+              <span className="selection-btn-icon"><FrameIcon /></span>
+            </button>
+          )}
           <button
             type="button"
             className="selection-btn selection-btn-compact"
@@ -2764,6 +2844,19 @@ export default function App() {
           y={bulkPicker.y}
           items={bulkPickerItems}
           onClose={() => setBulkPicker(null)}
+        />
+      )}
+
+      {bulkSpacePicker && (
+        <ContextMenu
+          x={bulkSpacePicker.x}
+          y={bulkSpacePicker.y}
+          items={(boards || []).map((b) => ({
+            label: b.name,
+            icon: <FrameIcon />,
+            onClick: () => handleBulkAddToBoard(b.id),
+          }))}
+          onClose={() => setBulkSpacePicker(null)}
         />
       )}
 
