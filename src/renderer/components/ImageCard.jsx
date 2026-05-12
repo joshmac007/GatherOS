@@ -209,7 +209,6 @@ export default function ImageCard({
         {record.__pending && (
           <div className={styles.pendingOverlay} aria-label="Generating variation">
             <div className={styles.pendingDots} aria-hidden="true" />
-            <div className={styles.pendingLabel}>Generating variation</div>
           </div>
         )}
         {inView && (

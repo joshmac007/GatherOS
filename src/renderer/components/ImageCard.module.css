@@ -258,24 +258,9 @@
 .pendingOverlay {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  padding-bottom: 18px;
   overflow: hidden;
   background: rgba(0, 0, 0, 0.5);
   pointer-events: none;
-}
-
-.pendingLabel {
-  position: relative;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: #fff;
-  letter-spacing: -0.005em;
-  z-index: 2;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 /* Dot field — a CSS radial-gradient tiled at 14px renders as a
