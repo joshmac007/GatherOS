@@ -1251,6 +1251,14 @@
   margin-bottom: 0;
 }
 
+/* Narrow variant — constrains the field to its control width so an
+   inline label + value hint (e.g. Grid columns: 4) reads adjacent
+   to the slider track rather than at the page edge. */
+.fieldNarrow {
+  align-items: stretch;
+  max-width: 220px;
+}
+
 /* Canonical input label — kept deliberately small + quiet so the
    actual control is the hero of the row. Matches the DetailPanel's
    metaFieldLabel. No uppercase, no letter-spacing tracking. */

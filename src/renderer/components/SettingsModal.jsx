@@ -1161,8 +1161,24 @@ export default function SettingsModal({
           {activePage === 'defaults' && (
             <div className={styles.page}>
               <p className={styles.sectionHint}>
-                Where the app lands when you launch it.
+                Defaults that apply each time you open GatherOS.
               </p>
+
+              <div className={`${styles.field} ${styles.fieldNarrow}`}>
+                <div className={styles.fieldLabelRow}>
+                  <span className={styles.fieldLabel}>Grid columns</span>
+                  <span className={styles.fieldHint}>{prefs.defaultColumns ?? 4}</span>
+                </div>
+                <input
+                  type="range"
+                  min={2}
+                  max={8}
+                  step={1}
+                  value={prefs.defaultColumns ?? 4}
+                  onChange={(e) => updatePref('defaultColumns', Number(e.target.value))}
+                  className={styles.rangeInput}
+                />
+              </div>
 
               <div className={styles.field}>
                 <label className={styles.fieldLabel}>Sort</label>
@@ -1176,22 +1192,6 @@ export default function SettingsModal({
                   <option value="name_asc">Name A→Z</option>
                   <option value="name_desc">Name Z→A</option>
                 </select>
-              </div>
-
-              <div className={styles.field}>
-                <label className={styles.fieldLabel} style={{ width: 220 }}>
-                  Grid columns
-                  <span className={styles.fieldHint}>{prefs.defaultColumns ?? 4}</span>
-                </label>
-                <input
-                  type="range"
-                  min={2}
-                  max={8}
-                  step={1}
-                  value={prefs.defaultColumns ?? 4}
-                  onChange={(e) => updatePref('defaultColumns', Number(e.target.value))}
-                  className={styles.rangeInput}
-                />
               </div>
 
               <div className={styles.field}>
