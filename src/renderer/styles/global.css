@@ -167,6 +167,12 @@ body[data-board-print="true"] .main-col {
   animation: trashToastIn var(--dur-quick) ease-out;
 }
 
+/* When the multi-select action bar is also on-screen, lift the toast
+   so it sits above the bar instead of crashing into it. */
+body:has(.selection-bar) .trash-toast {
+  bottom: 84px;
+}
+
 /* Symmetric padding when there's no Undo / action chip on the
    right — otherwise the 16px left + 8px right reads as awkward
    whitespace on the left of the label. :has() works in modern
@@ -214,7 +220,7 @@ body[data-board-print="true"] .main-col {
   padding: 6px 6px 6px 16px;
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   color: var(--text-primary);
   z-index: 60;
