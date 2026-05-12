@@ -252,13 +252,9 @@
   transform: scale(1.08);
 }
 
-/* Smooth bottom-weighted darkness so the label has contrast at
-   the bottom without painting a visible "start line" mid-image.
-   The previous gradient had a hard stop at 55% where alpha
-   jumped off zero, which renders as a faint horizontal seam in
-   some compositor paths. This runs the full height from 0.78
-   at the bottom to 0 at the top with no intermediate stops, so
-   there's no kink to render as a line. */
+/* Flat dark overlay sits above the blurred image so the dot
+   pattern reads against a uniform tone instead of competing with
+   the blur's own midtones. */
 .pendingOverlay {
   position: absolute;
   inset: 0;
@@ -268,11 +264,7 @@
   justify-content: flex-end;
   padding-bottom: 18px;
   overflow: hidden;
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.78) 0%,
-    rgba(0, 0, 0, 0) 100%
-  );
+  background: rgba(0, 0, 0, 0.5);
   pointer-events: none;
 }
 
@@ -286,54 +278,50 @@
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
-/* Particle layer — rising white motes that suggest the image is
-   coalescing from underneath. 14 particles spread horizontally
-   via the --i custom prop, each with a staggered animation delay
-   so they form a continuous gentle stream rather than a synced
-   pulse. */
-.pendingParticles {
+/* Dot field — a CSS radial-gradient tiled at 14px renders as a
+   uniform grid of small white dots. A diagonal linear-gradient
+   mask larger than the element shifts position across the layer,
+   creating a brighter "wave" band that traverses the dots while
+   leaving the rest dimmer. Pure CSS, no per-dot DOM nodes. */
+.pendingDots {
   position: absolute;
   inset: 0;
-  pointer-events: none;
   z-index: 1;
+  pointer-events: none;
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.95) 1.2px,
+    transparent 1.6px
+  );
+  background-size: 14px 14px;
+  -webkit-mask-image: linear-gradient(
+    115deg,
+    rgba(0, 0, 0, 0.18) 0%,
+    rgba(0, 0, 0, 0.18) 35%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, 0.18) 65%,
+    rgba(0, 0, 0, 0.18) 100%
+  );
+  mask-image: linear-gradient(
+    115deg,
+    rgba(0, 0, 0, 0.18) 0%,
+    rgba(0, 0, 0, 0.18) 35%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, 0.18) 65%,
+    rgba(0, 0, 0, 0.18) 100%
+  );
+  -webkit-mask-size: 260% 260%;
+  mask-size: 260% 260%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: pendingDotWave 3.2s ease-in-out infinite;
 }
 
-/* Each particle's x / y / size / duration / delay / sway are
-   randomized in ImageCard.jsx (useMemo at mount) and passed in
-   as custom props, so the field reads as a chaotic stream rather
-   than a regular row of dots. */
-.pendingParticle {
-  position: absolute;
-  left: var(--x, 50%);
-  bottom: -5%;
-  width: var(--size, 5px);
-  height: var(--size, 5px);
-  border-radius: 50%;
-  background: #fff;
-  /* Smaller halos since the dots are now 1–3px — bigger glows
-     would render as cottony blobs instead of dust motes. */
-  box-shadow:
-    0 0 3px rgba(255, 255, 255, 0.9),
-    0 0 7px rgba(255, 255, 255, 0.35);
-  opacity: 0;
-  animation: pendingParticleRise var(--duration, 4500ms) ease-in-out infinite;
-  animation-delay: var(--delay, 0ms);
-}
-
-/* `bottom` animates from -5% (below the card) to 110% (above it)
-   so each particle traverses the full card height regardless of
-   the card's pixel dimensions. The transform handles the
-   horizontal sway, counter-swaying near the top so the path
-   curves rather than going dead-straight. Opacity fades at both
-   seams so the loop is invisible. */
-@keyframes pendingParticleRise {
-  0%   { bottom: -5%;  transform: translateX(0)                                scale(0.5); opacity: 0; }
-  10%  {                                                                                   opacity: 0.95; }
-  50%  { transform: translateX(var(--sway, 0))                                 scale(1);   }
-  90%  {                                                                                   opacity: 0.5; }
-  100% { bottom: 110%; transform: translateX(calc(var(--sway, 0) * -0.4))      scale(0.4); opacity: 0; }
+@keyframes pendingDotWave {
+  0%   { -webkit-mask-position: 100% 100%; mask-position: 100% 100%; }
+  100% { -webkit-mask-position: 0% 0%;     mask-position: 0% 0%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pendingParticle { animation: none; opacity: 0.4; }
+  .pendingDots { animation: none; -webkit-mask-image: none; mask-image: none; opacity: 0.45; }
 }

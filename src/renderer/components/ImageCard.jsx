@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './ImageCard.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -149,20 +149,6 @@ export default function ImageCard({
   const isPending = !!record.__pending;
   // Pre-generate the rising-particle field for pending cards: random
   // x positions, sizes, durations, delays, and horizontal sway so
-  // they don't form vertical lanes. useMemo with [] keeps the same
-  // distribution for the lifetime of this placeholder — re-rendering
-  // doesn't reshuffle the field mid-animation.
-  const particles = useMemo(() => {
-    if (!isPending) return [];
-    return Array.from({ length: 96 }, () => ({
-      x: Math.random() * 100,
-      size: 1 + Math.random() * 2,
-      duration: 3500 + Math.random() * 2800,
-      delay: -Math.random() * 6000,
-      sway: (Math.random() * 36 - 18),
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPending]);
   return (
     <button
       ref={wrapperRef}
@@ -222,21 +208,7 @@ export default function ImageCard({
         )}
         {record.__pending && (
           <div className={styles.pendingOverlay} aria-label="Generating variation">
-            <div className={styles.pendingParticles} aria-hidden="true">
-              {particles.map((p, i) => (
-                <span
-                  key={i}
-                  className={styles.pendingParticle}
-                  style={{
-                    '--x': `${p.x}%`,
-                    '--size': `${p.size}px`,
-                    '--duration': `${p.duration}ms`,
-                    '--delay': `${p.delay}ms`,
-                    '--sway': `${p.sway}px`,
-                  }}
-                />
-              ))}
-            </div>
+            <div className={styles.pendingDots} aria-hidden="true" />
             <div className={styles.pendingLabel}>Generating variation</div>
           </div>
         )}
