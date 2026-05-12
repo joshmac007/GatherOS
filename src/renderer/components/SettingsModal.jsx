@@ -1129,18 +1129,21 @@ export default function SettingsModal({
                   { value: 'light',  label: 'Light',  Icon: SunIcon },
                   { value: 'dark',   label: 'Dark',   Icon: MoonIcon },
                   { value: 'system', label: 'System', Icon: MonitorIcon },
-                ].map(({ value, label, Icon }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`${styles.segmentBtn} ${prefs.theme === value ? styles.segmentBtnActive : ''}`}
-                    onClick={() => updatePref('theme', value)}
-                    aria-pressed={prefs.theme === value}
-                  >
-                    <Icon size={14} strokeWidth={1.7} aria-hidden="true" />
-                    {label}
-                  </button>
-                ))}
+                ].map(({ value, label, Icon }) => {
+                  const active = prefs.theme === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`${styles.segmentBtn} ${active ? styles.segmentBtnActive : ''}`}
+                      onClick={() => updatePref('theme', value)}
+                      aria-pressed={active}
+                    >
+                      {active && <Icon size={14} strokeWidth={1.7} aria-hidden="true" />}
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
