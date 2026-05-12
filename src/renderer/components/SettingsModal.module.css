@@ -1051,11 +1051,23 @@
   height: 16px;
   background: #fff;
   border-radius: var(--radius-circle);
-  transition: transform var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1);
+  transition: transform var(--dur-medium) cubic-bezier(0.34, 1.18, 0.40, 1), background var(--dur-instant) ease;
 }
 
 .toggleSwitchOn .toggleSwitchThumb {
   transform: translateX(14px);
+}
+
+/* In dark mode, --text-primary is white — so the on-state track and
+   the white thumb blend together. Bump the off-state track for
+   contrast against the dark surface, and dark-fill the thumb when
+   the switch is on so the white track shows the thumb's silhouette. */
+:root[data-theme="dark"] .toggleSwitch {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+:root[data-theme="dark"] .toggleSwitchOn .toggleSwitchThumb {
+  background: var(--surface-1);
 }
 
 /* Shortcut capture — a button-styled input that, when "armed",
