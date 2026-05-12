@@ -95,9 +95,9 @@
 .navItem {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 5px 8px;
   background: transparent;
   border: none;
   border-radius: var(--radius-md);
@@ -116,8 +116,9 @@
 
 .navItemActive,
 .navItemActive:hover {
-  background: var(--hover-bg);
-  color: var(--text-primary);
+  background: var(--active-row-bg);
+  color: var(--active-row-fg);
+  box-shadow: none;
 }
 
 .navIcon {
@@ -130,7 +131,7 @@
   color: var(--text-secondary);
 }
 
-.navItemActive .navIcon { color: var(--text-primary); }
+.navItemActive .navIcon { color: var(--active-row-fg); }
 
 .navLabel {
   flex: 1 1 auto;
