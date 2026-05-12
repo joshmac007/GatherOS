@@ -281,17 +281,6 @@
   margin-bottom: 5px;
 }
 
-/* Legacy .fieldLabel — duplicates the canonical rule below.
-   Kept identical so removing this block later is a no-op. */
-.fieldLabel {
-  display: block;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text-tertiary);
-}
-
 .helpLink {
   background: transparent;
   border: none;
@@ -703,35 +692,6 @@
   appearance: none;
 }
 
-.tagSort {
-  flex-shrink: 0;
-  height: 28px;
-  /* Right padding leaves room for the inline chevron painted via
-     background-image; the native arrow is suppressed by appearance:
-     none below so it doesn't double up against ours. */
-  padding: 0 26px 0 10px;
-  background-color: var(--input-bg);
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 10px 10px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 3.5l3 3 3-3' fill='none' stroke='rgba(0,0,0,0.55)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  border: 0.5px solid var(--input-border);
-  border-radius: var(--radius-md);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-/* Dark mode needs a brighter chevron — the inline SVG above bakes
-   in a black stroke, so override the background-image entirely. */
-:root[data-theme="dark"] .tagSort {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 3.5l3 3 3-3' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-}
-
 .tagSummaryRow {
   display: flex;
   align-items: center;
@@ -745,28 +705,6 @@
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
-
-.tagBulkBtn {
-  flex-shrink: 0;
-  height: 22px;
-  padding: 0 10px;
-  background: transparent;
-  border: 0.5px solid var(--input-border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background var(--dur-instant) ease, color var(--dur-instant) ease, border-color var(--dur-instant) ease;
-}
-
-.tagBulkBtn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--status-error) 8%, transparent);
-  border-color: color-mix(in srgb, var(--status-error) 35%, transparent);
-  color: var(--status-error);
-}
-
-.tagBulkBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .tagShowAll {
   display: block;
@@ -1205,31 +1143,12 @@
   margin-top: 8px;
 }
 
+/* Inherits the .btn + .btnPrimary recipe; this class just owns
+   the positioning concerns (margin and self-alignment inside the
+   library list flex column). */
 .libraryAddBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
   align-self: flex-start;
   margin-top: 14px;
-  padding: 9px 18px;
-  background: var(--text-primary);
-  border: none;
-  border-radius: var(--radius-pill);
-  color: var(--surface-1);
-  font-size: var(--text-md);
-  font-weight: 500;
-  font-family: var(--font-ui);
-  letter-spacing: -0.005em;
-  cursor: pointer;
-  transition: opacity var(--dur-instant) ease, transform var(--dur-instant) ease;
-}
-
-.libraryAddBtn:hover {
-  opacity: 0.9;
-}
-
-.libraryAddBtn:active {
-  transform: scale(0.98);
 }
 
 /* ── New settings controls (Appearance / Defaults / Capture /
@@ -1556,32 +1475,3 @@
   background: var(--hover-bg);
 }
 
-.primaryBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 18px;
-  background: var(--text-primary);
-  border: none;
-  border-radius: var(--radius-pill);
-  color: var(--surface-1);
-  font-family: var(--font-ui);
-  font-size: var(--text-md);
-  font-weight: 500;
-  cursor: pointer;
-  letter-spacing: -0.005em;
-  transition: opacity var(--dur-instant) ease, transform var(--dur-instant) ease;
-}
-
-.primaryBtn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.primaryBtn:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.primaryBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}

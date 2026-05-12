@@ -16,6 +16,8 @@ import {
   Maximize as MaximizeIcon,
   LogOut as LogOutIcon,
   CreditCard as CreditCardIcon,
+  FileArchive as FileArchiveIcon,
+  Eraser as EraserIcon,
 } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import { confirm } from '../lib/confirm.js';
@@ -354,7 +356,7 @@ function LibrariesPage({
               </button>
               <button
                 type="button"
-                className={styles.primaryBtn}
+                className={`${styles.btn} ${styles.btnPrimary}`}
                 onClick={commitCreate}
                 disabled={!creatingDraft.trim()}
               >
@@ -365,7 +367,7 @@ function LibrariesPage({
         ) : (
           <button
             type="button"
-            className={styles.libraryAddBtn}
+            className={`${styles.btn} ${styles.btnPrimary} ${styles.libraryAddBtn}`}
             onClick={() => setCreating(true)}
           >
             <Plus size={14} strokeWidth={1.7} aria-hidden="true" />
@@ -381,43 +383,6 @@ function DrawerChevron() {
   return (
     <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
       <path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ZipIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3.5 2h6.25l3 3v8.5a0.5 0.5 0 0 1-0.5 0.5h-9a0.5 0.5 0 0 1-0.5-0.5v-11a0.5 0.5 0 0 1 0.5-0.5z" />
-      <path d="M9.5 2v3h3" />
-      <path d="M6.25 6h1M7.25 7.5h1M6.25 9h1M7.25 10.5h1" />
-    </svg>
-  );
-}
-
-function EraseIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2.5 4h11" />
-      <path d="M5.5 4V2.5a0.75 0.75 0 0 1 0.75 -0.75h3.5a0.75 0.75 0 0 1 0.75 0.75V4" />
-      <path d="M3.75 4v9a0.75 0.75 0 0 0 0.75 0.75h7a0.75 0.75 0 0 0 0.75 -0.75V4" />
-      <path d="M6.5 7v4M9.5 7v4" />
     </svg>
   );
 }
@@ -635,7 +600,7 @@ function UpdatesPage({ prefs, updatePref }) {
       <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 20 }}>
         <button
           type="button"
-          className={styles.primaryBtn}
+          className={`${styles.btn} ${styles.btnPrimary}`}
           onClick={handleCheck}
           disabled={state.checking}
         >
@@ -643,7 +608,7 @@ function UpdatesPage({ prefs, updatePref }) {
           {state.checking ? 'Checking…' : 'Check for updates'}
         </button>
         {state.status === 'ready' && (
-          <button type="button" className={styles.primaryBtn} onClick={handleInstall}>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleInstall}>
             Restart and install{state.version ? ` v${state.version}` : ''}
           </button>
         )}
@@ -1326,44 +1291,30 @@ export default function SettingsModal({
 
               <div className={styles.divider} />
 
-              <label className={styles.toggleRow}>
+              <div className={styles.toggleRow}>
                 <span className={styles.toggleText}>
                   <span className={styles.toggleLabel}>Auto-name new uploads</span>
                   <span className={styles.toggleSub}>
                     Generate a short title for each image you save. Runs in the background.
                   </span>
                 </span>
-                <span className={styles.switch}>
-                  <input
-                    type="checkbox"
-                    checked={hasAi && !!prefs.autoNameOnSave}
-                    onChange={() => togglePref('autoNameOnSave')}
-                    disabled={!hasAi}
-                  />
-                  <span className={styles.switchTrack}>
-                    <span className={styles.switchKnob} />
-                  </span>
-                </span>
-              </label>
-              <label className={styles.toggleRow}>
+                <ToggleSwitch
+                  on={hasAi && !!prefs.autoNameOnSave}
+                  onChange={() => togglePref('autoNameOnSave')}
+                />
+              </div>
+              <div className={styles.toggleRow}>
                 <span className={styles.toggleText}>
                   <span className={styles.toggleLabel}>Visual search</span>
                   <span className={styles.toggleSub}>
                     Index new saves with vector embeddings so the search bar matches by meaning ("dark moody UI") instead of exact words.
                   </span>
                 </span>
-                <span className={styles.switch}>
-                  <input
-                    type="checkbox"
-                    checked={hasAi && !!prefs.semanticSearch}
-                    onChange={() => togglePref('semanticSearch')}
-                    disabled={!hasAi}
-                  />
-                  <span className={styles.switchTrack}>
-                    <span className={styles.switchKnob} />
-                  </span>
-                </span>
-              </label>
+                <ToggleSwitch
+                  on={hasAi && !!prefs.semanticSearch}
+                  onChange={() => togglePref('semanticSearch')}
+                />
+              </div>
 
               {hasAi && (unindexed > 0 || reindexState.running) && (
                 <div className={styles.reindexBox}>
@@ -1417,7 +1368,7 @@ export default function SettingsModal({
                       }}
                     />
                     <select
-                      className={styles.tagSort}
+                      className={styles.select}
                       value={tagSort}
                       onChange={(e) => setTagSort(e.target.value)}
                       aria-label="Sort tags"
@@ -1441,10 +1392,11 @@ export default function SettingsModal({
                     {unusedTagCount > 0 && (
                       <button
                         type="button"
-                        className={styles.tagBulkBtn}
+                        className={`${styles.btn} ${styles.btnDanger}`}
                         onClick={handleDeleteUnusedTags}
                         disabled={tagBusy}
                       >
+                        <Trash2 size={13} strokeWidth={1.7} aria-hidden="true" />
                         Delete unused
                       </button>
                     )}
@@ -1553,8 +1505,8 @@ export default function SettingsModal({
               onClick={handleExportLibrary}
               disabled={exportState.running}
             >
-              <span className={styles.btnIcon}><ZipIcon /></span>
-              {exportState.running ? 'Exporting…' : 'Export Library as Zip'}
+              <FileArchiveIcon size={14} strokeWidth={1.5} aria-hidden="true" />
+              {exportState.running ? 'Exporting…' : 'Export library as zip'}
             </button>
           </div>
           {exportState.message && (
@@ -1652,8 +1604,8 @@ export default function SettingsModal({
               onClick={handleWipeLibrary}
               disabled={wipeState.running}
             >
-              <span className={styles.btnIcon}><EraseIcon /></span>
-              {wipeState.running ? 'Erasing…' : 'Erase Library'}
+              <EraserIcon size={14} strokeWidth={1.5} aria-hidden="true" />
+              {wipeState.running ? 'Erasing…' : 'Erase library'}
             </button>
           </div>
               {wipeState.message && (
