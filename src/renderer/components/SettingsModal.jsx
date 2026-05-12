@@ -553,7 +553,7 @@ function UpdatesPage({ prefs, updatePref }) {
         />
       </div>
 
-      <div className={styles.actions} style={{ marginTop: 20 }}>
+      <div className={styles.actions} style={{ marginTop: 20, justifyContent: 'flex-start' }}>
         <button
           type="button"
           className={styles.primaryBtn}
@@ -579,7 +579,7 @@ function UpdatesPage({ prefs, updatePref }) {
         else if (state.status === 'unsupported') text = "Updates aren't available in this build (dev mode).";
         if (!text) return null;
         return (
-          <p className={styles.sectionHint} style={{ textAlign: 'right', marginTop: 16 }}>
+          <p className={styles.sectionHint} style={{ marginTop: 16 }}>
             {text}
           </p>
         );
