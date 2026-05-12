@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import {
-  History, User, Sparkles, Hash, Database, Info, Trash2, BookMarked as Library, Pencil, Plus, ArrowRight,
+  History, User, Sparkles, Hash, Database, Info, Trash2, BookMarked as Library, Pencil, Plus, RefreshCw,
   Palette as PaletteIcon,
   SlidersHorizontal as SlidersIcon,
   Camera as CameraIcon,
@@ -228,7 +228,7 @@ function LibrariesPage({
                     className={styles.btn}
                     onClick={() => onSwitch?.(lib.id)}
                   >
-                    <ArrowRight size={13} strokeWidth={1.7} aria-hidden="true" />
+                    <RefreshCw size={13} strokeWidth={1.7} aria-hidden="true" />
                     Switch
                   </button>
                 )}
