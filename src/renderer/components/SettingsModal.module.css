@@ -1230,8 +1230,8 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 28px;
+  gap: 6px;
+  margin-bottom: 24px;
 }
 
 /* Canonical input label — kept deliberately small + quiet so the
@@ -1441,16 +1441,16 @@
   gap: 6px;
   font-family: var(--font-ui);
   font-size: var(--text-sm);
-  padding: 4px;
+  padding: 0;
+  margin: 0;
   background: transparent;
   border: none;
   border-radius: var(--radius-md);
   color: var(--text-primary);
   cursor: pointer;
-  transition: background var(--dur-instant) ease;
 }
 
-.shortcutCaptureBtn:hover {
+.shortcutCaptureBtn:hover .shortcutKey {
   background: var(--hover-bg-soft);
 }
 
