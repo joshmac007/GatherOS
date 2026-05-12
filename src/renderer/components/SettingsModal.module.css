@@ -482,28 +482,10 @@
 }
 
 .tagSearch {
+  composes: inputCanonical from '../styles/forms.module.css';
   flex: 1 1 auto;
   min-width: 0;
-  height: 28px;
-  padding: 0 10px;
-  background: var(--input-bg);
-  border: 0.5px solid var(--input-border);
-  border-radius: var(--radius-md);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  outline: none;
-  -webkit-appearance: none;
   appearance: none;
-  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
-}
-
-.tagSearch::placeholder { color: var(--text-tertiary); }
-
-.tagSearch:focus {
-  background: var(--input-bg-focus);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
 }
 
 .tagSearch::-webkit-search-cancel-button {
@@ -867,21 +849,8 @@
 }
 
 .libraryRenameInput {
-  width: 100%;
-  padding: 6px 10px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-md);
+  composes: inputCanonical from '../styles/forms.module.css';
   font-weight: 500;
-  font-family: var(--font-ui);
-  color: var(--text-primary);
-  outline: none;
-  transition: border-color var(--dur-instant) ease;
-}
-
-.libraryRenameInput:focus {
-  border-color: var(--border-strong);
 }
 
 .libraryCreateRow {
@@ -1207,14 +1176,9 @@
 }
 
 .folderPickerPath {
+  composes: inputCanonical from '../styles/forms.module.css';
   flex: 1 1 auto;
   min-width: 0;
-  padding: 8px 12px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;

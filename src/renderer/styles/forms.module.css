@@ -1,0 +1,29 @@
+/* Canonical text-input recipe — reuse via `composes` from any
+   component's CSS module so every blocky text field across the app
+   shares stroke / fill / corner / shadow / focus treatment. */
+.inputCanonical {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-control);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: 1.4;
+  color: var(--text-primary);
+  outline: none;
+  box-sizing: border-box;
+  transition:
+    border-color var(--dur-instant) ease,
+    box-shadow var(--dur-instant) ease;
+}
+
+.inputCanonical::placeholder {
+  color: var(--text-tertiary);
+}
+
+.inputCanonical:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
+}
