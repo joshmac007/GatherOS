@@ -2391,7 +2391,8 @@ export default function App() {
                 />
               ) : (
               <div className="grid-scroll" ref={setGridScrollNode}>
-                {appMode === 'library' && (
+                {(appMode === 'library'
+                  || (appMode === 'folders' && view.type === 'collection')) && (
                   <SmartChipRail
                     activeViewType={
                       ['all', 'unsorted', 'trash'].includes(view.type)
