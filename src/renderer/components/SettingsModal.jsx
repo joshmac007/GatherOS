@@ -11,6 +11,9 @@ import {
   Moon as MoonIcon,
   Folder as FolderIcon,
   Layers as LayersIcon,
+  Crop as CropIcon,
+  AppWindow as AppWindowIcon,
+  Maximize as MaximizeIcon,
 } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
@@ -1215,20 +1218,24 @@ export default function SettingsModal({
                 <label className={styles.fieldLabel}>Default mode</label>
                 <div className={styles.segmentedRow}>
                   {[
-                    { value: 'region',     label: 'Region' },
-                    { value: 'window',     label: 'Window' },
-                    { value: 'fullscreen', label: 'Fullscreen' },
-                  ].map(({ value, label }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`${styles.segmentBtn} ${prefs.captureMode === value ? styles.segmentBtnActive : ''}`}
-                      onClick={() => updatePref('captureMode', value)}
-                      aria-pressed={prefs.captureMode === value}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                    { value: 'region',     label: 'Region',     Icon: CropIcon },
+                    { value: 'window',     label: 'Window',     Icon: AppWindowIcon },
+                    { value: 'fullscreen', label: 'Fullscreen', Icon: MaximizeIcon },
+                  ].map(({ value, label, Icon }) => {
+                    const active = prefs.captureMode === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`${styles.segmentBtn} ${active ? styles.segmentBtnActive : ''}`}
+                        onClick={() => updatePref('captureMode', value)}
+                        aria-pressed={active}
+                      >
+                        {active && <Icon size={14} strokeWidth={1.8} aria-hidden="true" />}
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
