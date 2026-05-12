@@ -274,12 +274,10 @@
   box-shadow: none;
 }
 
-/* New-tile variant: absolute-center the "+" against the whole card
-   so the label below doesn't pull the icon visually above center.
-   Min-height matches the body-height of a real tile (art 122 + gap
-   12 + meta 36 + padding 26) so the card retains its full size even
-   though the absolute-positioned tileArtNew no longer contributes
-   to the flex column's intrinsic height. */
+/* New-tile variant: absolute-center the "+" against the whole card,
+   pin the label to the bottom-left so the icon is unambiguously the
+   focal point. Min-height matches a real tile so the card holds its
+   size even though both inner blocks are absolute-positioned. */
 .tileNew {
   position: relative;
   min-height: 196px;
@@ -292,6 +290,14 @@
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.tileNew .tileMeta {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
   pointer-events: none;
 }
 

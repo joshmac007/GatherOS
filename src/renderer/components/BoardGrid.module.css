@@ -233,8 +233,9 @@
   box-shadow: none;
 }
 
-/* New-tile variant: absolute-center the "+" against the whole card
-   so the label below doesn't pull the icon visually above center. */
+/* New-tile variant: absolute-center the "+" against the whole card,
+   pin the label to the bottom-left so the icon is the focal point
+   and the label reads as a quiet caption. */
 .tileArtNew {
   position: absolute;
   inset: 0;
@@ -242,6 +243,14 @@
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.tileNew .tileMeta {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
   pointer-events: none;
 }
 

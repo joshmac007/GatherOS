@@ -8,6 +8,7 @@ import { CollectionIcon } from './components/Sidebar.jsx';
 import QuickSwitcher from './components/QuickSwitcher.jsx';
 import QuickLookOverlay from './components/QuickLookOverlay.jsx';
 import BulkTagPicker from './components/BulkTagPicker.jsx';
+import BulkSpacePicker from './components/BulkSpacePicker.jsx';
 import RediscoverMode from './components/RediscoverMode.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
@@ -1894,13 +1895,9 @@ export default function App() {
   // origin so they're easy to grab and rearrange.
   const openBulkSpacePicker = useCallback((e) => {
     if (selected.size === 0) return;
-    if (!boards || boards.length === 0) {
-      showActionToast({ message: 'No spaces yet — create one first.', durationMs: 1800 });
-      return;
-    }
     const rect = e.currentTarget.getBoundingClientRect();
-    setBulkSpacePicker({ x: rect.left, y: rect.top - 4 });
-  }, [selected, boards, showActionToast]);
+    setBulkSpacePicker({ x: rect.left + rect.width / 2, y: rect.top });
+  }, [selected]);
 
   const handleBulkAddToBoard = useCallback(async (boardId) => {
     setBulkSpacePicker(null);
@@ -2652,17 +2649,15 @@ export default function App() {
               <span className="selection-btn-icon"><CollectionIcon /></span>
             </button>
           )}
-          {boards && boards.length > 0 && (
-            <button
-              type="button"
-              className="selection-btn selection-btn-compact"
-              onClick={openBulkSpacePicker}
-              data-tooltip="Add to space"
-              aria-label="Add to space"
-            >
-              <span className="selection-btn-icon"><FrameIcon /></span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="selection-btn selection-btn-compact"
+            onClick={openBulkSpacePicker}
+            data-tooltip="Add to space"
+            aria-label="Add to space"
+          >
+            <span className="selection-btn-icon"><FrameIcon /></span>
+          </button>
           <button
             type="button"
             className="selection-btn selection-btn-compact"
@@ -2848,14 +2843,21 @@ export default function App() {
       )}
 
       {bulkSpacePicker && (
-        <ContextMenu
-          x={bulkSpacePicker.x}
-          y={bulkSpacePicker.y}
-          items={(boards || []).map((b) => ({
-            label: b.name,
-            icon: <FrameIcon />,
-            onClick: () => handleBulkAddToBoard(b.id),
-          }))}
+        <BulkSpacePicker
+          anchor={bulkSpacePicker}
+          boards={boards || []}
+          count={selected.size}
+          onPick={handleBulkAddToBoard}
+          onCreate={async (name) => {
+            try {
+              const created = await window.moodmark.boards.create({ name });
+              await loadBoards();
+              if (created?.id) handleBulkAddToBoard(created.id);
+            } catch (err) {
+              console.error('Create-and-add to space failed:', err);
+              setBulkSpacePicker(null);
+            }
+          }}
           onClose={() => setBulkSpacePicker(null)}
         />
       )}
