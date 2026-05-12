@@ -1161,15 +1161,32 @@
 .libraryRenameInput {
   width: 100%;
   padding: 6px 10px;
-  background: var(--input-bg-focus);
-  border: 1px solid var(--accent);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font-size: var(--text-md);
   font-weight: 500;
   font-family: var(--font-ui);
   color: var(--text-primary);
   outline: none;
-  box-shadow: 0 0 0 2.5px var(--accent-bg-medium);
+  transition: border-color var(--dur-instant) ease;
+}
+
+.libraryRenameInput:focus {
+  border-color: var(--border-strong);
+}
+
+.libraryCreateRow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.libraryCreateActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-left: 30px;
 }
 
 .libraryAddBtn {

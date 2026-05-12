@@ -28,7 +28,7 @@ const NAV_ITEMS = [
   { id: 'account',    label: 'Account',    Icon: User },
   { id: 'appearance', label: 'Appearance', Icon: PaletteIcon },
   { id: 'libraries',  label: 'Libraries',  Icon: Library },
-  { id: 'ai',         label: 'AI',         Icon: Sparkles },
+  { id: 'ai',         label: 'AI Usage',   Icon: Sparkles },
   { id: 'tags',       label: 'Tags',       Icon: Hash },
   { id: 'capture',    label: 'Capture',    Icon: CameraIcon },
   { id: 'updates',    label: 'Updates',    Icon: DownloadIcon },
@@ -308,28 +308,49 @@ function LibrariesPage({
           );
         })}
         {creating ? (
-          <div className={styles.libraryRow}>
-            <span className={styles.libraryRowGlyph} aria-hidden="true">
-              <Library size={16} strokeWidth={1.6} />
-            </span>
-            <div className={styles.libraryRowMain}>
-              <input
-                autoFocus
-                className={styles.libraryRenameInput}
-                placeholder="New library name"
-                value={creatingDraft}
-                onChange={(e) => setCreatingDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    commitCreate();
-                  } else if (e.key === 'Escape') {
-                    setCreating(false);
-                    setCreatingDraft('');
-                  }
+          <div className={styles.libraryCreateRow}>
+            <div className={styles.libraryRow}>
+              <span className={styles.libraryRowGlyph} aria-hidden="true">
+                <Library size={16} strokeWidth={1.6} />
+              </span>
+              <div className={styles.libraryRowMain}>
+                <input
+                  autoFocus
+                  className={styles.libraryRenameInput}
+                  placeholder="New library name"
+                  value={creatingDraft}
+                  onChange={(e) => setCreatingDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitCreate();
+                    } else if (e.key === 'Escape') {
+                      setCreating(false);
+                      setCreatingDraft('');
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className={styles.libraryCreateActions}>
+              <button
+                type="button"
+                className={styles.btn}
+                onClick={() => {
+                  setCreating(false);
+                  setCreatingDraft('');
                 }}
-                onBlur={commitCreate}
-              />
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.primaryBtn}
+                onClick={commitCreate}
+                disabled={!creatingDraft.trim()}
+              >
+                Create
+              </button>
             </div>
           </div>
         ) : (

@@ -32,7 +32,7 @@
   --accent-bg-faint: rgba(0, 0, 0, 0.06);
   --accent-bg-soft: rgba(0, 0, 0, 0.10);
   --accent-bg-active: rgba(0, 0, 0, 0.12);
-  --accent-bg-medium: rgba(0, 0, 0, 0.18);
+  --accent-bg-medium: rgba(0, 0, 0, 0.08);
   --accent-ring: rgba(0, 0, 0, 0.25);
 
   /* Hover/active states. --hover-bg is the canonical hover surface
@@ -248,7 +248,7 @@
   --accent-bg-faint: rgba(255, 255, 255, 0.08);
   --accent-bg-soft: rgba(255, 255, 255, 0.14);
   --accent-bg-active: rgba(255, 255, 255, 0.18);
-  --accent-bg-medium: rgba(255, 255, 255, 0.24);
+  --accent-bg-medium: rgba(255, 255, 255, 0.12);
   --accent-ring: rgba(255, 255, 255, 0.30);
 
   --hover-bg: rgba(255, 255, 255, 0.08);
