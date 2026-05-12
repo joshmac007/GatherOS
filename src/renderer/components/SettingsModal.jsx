@@ -289,7 +289,10 @@ function LibrariesPage({
                             className={`${styles.libraryRowMenuItem} ${styles.libraryRowMenuItemDanger}`}
                             onClick={() => {
                               setOpenMenuId(null);
-                              onDelete?.(lib.id);
+                              const ok = window.confirm(
+                                `Delete "${lib.name}"? This permanently removes the library and all of its saves. This can't be undone.`,
+                              );
+                              if (ok) onDelete?.(lib.id);
                             }}
                           >
                             <Trash2 size={14} strokeWidth={1.7} aria-hidden="true" />
