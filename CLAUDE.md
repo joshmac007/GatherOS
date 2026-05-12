@@ -3,8 +3,8 @@
 ## Conventions
 
 - After any code change, always end the reply with the full command to re-run
-  the app so the user can copy/paste — include the project root in the `cd`:
+  the app so the user can copy/paste — use the user's local project root:
 
   ```
-  cd /home/user/GatherOS && npm run dev
+  cd /Users/brett/GatherOS && npm run dev
   ```
