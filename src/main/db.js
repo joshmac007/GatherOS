@@ -210,6 +210,21 @@ const MIGRATIONS = [
     });
     txn(rows);
   },
+  // v? → next: boards.order_index for drag-to-reorder on the Spaces
+  // grid. Mirrors collections.order_index — seed existing rows in
+  // created_at order so the first launch after upgrade preserves
+  // current visual order.
+  (database) => {
+    addColumnIfMissing(database, 'boards', 'order_index', 'INTEGER DEFAULT 0');
+    const ordered = database
+      .prepare('SELECT COUNT(*) AS n FROM boards WHERE order_index > 0')
+      .get().n;
+    if (ordered === 0) {
+      const rows = database.prepare('SELECT id FROM boards ORDER BY created_at ASC').all();
+      const stmt = database.prepare('UPDATE boards SET order_index = ? WHERE id = ?');
+      rows.forEach((r, i) => stmt.run(i, r.id));
+    }
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -1151,8 +1166,18 @@ function removeSaveFromCollection({ collectionId, saveId } = {}) {
 
 function listBoards() {
   return getDatabase().prepare(
-    'SELECT id, name, thumb_path, created_at, updated_at FROM boards ORDER BY updated_at DESC'
+    'SELECT id, name, thumb_path, created_at, updated_at, order_index FROM boards ORDER BY order_index ASC, created_at ASC'
   ).all();
+}
+
+function reorderBoards(orderedIds) {
+  const db = getDatabase();
+  const stmt = db.prepare('UPDATE boards SET order_index = ? WHERE id = ?');
+  const txn = db.transaction((ids) => {
+    ids.forEach((id, idx) => stmt.run(idx, id));
+  });
+  txn(orderedIds);
+  return { ok: true };
 }
 
 // Same shape as listBoards plus a `thumbs: string[]` field with up
@@ -1186,11 +1211,11 @@ function listBoardsWithThumbs() {
        WHERE r.rn <= 4 AND s.deleted_at IS NULL
        GROUP BY r.board_id
     )
-    SELECT b.id, b.name, b.thumb_path, b.created_at, b.updated_at,
+    SELECT b.id, b.name, b.thumb_path, b.created_at, b.updated_at, b.order_index,
            tt.thumbs AS thumbs_blob
       FROM boards b
       LEFT JOIN top_thumbs tt ON tt.board_id = b.id
-     ORDER BY b.updated_at DESC
+     ORDER BY b.order_index ASC, b.created_at ASC
   `).all();
   return rows.map((row) => {
     const { thumbs_blob, ...rest } = row;
@@ -1373,6 +1398,7 @@ module.exports = {
   setCollectionParent,
   deleteCollection,
   reorderCollections,
+  reorderBoards,
   addSaveToCollection,
   removeSaveFromCollection,
   getAllTags,

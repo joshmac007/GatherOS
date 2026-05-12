@@ -668,6 +668,15 @@ export default function App() {
     await loadBoards();
   }, [loadBoards, setView]);
 
+  const handleReorderBoards = useCallback(async (orderedIds) => {
+    setBoards((prev) => {
+      const byId = new Map(prev.map((b) => [b.id, b]));
+      return orderedIds.map((id) => byId.get(id)).filter(Boolean);
+    });
+    await window.moodmark.boards.reorder(orderedIds);
+    loadBoards();
+  }, [loadBoards]);
+
   // Refresh collection counts whenever the grid refreshes — and also
   // whenever the local saves array shrinks/grows from an optimistic
   // mutation (delete, restore, empty-trash). Without the saves.length
@@ -2371,6 +2380,7 @@ export default function App() {
                   }}
                   onRenameFolder={handleRenameCollection}
                   onDeleteFolder={handleDeleteCollection}
+                  onReorderFolders={handleReorderCollections}
                   onAddSavesToBucket={handleAddSavesToBucket}
                   onDropFilesToBucket={handleDropFilesToBucket}
                 />
@@ -2388,6 +2398,7 @@ export default function App() {
                   }}
                   onRenameBoard={handleRenameBoard}
                   onDeleteBoard={handleDeleteBoard}
+                  onReorderBoards={handleReorderBoards}
                 />
               ) : (
               <div className="grid-scroll" ref={setGridScrollNode}>

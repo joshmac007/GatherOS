@@ -24,16 +24,28 @@ function FolderTile({
   onRenameCommit,
   onRenameCancel,
   isDropTarget,
+  onDragStart,
   onDragOver,
   onDragLeave,
   onDrop,
+  onDragEnd,
+  reorderHint,
+  isReorderDragging,
 }) {
   const thumbs = Array.isArray(folder.thumbs) ? folder.thumbs.slice(0, 4) : [];
   const count = folder.save_count || 0;
   return (
     <div
-      className={`${styles.tile}${isDropTarget ? ' ' + styles.tileDropTarget : ''}`}
+      className={[
+        styles.tile,
+        isDropTarget && styles.tileDropTarget,
+        isReorderDragging && styles.tileDragging,
+        reorderHint === 'before' && styles.tileReorderBefore,
+        reorderHint === 'after' && styles.tileReorderAfter,
+      ].filter(Boolean).join(' ')}
       role="button"
+      draggable={!isRenaming}
+      onDragStart={onDragStart}
       tabIndex={isRenaming ? -1 : 0}
       onClick={(e) => {
         if (isRenaming) return;
@@ -51,6 +63,7 @@ function FolderTile({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      onDragEnd={onDragEnd}
     >
       <div className={styles.tileArt}>
         {thumbs.length > 0 ? (
@@ -128,6 +141,8 @@ function NewFolderTile({ onActivate }) {
   );
 }
 
+const FOLDER_REORDER_MIME = 'application/x-moodmark-folder-reorder';
+
 export default function FolderGrid({
   folders,
   parentId = null,
@@ -135,6 +150,7 @@ export default function FolderGrid({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  onReorderFolders,
   onAddSavesToBucket,
   onDropFilesToBucket,
 }) {
@@ -147,6 +163,9 @@ export default function FolderGrid({
   const [renameDraft, setRenameDraft] = useState('');
   const renameInputRef = useRef(null);
   const [dropTargetId, setDropTargetId] = useState(null);
+  // Drag-to-reorder state: { id, hintBefore, hintAfter } — only one
+  // hint position renders at a time, on whichever side the cursor sits.
+  const [reorderState, setReorderState] = useState({ draggingId: null, overId: null, side: null });
 
   function startRename(folder) {
     setRenamingId(folder.id);
@@ -176,17 +195,56 @@ export default function FolderGrid({
   function isFileDrag(e) {
     return e.dataTransfer.types.includes('Files');
   }
+  function isReorderDrag(e) {
+    return e.dataTransfer.types.includes(FOLDER_REORDER_MIME);
+  }
+
+  function handleTileReorderDragStart(e, id) {
+    if (!onReorderFolders) return;
+    e.dataTransfer.setData(FOLDER_REORDER_MIME, id);
+    e.dataTransfer.effectAllowed = 'move';
+    setReorderState({ draggingId: id, overId: null, side: null });
+  }
 
   function handleTileDragOver(e, id) {
+    if (isReorderDrag(e)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = e.currentTarget.getBoundingClientRect();
+      const side = (e.clientX - rect.left) < rect.width / 2 ? 'before' : 'after';
+      if (reorderState.overId !== id || reorderState.side !== side) {
+        setReorderState((prev) => ({ ...prev, overId: id, side }));
+      }
+      return;
+    }
     if (!isSaveDrag(e) && !isFileDrag(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     if (dropTargetId !== id) setDropTargetId(id);
   }
   function handleTileDragLeave(e) {
-    if (!e.currentTarget.contains(e.relatedTarget)) setDropTargetId(null);
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDropTargetId(null);
+      setReorderState((prev) => (prev.overId ? { ...prev, overId: null, side: null } : prev));
+    }
   }
   async function handleTileDrop(e, id) {
+    if (isReorderDrag(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const draggedId = e.dataTransfer.getData(FOLDER_REORDER_MIME);
+      const rect = e.currentTarget.getBoundingClientRect();
+      const side = (e.clientX - rect.left) < rect.width / 2 ? 'before' : 'after';
+      setReorderState({ draggingId: null, overId: null, side: null });
+      if (!draggedId || draggedId === id) return;
+      const ordered = visible.map((f) => f.id).filter((x) => x !== draggedId);
+      const targetIdx = ordered.indexOf(id);
+      if (targetIdx < 0) return;
+      const insertAt = side === 'before' ? targetIdx : targetIdx + 1;
+      ordered.splice(insertAt, 0, draggedId);
+      onReorderFolders?.(ordered);
+      return;
+    }
     if (!isSaveDrag(e) && !isFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -200,6 +258,10 @@ export default function FolderGrid({
     catch { return; }
     if (!Array.isArray(ids) || ids.length === 0) return;
     await onAddSavesToBucket?.(id, ids);
+  }
+
+  function handleTileDragEnd() {
+    setReorderState({ draggingId: null, overId: null, side: null });
   }
 
   if (visible.length === 0) {
@@ -245,9 +307,13 @@ export default function FolderGrid({
             onRenameCommit={commitRename}
             onRenameCancel={cancelRename}
             isDropTarget={dropTargetId === folder.id}
+            isReorderDragging={reorderState.draggingId === folder.id}
+            reorderHint={reorderState.overId === folder.id ? reorderState.side : null}
+            onDragStart={(e) => handleTileReorderDragStart(e, folder.id)}
             onDragOver={(e) => handleTileDragOver(e, folder.id)}
             onDragLeave={handleTileDragLeave}
             onDrop={(e) => handleTileDrop(e, folder.id)}
+            onDragEnd={handleTileDragEnd}
           />
         ))}
       </div>

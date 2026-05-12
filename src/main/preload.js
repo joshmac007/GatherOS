@@ -102,6 +102,7 @@ contextBridge.exposeInMainWorld('moodmark', {
     create: (payload) => ipcRenderer.invoke('boards:create', payload ?? {}),
     rename: (payload) => ipcRenderer.invoke('boards:rename', payload),
     delete: (id) => ipcRenderer.invoke('boards:delete', id),
+    reorder: (ids) => ipcRenderer.invoke('boards:reorder', ids),
     getItems: (boardId) => ipcRenderer.invoke('boards:get-items', boardId),
     getPreviewSaves: (boardId, limit) => ipcRenderer.invoke('boards:get-preview-saves', boardId, limit),
     upsertItem: (payload) => ipcRenderer.invoke('boards:upsert-item', payload),

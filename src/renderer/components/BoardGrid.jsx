@@ -21,13 +21,31 @@ function BoardTile({
   onRenameDraftChange,
   onRenameCommit,
   onRenameCancel,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+  reorderHint,
+  isReorderDragging,
 }) {
   const thumbs = Array.isArray(board.thumbs) ? board.thumbs.slice(0, 4) : [];
   const count = thumbs.length;
   return (
     <div
-      className={styles.tile}
+      className={[
+        styles.tile,
+        isReorderDragging && styles.tileDragging,
+        reorderHint === 'before' && styles.tileReorderBefore,
+        reorderHint === 'after' && styles.tileReorderAfter,
+      ].filter(Boolean).join(' ')}
       role="button"
+      draggable={!isRenaming}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       tabIndex={isRenaming ? -1 : 0}
       onClick={(e) => {
         if (isRenaming) return;
@@ -112,17 +130,62 @@ function NewBoardTile({ onActivate }) {
   );
 }
 
+const BOARD_REORDER_MIME = 'application/x-moodmark-board-reorder';
+
 export default function BoardGrid({
   boards,
   onPickBoard,
   onCreateBoard,
   onRenameBoard,
   onDeleteBoard,
+  onReorderBoards,
 }) {
   const [ctxMenu, setCtxMenu] = useState(null);
   const [renamingId, setRenamingId] = useState(null);
   const [renameDraft, setRenameDraft] = useState('');
   const renameInputRef = useRef(null);
+  const [reorderState, setReorderState] = useState({ draggingId: null, overId: null, side: null });
+
+  function handleTileReorderDragStart(e, id) {
+    if (!onReorderBoards) return;
+    e.dataTransfer.setData(BOARD_REORDER_MIME, id);
+    e.dataTransfer.effectAllowed = 'move';
+    setReorderState({ draggingId: id, overId: null, side: null });
+  }
+  function handleTileDragOver(e, id) {
+    if (!e.dataTransfer.types.includes(BOARD_REORDER_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = (e.clientX - rect.left) < rect.width / 2 ? 'before' : 'after';
+    if (reorderState.overId !== id || reorderState.side !== side) {
+      setReorderState((prev) => ({ ...prev, overId: id, side }));
+    }
+  }
+  function handleTileDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setReorderState((prev) => (prev.overId ? { ...prev, overId: null, side: null } : prev));
+    }
+  }
+  function handleTileDrop(e, id) {
+    if (!e.dataTransfer.types.includes(BOARD_REORDER_MIME)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedId = e.dataTransfer.getData(BOARD_REORDER_MIME);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = (e.clientX - rect.left) < rect.width / 2 ? 'before' : 'after';
+    setReorderState({ draggingId: null, overId: null, side: null });
+    if (!draggedId || draggedId === id) return;
+    const ordered = boards.map((b) => b.id).filter((x) => x !== draggedId);
+    const targetIdx = ordered.indexOf(id);
+    if (targetIdx < 0) return;
+    const insertAt = side === 'before' ? targetIdx : targetIdx + 1;
+    ordered.splice(insertAt, 0, draggedId);
+    onReorderBoards?.(ordered);
+  }
+  function handleTileDragEnd() {
+    setReorderState({ draggingId: null, overId: null, side: null });
+  }
 
   function startRename(board) {
     setRenamingId(board.id);
@@ -189,6 +252,13 @@ export default function BoardGrid({
             onRenameDraftChange={setRenameDraft}
             onRenameCommit={commitRename}
             onRenameCancel={cancelRename}
+            isReorderDragging={reorderState.draggingId === board.id}
+            reorderHint={reorderState.overId === board.id ? reorderState.side : null}
+            onDragStart={(e) => handleTileReorderDragStart(e, board.id)}
+            onDragOver={(e) => handleTileDragOver(e, board.id)}
+            onDragLeave={handleTileDragLeave}
+            onDrop={(e) => handleTileDrop(e, board.id)}
+            onDragEnd={handleTileDragEnd}
           />
         ))}
       </div>

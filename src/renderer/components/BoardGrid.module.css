@@ -252,3 +252,30 @@
 .tileNew:hover .tileNameMuted {
   color: var(--text-primary);
 }
+
+/* Drag-to-reorder visuals. The lifted tile fades; the target tile
+   gets an accent line on the side the cursor is closer to so the
+   user can see where the dragged tile will land. */
+.tile.tileDragging {
+  opacity: 0.45;
+}
+
+.tile.tileReorderBefore,
+.tile.tileReorderAfter {
+  position: relative;
+}
+
+.tile.tileReorderBefore::before,
+.tile.tileReorderAfter::after {
+  content: '';
+  position: absolute;
+  top: 6%;
+  bottom: 6%;
+  width: 3px;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+}
+
+.tile.tileReorderBefore::before { left: -7px; }
+.tile.tileReorderAfter::after { right: -7px; }

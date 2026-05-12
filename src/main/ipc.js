@@ -10,7 +10,7 @@ const {
   getAllCollections, getAllCollectionsWithThumbs, getCollectionsForSave, getCollectionsContainingAll, createCollection, renameCollection, setCollectionParent,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
   getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
-  listBoards, listBoardsWithThumbs, getBoard, createBoard, renameBoard, deleteBoard,
+  listBoards, listBoardsWithThumbs, getBoard, createBoard, renameBoard, deleteBoard, reorderBoards,
   getBoardItems, getBoardPreviewSaves, upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
 } = require('./db');
 const {
@@ -369,6 +369,7 @@ function registerIpcHandlers() {
   ipcMain.handle('boards:create', (_e, payload) => createBoard(payload));
   ipcMain.handle('boards:rename', (_e, payload) => renameBoard(payload));
   ipcMain.handle('boards:delete', (_e, id) => deleteBoard(id));
+  ipcMain.handle('boards:reorder', (_e, ids) => reorderBoards(ids));
   ipcMain.handle('boards:get-items', (_e, boardId) => getBoardItems(boardId));
   ipcMain.handle('boards:get-preview-saves', (_e, boardId, limit) =>
     getBoardPreviewSaves(boardId, typeof limit === 'number' ? limit : 4),
