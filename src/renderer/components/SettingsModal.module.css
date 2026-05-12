@@ -900,14 +900,6 @@
   margin-bottom: 0;
 }
 
-/* Narrow variant — constrains the field's inner content to its
-   control width so an inline label + value hint (e.g. Grid columns:
-   4) reads adjacent to the slider track rather than at the page
-   edge. The field box itself stays full-width so the bottom divider
-   still spans the page. */
-.fieldNarrow > * {
-  max-width: 220px;
-}
 
 /* Canonical input label — kept deliberately small + quiet so the
    actual control is the hero of the row. Matches the DetailPanel's
@@ -965,70 +957,6 @@
     calc(100% - 11px) 50%;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
-}
-
-.rangeInput {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 16px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.rangeInput::-webkit-slider-runnable-track {
-  height: 3px;
-  background: var(--border-strong);
-  border-radius: var(--radius-pill);
-}
-
-.rangeInput::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-circle);
-  background: var(--text-primary);
-  margin-top: -5.5px;
-  border: none;
-}
-
-/* Range slider with a value bubble that tracks the thumb and small
-   min/max tick labels under the rail. --slider-frac is set inline on
-   the wrapper as a 0..1 fraction so the bubble's left edge can be
-   linearly placed along the rail's usable interior (track width
-   minus the thumb diameter). */
-.slider {
-  position: relative;
-  width: 100%;
-  padding-top: 22px;
-}
-
-.sliderValue {
-  position: absolute;
-  top: 0;
-  /* Center of thumb at frac=0 sits 7px from track left edge; at
-     frac=1 sits 7px from track right edge. transform centers the
-     bubble over that point. */
-  left: calc(7px + (100% - 14px) * var(--slider-frac, 0));
-  transform: translateX(-50%);
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-
-.sliderScale {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 2px;
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
 }
 
 /* Segmented picker — used for theme, mode, capture mode. The

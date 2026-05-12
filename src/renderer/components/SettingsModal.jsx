@@ -1129,32 +1129,24 @@ export default function SettingsModal({
                 Defaults that apply each time you open GatherOS.
               </p>
 
-              <div className={`${styles.field} ${styles.fieldNarrow}`}>
+              <div className={styles.field}>
                 <label className={styles.fieldLabel}>Grid columns</label>
-                {(() => {
-                  const min = 2;
-                  const max = 8;
-                  const value = prefs.defaultColumns ?? 4;
-                  const frac = (value - min) / (max - min);
-                  return (
-                    <div className={styles.slider} style={{ '--slider-frac': frac }}>
-                      <span className={styles.sliderValue}>{value}</span>
-                      <input
-                        type="range"
-                        min={min}
-                        max={max}
-                        step={1}
-                        value={value}
-                        onChange={(e) => updatePref('defaultColumns', Number(e.target.value))}
-                        className={styles.rangeInput}
-                      />
-                      <div className={styles.sliderScale} aria-hidden="true">
-                        <span>{min}</span>
-                        <span>{max}</span>
-                      </div>
-                    </div>
-                  );
-                })()}
+                <div className={styles.segmentedRow}>
+                  {[2, 3, 4, 5, 6, 7, 8].map((n) => {
+                    const active = (prefs.defaultColumns ?? 4) === n;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        className={`${styles.segmentBtn} ${active ? styles.segmentBtnActive : ''}`}
+                        onClick={() => updatePref('defaultColumns', n)}
+                        aria-pressed={active}
+                      >
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className={styles.field}>
