@@ -31,6 +31,7 @@ const { notifySaved, notifyDuplicate, refreshTray } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
 const { quitAndInstall } = require('./updater');
+const { ingestZip } = require('./zipImport');
 const {
   hasSession: hasAiSession,
   autoTagImage,
@@ -311,6 +312,17 @@ function registerIpcHandlers() {
     const record = insertSave(imgData);
     notifySaved(record);
     return record;
+  });
+
+  ipcMain.handle('saves:drop-zip', async (_e, zipPath) => {
+    if (!zipPath) throw new Error('drop-zip called without a path');
+    try {
+      const counts = await ingestZip(zipPath);
+      return { ok: true, ...counts };
+    } catch (err) {
+      console.error('[saves:drop-zip] failed:', err?.message || err);
+      return { ok: false, error: err?.message || String(err) };
+    }
   });
 
   ipcMain.handle('saves:drop-url', async (_e, payload) => {

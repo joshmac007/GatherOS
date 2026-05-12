@@ -2148,12 +2148,24 @@ export default function App() {
     e.stopPropagation();
     setDragging(false);
 
-    const files = [...e.dataTransfer.files].filter((f) =>
-      f.type.startsWith('image/'),
-    );
-    if (files.length > 0) {
+    const all = [...e.dataTransfer.files];
+    const isZip = (f) => f.type === 'application/zip' || /\.zip$/i.test(f.name || '');
+    const zips = all.filter(isZip);
+    const images = all.filter((f) => !isZip(f) && f.type.startsWith('image/'));
+
+    if (zips.length > 0) {
+      for (const file of zips) {
+        try {
+          await window.moodmark.saves.dropZip(file);
+        } catch (err) {
+          console.error('Zip drop failed:', err);
+        }
+      }
+    }
+
+    if (images.length > 0) {
       let lastId = null;
-      for (const file of files) {
+      for (const file of images) {
         try {
           const record = await window.moodmark.saves.dropFile(file);
           if (record?.id) lastId = record.id;
@@ -2162,8 +2174,9 @@ export default function App() {
         }
       }
       if (lastId) focusAfterDrop();
-      return;
     }
+
+    if (zips.length > 0 || images.length > 0) return;
 
     const candidates = extractDropImageUrls(e.dataTransfer);
     if (candidates.length === 0) return;
@@ -2186,11 +2199,21 @@ export default function App() {
   }, []);
 
   const handleFileInput = useCallback(async (e) => {
-    const files = [...e.target.files].filter((f) => f.type.startsWith('image/'));
+    const picked = [...e.target.files];
     e.target.value = ''; // reset so re-picking the same file fires onChange again
-    if (files.length === 0) return;
+    const isZip = (f) => f.type === 'application/zip' || /\.zip$/i.test(f.name || '');
+    const zips = picked.filter(isZip);
+    const images = picked.filter((f) => !isZip(f) && f.type.startsWith('image/'));
+    if (zips.length === 0 && images.length === 0) return;
+    for (const file of zips) {
+      try {
+        await window.moodmark.saves.dropZip(file);
+      } catch (err) {
+        console.error('Zip upload failed:', err);
+      }
+    }
     let lastId = null;
-    for (const file of files) {
+    for (const file of images) {
       try {
         const record = await window.moodmark.saves.dropFile(file);
         if (record?.id) lastId = record.id;
@@ -2209,10 +2232,22 @@ export default function App() {
   // file doesn't half-succeed.
   const handleDropFilesToBucket = useCallback(async (bucketId, fileList) => {
     if (!bucketId) return;
-    const files = [...(fileList || [])].filter((f) => f.type && f.type.startsWith('image/'));
-    if (files.length === 0) return;
+    const all = [...(fileList || [])];
+    const isZip = (f) => f.type === 'application/zip' || /\.zip$/i.test(f.name || '');
+    const images = all.filter((f) => !isZip(f) && f.type && f.type.startsWith('image/'));
+    const zips = all.filter(isZip);
+
+    // Zips can't be associated with a specific bucket from here (the
+    // ingest happens entirely main-side and we don't surface the new
+    // save ids yet), so just import them into the library.
+    for (const file of zips) {
+      try { await window.moodmark.saves.dropZip(file); }
+      catch (err) { console.error('Zip drop-to-bucket failed:', err); }
+    }
+
+    if (images.length === 0) return;
     const newIds = [];
-    for (const file of files) {
+    for (const file of images) {
       try {
         const record = await window.moodmark.saves.dropFile(file);
         if (record?.id) newIds.push(record.id);
@@ -2235,7 +2270,7 @@ export default function App() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/zip,.zip"
         multiple
         style={{ display: 'none' }}
         onChange={handleFileInput}

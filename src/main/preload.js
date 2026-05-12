@@ -66,6 +66,11 @@ contextBridge.exposeInMainWorld('moodmark', {
       if (!filePath) return Promise.reject(new Error('No filesystem path on dropped file'));
       return ipcRenderer.invoke('saves:drop-file', filePath);
     },
+    dropZip: (file) => {
+      const filePath = webUtils.getPathForFile(file);
+      if (!filePath) return Promise.reject(new Error('No filesystem path on dropped zip'));
+      return ipcRenderer.invoke('saves:drop-zip', filePath);
+    },
     dropUrl: (urls) =>
       ipcRenderer.invoke('saves:drop-url', {
         urls: Array.isArray(urls) ? urls : [urls],
