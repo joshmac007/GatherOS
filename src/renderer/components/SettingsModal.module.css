@@ -944,6 +944,7 @@
      ships with Chromium 123+, which Electron 41 includes. */
   field-sizing: content;
   align-self: flex-start;
+  flex-shrink: 0;
   width: auto;
   min-width: 0;
   padding: 8px 32px 8px 12px;
