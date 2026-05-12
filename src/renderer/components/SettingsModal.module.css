@@ -1192,7 +1192,8 @@
   display: flex;
   justify-content: flex-start;
   gap: 8px;
-  padding-left: 30px;
+  padding-left: 34px;
+  margin-top: 12px;
 }
 
 .libraryAddBtn {
