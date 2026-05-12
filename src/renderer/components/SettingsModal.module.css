@@ -1179,12 +1179,18 @@
 .libraryCreateRow {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.libraryCreateRow .libraryRow {
+  padding-bottom: 6px;
+  border-bottom: none;
 }
 
 .libraryCreateActions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
   padding-left: 30px;
 }
