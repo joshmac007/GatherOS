@@ -1320,6 +1320,26 @@
    accelerator string. */
 .shortcutCapture {
   display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shortcutResetBtn {
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: color var(--dur-instant) ease, background var(--dur-instant) ease;
+}
+
+.shortcutResetBtn:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg-soft);
 }
 
 .shortcutCaptureBtn {

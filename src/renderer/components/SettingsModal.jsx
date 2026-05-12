@@ -343,6 +343,8 @@ function EraseIcon() {
   );
 }
 
+const DEFAULT_CAPTURE_SHORTCUT = 'CommandOrControl+Shift+S';
+
 // Accelerator capture input — focus it, press a key combo, and the
 // resulting Electron-style "CommandOrControl+Shift+S" string is
 // stored. Esc cancels; clearing falls back to the default.
@@ -396,7 +398,7 @@ function acceleratorToKeys(value) {
   });
 }
 
-function ShortcutCapture({ value, onChange }) {
+function ShortcutCapture({ value, defaultValue, onChange }) {
   const [capturing, setCapturing] = useState(false);
 
   function format(e) {
@@ -429,6 +431,7 @@ function ShortcutCapture({ value, onChange }) {
   }
 
   const keys = acceleratorToKeys(value);
+  const canReset = !!defaultValue && value !== defaultValue;
 
   return (
     <div className={styles.shortcutCapture}>
@@ -450,6 +453,16 @@ function ShortcutCapture({ value, onChange }) {
           <span className={styles.shortcutCapturePrompt}>Set a shortcut</span>
         )}
       </button>
+      {canReset && (
+        <button
+          type="button"
+          className={styles.shortcutResetBtn}
+          onClick={() => onChange?.(defaultValue)}
+          title="Reset to default"
+        >
+          Reset
+        </button>
+      )}
     </div>
   );
 }
@@ -1122,7 +1135,8 @@ export default function SettingsModal({
               <div className={styles.field}>
                 <label className={styles.fieldLabel}>Global shortcut</label>
                 <ShortcutCapture
-                  value={prefs.captureShortcut || 'CommandOrControl+Shift+S'}
+                  value={prefs.captureShortcut || DEFAULT_CAPTURE_SHORTCUT}
+                  defaultValue={DEFAULT_CAPTURE_SHORTCUT}
                   onChange={(next) => updatePref('captureShortcut', next)}
                 />
                 <span className={styles.fieldHint}>
