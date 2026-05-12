@@ -500,20 +500,21 @@ function UpdatesPage({ prefs, updatePref }) {
         )}
       </div>
 
-      {state.status === 'up-to-date' && (
-        <p className={styles.sectionHint} style={{ textAlign: 'right' }}>You're on the latest version.</p>
-      )}
-      {state.status === 'downloading' && (
-        <p className={styles.sectionHint} style={{ textAlign: 'right' }}>Downloading update in the background…</p>
-      )}
-      {state.status === 'error' && (
-        <p className={styles.sectionHint} style={{ textAlign: 'right' }}>Update failed: {state.message || 'unknown'}</p>
-      )}
-      {state.status === 'unsupported' && (
-        <p className={styles.sectionHint} style={{ textAlign: 'right' }}>
-          Updates aren't available in this build (dev mode).
-        </p>
-      )}
+      {(() => {
+        let text = null;
+        if (state.checking) text = 'Checking for updates…';
+        else if (state.status === 'up-to-date') text = "You're on the latest version.";
+        else if (state.status === 'downloading') text = 'Downloading update in the background…';
+        else if (state.status === 'ready') text = `Update ready to install${state.version ? ` (v${state.version})` : ''}.`;
+        else if (state.status === 'error') text = `Update failed: ${state.message || 'unknown'}`;
+        else if (state.status === 'unsupported') text = "Updates aren't available in this build (dev mode).";
+        if (!text) return null;
+        return (
+          <p className={styles.sectionHint} style={{ textAlign: 'right', marginTop: 16 }}>
+            {text}
+          </p>
+        );
+      })()}
     </div>
   );
 }
