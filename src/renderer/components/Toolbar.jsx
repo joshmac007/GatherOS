@@ -347,7 +347,7 @@ export default function Toolbar({
           {/* GatherOS brand mark — gradient tile + foreground glyph
               with soft drop shadow. Fixed colours (not currentColor)
               because this version is a full-colour mark. */}
-          <svg width="22" height="28" viewBox="0 0 46 58" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <svg width="40" height="50" viewBox="0 0 46 58" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <g clipPath="url(#clip0_23_13)">
               <g filter="url(#filter0_dddd_23_13)">
                 <g filter="url(#filter1_i_23_13)">
