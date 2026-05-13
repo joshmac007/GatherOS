@@ -718,17 +718,17 @@
 
 /* Suppress every focus / outline / tap-highlight indicator on the
    thumb. role="button" + tabIndex=0 made the browser keep painting a
-   ring after a click (especially in dark mode where the :focus-visible
-   ring was white). The action itself is a single click — no need to
-   linger on the previously-clicked thumb. */
-.drawerThumb,
-.drawerThumb:focus,
-.drawerThumb:focus-visible {
-  outline: none;
-}
-
+   ring after a click (especially in dark mode where any focus indicator
+   reads as white). Also explicitly clear box-shadow on focus to catch
+   the case where a UA stylesheet uses box-shadow rather than outline. */
 .drawerThumb {
   -webkit-tap-highlight-color: transparent;
+}
+
+.drawerThumb:focus,
+.drawerThumb:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .drawerThumb:hover {
@@ -1384,6 +1384,15 @@
 .tt_btn_active:hover {
   background: var(--accent-bg-soft);
   color: var(--accent);
+}
+
+/* The global [data-tooltip] rule in global.css already paints an
+   ::after label + ::before arrow. The local ::before rule below
+   re-purposes ::before as the label pill, so we need to silence
+   the global ::after to avoid a duplicate label stacking under
+   the local one. */
+.tt_btn[data-tooltip]::after {
+  content: none;
 }
 
 /* Custom tooltip above each action-bar button. data-tooltip on the
