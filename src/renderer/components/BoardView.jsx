@@ -977,13 +977,44 @@ export default function BoardView({
       ]);
       if (cancelled) return;
       setBoard(b);
-      setItems(Array.isArray(its) ? its : []);
+      const list = Array.isArray(its) ? its : [];
+      setItems(list);
       setTitleDraft(b?.name || '');
-      // Reset view per board so each opens at its origin.
-      setPan(INITIAL_PAN);
       setZoom(INITIAL_ZOOM);
       setSelectedIds(new Set());
       setEditingItemId(null);
+
+      // Auto-centre the viewport on the items' bounding box so newly-
+      // opened boards (especially "Open as space" results, which lay
+      // items out around the world origin) appear with content
+      // already in view. requestAnimationFrame so canvasNodeRef has
+      // been populated by the just-rendered <BoardCanvas>.
+      if (list.length === 0) {
+        setPan(INITIAL_PAN);
+        return;
+      }
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const it of list) {
+          const x = it.x || 0;
+          const y = it.y || 0;
+          const w = it.width || 0;
+          const h = it.height || 0;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x + w > maxX) maxX = x + w;
+          if (y + h > maxY) maxY = y + h;
+        }
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const el = canvasNodeRef.current;
+        const rect = el ? el.getBoundingClientRect() : { width: 1200, height: 800 };
+        setPan({
+          x: rect.width / 2 - cx,
+          y: rect.height / 2 - cy,
+        });
+      });
     })();
     return () => { cancelled = true; };
   }, [boardId]);
