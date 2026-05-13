@@ -355,7 +355,10 @@ function BoardItem({
     // path). Convert to wrapper-local for SVG rendering.
     const points = getArrowPoints(item);
     const localPoints = points.map((p) => ({ x: p.x - item.x, y: p.y - item.y }));
-    const stroke = item.data?.stroke || '#0a0a0a';
+    // currentColor falls through to .itemArrow's CSS color, which is
+    // --text-primary — so the default arrow tracks the theme (black on
+    // light, white on dark) while user-picked stroke colors still win.
+    const stroke = item.data?.stroke || 'currentColor';
     const strokeWidth = item.data?.strokeWidth || 2;
     const kind = item.data?.kind || 'arrow';
     const markerId = `arrowhead-${item.id}`;
@@ -1676,14 +1679,14 @@ export default function BoardCanvas({
                     markerUnits="strokeWidth"
                     orient="auto-start-reverse"
                   >
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#0a0a0a" />
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
                   </marker>
                 </defs>
                 {isElbow ? (
                   <path
                     d={`M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`}
                     fill="none"
-                    stroke="#0a0a0a"
+                    stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -1693,7 +1696,7 @@ export default function BoardCanvas({
                 ) : (
                   <line
                     x1={x1} y1={y1} x2={x2} y2={y2}
-                    stroke="#0a0a0a"
+                    stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     markerEnd={showHead ? 'url(#arrowhead-preview)' : undefined}

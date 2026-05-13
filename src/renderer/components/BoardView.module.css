@@ -1067,6 +1067,11 @@
   white-space: pre-wrap;
   word-break: break-word;
   overflow: hidden;
+  /* Shapes have user-defined fills (default #FFFFFF), so the text
+     needs to be dark regardless of app theme. Inheriting --text-primary
+     made shape text white in dark mode and invisible on white-filled
+     shapes. */
+  color: rgba(0, 0, 0, 0.88);
 }
 
 /* No placeholder on shapes — the outline reads as the item. The
@@ -1084,6 +1089,11 @@
 .itemArrow {
   background: transparent;
   cursor: default;
+  /* Default stroke flows from currentColor in the SVG → this color
+     here. Tracks the theme so a freshly-drawn arrow/line is black
+     against a light board and white against a dark board, while
+     user-picked stroke colors still take precedence in JSX. */
+  color: var(--text-primary);
 }
 
 .arrowSvg {
@@ -1155,6 +1165,7 @@
   position: absolute;
   pointer-events: none;
   z-index: 997;
+  color: var(--text-primary);
 }
 
 /* Snap line — extends along the locked axis across the canvas.
@@ -1231,6 +1242,12 @@
   color: var(--text-tertiary);
   pointer-events: none;
   display: block;
+}
+
+/* Sticky paper is always light yellow regardless of app theme, so
+   the placeholder must always read as a dark muted hint. */
+.itemSticky:empty::before {
+  color: rgba(0, 0, 0, 0.35);
 }
 
 /* Text items auto-size to their content (newly placed and resized
