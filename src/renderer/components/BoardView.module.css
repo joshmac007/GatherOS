@@ -1255,8 +1255,8 @@
   gap: 6px;
   padding: 6px 8px;
   background: var(--surface-1);
-  border: 0.5px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   white-space: nowrap;
   font-size: var(--text-md);
