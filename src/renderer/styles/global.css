@@ -97,13 +97,11 @@ body[data-board-print="true"] .main-col {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
-  /* Clears the macOS traffic-light controls (~12px from the window
-     edge, ~58px wide) plus a comfortable gap before the brand mark. */
-  --titlebar-left-pad: 86px;
+  --titlebar-left-pad: 16px;
 }
 
 .layout.sidebar-collapsed {
-  --titlebar-left-pad: 86px;
+  --titlebar-left-pad: 16px;
 }
 
 .main-col {
