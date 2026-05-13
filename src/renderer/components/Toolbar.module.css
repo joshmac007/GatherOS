@@ -97,7 +97,7 @@
 .left {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
   min-width: 0;
   justify-self: start;
 }
