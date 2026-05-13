@@ -726,6 +726,36 @@
   transform: translateY(0);
 }
 
+/* Thumb marked as already-on-canvas. Slightly desaturate to signal
+   "not new" + paint a small check badge in the top-right corner. */
+.drawerThumbInSpace img {
+  opacity: 0.55;
+}
+
+.drawerThumbInSpace:hover img {
+  opacity: 0.75;
+}
+
+.drawerThumbBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-circle);
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+  box-shadow: 0 0 0 2px var(--surface-1);
+  pointer-events: none;
+}
+
+:root[data-theme="dark"] .drawerThumbBadge {
+  color: var(--surface-1);
+}
+
 .drawerThumb img {
   width: 100%;
   height: 100%;

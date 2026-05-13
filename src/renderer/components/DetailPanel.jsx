@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { Info as InfoIcon } from 'lucide-react';
+import { Info as InfoIcon, Layers as LayersIcon } from 'lucide-react';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
@@ -148,6 +148,7 @@ export default function DetailPanel({
   onOpenSettings,
   onOpenSave,
   onGenerateVariant,
+  onOpenSpace,
 }) {
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
@@ -265,6 +266,10 @@ export default function DetailPanel({
   const [memberships, setMemberships] = useState([]);
   const [picker, setPicker] = useState(null); // { x, y }
 
+  // Spaces this save appears on (image items where data.saveId
+  // matches). Loaded alongside collections / tags below.
+  const [spaceMemberships, setSpaceMemberships] = useState([]);
+
   const [tags, setTags] = useState([]);
   const [tagDraft, setTagDraft] = useState('');
   const [addingTag, setAddingTag] = useState(false);
@@ -333,10 +338,12 @@ export default function DetailPanel({
     Promise.all([
       window.moodmark.collections.getForSave(record.id),
       window.moodmark.tags.getForSave(record.id),
-    ]).then(([cols, tagRows]) => {
+      window.moodmark.boards.getForSave(record.id),
+    ]).then(([cols, tagRows, spaceRows]) => {
       if (cancelled) return;
       setMemberships(cols);
       setTags(tagRows);
+      setSpaceMemberships(Array.isArray(spaceRows) ? spaceRows : []);
     });
     return () => { cancelled = true; };
   }, [record.id]);
@@ -882,6 +889,33 @@ export default function DetailPanel({
           )}
         </div>
       </div>
+
+      {spaceMemberships.length > 0 && (
+        <div className={styles.spacesSection}>
+          <div className={styles.spacesLabel}>
+            <span className={styles.sectionLabelIcon}>
+              <LayersIcon size={14} strokeWidth={1.7} aria-hidden="true" />
+            </span>
+            Spaces
+          </div>
+          <div className={styles.spacePills}>
+            {spaceMemberships.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                className={styles.spacePill}
+                onClick={() => onOpenSpace?.(b.id)}
+                title={`Open “${b.name}”`}
+              >
+                <span className={styles.spacePillIcon}>
+                  <LayersIcon size={12} strokeWidth={1.7} aria-hidden="true" />
+                </span>
+                <span className={styles.spacePillName}>{b.name || 'Untitled space'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className={styles.tagsSection}>
         <div className={styles.tagsLabel}>

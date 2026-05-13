@@ -1295,6 +1295,39 @@ function getBoardPreviewSaves(boardId, limit = 4) {
   return saveIds.map((id) => byId.get(id)).filter(Boolean);
 }
 
+// All save ids referenced by a board's image items. Used by the
+// BoardLibraryDrawer to mark library cards that are already on the
+// canvas with an "in this space" badge.
+function getBoardSaveIds(boardId) {
+  if (!boardId) return [];
+  const rows = getDatabase().prepare(
+    `SELECT json_extract(data, '$.saveId') AS save_id
+       FROM board_items
+      WHERE board_id = ? AND type = 'image'`,
+  ).all(boardId);
+  const ids = [];
+  for (const r of rows) {
+    if (typeof r.save_id === 'string' && r.save_id) ids.push(r.save_id);
+  }
+  return ids;
+}
+
+// Reverse lookup: every board that contains the given save as an
+// image item, with the board's display name. Drives the Spaces row
+// in the DetailPanel so users can jump from a save to any board it
+// lives on.
+function getBoardsForSave(saveId) {
+  if (!saveId) return [];
+  return getDatabase().prepare(
+    `SELECT DISTINCT b.id, b.name, b.updated_at
+       FROM board_items bi
+       JOIN boards b ON b.id = bi.board_id
+      WHERE bi.type = 'image'
+        AND json_extract(bi.data, '$.saveId') = ?
+      ORDER BY b.updated_at DESC`,
+  ).all(saveId);
+}
+
 function safeParseJSON(s) {
   try { return JSON.parse(s); } catch { return {}; }
 }
@@ -1418,6 +1451,8 @@ module.exports = {
   deleteBoard,
   getBoardItems,
   getBoardPreviewSaves,
+  getBoardSaveIds,
+  getBoardsForSave,
   upsertBoardItem,
   bulkUpdateBoardItems,
   deleteBoardItem,

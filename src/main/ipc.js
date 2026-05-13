@@ -11,7 +11,8 @@ const {
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
   getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
   listBoards, listBoardsWithThumbs, getBoard, createBoard, renameBoard, deleteBoard, reorderBoards,
-  getBoardItems, getBoardPreviewSaves, upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
+  getBoardItems, getBoardPreviewSaves, getBoardSaveIds, getBoardsForSave,
+  upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
 } = require('./db');
 const {
   deleteImageFiles,
@@ -374,6 +375,8 @@ function registerIpcHandlers() {
   ipcMain.handle('boards:get-preview-saves', (_e, boardId, limit) =>
     getBoardPreviewSaves(boardId, typeof limit === 'number' ? limit : 4),
   );
+  ipcMain.handle('boards:get-save-ids', (_e, boardId) => getBoardSaveIds(boardId));
+  ipcMain.handle('boards:get-for-save', (_e, saveId) => getBoardsForSave(saveId));
   ipcMain.handle('boards:upsert-item', (_e, payload) => upsertBoardItem(payload));
   ipcMain.handle('boards:bulk-update-items', (_e, payload) => bulkUpdateBoardItems(payload));
   ipcMain.handle('boards:delete-item', (_e, payload) => deleteBoardItem(payload));

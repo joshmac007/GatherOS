@@ -623,6 +623,75 @@
   gap: 6px;
 }
 
+/* Spaces this save appears on. Same shape as the collections row
+   above, just a different icon + click handler. */
+.spacesSection {
+  padding: 12px 16px 14px;
+  border-bottom: none;
+}
+
+.spacesLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.spacePills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.spacePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  background: #EAEAEA;
+  border: none;
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+  font-size: var(--text-xs);
+  color: #000000;
+  cursor: pointer;
+  max-width: 100%;
+  transition: background var(--dur-instant) ease;
+}
+
+.spacePill:hover {
+  background: #DCDCDC;
+}
+
+:root[data-theme="dark"] .spacePill {
+  background: #3A3A3C;
+  color: #FFFFFF;
+}
+
+:root[data-theme="dark"] .spacePill:hover {
+  background: #48484A;
+}
+
+.spacePillIcon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="dark"] .spacePillIcon { color: #FFFFFF; }
+
+.spacePillName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .collectionPill {
   display: inline-flex;
   align-items: center;

@@ -105,6 +105,8 @@ contextBridge.exposeInMainWorld('moodmark', {
     reorder: (ids) => ipcRenderer.invoke('boards:reorder', ids),
     getItems: (boardId) => ipcRenderer.invoke('boards:get-items', boardId),
     getPreviewSaves: (boardId, limit) => ipcRenderer.invoke('boards:get-preview-saves', boardId, limit),
+    getSaveIds: (boardId) => ipcRenderer.invoke('boards:get-save-ids', boardId),
+    getForSave: (saveId) => ipcRenderer.invoke('boards:get-for-save', saveId),
     upsertItem: (payload) => ipcRenderer.invoke('boards:upsert-item', payload),
     bulkUpdateItems: (payload) => ipcRenderer.invoke('boards:bulk-update-items', payload),
     deleteItem: (payload) => ipcRenderer.invoke('boards:delete-item', payload),

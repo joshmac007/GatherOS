@@ -856,6 +856,16 @@ export default function BoardView({
 }) {
   const [board, setBoard] = useState(null);
   const [items, setItems] = useState([]);
+
+  // Tell the BoardLibraryDrawer (and any other listener) whenever the
+  // board's items change, so the "in this space" badge on the
+  // drawer's thumbs can refresh without polling.
+  useEffect(() => {
+    if (!boardId) return;
+    window.dispatchEvent(new CustomEvent('moodmark:board-items-changed', {
+      detail: { boardId },
+    }));
+  }, [boardId, items]);
   const [tool, setTool] = useState('select');
   // Active shape kind for the shape tool. Persists across multiple
   // spawns so the user can place several rectangles in a row without

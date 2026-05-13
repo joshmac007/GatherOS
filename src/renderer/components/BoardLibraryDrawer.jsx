@@ -34,6 +34,10 @@ export default function BoardLibraryDrawer({ collections, boardId, onClose }) {
   // images dropped onto the board canvas while the drawer is open.
   const [refreshTick, setRefreshTick] = useState(0);
   const requestId = useRef(0);
+  // Set of save ids already on the canvas. Drives the "in this space"
+  // check badge on each thumb. Refreshed alongside the saves list so
+  // a drop or remove on the canvas updates the badges live.
+  const [onCanvasIds, setOnCanvasIds] = useState(() => new Set());
 
   // Debounce typed search so we don't spam IPC on every keystroke.
   useEffect(() => {
@@ -71,6 +75,32 @@ export default function BoardLibraryDrawer({ collections, boardId, onClose }) {
       setRefreshTick((t) => t + 1);
     });
   }, []);
+
+  // Reload the set of save ids already on this board whenever it
+  // changes. Tied to refreshTick so click-to-drop / drag-drop updates
+  // the badges as soon as the canvas reflects the change.
+  useEffect(() => {
+    if (!boardId) {
+      setOnCanvasIds(new Set());
+      return undefined;
+    }
+    let cancelled = false;
+    function refresh() {
+      window.moodmark.boards.getSaveIds(boardId).then((ids) => {
+        if (cancelled) return;
+        setOnCanvasIds(new Set(Array.isArray(ids) ? ids : []));
+      });
+    }
+    refresh();
+    function onChange(e) {
+      if (!e.detail || e.detail.boardId === boardId) refresh();
+    }
+    window.addEventListener('moodmark:board-items-changed', onChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('moodmark:board-items-changed', onChange);
+    };
+  }, [boardId, refreshTick]);
 
   const activeOption = useMemo(() => {
     const fromStatic = STATIC_OPTIONS.find((o) => o.id === collectionId);
@@ -237,49 +267,61 @@ export default function BoardLibraryDrawer({ collections, boardId, onClose }) {
               cols[target].push(s);
               heights[target] += ar;
             }
-            const renderThumb = (s) => (
-              <div
-                key={s.id}
-                className={styles.drawerThumb}
-                draggable
-                role="button"
-                tabIndex={0}
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'copy';
-                  e.dataTransfer.setData(
-                    'application/x-moodmark-board-save',
-                    JSON.stringify({ saveId: s.id }),
-                  );
-                }}
-                onClick={() => {
-                  if (!boardId) return;
-                  window.dispatchEvent(new CustomEvent('moodmark:add-saves-to-board', {
-                    detail: { boardId, ids: [s.id] },
-                  }));
-                }}
-                onKeyDown={(e) => {
-                  if ((e.key === 'Enter' || e.key === ' ') && boardId) {
-                    e.preventDefault();
+            const renderThumb = (s) => {
+              const inSpace = onCanvasIds.has(s.id);
+              return (
+                <div
+                  key={s.id}
+                  className={[styles.drawerThumb, inSpace && styles.drawerThumbInSpace].filter(Boolean).join(' ')}
+                  draggable
+                  role="button"
+                  tabIndex={0}
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.dataTransfer.setData(
+                      'application/x-moodmark-board-save',
+                      JSON.stringify({ saveId: s.id }),
+                    );
+                  }}
+                  onClick={() => {
+                    if (!boardId) return;
                     window.dispatchEvent(new CustomEvent('moodmark:add-saves-to-board', {
                       detail: { boardId, ids: [s.id] },
                     }));
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && boardId) {
+                      e.preventDefault();
+                      window.dispatchEvent(new CustomEvent('moodmark:add-saves-to-board', {
+                        detail: { boardId, ids: [s.id] },
+                      }));
+                    }
+                  }}
+                  title={
+                    inSpace
+                      ? (s.title ? `${s.title} — already on this canvas` : 'Already on this canvas')
+                      : (s.title ? `${s.title} — click to add to canvas` : 'Click to add to canvas')
                   }
-                }}
-                title={s.title ? `${s.title} — click to add to canvas` : 'Click to add to canvas'}
-                style={{
-                  aspectRatio:
-                    s.width && s.height ? `${s.width} / ${s.height}` : '1',
-                  cursor: 'pointer',
-                }}
-              >
-                <img
-                  src={fileUrl(s.thumb_path || s.file_path)}
-                  alt=""
-                  draggable={false}
-                />
-                {s.title && <div className={styles.drawerThumbCaption}>{s.title}</div>}
-              </div>
-            );
+                  style={{
+                    aspectRatio:
+                      s.width && s.height ? `${s.width} / ${s.height}` : '1',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <img
+                    src={fileUrl(s.thumb_path || s.file_path)}
+                    alt=""
+                    draggable={false}
+                  />
+                  {inSpace && (
+                    <span className={styles.drawerThumbBadge} aria-label="Already on this canvas">
+                      <Check size={11} strokeWidth={2.4} aria-hidden="true" />
+                    </span>
+                  )}
+                  {s.title && <div className={styles.drawerThumbCaption}>{s.title}</div>}
+                </div>
+              );
+            };
             return (
               <>
                 <div className={styles.drawerCol}>{cols[0].map(renderThumb)}</div>

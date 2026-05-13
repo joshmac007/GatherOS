@@ -1466,6 +1466,75 @@ export default function App() {
     loadCollections();
   }, [view, handleViewChange, loadCollections]);
 
+  // Open a collection's saves as a brand-new space — auto-creates a
+  // board named after the collection, lays each save out as an image
+  // item in a wrapping grid centered on the world origin, and
+  // navigates the user straight into the new canvas.
+  const handleOpenCollectionAsSpace = useCallback(async (collectionId) => {
+    if (!collectionId) return;
+    const collection = collections.find((c) => c.id === collectionId);
+    if (!collection) return;
+    let collectionSaves = [];
+    try {
+      collectionSaves = await window.moodmark.saves.getAll({
+        view: 'all',
+        sort: 'newest',
+        collectionId,
+      });
+    } catch (err) {
+      console.error('Failed to load collection saves:', err);
+      return;
+    }
+    const list = (Array.isArray(collectionSaves) ? collectionSaves : [])
+      .filter((s) => !s.deleted_at);
+    let board;
+    try {
+      board = await window.moodmark.boards.create({
+        name: collection.name || 'Untitled space',
+      });
+    } catch (err) {
+      console.error('Failed to create space:', err);
+      return;
+    }
+    if (!board?.id) return;
+    await loadBoards();
+    const cols = Math.min(Math.max(list.length, 1), 5);
+    const cell = 240;
+    const gap = 24;
+    const totalW = cols * cell + (cols - 1) * gap;
+    const zBase = Math.floor(Date.now() / 1000);
+    for (let i = 0; i < list.length; i += 1) {
+      const save = list[i];
+      const colIdx = i % cols;
+      const row = Math.floor(i / cols);
+      const aspect = save.width && save.height ? save.width / save.height : 1;
+      const w = aspect >= 1 ? cell : Math.round(cell * aspect);
+      const h = aspect >= 1 ? Math.round(cell / aspect) : cell;
+      const x = colIdx * (cell + gap) - totalW / 2;
+      const y = row * (cell + gap) - cell;
+      const now = Date.now();
+      const item = {
+        id: crypto.randomUUID(),
+        board_id: board.id,
+        type: 'image',
+        x, y, width: w, height: h,
+        rotation: 0,
+        z_index: zBase + i,
+        data: {
+          saveId: save.id,
+          fileUrl: fileUrl(save.file_path),
+          naturalWidth: save.width || null,
+          naturalHeight: save.height || null,
+        },
+        created_at: now,
+        updated_at: now,
+      };
+      try { await window.moodmark.boards.upsertItem({ boardId: board.id, item }); }
+      catch (err) { console.error('Open-as-space item insert failed:', save.id, err); }
+    }
+    handleViewChange({ type: 'board', id: board.id });
+  }, [collections, loadBoards, handleViewChange]);
+
   const handleReorderCollections = useCallback(async (orderedIds) => {
     const previousOrder = collections.map((c) => c.id);
     // Optimistic local reorder so the sidebar doesn't flash back to old order.
@@ -2385,6 +2454,7 @@ export default function App() {
                   onAddSavesToBucket={handleAddSavesToBucket}
                   onDropFilesToBucket={handleDropFilesToBucket}
                   onSetAppDragging={setDragging}
+                  onOpenCollectionAsSpace={handleOpenCollectionAsSpace}
                 />
               ) : appMode === 'boards' ? (
                 // Boards mode → tile grid of every board. Clicking
@@ -2436,6 +2506,7 @@ export default function App() {
                     onAddSavesToBucket={handleAddSavesToBucket}
                     onDropFilesToBucket={handleDropFilesToBucket}
                     onSetAppDragging={setDragging}
+                    onOpenCollectionAsSpace={handleOpenCollectionAsSpace}
                   />
                 )}
                 <Grid
@@ -2486,6 +2557,10 @@ export default function App() {
               // the grid when the new save actually arrives.
               setFocusedId(null);
               openVariantModal(id, false);
+            }}
+            onOpenSpace={(boardId) => {
+              setFocusedId(null);
+              handleViewChange({ type: 'board', id: boardId });
             }}
           />
         )}
