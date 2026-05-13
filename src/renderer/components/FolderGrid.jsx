@@ -153,6 +153,7 @@ export default function FolderGrid({
   onReorderFolders,
   onAddSavesToBucket,
   onDropFilesToBucket,
+  onSetAppDragging,
 }) {
   const visible = (folders || []).filter(
     (f) => (f.parent_id || null) === parentId,
@@ -219,8 +220,15 @@ export default function FolderGrid({
     }
     if (!isSaveDrag(e) && !isFileDrag(e)) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
     if (dropTargetId !== id) setDropTargetId(id);
+    // Suppress the global "Drop to save" overlay while the drag hovers
+    // a real drop target — the tile's own outline + lift signals where
+    // the drop will land, the full-screen tint is redundant. The
+    // stopPropagation above prevents the App-shell onDragOver (which
+    // re-arms the overlay on every move) from firing.
+    onSetAppDragging?.(false);
   }
   function handleTileDragLeave(e) {
     if (!e.currentTarget.contains(e.relatedTarget)) {
@@ -249,6 +257,9 @@ export default function FolderGrid({
     e.preventDefault();
     e.stopPropagation();
     setDropTargetId(null);
+    // Tile owns this drop, so the global "Drop to save" overlay must
+    // not linger on screen after release.
+    onSetAppDragging?.(false);
     if (isFileDrag(e) && e.dataTransfer.files?.length > 0) {
       await onDropFilesToBucket?.(id, e.dataTransfer.files);
       return;

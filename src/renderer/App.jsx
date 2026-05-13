@@ -2455,6 +2455,7 @@ export default function App() {
                   onReorderFolders={handleReorderCollections}
                   onAddSavesToBucket={handleAddSavesToBucket}
                   onDropFilesToBucket={handleDropFilesToBucket}
+                  onSetAppDragging={setDragging}
                 />
               ) : appMode === 'boards' ? (
                 // Boards mode → tile grid of every board. Clicking
@@ -2505,6 +2506,7 @@ export default function App() {
                     onShuffleView={handleShuffleView}
                     onAddSavesToBucket={handleAddSavesToBucket}
                     onDropFilesToBucket={handleDropFilesToBucket}
+                    onSetAppDragging={setDragging}
                   />
                 )}
                 <Grid

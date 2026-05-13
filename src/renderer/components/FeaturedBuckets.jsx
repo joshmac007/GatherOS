@@ -41,6 +41,7 @@ export default function FeaturedBuckets({
   onShuffleView,
   onAddSavesToBucket,
   onDropFilesToBucket,
+  onSetAppDragging,
 }) {
   const [previews, setPreviews] = useState({}); // { bucketId: [save, ...] }
   // Right-click context menu anchor + the bucket it targets.
@@ -66,8 +67,13 @@ export default function FeaturedBuckets({
   function handleCardDragOver(e, bucketId) {
     if (!isSaveDrag(e) && !isFileDrag(e)) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
     if (dropTargetId !== bucketId) setDropTargetId(bucketId);
+    // Card owns this drop, so suppress the global "Drop to save"
+    // overlay while the cursor hovers it. stopPropagation above keeps
+    // the App-shell onDragOver from re-arming the overlay each move.
+    onSetAppDragging?.(false);
   }
 
   function handleCardDragLeave(e) {
@@ -80,6 +86,7 @@ export default function FeaturedBuckets({
     e.preventDefault();
     e.stopPropagation();
     setDropTargetId(null);
+    onSetAppDragging?.(false);
     // Files take priority — if the user drags both an in-app card
     // AND an OS file, only one of those branches will be true at a
     // time in practice.
