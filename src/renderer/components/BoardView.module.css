@@ -1220,6 +1220,19 @@
   min-height: 1em;
 }
 
+/* Text-bearing content inside an item is non-selectable unless the
+   element is also .itemEditable (i.e. actively in edit mode). The
+   .item wrapper above already disables selection, but inner content-
+   editable=false nodes don't always inherit user-select reliably
+   across browsers; re-asserting here keeps drag mousedowns from
+   accidentally extending into a text selection. */
+.itemText:not(.itemEditable),
+.shapeText:not(.itemEditable),
+.itemSticky:not(.itemEditable) {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .itemEditable {
   outline: none;
   cursor: text;

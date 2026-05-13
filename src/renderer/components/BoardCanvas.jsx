@@ -964,6 +964,13 @@ export default function BoardCanvas({
   // via window-level listeners so the cursor can wander outside the
   // canvas during a drag without the move getting stuck.
   const handleItemMoveStart = (item, e) => {
+    // A drag that started on top of a contentEditable's text node will
+    // also start a native text selection, which sticks even after the
+    // drag ends. Clear any pending selection at the start of a move
+    // and prevent the default so the browser doesn't keep extending
+    // it as the cursor moves.
+    window.getSelection?.()?.removeAllRanges?.();
+    if (e?.preventDefault) e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
     const cursor = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, pan, zoom);
 
