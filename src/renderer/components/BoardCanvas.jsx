@@ -69,15 +69,20 @@ const STICKY_PALETTES_CANVAS = {
 function textStyleFor(item) {
   const isSticky = item.type === 'sticky';
   const isShape = item.type === 'shape';
+  // Sticky paper is always light yellow and shapes default to a
+  // user-defined fill (white out of the box), so text on both needs
+  // to be dark regardless of app theme. Free text floats directly on
+  // the board surface, so it follows --text-primary.
+  const defaultColor = (isSticky || isShape)
+    ? 'rgba(0, 0, 0, 0.85)'
+    : 'var(--text-primary)';
   const out = {
     fontFamily: item.data?.fontFamily || 'inherit',
     fontSize: `${item.data?.fontSize || (isSticky || isShape ? 14 : 16)}px`,
     fontWeight: item.data?.bold ? 700 : 400,
     fontStyle: item.data?.italic ? 'italic' : 'normal',
     textAlign: item.data?.align || (isShape ? 'center' : 'left'),
-    color:
-      item.data?.color
-      || (isSticky ? 'rgba(0, 0, 0, 0.85)' : 'var(--text-primary)'),
+    color: item.data?.color || defaultColor,
   };
   if (isSticky) {
     const palette = STICKY_PALETTES_CANVAS[item.data?.stickyColor]
@@ -358,7 +363,13 @@ function BoardItem({
     // currentColor falls through to .itemArrow's CSS color, which is
     // --text-primary — so the default arrow tracks the theme (black on
     // light, white on dark) while user-picked stroke colors still win.
-    const stroke = item.data?.stroke || 'currentColor';
+    // Also collapses the legacy ARROW_DEFAULT_DATA value '#0a0a0a' to
+    // the theme-aware default so existing arrows behave correctly
+    // without a DB migration.
+    const rawStroke = item.data?.stroke;
+    const stroke = (!rawStroke || rawStroke === '#0a0a0a')
+      ? 'currentColor'
+      : rawStroke;
     const strokeWidth = item.data?.strokeWidth || 2;
     const kind = item.data?.kind || 'arrow';
     const markerId = `arrowhead-${item.id}`;
