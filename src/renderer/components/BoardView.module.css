@@ -716,6 +716,19 @@
               box-shadow var(--dur-instant) ease;
 }
 
+/* Suppress the browser's default focus outline on mouse-click — the
+   role="button" + tabIndex=0 wrapper kept a lingering ring after a
+   thumb was clicked. Keyboard users still get a visible ring via
+   :focus-visible below. */
+.drawerThumb:focus {
+  outline: none;
+}
+
+.drawerThumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .drawerThumb:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
