@@ -935,6 +935,11 @@
   flex-shrink: 0;
   color: var(--text-primary);
   -webkit-app-region: no-drag;
+  /* Optical alignment nudge — the gradient mark's icon body sits
+     slightly above its element's centre because the source SVG
+     reserves room for its drop shadow below; a 3px translate brings
+     it visually flush with the Library text baseline. */
+  transform: translateY(3px);
 }
 
 /* Each dot in the brand mark animates to a neighbour's slot when
