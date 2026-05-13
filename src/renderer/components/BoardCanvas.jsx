@@ -1832,11 +1832,7 @@ export default function BoardCanvas({
 
       {items.length === 0 && (
         <div className={styles.empty}>
-          Drag images from the library, or click the canvas with the text /
-          sticky tool.
-          <div className={styles.emptyHint}>
-            Drag to lasso-select • Two-finger scroll to pan • Pinch or ⌘+scroll to zoom
-          </div>
+          Drag images here to get started.
         </div>
       )}
     </div>
