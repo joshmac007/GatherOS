@@ -2382,7 +2382,7 @@ export default function App() {
               saves={saves}
               collections={collections}
               onRenameBoard={handleRenameBoard}
-              onExit={() => setView({ type: 'all' })}
+              onExit={() => { setView({ type: 'all' }); loadBoards(); }}
               onShowToast={(message) => showActionToast({ message, durationMs: 1800 })}
               onSetAppDragging={setDragging}
               onLibraryReload={reload}
