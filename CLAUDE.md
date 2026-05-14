@@ -3,10 +3,13 @@
 ## Conventions
 
 - After any code change, always end the reply with the full command to re-run
-  the app so the user can copy/paste — use the user's local project root:
+  the app so the user can copy/paste. Claude's pushes only land in the user's
+  local working tree after a `git pull`, so include that explicitly — and use
+  the active feature branch (`claude/scaffold-moodmark-app-f7ET2`) so the
+  command keeps working even after a branch swap:
 
   ```
-  cd /Users/brett/GatherOS && npm run dev
+  cd /Users/brett/GatherOS && git pull origin claude/scaffold-moodmark-app-f7ET2 && npm run dev
   ```
 
 - Always use **sentence case** for CTAs / button labels / headings — not Title
