@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Layers } from 'lucide-react';
 import styles from './FeaturedBuckets.module.css';
 import { CollectionIcon } from './Sidebar.jsx';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -43,7 +42,6 @@ export default function FeaturedBuckets({
   onAddSavesToBucket,
   onDropFilesToBucket,
   onSetAppDragging,
-  onOpenCollectionAsSpace,
 }) {
   const [previews, setPreviews] = useState({}); // { bucketId: [save, ...] }
   // Right-click context menu anchor + the bucket it targets.
@@ -266,11 +264,6 @@ export default function FeaturedBuckets({
               icon: <PencilIcon />,
               onClick: () => startRename(ctxMenu.collection),
             },
-            ...(onOpenCollectionAsSpace ? [{
-              label: 'Open as space',
-              icon: <Layers size={14} strokeWidth={1.6} aria-hidden="true" />,
-              onClick: () => onOpenCollectionAsSpace(ctxMenu.collection.id),
-            }] : []),
             {
               label: 'Delete collection',
               icon: <TrashIcon />,
