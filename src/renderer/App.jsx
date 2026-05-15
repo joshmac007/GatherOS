@@ -2465,6 +2465,7 @@ export default function App() {
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOpenShortcuts={() => setShortcutsOpen(true)}
                 onOpenReleaseNotes={handleOpenReleaseNotes}
+                onOpenRediscover={() => setRediscoverOpen(true)}
                 releaseNotesUnseen={releaseNotesUnseen}
                 libraries={libraries}
                 activeLibraryId={activeLibraryId}

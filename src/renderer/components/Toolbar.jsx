@@ -15,6 +15,7 @@ import {
   Keyboard,
   Megaphone,
   Plus,
+  Shuffle,
   BookMarked as LibraryIcon,
   Folder as FolderIcon,
   Layers as LayersIcon,
@@ -35,6 +36,7 @@ const SidebarIcon = () => <PanelLeft {...ICON} />;
 const BackChevronIcon = () => <ChevronLeft {...ICON} strokeWidth={2} />;
 const SettingsIcon = () => <SettingsLucide {...ICON} />;
 const HelpIcon = () => <HelpCircle {...ICON} />;
+const RediscoverIcon = () => <Shuffle {...ICON} />;
 const KeyboardIcon = () => <Keyboard {...ICON} />;
 const MegaphoneIcon = () => <Megaphone {...ICON} />;
 const GridSmallIcon = () => <Grid3x3 className={styles.zoomIcon} {...ICON} />;
@@ -324,6 +326,7 @@ export default function Toolbar({
   onOpenSettings,
   onOpenShortcuts,
   onOpenReleaseNotes,
+  onOpenRediscover,
   releaseNotesUnseen = false,
   libraries,
   activeLibraryId,
@@ -493,6 +496,17 @@ export default function Toolbar({
       <ModePill mode={mode} onModeChange={onModeChange} compact={modePillCompact} />
 
       <div className={styles.right}>
+        {onOpenRediscover && (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={onOpenRediscover}
+            title="Rediscover"
+            aria-label="Rediscover"
+          >
+            <RediscoverIcon />
+          </button>
+        )}
         <ThemeToggle className={styles.iconBtn} />
         {onOpenSettings && (
           <button
