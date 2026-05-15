@@ -17,8 +17,16 @@
   background: var(--surface-1);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
+  /* Match the Toolbar's scrolled drop — soft directional shadow,
+     no inset highlight rim. The older --shadow-card / --shadow-modal
+     recipes both painted a white inset that read as the previous
+     glassy aesthetic; the rest of the app dropped it. */
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.10);
   -webkit-app-region: no-drag;
+}
+
+:root[data-theme="dark"] .card {
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.55);
 }
 
 .brand {
