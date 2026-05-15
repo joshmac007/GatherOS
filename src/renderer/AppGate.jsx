@@ -6,6 +6,23 @@ import PaywallModal from './components/PaywallModal.jsx';
 import AccountBanner from './components/AccountBanner.jsx';
 import DbIntegrityBanner from './components/DbIntegrityBanner.jsx';
 
+// Dev override for previewing gate screens without juggling real
+// license state. Set in DevTools and reload:
+//   localStorage.setItem('moodmark.dev.gate', 'paywall')  // PaywallModal
+//   localStorage.setItem('moodmark.dev.gate', 'signin')   // SigninScreen
+//   localStorage.setItem('moodmark.dev.gate', 'app')      // skip gate, just App
+//   localStorage.removeItem('moodmark.dev.gate')          // back to real
+// Captured once on module load so toggling needs a reload (clearer
+// than reacting mid-session, which would surprise active state).
+const DEV_GATE = (() => {
+  try { return localStorage.getItem('moodmark.dev.gate') || null; }
+  catch { return null; }
+})();
+if (DEV_GATE) {
+  // eslint-disable-next-line no-console
+  console.warn(`[AppGate] dev override active: ${DEV_GATE}. Remove with localStorage.removeItem('moodmark.dev.gate').`);
+}
+
 // Top-level license gate. Decides whether the user sees the app, the
 // signin screen, or the paywall — based on the entitlement state
 // resolved by useLicense(). Mounted from main.jsx as the only child
@@ -116,6 +133,25 @@ export default function AppGate() {
     });
     return off;
   }, [state.status, guestSaveCount, guestSaveLanded]);
+
+  if (DEV_GATE === 'paywall') {
+    return (
+      <PaywallModal
+        license={{ trial_ends_at: Date.now() - 3 * 24 * 60 * 60 * 1000 }}
+        onSignOut={signOut}
+        onSubscribe={async (plan) => {
+          // eslint-disable-next-line no-console
+          console.log('[AppGate dev] would open checkout for', plan);
+        }}
+      />
+    );
+  }
+  if (DEV_GATE === 'signin' || DEV_GATE === 'unauth') {
+    return <SigninScreen onRequestMagicLink={requestMagicLink} />;
+  }
+  if (DEV_GATE === 'app') {
+    return <App />;
+  }
 
   if (state.status === 'loading') {
     // Brief — usually just one tick while the cached cache is read.
