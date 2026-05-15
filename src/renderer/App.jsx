@@ -943,6 +943,20 @@ export default function App() {
       });
       return items;
     }
+    // Open in Preview — top of the menu so both grid right-click and
+    // focused-view right-click lead with the same "look at the
+    // original file" affordance. Single-save only; the OS Preview
+    // app handles one image at a time.
+    if (!isMulti) {
+      const previewAnchor = saves.find((s) => s.id === saveId);
+      if (previewAnchor?.file_path) {
+        items.push({
+          label: 'Open in Preview',
+          icon: <ExternalLinkIcon />,
+          onClick: () => window.moodmark.image.openInPreview(previewAnchor.file_path),
+        });
+      }
+    }
     if (view.type === 'collection') {
       items.push({
         label: `Remove from collection${suffix}`,
@@ -1869,11 +1883,10 @@ export default function App() {
     [handleOpenInPreview],
   );
 
-  // Right-click on the focused image. Builds the same menu as the
-  // grid card (Add to Folder, Find similar, Copy image, Delete) but
-  // prepends focused-view-specific actions (Open in Preview, Export)
-  // since they're the operations a user is most likely to want once
-  // they're studying the full-size image.
+  // Right-click on the focused image — reuses the canonical card
+  // menu so item order matches the grid right-click verbatim. Open in
+  // Preview + Export now live inside buildCardMenuItems, so there's
+  // nothing to prepend here.
   const handleFocusedContextMenu = useCallback(async (e) => {
     e.preventDefault();
     if (!focused) return;
@@ -1883,32 +1896,10 @@ export default function App() {
       const rows = await window.moodmark.collections.getForSave(saveId);
       memberIds = (rows || []).map((r) => r.id);
     } catch { /* fall through with empty list */ }
-    const cardItems = buildCardMenuItems(saveId, memberIds);
-
-    const ext = (focused.file_path.split('.').pop() || 'png').toLowerCase();
-    const exportName = focused.title
-      ? `${focused.title}.${ext}`
-      : `moodmark-${focused.id.slice(0, 8)}.${ext}`;
-
-    const focusedItems = [
-      {
-        label: 'Open in Preview',
-        icon: <ExternalLinkIcon />,
-        onClick: () => handleOpenInPreview(focused.file_path),
-      },
-      {
-        label: 'Export…',
-        icon: <DownloadIcon />,
-        onClick: () => window.moodmark.image.export(focused.file_path, exportName),
-      },
-    ];
-
-    const items = cardItems.length > 0
-      ? [...focusedItems, { type: 'separator' }, ...cardItems]
-      : focusedItems;
-
+    const items = buildCardMenuItems(saveId, memberIds);
+    if (items.length === 0) return;
     setCardCtx({ saveId, x: e.clientX, y: e.clientY, items });
-  }, [focused, buildCardMenuItems, handleOpenInPreview]);
+  }, [focused, buildCardMenuItems]);
 
   const handleDelete = useCallback(
     async (id) => {
