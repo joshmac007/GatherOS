@@ -1143,6 +1143,31 @@ export default function App() {
       }
     }
 
+    // Export to disk. Single-save opens a Save As dialog with a
+    // sensible default filename; multi-select opens the bulk folder
+    // picker that copies every selected file into one directory.
+    if (items.length > 0) items.push({ type: 'separator' });
+    if (isMulti) {
+      items.push({
+        label: `Export${suffix}`,
+        icon: <DownloadIcon />,
+        onClick: () => window.moodmark.saves.exportBulk(targetIds),
+      });
+    } else {
+      const exportAnchor = saves.find((s) => s.id === saveId);
+      if (exportAnchor?.file_path) {
+        const ext = (exportAnchor.file_path.split('.').pop() || 'png').toLowerCase();
+        const exportName = exportAnchor.title
+          ? `${exportAnchor.title}.${ext}`
+          : `moodmark-${exportAnchor.id.slice(0, 8)}.${ext}`;
+        items.push({
+          label: 'Export…',
+          icon: <DownloadIcon />,
+          onClick: () => window.moodmark.image.export(exportAnchor.file_path, exportName),
+        });
+      }
+    }
+
     // Delete: soft-delete with the same undo toast as the bulk path.
     if (items.length > 0) items.push({ type: 'separator' });
     items.push({
