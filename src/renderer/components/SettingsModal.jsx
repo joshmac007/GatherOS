@@ -1133,7 +1133,7 @@ export default function SettingsModal({
                 <label className={styles.fieldLabel}>Grid columns</label>
                 <div className={styles.segmentedRow}>
                   {[2, 3, 4, 5, 6, 7, 8].map((n) => {
-                    const active = (prefs.defaultColumns ?? 4) === n;
+                    const active = prefs.defaultColumns === n;
                     return (
                       <button
                         key={n}
