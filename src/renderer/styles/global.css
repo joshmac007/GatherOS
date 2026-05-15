@@ -336,7 +336,7 @@ body:has(.selection-bar) .trash-toast {
 
 .sort-fab:hover {
   transform: translateY(-1px);
-  background: var(--hover-bg-soft);
+  background: var(--hover-bg);
 }
 
 .sort-fab:active { transform: translateY(0); }

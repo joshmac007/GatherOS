@@ -38,7 +38,6 @@ import {
   RotateCcw,
   Copy,
   MinusCircle,
-  ArrowRightFromLine,
   ArrowUp,
   Clipboard,
   ExternalLink,
@@ -47,6 +46,7 @@ import {
   Sparkles,
   FolderOpen,
   Link2,
+  Focus,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -69,7 +69,7 @@ const InboxIcon = () => <Inbox {...ICON} />;
 const RestoreIcon = () => <RotateCcw {...ICON} />;
 const SimilarIcon = () => <Copy {...ICON} />;
 const MinusCircleIcon = () => <MinusCircle {...ICON} />;
-const SortFabIcon = () => <ArrowRightFromLine {...ICON} />;
+const SortFabIcon = () => <Focus {...ICON} />;
 const ClipboardIcon = () => <Clipboard {...ICON} />;
 const ExternalLinkIcon = () => <ExternalLink {...ICON} />;
 const HashIcon = () => <Hash {...ICON} />;
@@ -2872,10 +2872,10 @@ export default function App() {
           type="button"
           className="sort-fab"
           onClick={() => setFocusedSortOpen(true)}
-          title="Sort each unsorted save one at a time, with keyboard shortcuts"
+          title="Open each unsorted save full-screen and file it with one keystroke"
         >
           <span className="sort-fab-icon"><SortFabIcon /></span>
-          <span>Sort one by one</span>
+          <span>Focused sort</span>
           <span className="sort-fab-count">{saves.length}</span>
         </button>
       )}
