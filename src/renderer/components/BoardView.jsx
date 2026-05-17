@@ -117,10 +117,12 @@ const ARROW_STROKE_WIDTHS = [1, 2, 3, 5, 8];
 // Curated font list for the text styler. Web-safe + system fonts so
 // they render consistently without bundling.
 const FONT_OPTIONS = [
-  { label: 'Sans',       value: 'inherit' },
-  { label: 'Serif',      value: '"Iowan Old Style", "Apple Garamond", Georgia, serif' },
-  { label: 'Mono',       value: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)' },
-  { label: 'Display',    value: '"Helvetica Neue", "Inter", system-ui, sans-serif' },
+  { label: 'Sans',  value: 'inherit' },
+  { label: 'Serif', value: '"Iowan Old Style", "Apple Garamond", Georgia, serif' },
+  // Hard-code the mono stack — --font-mono is aliased to the
+  // proportional UI font globally, so reading from it here renders
+  // Mono as a sans. Menlo ships on every Mac; the rest are fallbacks.
+  { label: 'Mono',  value: 'Menlo, "SF Mono", ui-monospace, SFMono-Regular, monospace' },
 ];
 
 // Curated text colors for the styler. Black + the same accent palette
