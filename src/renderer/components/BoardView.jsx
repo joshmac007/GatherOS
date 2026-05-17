@@ -1527,6 +1527,9 @@ export default function BoardView({
         setItems((prev) => prev.filter((it) => !selectedIds.has(it.id)));
         setSelectedIds(new Set());
         window.moodmark.boards.deleteItems({ boardId, itemIds: ids });
+        // Drop back to select so the toolbar doesn't keep the
+        // previous draw tool (e.g. frame) lit up after the delete.
+        setTool('select');
       } else if (e.key === 'Escape') {
         // Confirm any in-progress text edit, then drop selection
         // and clear edit state so the bounding box, handles, and
@@ -1751,6 +1754,7 @@ export default function BoardView({
       return next;
     });
     window.moodmark.boards.deleteItems({ boardId, itemIds: ids });
+    setTool('select');
   }, [boardId, pushHistory]);
 
   const setLockOnIds = useCallback((ids, locked) => {

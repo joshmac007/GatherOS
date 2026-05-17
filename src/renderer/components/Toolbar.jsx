@@ -56,6 +56,7 @@ function SearchField({
   onSearchChange,
   searchInputRef,
   onRecordSearch,
+  onOpenQuickSwitcher,
 }) {
   const [expanded, setExpanded] = useState(!!search);
   const wrapRef = useRef(null);
@@ -75,10 +76,15 @@ function SearchField({
       data-onboarding="search"
       onClick={(e) => {
         if (expanded) return;
-        // Clicking the collapsed pill expands it + focuses the input.
-        e.stopPropagation();
-        setExpanded(true);
-        requestAnimationFrame(() => searchInputRef?.current?.focus());
+        // Collapsed click → open the Quick Switcher (same modal as
+        // Cmd+K) so a deliberate click on the icon doesn't mean "use
+        // the cramped inline pill". The inline path is still reached
+        // via Cmd+F (which focuses the input directly and expands
+        // via onFocus below).
+        if (typeof onOpenQuickSwitcher === 'function') {
+          e.stopPropagation();
+          onOpenQuickSwitcher();
+        }
       }}
     >
       <span className={styles.searchIcon}>
@@ -473,6 +479,7 @@ export default function Toolbar({
           onSearchChange={onSearchChange}
           searchInputRef={searchInputRef}
           onRecordSearch={onRecordSearch}
+          onOpenQuickSwitcher={onOpenQuickSwitcher}
         />
         {onBackToAll && (
           <button
