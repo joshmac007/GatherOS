@@ -2318,8 +2318,11 @@ export default function App() {
       }
       // Horizontal swipe — only fire when the gesture is clearly
       // sideways and we're not in the middle of an inertial scroll
-      // following a vertical one.
+      // following a vertical one. Skip if the event came from an
+      // element that owns its own horizontal scroll (e.g. the
+      // featured-buckets row) so its native scroll isn't hijacked.
       if (Math.abs(e.deltaX) > SWIPE_DELTA_X && Math.abs(e.deltaY) < SWIPE_DELTA_Y_MAX) {
+        if (e.target?.closest?.('[data-allow-horizontal-scroll]')) return;
         const now = Date.now();
         if (now - lastSwipe < SWIPE_COOLDOWN_MS) return;
         lastSwipe = now;

@@ -173,7 +173,14 @@ export default function FeaturedBuckets({
     <>
       {/* Cards row — normal flow, scrolls with content. */}
       <div className={styles.cardsRow}>
-        <div ref={scrollerRef} className={styles.scroller}>
+        <div
+          ref={scrollerRef}
+          className={styles.scroller}
+          /* Opt this scroller out of the app-shell's horizontal-swipe
+             navigation. Without this, swiping the cards row triggers
+             the global wheel handler that flips collections. */
+          data-allow-horizontal-scroll="true"
+        >
           {collections.map((c) => {
             const items = previews[c.id] || [];
             const isRenaming = renamingId === c.id;
