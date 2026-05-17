@@ -24,16 +24,15 @@ import BoardGrid from './components/BoardGrid.jsx';
 import SmartChipRail from './components/SmartChipRail.jsx';
 import DetailPanelV1 from './components/DetailPanel.jsx';
 import DetailPanelV2 from './components/DetailPanelV2.jsx';
-// Active detail-panel implementation. V2 is the new compact layout
-// with secondary metadata behind a "More" toggle; V1 stays one flag
-// away so reverting is `localStorage.setItem('moodmark.dev.detailPanel', 'v1')`.
+// Default back to V1 — V2 (compact + collapse) didn't land. Opt in
+// to V2 with localStorage.setItem('moodmark.dev.detailPanel', 'v2').
 const DetailPanel = (() => {
   try {
-    return localStorage.getItem('moodmark.dev.detailPanel') === 'v1'
-      ? DetailPanelV1
-      : DetailPanelV2;
+    return localStorage.getItem('moodmark.dev.detailPanel') === 'v2'
+      ? DetailPanelV2
+      : DetailPanelV1;
   } catch {
-    return DetailPanelV2;
+    return DetailPanelV1;
   }
 })();
 import FocusedView from './components/FocusedView.jsx';
