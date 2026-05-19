@@ -7,6 +7,7 @@ directories:
   buildResources: build
 files:
   - src/main/**/*
+  - src/shared/**/*
   - dist/renderer/**/*
   - build/tray-icon*.png
   - package.json
