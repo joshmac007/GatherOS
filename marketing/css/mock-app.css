@@ -32,19 +32,21 @@
   font-family: 'Geist', 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
+/* Window — in-app shadow recipe. Stacked subtle shadows + 1px white
+   inset highlight (matches --shadow-modal from variables.css) and
+   a 1px hairline border so the surface reads "lifted off the page"
+   without the heavy hero-image drop shadow. */
 .mock-window {
-  /* min-width keeps the toolbar from compressing when the parent
-     column gets narrow — the mock can clip horizontally rather than
-     stack/distort. */
   width: 100%;
   min-width: 880px;
-  max-width: 1020px;
+  max-width: 1180px;
   background: var(--m-content-bg);
+  border: 1px solid var(--m-border);
   border-radius: 14px;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 30px 60px -20px rgba(0, 0, 0, 0.18),
-    0 12px 24px -16px rgba(0, 0, 0, 0.12);
+    inset 0 1px 0 #fff,
+    0 4px 14px rgba(0, 0, 0, 0.08),
+    0 24px 60px rgba(0, 0, 0, 0.18);
   overflow: hidden;
   transform: rotateY(-3deg) rotateX(2deg);
   transform-origin: left center;
@@ -92,20 +94,17 @@
   justify-self: start;
 }
 
-/* Real GatherOS brand mark — same SVG the app's toolbar renders, the
-   gradient tile + foreground glyph with the soft drop shadow stack.
-   Source SVG is 46x58 (38x38 glyph + room for drop-shadow padding);
-   sized at 32x40 here so the visible icon body sits at ~26x26 to
-   match the toolbar's optical weight. */
+/* Real GatherOS brand mark — same SVG the app renders, with the
+   tighter 46x46 viewBox so the icon body fills the element. Sized
+   28x28 to match the toolbar's other interactive controls; the
+   drop shadow inside the SVG extends past the element bounds via
+   the SVG's own overflow:visible. */
 .mock-brand {
-  width: 32px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   display: block;
-  /* Translate up slightly so the glyph centre aligns with the
-     library-switcher text baseline despite the SVG's bottom shadow
-     padding. Same idea as the real toolbar's translateY(3px). */
-  transform: translateY(-1px);
+  overflow: visible;
   -webkit-user-select: none;
   user-select: none;
   pointer-events: none;
@@ -470,6 +469,15 @@
 
 .mock-grid img:hover {
   transform: scale(1.015);
+}
+
+/* ── Containing the mock — kill horizontal scroll ─────────────── */
+
+/* Hero owns horizontal overflow so the wider mock can't introduce
+   a page-level scrollbar when min-width pushes it past the
+   1200px .div-block ceiling. */
+.hero {
+  overflow-x: hidden;
 }
 
 /* ── Hide on narrow viewports ─────────────────────────────────── */
