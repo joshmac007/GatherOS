@@ -491,7 +491,13 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('shell:open-url', (_e, url) => {
-    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    // Source-URL hand-off: the renderer asks the OS to open an http(s)
+    // URL in the user's default browser. Scheme check rejects file:,
+    // javascript:, data:, etc.; the length cap stops outsized strings
+    // from being passed to shell.openExternal (no known exploit, just
+    // hardening). Anything else lands in the user's browser, where the
+    // real address bar + TLS chain are the security boundary.
+    if (typeof url !== 'string' || url.length > 2048 || !/^https?:\/\//i.test(url)) {
       return { ok: false, reason: 'invalid-url' };
     }
     shell.openExternal(url);
