@@ -318,8 +318,29 @@ function registerIpcHandlers() {
 
   ipcMain.handle('saves:update', (_e, payload) => updateSave(payload));
 
+  // Tightens what the renderer can pass to filesystem-touching
+  // handlers: path has to be a real absolute string of bounded length
+  // and the right kind of file extension. Doesn't block every
+  // possible abuse (a compromised renderer can still probe whether a
+  // path exists), but it caps the surface and stops outsized paths
+  // from being read or zip-parsed.
+  const IMAGE_DROP_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'heic', 'tiff', 'tif']);
+  function validateDropPath(input, allowedExts) {
+    if (typeof input !== 'string') return null;
+    if (input.length === 0 || input.length > 1024) return null;
+    if (!path.isAbsolute(input)) return null;
+    const ext = path.extname(input).slice(1).toLowerCase();
+    if (!allowedExts.has(ext)) return null;
+    return input;
+  }
+
   ipcMain.handle('saves:drop-file', async (_e, filePath) => {
-    const imgData = await saveImageFromFile(filePath);
+    const safe = validateDropPath(filePath, IMAGE_DROP_EXTS);
+    if (!safe) {
+      console.warn('[saves:drop-file] rejecting invalid path:', filePath);
+      throw new Error('Invalid file path');
+    }
+    const imgData = await saveImageFromFile(safe);
     if (imgData.duplicateOf) {
       notifyDuplicate(imgData.existing);
       return imgData.existing;
@@ -330,9 +351,13 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('saves:drop-zip', async (_e, zipPath) => {
-    if (!zipPath) throw new Error('drop-zip called without a path');
+    const safe = validateDropPath(zipPath, new Set(['zip']));
+    if (!safe) {
+      console.warn('[saves:drop-zip] rejecting invalid path:', zipPath);
+      return { ok: false, error: 'Invalid zip path' };
+    }
     try {
-      const counts = await ingestZip(zipPath);
+      const counts = await ingestZip(safe);
       return { ok: true, ...counts };
     } catch (err) {
       console.error('[saves:drop-zip] failed:', err?.message || err);
