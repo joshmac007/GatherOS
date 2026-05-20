@@ -1,38 +1,65 @@
 // afterPack hook — runs after electron-builder copies the Electron
 // framework into the .app bundle, BEFORE codesign walks every file.
 //
-// Strips gendered/neutered locale variants (e.g. es_419_NEUTER.lproj,
-// ar_MASCULINE.lproj, th_NEUTER.lproj). They aren't standard locale
-// codes so electronLanguages doesn't filter them out, and on macOS
-// 15+ they're flagged with a restricted attribute that makes
-// `codesign --force` fail with "Operation not permitted" — taking
-// the whole release down with it.
+// Two things to strip before signing:
 //
-// Removing them is safe: they're regional Spanish / gendered-language
-// variants we don't ship UI strings for, and the standard locale
-// fallback (es.lproj, etc.) renders identically for users of those
-// languages.
+// 1. Gendered/neutered locale variants (e.g. es_419_NEUTER.lproj,
+//    ar_MASCULINE.lproj, th_NEUTER.lproj). They aren't standard locale
+//    codes so electronLanguages doesn't filter them out, and on macOS
+//    15+ they're flagged with a restricted attribute that makes
+//    `codesign --force` fail with "Operation not permitted" —
+//    taking the whole release down with it.
+//
+// 2. All non-English .lproj directories (de, es, fr, ja, zh_TW, uk,
+//    …). electron-builder's electronLanguages config is supposed to
+//    handle this but in practice doesn't reach every framework
+//    locale.pak. Each surviving locale.pak forces another
+//    `codesign --timestamp` round-trip to Apple's TSA server, and
+//    any one timing out fails the whole signing pass with
+//    "A timestamp was expected but was not found" (the bug that
+//    blocked v0.1.31 / v0.1.32 from publishing).
+//
+// We only ship English UI strings, so removing every non-en .lproj
+// is safe — the standard locale fallback hands users their system
+// language treatment from whatever's left or Base.lproj.
 
 const fs = require('node:fs');
 const path = require('node:path');
 
 const VARIANT_RE = /_(MASCULINE|FEMININE|NEUTER)\.lproj$/;
+const KEEP_LPROJ = new Set([
+  'en.lproj',
+  'en_GB.lproj',
+  'en_US.lproj',
+  'Base.lproj', // the fallback layout strings macOS uses if no match
+]);
 
 function stripDir(dir) {
-  if (!fs.existsSync(dir)) return [];
-  const removed = [];
+  if (!fs.existsSync(dir)) return { variants: 0, locales: 0 };
+  let variants = 0;
+  let locales = 0;
   for (const entry of fs.readdirSync(dir)) {
+    if (!entry.endsWith('.lproj')) continue;
+    const full = path.join(dir, entry);
     if (VARIANT_RE.test(entry)) {
-      const full = path.join(dir, entry);
       try {
         fs.rmSync(full, { recursive: true, force: true });
-        removed.push(entry);
+        variants += 1;
       } catch (err) {
-        console.warn(`[strip-gendered-locales] failed to remove ${full}:`, err.message);
+        console.warn(`[strip-locales] failed to remove variant ${full}:`, err.message);
+      }
+      continue;
+    }
+    if (!KEEP_LPROJ.has(entry)) {
+      try {
+        fs.rmSync(full, { recursive: true, force: true });
+        locales += 1;
+      } catch (err) {
+        console.warn(`[strip-locales] failed to remove locale ${full}:`, err.message);
       }
     }
   }
-  return removed;
+  return { variants, locales };
 }
 
 exports.default = async function afterPack(context) {
@@ -49,12 +76,14 @@ exports.default = async function afterPack(context) {
     path.join(appRoot, 'Contents', 'Frameworks', 'Electron Framework.framework', 'Versions', 'A', 'Resources'),
   ];
 
-  let totalRemoved = 0;
+  let totalVariants = 0;
+  let totalLocales = 0;
   for (const dir of candidates) {
-    const removed = stripDir(dir);
-    totalRemoved += removed.length;
+    const { variants, locales } = stripDir(dir);
+    totalVariants += variants;
+    totalLocales += locales;
   }
-  if (totalRemoved > 0) {
-    console.log(`[strip-gendered-locales] removed ${totalRemoved} variant locale dir(s)`);
+  if (totalVariants > 0 || totalLocales > 0) {
+    console.log(`[strip-locales] removed ${totalVariants} variant + ${totalLocales} non-English locale dir(s)`);
   }
 };
