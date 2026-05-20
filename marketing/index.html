@@ -38,35 +38,91 @@
         </div>
       </div>
 
-      <!-- Interactive app mock — replaces the static desktop screenshot.
-           Hovering a featured-bucket card fans out its stacked thumbnails.
-           Pure HTML/CSS, no JS, nothing clickable. -->
+      <!-- Interactive app mock. Hover any featured card → stack fans. -->
       <div class="mock" aria-hidden="true">
         <div class="mock-window">
-          <div class="mock-titlebar">
+          <!-- Traffic lights -->
+          <div class="mock-traffic-row">
             <div class="mock-traffic"><span></span><span></span><span></span></div>
-            <div class="mock-library-switcher">Library <span class="mock-chev">⇅</span></div>
-            <div class="mock-search-icon">⌕</div>
-            <div class="mock-tabs">
-              <span class="mock-tab is-active">📚 Library</span>
-              <span class="mock-tab">Collections</span>
-              <span class="mock-tab">Spaces</span>
+          </div>
+
+          <!-- Toolbar -->
+          <div class="mock-toolbar">
+            <div class="mock-toolbar-left">
+              <div class="mock-brand">G</div>
+              <div class="mock-library-switcher">
+                Library
+                <span class="mock-chev">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" width="10" height="10"><path d="M5 6l3-3 3 3"/><path d="M11 10l-3 3-3-3"/></svg>
+                </span>
+              </div>
+              <div class="mock-search-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+              </div>
             </div>
-            <div class="mock-right">
-              <span class="mock-icon-btn">⌖</span>
-              <span class="mock-icon-btn">☾</span>
-              <span class="mock-icon-btn">⚙</span>
-              <span class="mock-add">+ Add</span>
+
+            <div class="mock-mode-pill">
+              <div class="mock-mode-thumb"></div>
+              <span class="mock-mode-segment is-active">
+                <span class="mock-mode-segment-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                </span>
+                Library
+              </span>
+              <span class="mock-mode-segment">
+                <span class="mock-mode-segment-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                </span>
+                Collections
+              </span>
+              <span class="mock-mode-segment">
+                <span class="mock-mode-segment-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg>
+                </span>
+                Spaces
+              </span>
+            </div>
+
+            <div class="mock-toolbar-right">
+              <span class="mock-icon-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+              </span>
+              <span class="mock-icon-divider"></span>
+              <span class="mock-icon-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+              </span>
+              <span class="mock-icon-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </span>
+              <span class="mock-add">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                Add
+              </span>
             </div>
           </div>
 
+          <!-- Sub-tabs row -->
           <div class="mock-subtabs">
             <span class="mock-subtab is-active">All</span>
             <span class="mock-subtab">Unsorted</span>
             <span class="mock-subtab">Trash</span>
-            <span class="mock-sort">Most recent ⌄</span>
+            <div class="mock-toolbar-sort">
+              <div class="mock-slider">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                <div class="mock-slider-track">
+                  <div class="mock-slider-thumb"></div>
+                </div>
+              </div>
+              <span class="mock-sort">
+                Most recent
+                <span class="mock-chev">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" width="9" height="9"><path d="M4 6l4 4 4-4"/></svg>
+                </span>
+              </span>
+            </div>
           </div>
 
+          <!-- Featured-bucket cards -->
           <div class="mock-cards-row">
             <div class="mock-card">
               <div class="mock-card-stack">
@@ -75,8 +131,10 @@
                 <img src="https://picsum.photos/seed/branding3/200" alt="">
                 <img src="https://picsum.photos/seed/branding4/200" alt="">
               </div>
-              <div class="mock-card-name">Branding</div>
-              <div class="mock-card-count">5 saves</div>
+              <div class="mock-card-meta">
+                <div class="mock-card-name">Branding</div>
+                <div class="mock-card-count">5 saves</div>
+              </div>
             </div>
             <div class="mock-card">
               <div class="mock-card-stack">
@@ -85,8 +143,10 @@
                 <img src="https://picsum.photos/seed/srefs3/200" alt="">
                 <img src="https://picsum.photos/seed/srefs4/200" alt="">
               </div>
-              <div class="mock-card-name">Srefs</div>
-              <div class="mock-card-count">12 saves</div>
+              <div class="mock-card-meta">
+                <div class="mock-card-name">Srefs</div>
+                <div class="mock-card-count">12 saves</div>
+              </div>
             </div>
             <div class="mock-card">
               <div class="mock-card-stack">
@@ -95,18 +155,21 @@
                 <img src="https://picsum.photos/seed/packaging3/200" alt="">
                 <img src="https://picsum.photos/seed/packaging4/200" alt="">
               </div>
-              <div class="mock-card-name">Packaging</div>
-              <div class="mock-card-count">8 saves</div>
+              <div class="mock-card-meta">
+                <div class="mock-card-name">Packaging</div>
+                <div class="mock-card-count">8 saves</div>
+              </div>
             </div>
             <div class="mock-card">
               <div class="mock-card-stack">
-                <img src="https://picsum.photos/seed/interface1/200" alt="">
-                <img src="https://picsum.photos/seed/interface2/200" alt="">
-                <img src="https://picsum.photos/seed/interface3/200" alt="">
-                <img src="https://picsum.photos/seed/interface4/200" alt="">
+                <div class="mock-card-stack-empty">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                </div>
               </div>
-              <div class="mock-card-name">Interface</div>
-              <div class="mock-card-count">21 saves</div>
+              <div class="mock-card-meta">
+                <div class="mock-card-name">Interface</div>
+                <div class="mock-card-count">0 saves</div>
+              </div>
             </div>
             <div class="mock-card">
               <div class="mock-card-stack">
@@ -115,11 +178,14 @@
                 <img src="https://picsum.photos/seed/logos3/200" alt="">
                 <img src="https://picsum.photos/seed/logos4/200" alt="">
               </div>
-              <div class="mock-card-name">Logos</div>
-              <div class="mock-card-count">9 saves</div>
+              <div class="mock-card-meta">
+                <div class="mock-card-name">Logos</div>
+                <div class="mock-card-count">9 saves</div>
+              </div>
             </div>
           </div>
 
+          <!-- Masonry grid -->
           <div class="mock-grid">
             <img src="https://picsum.photos/seed/g1/400/520" alt="">
             <img src="https://picsum.photos/seed/g2/400/360" alt="">
