@@ -418,8 +418,10 @@ function registerIpcHandlers() {
     return { ok: true };
   });
 
-  ipcMain.handle('overlay:complete', (_e, payload) => {
-    handleOverlayComplete(payload);
+  ipcMain.handle('overlay:complete', (e, payload) => {
+    // Pass the sender so capture.js can identify which per-display
+    // overlay sent the rect (multi-monitor setups need this).
+    handleOverlayComplete(payload, e.sender);
     return { ok: true };
   });
 

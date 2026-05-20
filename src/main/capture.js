@@ -16,11 +16,14 @@ const { spawn } = require('node:child_process');
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:5173';
 
-let overlayWin = null;
-// The display the current overlay is bound to — captured at open
-// time so the crop step (which fires after the overlay is dismissed)
-// reads pixels from the right monitor on a multi-display setup.
-let overlayDisplay = null;
+// One BrowserWindow per display, all opened at once. A single
+// spanning window doesn't render reliably across displays with
+// different scale factors on macOS — Chromium picks one display to
+// paint on and the others get nothing — so we open per-display
+// overlays. Map<windowId, { win, display }> so the complete-handler
+// can look up which display sent the rect.
+const overlayWins = new Map();
+let escRegistered = false;
 
 // Default accelerator if no pref is set / pref returns junk.
 const DEFAULT_ACCELERATOR = 'CommandOrControl+Shift+S';
@@ -106,9 +109,6 @@ async function ensureScreenRecordingPermission() {
   let status = systemPreferences.getMediaAccessStatus('screen');
   if (status === 'granted') return true;
 
-  // Trigger the system permission prompt. Silently no-ops if the
-  // user has already denied — getMediaAccessStatus is the source of
-  // truth on the next read.
   try {
     await desktopCapturer.getSources({
       types: ['screen'],
@@ -119,10 +119,6 @@ async function ensureScreenRecordingPermission() {
   status = systemPreferences.getMediaAccessStatus('screen');
   if (status === 'granted') return true;
 
-  // Still not granted (denied / restricted / dismissed prompt).
-  // Walk the user to the right pane in System Settings. In dev we
-  // run inside an `Electron` host binary, so that's the toggle name
-  // they'll see; packaged builds appear as the product name.
   const productName = app.isPackaged ? app.getName() : 'Electron';
   const restartLine = app.isPackaged
     ? `Then quit and reopen GatherOS for the change to take effect.`
@@ -147,148 +143,124 @@ async function ensureScreenRecordingPermission() {
   return false;
 }
 
+function closeAllOverlays() {
+  for (const entry of overlayWins.values()) {
+    if (entry.win && !entry.win.isDestroyed()) {
+      try { entry.win.close(); } catch {}
+    }
+  }
+  overlayWins.clear();
+  if (escRegistered) {
+    try { globalShortcut.unregister('Escape'); } catch {}
+    escRegistered = false;
+  }
+}
+
 async function startScreenshotCapture() {
-  if (overlayWin) return;
+  if (overlayWins.size > 0) return;
 
   const ok = await ensureScreenRecordingPermission();
   if (!ok) return;
 
-  // Span every display with a single overlay so the user can drag a
-  // selection across monitors. The overlay is positioned at the
-  // union of all display bounds in global screen space; the renderer
-  // sees one big canvas in CSS pixels and reports the rect back in
-  // those same coordinates. captureAndCrop figures out which
-  // physical display the rect lives on.
   const displays = screen.getAllDisplays();
-  const minX = Math.min(...displays.map((d) => d.bounds.x));
-  const minY = Math.min(...displays.map((d) => d.bounds.y));
-  const maxX = Math.max(...displays.map((d) => d.bounds.x + d.bounds.width));
-  const maxY = Math.max(...displays.map((d) => d.bounds.y + d.bounds.height));
-  const x = minX;
-  const y = minY;
-  const width = maxX - minX;
-  const height = maxY - minY;
-  // Stash the union origin so captureAndCrop can translate rect
-  // coords (overlay-local) into global screen coords.
-  overlayDisplay = { unionOrigin: { x: minX, y: minY } };
+  console.log('[capture] opening overlays for', displays.length, 'displays');
 
-  overlayWin = new BrowserWindow({
-    x, y, width, height,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    // Don't use simpleFullscreen — it locks the window to the
-    // primary display on macOS regardless of the x/y passed in,
-    // breaking capture on every non-primary monitor. The window is
-    // already sized to display.bounds and the screen-saver always-
-    // on-top level (set below) places it above the menu bar.
-    resizable: false,
-    movable: false,
-    hasShadow: false,
-    skipTaskbar: true,
-    enableLargerThanScreen: true,
-    backgroundColor: '#00000000',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload-overlay.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  // Re-assert the bounds after construction — on multi-display
-  // setups BrowserWindow occasionally rounds x/y to the primary
-  // display's origin if the OS thinks the chosen point is invalid.
-  overlayWin.setBounds({ x, y, width, height });
-
-  overlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  overlayWin.setAlwaysOnTop(true, 'screen-saver');
-  overlayWin.setIgnoreMouseEvents(false);
-
-  // Sanity check — log what the OS actually gave us. If the actual
-  // bounds don't match the requested ones, macOS is clamping the
-  // overlay to a single display (the most common cause of "cursor
-  // works on monitor 1 but disappears on monitor 2").
-  console.log('[capture] requested overlay bounds:', { x, y, width, height });
-  console.log('[capture] actual overlay bounds:', overlayWin.getBounds());
-  console.log('[capture] all displays at overlay creation:', screen.getAllDisplays().map((d) => ({
-    id: d.id,
-    bounds: d.bounds,
-    scaleFactor: d.scaleFactor,
-    internal: d.internal,
-    primary: d.id === screen.getPrimaryDisplay().id,
-  })));
-
-  // Backstop for the renderer's keydown listener: while the overlay
-  // is open, Escape is wired through the OS shortcut layer too. If
-  // focus ever slips (tray menu held it, another app stole it, etc.)
-  // the user can still bail out without restarting the app.
-  const escAccelerator = 'Escape';
-  let escRegistered = false;
+  // One Escape registration shared by every overlay.
   try {
-    escRegistered = globalShortcut.register(escAccelerator, () => {
+    escRegistered = globalShortcut.register('Escape', () => {
       handleOverlayCancel();
     });
   } catch {}
 
-  overlayWin.on('closed', () => {
-    overlayWin = null;
-    overlayDisplay = null;
-    if (escRegistered) {
-      try { globalShortcut.unregister(escAccelerator); } catch {}
-      escRegistered = false;
-    }
-  });
+  for (const display of displays) {
+    const { x, y, width, height } = display.bounds;
+    const win = new BrowserWindow({
+      x, y, width, height,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      resizable: false,
+      movable: false,
+      hasShadow: false,
+      skipTaskbar: true,
+      enableLargerThanScreen: true,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload-overlay.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+    // Re-assert bounds — macOS occasionally rounds non-primary
+    // origins to the nearest valid display point at construction.
+    win.setBounds({ x, y, width, height });
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setIgnoreMouseEvents(false);
 
-  // When launched from the tray menu, the menu keeps keyboard focus
-  // by default and the overlay receives no key events. Try to steal
-  // focus at every reasonable moment (creation, finish-load, show)
-  // so the renderer's keydown listener actually fires.
-  const stealFocus = () => {
-    if (!overlayWin || overlayWin.isDestroyed()) return;
-    if (process.platform === 'darwin') {
-      try { app.focus({ steal: true }); } catch {}
-    }
-    try { overlayWin.focus(); } catch {}
-  };
-  overlayWin.once('ready-to-show', stealFocus);
-  overlayWin.webContents.once('did-finish-load', stealFocus);
-  overlayWin.on('show', stealFocus);
+    overlayWins.set(win.id, { win, display });
 
-  if (isDev) {
-    overlayWin.loadURL(`${DEV_URL}/overlay.html`);
-  } else {
-    overlayWin.loadFile(
-      path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'),
-    );
+    win.on('closed', () => {
+      overlayWins.delete(win.id);
+      if (overlayWins.size === 0 && escRegistered) {
+        try { globalShortcut.unregister('Escape'); } catch {}
+        escRegistered = false;
+      }
+    });
+
+    const stealFocus = () => {
+      if (win.isDestroyed()) return;
+      if (process.platform === 'darwin') {
+        try { app.focus({ steal: true }); } catch {}
+      }
+      try { win.focus(); } catch {}
+    };
+    win.once('ready-to-show', stealFocus);
+    win.webContents.once('did-finish-load', stealFocus);
+    win.on('show', stealFocus);
+
+    if (isDev) {
+      win.loadURL(`${DEV_URL}/overlay.html`);
+    } else {
+      win.loadFile(
+        path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'),
+      );
+    }
+
+    console.log('[capture] opened overlay for display', display.id, 'at', win.getBounds());
   }
 }
 
-async function handleOverlayComplete(rect) {
-  if (!overlayWin) return;
-  const win = overlayWin;
-  overlayWin = null;
+async function handleOverlayComplete(rect, senderWebContents) {
+  // Identify which overlay (and therefore which display) the rect
+  // came from. Without this we can't tell monitor 1 from monitor 2.
+  const senderWin = senderWebContents
+    ? BrowserWindow.fromWebContents(senderWebContents)
+    : null;
+  const entry = senderWin ? overlayWins.get(senderWin.id) : null;
+  if (!entry) {
+    console.error('[capture] overlay-complete from unknown sender; ignoring');
+    closeAllOverlays();
+    return;
+  }
+  const { win, display } = entry;
 
-  // Hide the overlay before capturing so it doesn't appear in the screenshot.
-  win.setOpacity(0);
-  win.hide();
+  // Hide every overlay before capturing so none appear in the shot.
+  for (const e of overlayWins.values()) {
+    try { e.win.setOpacity(0); } catch {}
+    try { e.win.hide(); } catch {}
+  }
 
-  // Hard kill-switch: no matter what happens below — capture hangs,
-  // sharp throws, IPC stalls — the overlay must not linger. 4s is
-  // long enough for a clean capture path on slow disks but short
-  // enough that a stuck flow doesn't trap the user.
-  const killTimer = setTimeout(() => {
-    if (!win.isDestroyed()) {
-      try { win.close(); } catch {}
-    }
-  }, 4000);
+  // Hard kill-switch — overlays must not linger if anything below stalls.
+  const killTimer = setTimeout(() => closeAllOverlays(), 4000);
 
   // Give the compositor a frame to render without the overlay.
   await new Promise((r) => setTimeout(r, 120));
 
   try {
-    const cropped = await captureAndCrop(rect);
-    if (!win.isDestroyed()) win.close();
+    const cropped = await captureAndCrop(rect, display);
+    closeAllOverlays();
 
     writeToDropFolder(cropped);
 
@@ -304,56 +276,28 @@ async function handleOverlayComplete(rect) {
     }
   } catch (err) {
     console.error('Failed to capture screenshot:', err);
-    if (!win.isDestroyed()) win.close();
+    closeAllOverlays();
   } finally {
     clearTimeout(killTimer);
   }
 }
 
-async function captureAndCrop(rect) {
+// rect is in CSS pixels relative to the overlay window for `display`.
+// Since each overlay sits at exactly that display's bounds, rect is
+// already in display-local CSS coords — no translation needed.
+async function captureAndCrop(rect, display) {
   const sharp = require('sharp');
-  // rect is in CSS pixels relative to the overlay window, which spans
-  // the union of all displays. Translate to global screen coords by
-  // adding the union origin, then pick the display the rect's centre
-  // falls on. That's the display we capture from, and we re-express
-  // the rect in that display's local CSS coords before scaling to
-  // device pixels.
-  const origin = (overlayDisplay && overlayDisplay.unionOrigin) || { x: 0, y: 0 };
-  const centreGlobal = {
-    x: origin.x + rect.x + rect.w / 2,
-    y: origin.y + rect.y + rect.h / 2,
-  };
-  const display = screen.getDisplayNearestPoint(centreGlobal);
   const sf = display.scaleFactor || 1;
 
-  console.log('[capture] rect (overlay-local CSS px):', rect);
-  console.log('[capture] union origin:', origin);
-  console.log('[capture] rect centre (global CSS px):', centreGlobal);
-  console.log('[capture] chosen display:', {
-    id: display.id,
-    bounds: display.bounds,
-    size: display.size,
-    scaleFactor: sf,
-    rotation: display.rotation,
-    internal: display.internal,
+  console.log('[capture] rect (display-local CSS px):', rect);
+  console.log('[capture] target display:', {
+    id: display.id, bounds: display.bounds, size: display.size, scaleFactor: sf,
   });
-  console.log('[capture] all displays:', screen.getAllDisplays().map((d) => ({
-    id: d.id,
-    bounds: d.bounds,
-    scaleFactor: d.scaleFactor,
-  })));
 
-  // Local CSS rect on the chosen display, clamped to its bounds.
-  const localX = origin.x + rect.x - display.bounds.x;
-  const localY = origin.y + rect.y - display.bounds.y;
-  const clampedLeft = Math.max(0, Math.min(display.bounds.width - 1, localX));
-  const clampedTop = Math.max(0, Math.min(display.bounds.height - 1, localY));
-  const clampedRight = Math.max(clampedLeft + 1, Math.min(display.bounds.width, localX + rect.w));
-  const clampedBottom = Math.max(clampedTop + 1, Math.min(display.bounds.height, localY + rect.h));
-
-  console.log('[capture] local clamped rect (CSS px on display):', {
-    left: clampedLeft, top: clampedTop, right: clampedRight, bottom: clampedBottom,
-  });
+  const clampedLeft = Math.max(0, Math.min(display.bounds.width - 1, rect.x));
+  const clampedTop = Math.max(0, Math.min(display.bounds.height - 1, rect.y));
+  const clampedRight = Math.max(clampedLeft + 1, Math.min(display.bounds.width, rect.x + rect.w));
+  const clampedBottom = Math.max(clampedTop + 1, Math.min(display.bounds.height, rect.y + rect.h));
 
   const targetWidth = Math.round(display.size.width * sf);
   const targetHeight = Math.round(display.size.height * sf);
@@ -364,19 +308,11 @@ async function captureAndCrop(rect) {
   });
   console.log('[capture] desktopCapturer sources:', sources.map((s, i) => ({
     idx: i,
-    id: s.id,
     display_id: s.display_id,
-    display_id_num: Number(s.display_id),
     name: s.name,
     thumbSize: s.thumbnail.getSize(),
   })));
 
-  // display_id matching is unreliable on some Electron / macOS
-  // builds — it can come back as an empty string per source, in
-  // which case the strict ID match fails and the silent fallback to
-  // sources[0] silently always grabs the primary display. Match by
-  // ID first, then fall back to index alignment with
-  // screen.getAllDisplays(), then bail rather than guessing.
   let source = sources.find((s) => Number(s.display_id) === display.id);
   let matchVia = 'display_id';
   if (!source) {
@@ -391,10 +327,9 @@ async function captureAndCrop(rect) {
     console.error('[capture] no desktopCapturer source for display', display.id);
     throw new Error('Could not locate screen source for the active display.');
   }
-  console.log('[capture] matched source via', matchVia, '→', { id: source.id, display_id: source.display_id });
+  console.log('[capture] matched source via', matchVia);
 
   const pngBuffer = source.thumbnail.toPNG();
-
   const thumbSize = source.thumbnail.getSize();
   const scaleX = thumbSize.width / display.bounds.width;
   const scaleY = thumbSize.height / display.bounds.height;
@@ -409,9 +344,7 @@ async function captureAndCrop(rect) {
 }
 
 function handleOverlayCancel() {
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.close();
-  }
+  closeAllOverlays();
 }
 
 // Capture the entire display under the cursor in one shot — no
@@ -429,8 +362,12 @@ async function captureFullscreen() {
     types: ['screen'],
     thumbnailSize: { width: targetWidth, height: targetHeight },
   });
-  const source =
-    sources.find((s) => Number(s.display_id) === display.id) || sources[0];
+  let source = sources.find((s) => Number(s.display_id) === display.id);
+  if (!source) {
+    const allDisplays = screen.getAllDisplays();
+    const idx = allDisplays.findIndex((d) => d.id === display.id);
+    if (idx >= 0 && sources[idx]) source = sources[idx];
+  }
   if (!source) return;
 
   try {
@@ -468,8 +405,6 @@ async function captureWindow() {
 
   try {
     await new Promise((resolve, reject) => {
-      // -w: window selection mode (the native blue-hover UX)
-      // -t png  (no -x so the shutter sound confirms it fired)
       const proc = spawn('/usr/sbin/screencapture', [
         '-w', '-t', 'png', tmpPath,
       ]);
@@ -489,8 +424,6 @@ async function captureWindow() {
       });
     });
 
-    // Give the FS a beat to flush. screencapture closes its file
-    // handle before exit, but sandbox / FS journaling can lag.
     await new Promise((r) => setTimeout(r, 80));
 
     if (!fs.existsSync(tmpPath)) {
@@ -525,10 +458,6 @@ async function captureWindow() {
   }
 }
 
-// Frame a window screenshot in a light-gray canvas with even padding
-// on every side. The macOS shot already includes the system shadow on
-// the alpha channel, so once we extend onto gray the shadow softens
-// naturally into the surround.
 async function padWindowImage(pngBuffer) {
   const sharp = require('sharp');
   const PAD = 48;
@@ -538,7 +467,7 @@ async function padWindowImage(pngBuffer) {
       top: PAD, bottom: PAD, left: PAD, right: PAD,
       background: BG,
     })
-    .flatten({ background: BG }) // collapse residual transparency
+    .flatten({ background: BG })
     .png()
     .toBuffer();
 }
