@@ -327,8 +327,22 @@ async function captureAndCrop(rect) {
     types: ['screen'],
     thumbnailSize: { width: targetWidth, height: targetHeight },
   });
-  const source =
-    sources.find((s) => Number(s.display_id) === display.id) || sources[0];
+  // display_id matching is unreliable on some Electron / macOS
+  // builds — it can come back as an empty string per source, in
+  // which case the strict ID match fails and the silent fallback to
+  // sources[0] silently always grabs the primary display. Match by
+  // ID first, then fall back to index alignment with
+  // screen.getAllDisplays(), then bail rather than guessing.
+  let source = sources.find((s) => Number(s.display_id) === display.id);
+  if (!source) {
+    const allDisplays = screen.getAllDisplays();
+    const idx = allDisplays.findIndex((d) => d.id === display.id);
+    if (idx >= 0 && sources[idx]) source = sources[idx];
+  }
+  if (!source) {
+    console.error('[capture] no desktopCapturer source for display', display.id, 'sources:', sources.map((s) => ({ id: s.id, display_id: s.display_id, name: s.name })));
+    throw new Error('Could not locate screen source for the active display.');
+  }
 
   const pngBuffer = source.thumbnail.toPNG();
 

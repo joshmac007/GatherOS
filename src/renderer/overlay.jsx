@@ -127,14 +127,16 @@ function CaptureOverlay() {
         </div>
       )}
 
-      {/* Resting hint at the bottom-center until the user starts
-          dragging. Disappears once a selection is being drawn so it
-          doesn't fight with the readout for attention. */}
-      {!sel && (
+      {/* Resting hint floats near the cursor. The overlay window
+          spans every display in a multi-monitor setup, so anchoring
+          to 50% of the window would land at the seam between
+          monitors. Following the cursor keeps the hint on the
+          display the user is actually looking at. */}
+      {!sel && cursor && (
         <div style={{
           position: 'fixed',
-          left: '50%',
-          bottom: 28,
+          left: cursor.x,
+          top: cursor.y + 24,
           transform: 'translateX(-50%)',
           padding: '7px 14px',
           background: 'rgba(0, 0, 0, 0.78)',
