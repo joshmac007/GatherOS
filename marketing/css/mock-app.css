@@ -32,10 +32,22 @@
   min-width: 880px;
   align-self: stretch;
   display: flex;
-  perspective: 1800px;
+  /* Tighter perspective + offset perspective origin so the right
+     side of the window recedes more dramatically than the left.
+     1100px makes the 3D effect pronounced without breaking the UI;
+     origin 25%/40% places the vanishing point near the heading
+     column, so the mock looks like it's leaning away from the
+     reader and into the page. */
+  perspective: 1100px;
+  perspective-origin: 25% 40%;
   font-family: 'Geist', 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
+/* Isometric-style tilt — rotateY tilts the right side away from the
+   viewer (foreshortens the right edge that's already running off
+   screen, doubling down on the "depth" feel). rotateX leans the
+   top edge back. rotateZ adds a subtle skew so the window doesn't
+   read as a perfectly axial 3D rotation — gives it character. */
 .mock-window {
   width: 100%;
   min-width: 880px;
@@ -44,9 +56,13 @@
   border-radius: 14px;
   box-shadow:
     inset 0 1px 0 #fff,
-    0 6px 24px rgba(0, 0, 0, 0.06);
+    0 14px 32px rgba(0, 0, 0, 0.08),
+    0 32px 64px -20px rgba(0, 0, 0, 0.10);
   overflow: hidden;
-  transform: rotateY(-3deg) rotateX(2deg);
+  transform:
+    rotateY(-14deg)
+    rotateX(8deg)
+    rotateZ(-1deg);
   transform-origin: left center;
   color: var(--m-text-primary);
 }
@@ -439,10 +455,6 @@
 
 /* ── Masonry grid ─────────────────────────────────────────────── */
 
-/* column-width instead of column-count so the browser fits as many
-   fixed-size columns as the container allows — keeps individual
-   thumbnails at a sensible size on wide viewports instead of letting
-   four columns stretch out to ridiculous widths. */
 .mock-grid {
   column-width: 220px;
   column-gap: 10px;
