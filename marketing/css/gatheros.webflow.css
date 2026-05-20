@@ -50,9 +50,6 @@ h1 {
   display: flex;
 }
 
-/* Stack heading + features tight together at the top of the column.
-   align-items: flex-start on the parent (.div-block) keeps the column
-   from stretching to match the screenshot's height. */
 .div-block-2 {
   flex-flow: column;
   flex: none;
@@ -125,9 +122,12 @@ h1 {
     flex-flow: column;
   }
 
+  /* Tablet/mobile: no row-gap on the column — .feature-list's own
+     margin-top is the single source of truth for the heading→features
+     gap, so the two don't stack into an 80px void. */
   .div-block-2 {
-    grid-column-gap: 40px;
-    grid-row-gap: 40px;
+    grid-column-gap: 0;
+    grid-row-gap: 0;
     flex-flow: column;
     width: 100%;
   }
@@ -139,6 +139,10 @@ h1 {
 
   .div-block-3 {
     max-width: 420px;
+  }
+
+  .feature-list {
+    margin-top: 24px;
   }
 }
 
