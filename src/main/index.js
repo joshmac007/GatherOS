@@ -253,14 +253,27 @@ function registerMoodmarkFileProtocol() {
     const encoded = url.pathname.replace(/^\/+/, '');
     const abs = decodeURIComponent(encoded);
 
-    if (!fs.existsSync(abs)) {
-      console.error('[moodmark-file] not found:', abs);
+    // Path-traversal guard. The protocol is only meant to serve image
+    // files that live inside one of the app's library directories
+    // (<userData>/libraries/<id>/…). Resolving the path and checking
+    // that it starts with the libraries root blocks
+    // moodmark-file://local/../../../etc/passwd-style escapes that a
+    // compromised renderer could otherwise feed back through here.
+    const root = path.resolve(libraryRegistry.librariesRoot()) + path.sep;
+    const resolved = path.resolve(abs);
+    if (!resolved.startsWith(root)) {
+      console.error('[moodmark-file] rejected out-of-library path:', resolved);
+      return new Response(null, { status: 403 });
+    }
+
+    if (!fs.existsSync(resolved)) {
+      console.error('[moodmark-file] not found:', resolved);
       return new Response(null, { status: 404 });
     }
 
-    const ext = path.extname(abs).slice(1).toLowerCase();
+    const ext = path.extname(resolved).slice(1).toLowerCase();
     const contentType = CONTENT_TYPES[ext] || 'application/octet-stream';
-    return new Response(Readable.toWeb(fs.createReadStream(abs)), {
+    return new Response(Readable.toWeb(fs.createReadStream(resolved)), {
       headers: { 'Content-Type': contentType },
     });
   });

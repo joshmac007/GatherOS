@@ -342,6 +342,7 @@ module.exports = {
   bootstrap,
   getActiveLibrary,
   getActiveLibraryRoot,
+  librariesRoot,
   listLibraries,
   createLibrary,
   renameLibrary,
