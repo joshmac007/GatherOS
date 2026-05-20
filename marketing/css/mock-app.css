@@ -32,22 +32,11 @@
   min-width: 880px;
   align-self: stretch;
   display: flex;
-  /* Tighter perspective + offset perspective origin so the right
-     side of the window recedes more dramatically than the left.
-     1100px makes the 3D effect pronounced without breaking the UI;
-     origin 25%/40% places the vanishing point near the heading
-     column, so the mock looks like it's leaning away from the
-     reader and into the page. */
   perspective: 1100px;
   perspective-origin: 25% 40%;
   font-family: 'Geist', 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
-/* Isometric-style tilt — rotateY tilts the right side away from the
-   viewer (foreshortens the right edge that's already running off
-   screen, doubling down on the "depth" feel). rotateX leans the
-   top edge back. rotateZ adds a subtle skew so the window doesn't
-   read as a perfectly axial 3D rotation — gives it character. */
 .mock-window {
   width: 100%;
   min-width: 880px;
@@ -474,16 +463,44 @@
   transform: scale(1.015);
 }
 
-/* ── Containing the mock — kill horizontal scroll ─────────────── */
+/* ── Page-level scroll behaviour ─────────────────────────────────
+   Desktop: lock the hero to viewport height and clip everything past
+   the fold — the mock's runoff (right edge + bottom) gets hidden,
+   page never scrolls.
+
+   Tablet / mobile: allow vertical scroll so the PNG fallback below
+   the heading column is reachable. */
 
 .hero {
-  overflow-x: hidden;
+  height: 100vh;
+  overflow: hidden;
 }
 
-/* ── Hide on narrow viewports ─────────────────────────────────── */
+@media (max-width: 991px) {
+  .hero {
+    height: auto;
+    min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: visible;
+  }
+}
+
+/* ── Mobile/tablet PNG fallback for the mock ─────────────────── */
+
+.mock-fallback {
+  display: none;
+  width: 100%;
+  height: auto;
+}
 
 @media (max-width: 991px) {
+  /* Mock is hidden, fallback shows. Sits below the heading column
+     as the second flex child of .div-block (which flips to column
+     direction at this breakpoint via the Webflow CSS). */
   .mock {
     display: none;
+  }
+  .mock-fallback {
+    display: block;
   }
 }
