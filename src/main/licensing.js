@@ -43,13 +43,17 @@ function cacheFilePath() {
 function getSessionToken() {
   const file = sessionFilePath();
   if (!fs.existsSync(file)) return null;
+  if (!safeStorage.isEncryptionAvailable()) {
+    // Refuse to read any persisted token if the OS keychain isn't
+    // available. Anything on disk under this code path was written by
+    // a build that ran without encryption — treat it as untrusted and
+    // require the user to sign in fresh through the secure path.
+    console.error('[licensing] safeStorage unavailable; refusing to load session token');
+    return null;
+  }
   try {
     const buf = fs.readFileSync(file);
-    if (safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(buf);
-    }
-    // safeStorage unavailable: we wrote plaintext last time too.
-    return buf.toString('utf8');
+    return safeStorage.decryptString(buf);
   } catch (err) {
     console.error('[licensing] failed to read session:', err);
     return null;
@@ -58,14 +62,18 @@ function getSessionToken() {
 
 function setSessionToken(token) {
   const file = sessionFilePath();
+  if (!safeStorage.isEncryptionAvailable()) {
+    // No keychain → no persistence. Better to keep the user signed in
+    // only for the lifetime of this process than to write a long-lived
+    // bearer to disk in plaintext. Returning silently here means the
+    // caller still treats the sign-in as successful for the current
+    // session; the next launch will require a fresh magic link.
+    console.error('[licensing] safeStorage unavailable; session token NOT persisted');
+    return;
+  }
   try {
-    if (safeStorage.isEncryptionAvailable()) {
-      const enc = safeStorage.encryptString(token);
-      fs.writeFileSync(file, enc, { mode: 0o600 });
-    } else {
-      console.warn('[licensing] safeStorage unavailable; session stored in plaintext');
-      fs.writeFileSync(file, token, { mode: 0o600 });
-    }
+    const enc = safeStorage.encryptString(token);
+    fs.writeFileSync(file, enc, { mode: 0o600 });
   } catch (err) {
     console.error('[licensing] failed to persist session:', err);
   }
