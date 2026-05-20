@@ -179,15 +179,6 @@ async function startScreenshotCapture() {
       frame: false,
       transparent: true,
       alwaysOnTop: true,
-      // Don't compete for keyboard focus — only one window can be
-      // "frontmost" at a time on macOS, and the unfocused overlay's
-      // cursor lags the focused one's (default arrow until first
-      // mousedown). Marking both non-focusable means macOS tracks
-      // cursor purely by which window the pointer is over, so the
-      // crosshair shows immediately on either monitor. Escape still
-      // works because it's registered via globalShortcut, not the
-      // renderer's keydown listener.
-      focusable: false,
       resizable: false,
       movable: false,
       hasShadow: false,
@@ -216,15 +207,25 @@ async function startScreenshotCapture() {
       }
     });
 
+    // Pass the cursor's display-local position via query string so
+    // the renderer can draw the custom crosshair immediately on
+    // mount — before the first mousemove fires. Without this there's
+    // a brief window where no crosshair is shown if the user opens
+    // the overlay and doesn't move their pointer.
+    const cursorGlobal = screen.getCursorScreenPoint();
+    const cx = cursorGlobal.x - display.bounds.x;
+    const cy = cursorGlobal.y - display.bounds.y;
+
     if (isDev) {
-      win.loadURL(`${DEV_URL}/overlay.html`);
+      win.loadURL(`${DEV_URL}/overlay.html?cx=${cx}&cy=${cy}`);
     } else {
       win.loadFile(
         path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'),
+        { query: { cx: String(cx), cy: String(cy) } },
       );
     }
 
-    console.log('[capture] opened overlay for display', display.id, 'at', win.getBounds());
+    console.log('[capture] opened overlay for display', display.id, 'at', win.getBounds(), 'cursor at', { cx, cy });
   }
 }
 

@@ -14,7 +14,17 @@ function normalizeRect(a, b) {
 
 function CaptureOverlay() {
   const [drag, setDrag] = useState(null);
-  const [cursor, setCursor] = useState(null);
+  // Seed cursor from URL query so the custom crosshair is drawn at
+  // the real pointer location before the first mousemove fires.
+  const [cursor, setCursor] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const cx = parseInt(params.get('cx'), 10);
+      const cy = parseInt(params.get('cy'), 10);
+      if (Number.isFinite(cx) && Number.isFinite(cy)) return { x: cx, y: cy };
+    } catch {}
+    return null;
+  });
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') window.captureOverlay.cancel(); };
@@ -77,7 +87,13 @@ function CaptureOverlay() {
       style={{
         position: 'fixed',
         inset: 0,
-        cursor: 'crosshair',
+        // System cursor is hidden via overlay.html (cursor: none on
+        // body) because macOS only renders the CSS crosshair on the
+        // frontmost window in a multi-window setup — the other
+        // overlay stays on the default arrow until first mousedown.
+        // We draw our own crosshair below at the tracked pointer
+        // position so the visual is identical on every monitor.
+        cursor: 'none',
         background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
       }}
@@ -100,6 +116,29 @@ function CaptureOverlay() {
           boxSizing: 'border-box',
           pointerEvents: 'none',
         }} />
+      )}
+
+      {/* Custom crosshair drawn at the tracked pointer position.
+          Independent of macOS's cursor state so it shows up on every
+          overlay window, focused or not. */}
+      {cursor && (
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          style={{
+            position: 'absolute',
+            left: cursor.x - 12,
+            top: cursor.y - 12,
+            pointerEvents: 'none',
+            mixBlendMode: 'difference',
+          }}
+        >
+          <line x1="12" y1="0"  x2="12" y2="9"  stroke="white" strokeWidth="1.25" />
+          <line x1="12" y1="15" x2="12" y2="24" stroke="white" strokeWidth="1.25" />
+          <line x1="0"  y1="12" x2="9"  y2="12" stroke="white" strokeWidth="1.25" />
+          <line x1="15" y1="12" x2="24" y2="12" stroke="white" strokeWidth="1.25" />
+        </svg>
       )}
 
       {/* Live W×H readout — small dark chip pinned next to the cursor. */}
