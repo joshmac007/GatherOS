@@ -109,10 +109,11 @@ h1 {
   margin-right: auto;
 }
 
+/* Features list flows at the bottom of the heading column
+   (.div-block-2 has justify-content: space-between) so it always
+   left-aligns with the heading text instead of pinning to the
+   viewport edge. */
 .feature-list {
-  position: fixed;
-  bottom: 5%;
-  left: 5%;
   z-index: 2;
 }
 
@@ -124,7 +125,6 @@ h1 {
   }
 
   .feature-list {
-    position: static;
     margin-top: 32px;
   }
 }
@@ -152,10 +152,6 @@ h1 {
 
   .div-block-3 {
     max-width: 420px;
-  }
-
-  .feature-list {
-    position: static;
   }
 }
 
