@@ -31,13 +31,16 @@ h1 {
   line-height: 44px;
 }
 
+/* min-height instead of height + overflow:visible so the features
+   list at the bottom of the heading column is never clipped by a
+   short viewport. The desktop screenshot can extend below the fold
+   if the user scrolls — better that than losing the features. */
 .hero {
-  height: 100vh;
+  min-height: 100vh;
   padding-top: 90px;
   padding-left: 5%;
   padding-right: 5%;
   display: block;
-  overflow: hidden;
 }
 
 .div-block {
@@ -117,26 +120,8 @@ h1 {
   z-index: 2;
 }
 
-@media screen and (max-height: 700px) {
-  .hero {
-    height: auto;
-    min-height: 100vh;
-    overflow: visible;
-  }
-
-  .feature-list {
-    margin-top: 32px;
-  }
-}
-
 @media screen and (max-width: 991px) {
-  /* Narrow viewports: let the hero grow with its content so the
-     features list at the bottom of the heading column isn't clipped
-     by the 100vh + overflow:hidden combo from the desktop layout. */
   .hero {
-    height: auto;
-    min-height: 100vh;
-    overflow: visible;
     padding-top: 32px;
   }
 
@@ -169,10 +154,6 @@ h1 {
 }
 
 @media screen and (max-width: 479px) {
-  .hero {
-    height: auto;
-  }
-
   .div-block {
     grid-column-gap: 30px;
     grid-row-gap: 30px;
