@@ -7,16 +7,10 @@
    FeaturedBuckets uses, just rendered in plain CSS.
    ------------------------------------------------------------------ */
 
-/* Widen the heading-row container so the mock has real room. The
-   default 1200px gets eaten by the 420px heading column + 60px gap,
-   leaving the mock squeezed under its own min-width. Override here
-   rather than touching the Webflow file. */
 .hero .div-block {
   max-width: 1500px;
 }
 
-/* Match the real app's design tokens locally so the mock doesn't
-   inherit anything from gatheros.webflow.css. */
 .mock {
   --m-content-bg: #FAFAF9;
   --m-surface-1: #FAFAF9;
@@ -40,10 +34,9 @@
   font-family: 'Geist', 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
-/* Window — in-app shadow recipe. Stacked subtle shadows + 1px white
-   inset highlight (matches --shadow-modal from variables.css) and
-   a 1px hairline border so the surface reads "lifted off the page"
-   without the heavy hero-image drop shadow. */
+/* Window — much subtler shadow than before. Single soft ambient
+   shadow + 1px white inset highlight + 1px hairline border, in line
+   with how surfaces are treated inside the actual app. */
 .mock-window {
   width: 100%;
   min-width: 880px;
@@ -53,8 +46,7 @@
   border-radius: 14px;
   box-shadow:
     inset 0 1px 0 #fff,
-    0 4px 14px rgba(0, 0, 0, 0.08),
-    0 24px 60px rgba(0, 0, 0, 0.18);
+    0 6px 24px rgba(0, 0, 0, 0.06);
   overflow: hidden;
   transform: rotateY(-3deg) rotateX(2deg);
   transform-origin: left center;
@@ -102,18 +94,20 @@
   justify-self: start;
 }
 
-/* Brand mark — inline SVG with the gradient tile + glyph. Inline
-   (rather than <img>) so the SVG's own drop-shadow filter can
-   extend past the 46x46 bounds via overflow: visible — an <img>
-   element would clip the shadow at the rasterised img bounds.
-   translateY nudges the icon body's optical centre to line up with
-   the library-switcher text baseline next to it. */
+/* Brand mark — CSS drop-shadow filter renders the shadow outside
+   the SVG element bounds (the in-SVG filter approach was being
+   clipped by SVG/HTML overflow interop). Stacked drop-shadows
+   approximate the original recipe: a tight near shadow + a softer
+   ambient one. translateY(2px) keeps the optical centring tweak. */
 .mock-brand {
   width: 28px;
   height: 28px;
   flex-shrink: 0;
-  overflow: visible;
   transform: translateY(2px);
+  filter:
+    drop-shadow(0 0.5px 0.5px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 3px 4px rgba(0, 0, 0, 0.10))
+    drop-shadow(0 6px 8px rgba(0, 0, 0, 0.05));
 }
 
 .mock-library-switcher {
@@ -209,7 +203,6 @@
   color: var(--m-surface-1);
 }
 
-/* Inactive segments hide their icon — same as the real app. */
 .mock-mode-segment:not(.is-active) .mock-mode-segment-icon {
   display: none;
 }
@@ -249,7 +242,6 @@
   margin: 0 6px;
 }
 
-/* Add button — matches .addBtn (46px tall, 18px font, weight 500). */
 .mock-add {
   display: inline-flex;
   align-items: center;
@@ -407,19 +399,16 @@
   transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Resting fan — identical nth-child to FeaturedBuckets.module.css. */
 .mock-card-stack img:nth-child(1) { transform: rotate(-7deg) translate(-10px, 4px); z-index: 1; }
 .mock-card-stack img:nth-child(2) { transform: rotate(-2deg) translate(-3px, 0px);  z-index: 2; }
 .mock-card-stack img:nth-child(3) { transform: rotate(3deg)  translate(5px, 0px);   z-index: 3; }
 .mock-card-stack img:nth-child(4) { transform: rotate(8deg)  translate(12px, 4px);  z-index: 4; }
 
-/* Hover state — fan out further, also identical to the real app. */
 .mock-card:hover .mock-card-stack img:nth-child(1) { transform: rotate(-16deg) translate(-30px, 8px); }
 .mock-card:hover .mock-card-stack img:nth-child(2) { transform: rotate(-6deg)  translate(-12px, -2px); }
 .mock-card:hover .mock-card-stack img:nth-child(3) { transform: rotate(7deg)   translate(14px, -2px); }
 .mock-card:hover .mock-card-stack img:nth-child(4) { transform: rotate(18deg)  translate(32px, 8px); }
 
-/* Empty-bucket placeholder — bare folder glyph, no thumbnails. */
 .mock-card-stack-empty {
   width: 92px;
   height: 92px;
