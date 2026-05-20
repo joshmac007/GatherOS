@@ -7,10 +7,19 @@
    FeaturedBuckets uses, just rendered in plain CSS.
    ------------------------------------------------------------------ */
 
-.hero .div-block {
+/* Match the heading-block + logo containers so their left edges line
+   up at the same x — Webflow shipped them at different max-widths
+   (.div-block-4 at 1200 vs .div-block at 1200, then we widened the
+   second one for the mock). 1500px centred on viewport for both. */
+.hero .div-block,
+.hero .div-block-4 {
   max-width: 1500px;
 }
 
+/* Mock container — explicit width that always exceeds the available
+   space on the right of the heading column, so the app preview
+   "flows off" the right edge of the viewport at every viewport
+   size. .hero { overflow-x: hidden } clips the runoff. */
 .mock {
   --m-content-bg: #FAFAF9;
   --m-surface-1: #FAFAF9;
@@ -26,21 +35,22 @@
   --m-text-xs: 11px;
   --m-text-lg: 18px;
 
-  flex: 1 1 auto;
-  min-width: 0;
+  /* flex: 0 0 auto so the explicit width below isn't shrunk by the
+     parent flex container's space-between layout. */
+  flex: 0 0 auto;
+  width: calc(100vw - 100px);
+  min-width: 880px;
   align-self: stretch;
   display: flex;
   perspective: 1800px;
   font-family: 'Geist', 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
-/* Window — much subtler shadow than before. Single soft ambient
-   shadow + 1px white inset highlight + 1px hairline border, in line
-   with how surfaces are treated inside the actual app. */
 .mock-window {
   width: 100%;
   min-width: 880px;
-  max-width: 1320px;
+  /* No max-width — the .mock container's calc(100vw - 100px) is the
+     source of truth for how big the window gets. */
   background: var(--m-content-bg);
   border: 1px solid var(--m-border);
   border-radius: 14px;
@@ -94,11 +104,6 @@
   justify-self: start;
 }
 
-/* Brand mark — CSS drop-shadow filter renders the shadow outside
-   the SVG element bounds (the in-SVG filter approach was being
-   clipped by SVG/HTML overflow interop). Stacked drop-shadows
-   approximate the original recipe: a tight near shadow + a softer
-   ambient one. translateY(2px) keeps the optical centring tweak. */
 .mock-brand {
   width: 28px;
   height: 28px;
@@ -142,7 +147,6 @@
   height: 16px;
 }
 
-/* Mode pill — same recipe as .modePill in Toolbar.module.css */
 .mock-mode-pill {
   position: relative;
   display: inline-flex;
