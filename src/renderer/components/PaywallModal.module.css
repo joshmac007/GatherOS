@@ -46,8 +46,7 @@
   line-height: 1.5;
   color: var(--text-secondary);
   margin: 0 auto 22px;
-  max-width: 280px;
-  text-wrap: balance;
+  max-width: 380px;
 }
 
 /* Monthly / Yearly segmented toggle. Two pill segments inside a

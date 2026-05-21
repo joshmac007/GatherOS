@@ -50,8 +50,8 @@ export default function PaywallModal({ onSignOut, onSubscribe }) {
         />
         <h1 className={styles.heading}>Start your 14-day free trial</h1>
         <p className={styles.body}>
-          Full access to GatherOS for 14 days. We&rsquo;ll only charge
-          your card if you keep going.
+          Full access to GatherOS for 14 days.<br />
+          We&rsquo;ll only charge your card if you keep going.
         </p>
 
         <div
