@@ -128,10 +128,10 @@ mac:
 # background image. UDZO produces a slightly larger file (~5%) but
 # the background reliably shows up.
 #
-# .app path is explicit so electron-builder doesn't have to guess
-# from the type:file entry — the prior implicit form sometimes
-# resulted in the icon being placed without the window layout being
-# committed.
+# DO NOT specify path: GatherOS.app on the type:file entry —
+# electron-builder auto-resolves the .app path internally and
+# rejects the build with "cannot find specified resource" when the
+# path is given explicitly.
 dmg:
   background: build/background.png
   format: UDZO
@@ -143,7 +143,6 @@ dmg:
     - x: 140
       y: 170
       type: file
-      path: GatherOS.app
     - x: 400
       y: 170
       type: link
