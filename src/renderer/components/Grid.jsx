@@ -166,6 +166,43 @@ export default function Grid({
     const isCollection = view?.type === 'collection';
     const isUnsorted = view?.type === 'unsorted';
     const isTrash = view?.type === 'trash';
+    const isBrandNewLibrary =
+      !trimmedSearch && !colorFilter && !isCollection && !isUnsorted && !isTrash;
+
+    // First-launch hero. No tutorial copy — a fanned card stack
+    // (same motif as FeaturedBuckets / FolderGrid tiles) signals
+    // "this is where your images live," and three icon chips show
+    // the three ways to fill it.
+    if (isBrandNewLibrary) {
+      const mac = /Mac/i.test(navigator.platform);
+      const mod = mac ? '⌘' : 'Ctrl';
+      return (
+        <div className={styles.state}>
+          <div className={styles.heroFan} aria-hidden="true">
+            <span className={styles.heroFanCard} />
+            <span className={styles.heroFanCard} />
+            <span className={styles.heroFanCard} />
+          </div>
+          <div className={styles.heroTitle}>Start your library</div>
+          <div className={styles.heroActions}>
+            <span className={styles.heroAction}>Drag</span>
+            <span className={styles.heroDot} aria-hidden="true">·</span>
+            <span className={styles.heroAction}>
+              <kbd className={styles.heroKbd}>{mod}</kbd>
+              <kbd className={styles.heroKbd}>V</kbd>
+              Paste
+            </span>
+            <span className={styles.heroDot} aria-hidden="true">·</span>
+            <span className={styles.heroAction}>
+              <kbd className={styles.heroKbd}>{mod}</kbd>
+              <kbd className={styles.heroKbd}>⇧</kbd>
+              <kbd className={styles.heroKbd}>S</kbd>
+              Screenshot
+            </span>
+          </div>
+        </div>
+      );
+    }
 
     let title = 'Nothing saved yet';
     let hint = 'Press ⌘⇧S to screenshot, or drag images into this window';

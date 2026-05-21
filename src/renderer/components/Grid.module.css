@@ -98,6 +98,90 @@
   color: var(--text-tertiary);
 }
 
+/* ── First-launch hero ──────────────────────────────────────────────
+   Brand-aligned empty state for a fresh library. The fan of three
+   placeholder cards mirrors the FeaturedBuckets / FolderGrid tile
+   stack so it reads as "your collections will look like this." */
+
+.heroFan {
+  position: relative;
+  width: 132px;
+  height: 96px;
+  margin-bottom: 22px;
+  perspective: 600px;
+}
+
+.heroFanCard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 76px;
+  height: 76px;
+  margin-top: -38px;
+  margin-left: -38px;
+  border-radius: 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme="dark"] .heroFanCard {
+  background: #2a2a2c;
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.heroFanCard:nth-child(1) { transform: rotate(-8deg) translate(-22px, 4px); }
+.heroFanCard:nth-child(2) { transform: rotate(0deg)  translate(0, -2px);    z-index: 1; }
+.heroFanCard:nth-child(3) { transform: rotate(8deg)  translate(22px, 4px);  }
+
+.heroTitle {
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+}
+
+.heroActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.heroAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.heroDot {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+.heroKbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+:root[data-theme="dark"] .heroKbd {
+  background: #2a2a2c;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 /* ── List view ────────────────────────────────────────────────────────── */
 
 .list {
