@@ -167,7 +167,7 @@ export default function QuickSwitcher({
                       onMouseEnter={() => setActiveIdx(idx)}
                       onClick={() => pick({ type: 'bucket', record: b })}
                     >
-                      <span className={styles.rowIcon} style={{ color: 'var(--icon-blue)' }}>
+                      <span className={styles.rowIcon}>
                         <CollectionIcon />
                       </span>
                       <span className={styles.rowLabel}>{b.name}</span>
