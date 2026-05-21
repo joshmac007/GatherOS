@@ -26,7 +26,7 @@
   display: block;
   width: 56px;
   height: auto;
-  margin: 0 auto 18px;
+  margin: 0 auto 6px;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -123,17 +123,19 @@
 }
 
 .cta {
-  width: 100%;
-  padding: 11px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 28px;
   border: none;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-pill);
   background: var(--text-primary);
   color: var(--surface-1);
   font-family: var(--font-ui);
   font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
   transition: filter var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
@@ -148,14 +150,6 @@
 .cta:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.fineprint {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  margin: 0 0 16px;
-  line-height: 1.5;
-  text-wrap: pretty;
 }
 
 .signOutLink {

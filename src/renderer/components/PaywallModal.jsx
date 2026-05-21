@@ -94,11 +94,6 @@ export default function PaywallModal({ onSignOut, onSubscribe }) {
           {opening ? 'Opening…' : 'Start free trial'}
         </button>
 
-        <p className={styles.fineprint}>
-          Card required. Billed automatically after the trial. Cancel
-          any time from your account. Billing by Lemon Squeezy.
-        </p>
-
         <button type="button" className={styles.signOutLink} onClick={onSignOut}>
           Sign out
         </button>
