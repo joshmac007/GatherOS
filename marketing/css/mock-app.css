@@ -579,11 +579,18 @@
     display: none;
   }
 
+  /* Tighten the copy → mock gap on small screens. .div-block ships
+     with a 60px row-gap that makes the column layout feel airy. */
+  .hero .div-block {
+    grid-row-gap: 16px;
+    row-gap: 16px;
+  }
+
   /* Hero stacks vertically — let the mock sit below the copy and
      bleed off the right edge of the viewport. */
   .mock {
     width: 100vw;
-    margin-top: 32px;
+    margin-top: 0;
     margin-left: -5%;   /* offset .hero's 5% side padding so the
                             mock's left edge can hit the viewport
                             edge, matching the desktop framing */
