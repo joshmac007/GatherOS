@@ -58,31 +58,24 @@ function launcherPath() {
 }
 
 function launcherScript() {
+  // ELECTRON_RUN_AS_NODE makes the Electron binary behave as plain
+  // node — no GUI subsystems initialized, no Dock icon, no menu bar.
+  // The relay only uses built-in modules so it has everything it
+  // needs. This sidesteps the macOS GUI PATH problem (Chrome is
+  // launched from the Dock and never sees /opt/homebrew/bin, so a
+  // bare `node` in the launcher would silently fail to exec).
+  //
+  // Same script in dev and packaged — process.execPath and
+  // app.getAppPath() are absolute in both modes.
   const electron = process.execPath;
-  if (app.isPackaged) {
-    // Packaged build: process.execPath is the .app's own binary,
-    // which auto-loads the bundled Resources/app code. Pass the
-    // flag, export the binary path so the relay can re-launch us
-    // if the main app isn't running, and forward Chrome's args.
-    return [
-      '#!/bin/bash',
-      `export GATHEROS_BINARY=${JSON.stringify(electron)}`,
-      `exec ${JSON.stringify(electron)} --native-host "$@"`,
-      '',
-    ].join('\n');
-  }
-  // Dev: prefer `node` over Electron so the relay doesn't briefly
-  // flash a Dock icon every time Chrome invokes the host. If the
-  // user doesn't have node in PATH the launcher fails noisily and
-  // we can fall back to Electron — but a dev environment running
-  // npm scripts has node by definition.
   const appRoot = app.getAppPath();
   const hostScript = path.join(appRoot, 'src', 'main', 'native-host.js');
   return [
     '#!/bin/bash',
     `export GATHEROS_BINARY=${JSON.stringify(electron)}`,
     `export GATHEROS_APP_PATH=${JSON.stringify(appRoot)}`,
-    `exec node ${JSON.stringify(hostScript)}`,
+    'export ELECTRON_RUN_AS_NODE=1',
+    `exec ${JSON.stringify(electron)} ${JSON.stringify(hostScript)}`,
     '',
   ].join('\n');
 }

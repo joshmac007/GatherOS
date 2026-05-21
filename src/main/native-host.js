@@ -91,7 +91,12 @@ async function ensureAppRunning() {
   const appPath = process.env.GATHEROS_APP_PATH;
   const args = appPath ? [appPath] : [];
   try {
-    spawn(bin, args, { detached: true, stdio: 'ignore' }).unref();
+    // Clear ELECTRON_RUN_AS_NODE — if it leaked into the spawned
+    // child, the main app would boot as headless node instead of
+    // the GUI, and Chrome's user would never see it open.
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    spawn(bin, args, { detached: true, stdio: 'ignore', env }).unref();
   } catch {
     return false;
   }
