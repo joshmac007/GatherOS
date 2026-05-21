@@ -59,9 +59,13 @@ export function magicLinkEmail(args: {
 <html><body style="font-family: -apple-system, system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 40px auto; padding: 0 16px;">
   <h1 style="font-size: 18px; font-weight: 600;">Sign in to ${appName}</h1>
   <p>Click the button below to finish signing in. This link expires in ${expiresMinutes} minutes.</p>
-  <p style="margin: 24px 0;">
-    <a href="${verifyUrl}" style="display: inline-block; padding: 11px 28px; background: #000000; color: #FAFAF9; text-decoration: none; border-radius: 9999px; font-weight: 500; font-size: 15px; line-height: 1;">Open ${appName}</a>
-  </p>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 24px 0; border-collapse: separate;">
+    <tr>
+      <td align="center" bgcolor="#000000" style="border-radius: 9999px;">
+        <a href="${verifyUrl}" style="display: inline-block; padding: 11px 28px; background: #000000; color: #FAFAF9; text-decoration: none; border-radius: 9999px; font-family: -apple-system, system-ui, sans-serif; font-weight: 500; font-size: 15px; line-height: 1;">Open ${appName}</a>
+      </td>
+    </tr>
+  </table>
   <p style="color: #666; font-size: 13px;">If the button doesn't work, paste this into your browser:<br><a href="${verifyUrl}">${verifyUrl}</a></p>
   <p style="color: #888; font-size: 12px; margin-top: 32px;">If you didn't ask to sign in, you can ignore this email.</p>
 </body></html>`;
