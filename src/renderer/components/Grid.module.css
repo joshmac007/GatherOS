@@ -109,6 +109,7 @@
   height: 96px;
   margin-bottom: 22px;
   perspective: 600px;
+  cursor: default;
 }
 
 .heroFanCard {
@@ -123,6 +124,9 @@
   background: var(--surface-1);
   border: 1px solid var(--border);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  /* Same spread-on-hover recipe FeaturedBuckets uses, so the empty
+     state previews the fan animation users get on real collections. */
+  transition: transform var(--dur-pronounced) var(--ease-out);
 }
 
 :root[data-theme="dark"] .heroFanCard {
@@ -134,6 +138,14 @@
 .heroFanCard:nth-child(1) { transform: rotate(-8deg) translate(-22px, 4px); }
 .heroFanCard:nth-child(2) { transform: rotate(0deg)  translate(0, -2px);    z-index: 1; }
 .heroFanCard:nth-child(3) { transform: rotate(8deg)  translate(22px, 4px);  }
+
+.heroFan:hover .heroFanCard:nth-child(1) { transform: rotate(-18deg) translate(-44px, 8px); }
+.heroFan:hover .heroFanCard:nth-child(2) { transform: rotate(0deg)   translate(0, -6px); }
+.heroFan:hover .heroFanCard:nth-child(3) { transform: rotate(18deg)  translate(44px, 8px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .heroFanCard { transition: none; }
+}
 
 .heroTitle {
   font-size: var(--text-lg);
