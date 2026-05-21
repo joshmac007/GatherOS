@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import styles from './PaywallModal.module.css';
+import brandIconUrl from '../assets/welcome-icon.svg';
 
 // Full-screen paywall shown when the user has no active subscription.
 // Blocks the rest of the app.
@@ -41,7 +42,12 @@ export default function PaywallModal({ onSignOut, onSubscribe }) {
   return (
     <div className={styles.scrim}>
       <div className={styles.card}>
-        <div className={styles.brand}>GatherOS</div>
+        <img
+          className={styles.brand}
+          src={brandIconUrl}
+          alt="GatherOS"
+          draggable={false}
+        />
         <h1 className={styles.heading}>Subscribe to GatherOS</h1>
         <p className={styles.body}>
           Unlock the full library — saves, collections, spaces, and AI
