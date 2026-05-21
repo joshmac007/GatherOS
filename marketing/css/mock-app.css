@@ -565,22 +565,45 @@
   );
 }
 
-/* ── Mobile/tablet PNG fallback for the mock ─────────────────── */
+/* ── Mobile/tablet: hide the static PNG fallback and let the live
+      mock render so you see "part of the app" on small screens too.
+      .hero already has overflow-x: hidden ≤991px, so the 880px-wide
+      window naturally clips at the right edge of the viewport. */
 
 .mock-fallback {
   display: none;
-  width: 100%;
-  height: auto;
 }
 
 @media (max-width: 991px) {
-  .mock {
-    display: none;
-  }
-  .mock-fallback {
-    display: block;
-  }
   .progressive-blur {
     display: none;
+  }
+
+  /* Hero stacks vertically — let the mock sit below the copy and
+     bleed off the right edge of the viewport. */
+  .mock {
+    width: 100vw;
+    margin-top: 32px;
+    margin-left: -5%;   /* offset .hero's 5% side padding so the
+                            mock's left edge can hit the viewport
+                            edge, matching the desktop framing */
+    perspective-origin: 30% 50%;
+  }
+
+  /* Soften the 3D tilt on small screens — the heavy desktop angle
+     reads as broken when the window is the dominant element below
+     the copy instead of off to the side. */
+  .mock-window {
+    transform:
+      rotateY(-10deg)
+      rotateX(4deg);
+  }
+}
+
+@media (max-width: 479px) {
+  .mock-window {
+    transform:
+      rotateY(-8deg)
+      rotateX(3deg);
   }
 }
