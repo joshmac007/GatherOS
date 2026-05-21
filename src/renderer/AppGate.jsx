@@ -140,8 +140,14 @@ export default function AppGate() {
         license={{ trial_ends_at: Date.now() - 3 * 24 * 60 * 60 * 1000 }}
         onSignOut={signOut}
         onSubscribe={async (plan) => {
-          // eslint-disable-next-line no-console
-          console.log('[AppGate dev] would open checkout for', plan);
+          // Route through the real checkout opener so the dev override
+          // exercises the entire flow (worker mint → shell.openExternal
+          // → polling). Buttons-do-nothing simulation isn't a useful
+          // simulation.
+          const result = await window.moodmark.licensing.openCheckout(plan);
+          if (!result?.ok) {
+            console.error('[paywall:dev] openCheckout failed:', result?.error);
+          }
         }}
       />
     );
