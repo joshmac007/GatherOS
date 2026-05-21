@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Layers } from 'lucide-react';
+import { Eclipse as Layers } from 'lucide-react';
 import styles from './FeaturedBuckets.module.css';
 import { CollectionIcon } from './Sidebar.jsx';
 import { fileUrl } from '../lib/fileUrl.js';

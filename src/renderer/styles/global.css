@@ -336,7 +336,15 @@ body:has(.selection-bar) .trash-toast {
 
 .sort-fab:hover {
   transform: translateY(-1px);
-  background: var(--hover-bg);
+  /* Hover must stay a solid colour — .sort-fab is a floating fixed
+     element, so replacing its --surface-1 base with the translucent
+     --hover-bg (rgba in dark mode) makes the FAB go see-through onto
+     whatever's behind it. Use a baked solid per-theme instead. */
+  background: #EAEAEA;
+}
+
+:root[data-theme="dark"] .sort-fab:hover {
+  background: #2E2E30;
 }
 
 .sort-fab:active { transform: translateY(0); }

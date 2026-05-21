@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import {
-  History, User, Sparkles, Hash, Database, Info, Trash2, BookMarked as Library, Pencil, Plus, RefreshCw, MoreHorizontal,
+  History, User, Sparkles, Hash, Database, Info, Trash2, SquareLibrary as Library, Pencil, Plus, RefreshCw, MoreHorizontal,
   Palette as PaletteIcon,
   Camera as CameraIcon,
   Download as DownloadIcon,

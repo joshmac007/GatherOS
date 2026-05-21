@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { Info as InfoIcon, Layers as LayersIcon } from 'lucide-react';
+import { Info as InfoIcon, Eclipse as LayersIcon } from 'lucide-react';
 import styles from './DetailPanelV2.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';

@@ -76,10 +76,8 @@
   width: 22px;
   height: 22px;
   border-radius: var(--radius-circle);
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
-  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
@@ -111,7 +109,7 @@
 }
 
 .checkbox:hover:not(.checkboxOn) {
-  background: rgba(255, 255, 255, 0.8);
+  background: #fff;
 }
 
 /* Peek trigger — bottom-right counterpart to the checkbox. Same
@@ -124,10 +122,8 @@
   width: 22px;
   height: 22px;
   border-radius: var(--radius-circle);
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
-  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
@@ -149,7 +145,7 @@
 }
 
 .peekBtn:hover {
-  background: rgba(255, 255, 255, 0.8);
+  background: #fff;
   transform: scale(1.06);
 }
 

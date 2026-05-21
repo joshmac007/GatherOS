@@ -128,18 +128,22 @@
 .tile:hover .tileStackImg:nth-child(4) { transform: rotate(18deg)  translate(34px, 8px);  }
 
 /* Empty bucket — bare folder icon, no surrounding tile. Reads as a
-   placeholder, not a card. */
+   placeholder, not a card. Uses a solid color (not an rgba with
+   alpha) so the FolderClosed SVG's overlapping stroke joins don't
+   compound into brighter spots at the corners. The values are
+   hand-picked to match what rgba(*, 0.22) used to render against
+   the dark/light card surface. */
 .tileEmpty {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 56px;
   height: 56px;
-  color: rgba(0, 0, 0, 0.22);
+  color: #c7c7c7;
 }
 
 :root[data-theme="dark"] .tileEmpty {
-  color: rgba(255, 255, 255, 0.22);
+  color: #4a4a4a;
 }
 
 .tileMeta {

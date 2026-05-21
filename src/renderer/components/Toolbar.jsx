@@ -16,9 +16,9 @@ import {
   Megaphone,
   Plus,
   Compass,
-  BookMarked as LibraryIcon,
+  SquareLibrary as LibraryIcon,
   Folder as FolderIcon,
-  Layers as LayersIcon,
+  Eclipse as LayersIcon,
 } from 'lucide-react';
 import styles from './Toolbar.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
