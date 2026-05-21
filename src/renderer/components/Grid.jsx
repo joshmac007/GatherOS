@@ -223,12 +223,12 @@ export default function Grid({
       title = 'Nothing unsorted';
       hint = 'Every save belongs to at least one collection.';
       EmptyIcon = InboxIcon;
-      emptyIconColor = 'var(--text-tertiary)';
+      emptyIconColor = 'var(--icon-muted)';
     } else if (isTrash) {
       title = 'Trash is empty';
       hint = 'Deleted saves land here. Empty Trash to remove for good.';
       EmptyIcon = TrashIcon;
-      emptyIconColor = 'var(--text-tertiary)';
+      emptyIconColor = 'var(--icon-muted)';
     }
 
     return (
