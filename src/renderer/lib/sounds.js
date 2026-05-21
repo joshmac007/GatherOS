@@ -39,10 +39,3 @@ export function playPop() {
   }
 }
 
-// Splash sound — stubbed. The mp3 asset isn't bundled, and the
-// splash sphere only runs on first-ever launch, so background
-// audio there isn't worth shipping a binary blob for. Kept the
-// exports as no-ops so existing call sites don't need to change.
-
-export function playLoading() { /* no-op */ }
-export function stopLoading() { /* no-op */ }

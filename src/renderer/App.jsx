@@ -38,7 +38,6 @@ const DetailPanel = (() => {
 import FocusedView from './components/FocusedView.jsx';
 import BoardView from './components/BoardView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
-import LoadingScreen from './components/LoadingScreen.jsx';
 import FocusedSortMode from './components/FocusedSortMode.jsx';
 import VariantOptionsModal from './components/VariantOptionsModal.jsx';
 import {
@@ -491,21 +490,6 @@ export default function App() {
     });
     return off;
   }, []);
-
-  // Splash runs once on the user's first-ever launch only. Subsequent
-  // launches go straight into the app — TTI under ~200ms is more
-  // important than a brand moment for a returning user. The
-  // localStorage flag persists alongside other UI prefs (cheap and
-  // user-scoped; no IPC needed).
-  const SPLASH_FLAG_KEY = 'moodmark.splashSeen';
-  const [booting, setBooting] = useState(() => {
-    try { return localStorage.getItem(SPLASH_FLAG_KEY) !== '1'; }
-    catch { return false; }
-  });
-  useEffect(() => {
-    if (booting) return;
-    try { localStorage.setItem(SPLASH_FLAG_KEY, '1'); } catch {}
-  }, [booting]);
 
   // Settings modal + AI configured-state. The ai.hasSession check runs
   // once on mount and is updated whenever the user saves/clears via
@@ -2485,7 +2469,6 @@ export default function App() {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {booting && <LoadingScreen onDone={() => setBooting(false)} />}
       <input
         ref={fileInputRef}
         type="file"
