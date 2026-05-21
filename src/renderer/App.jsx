@@ -2676,6 +2676,9 @@ export default function App() {
         onConfirm={({ prompt, aspect }) => {
           const { saveId, openOnComplete } = variantOptions;
           setVariantOptions(null);
+          // Drop back to the grid (no-op if not focused) so the
+          // pending placeholder card is visible while generation runs.
+          setFocusedId(null);
           handleGenerateVariant(saveId, { prompt, aspect, openOnComplete });
         }}
       />
