@@ -62,8 +62,9 @@ export default function SigninScreen({ onRequestMagicLink, reason }) {
           <div className={styles.sentBlock}>
             <h1 className={styles.heading}>Check your email</h1>
             <p className={styles.body}>
-              We sent a sign-in link to <strong>{email}</strong>. Click it
-              from this device to finish signing in.
+              We sent a sign-in link to <strong>{email}</strong>.
+              <br />
+              Click it from this device to finish signing in.
             </p>
             <button
               type="button"
