@@ -6,11 +6,12 @@ const DEV_URL = 'http://localhost:5173';
 
 const TOAST_WIDTH = 300;
 // Window only needs to be tall enough to hold one pill (~50px) plus
-// breathing room for the box-shadow + slide-in animation. The
-// previous 340px left ~290px of dead space below the pill which
-// made the toast appear to float way above the screen corner.
+// breathing room for the box-shadow + slide-in animation.
 const TOAST_HEIGHT = 100;
-const EDGE_INSET = 12;
+// The window itself hugs the work-area corner; visual gap is owned
+// by the renderer's container padding (CORNER_GAP in toast.jsx),
+// so both axes are guaranteed equal regardless of Dock position.
+const EDGE_INSET = 0;
 
 let toastWin = null;
 let ready = false;

@@ -18,6 +18,11 @@ const TOAST_TTL_MS = 2500;
 function ToastStack() {
   const [current, setCurrent] = useState(null); // { record, count } | null
   const timerRef = useRef(null);
+  // Tracks whether we've shown at least one toast in this window's
+  // lifetime. The initial mount has current=null but we MUST NOT
+  // call empty() then — that would hide the window before the
+  // pending first-save IPC ever reached us.
+  const hasShownRef = useRef(false);
 
   useEffect(() => {
     return window.toast.onShow((record) => {
@@ -30,10 +35,17 @@ function ToastStack() {
     });
   }, []);
 
-  // Forward mouse events only while there's something to interact with.
+  // Forward mouse events only while there's something to interact
+  // with. Defer the "no toast → hide window" path until we've
+  // actually shown one toast at least once.
   useEffect(() => {
-    window.toast.setInteractive(!!current);
-    if (!current) window.toast.empty();
+    if (current) {
+      hasShownRef.current = true;
+      window.toast.setInteractive(true);
+    } else if (hasShownRef.current) {
+      window.toast.setInteractive(false);
+      window.toast.empty();
+    }
   }, [current]);
 
   function handleDismiss() {
@@ -48,10 +60,11 @@ function ToastStack() {
       style={{
         position: 'fixed',
         inset: 0,
-        // Just enough internal breathing room so the pill's box-shadow
-        // doesn't get clipped at the window edges. Screen-edge inset
-        // is handled by EDGE_INSET in toast-window.js.
-        padding: 6,
+        // Single source of corner inset. EDGE_INSET in
+        // toast-window.js is 0, so this padding IS the visual gap
+        // from the work-area corner — equal on right and bottom
+        // regardless of where the Dock lives.
+        padding: 12,
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'flex-end',
