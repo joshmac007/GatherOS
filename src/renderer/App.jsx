@@ -2597,6 +2597,9 @@ export default function App() {
                     onBack={view.type === 'collection'
                       ? () => handleViewChange({ type: 'all' })
                       : null}
+                    onRenameViewTitle={view.type === 'collection'
+                      ? (name) => handleRenameCollection({ id: view.id, name })
+                      : null}
                   />
                 )}
                 {view.type === 'all' && collections.length > 0 && !search && (

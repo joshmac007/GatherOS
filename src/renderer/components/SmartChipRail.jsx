@@ -36,7 +36,31 @@ export default function SmartChipRail({
   // title. Sort + zoom on the right stay regardless.
   viewTitle = null,
   onBack = null,
+  // Optional inline-rename callback. When provided, clicking the
+  // viewTitle swaps it for an editable input. Only wired in for
+  // collection views — there's no rename for All/Unsorted/Trash.
+  onRenameViewTitle = null,
 }) {
+  // Inline rename state for the collection title. Click → enter
+  // edit mode; Enter / blur commits; Escape cancels.
+  const [renaming, setRenaming] = React.useState(false);
+  const [renameDraft, setRenameDraft] = React.useState('');
+  function startRename() {
+    if (!onRenameViewTitle || !viewTitle) return;
+    setRenameDraft(viewTitle);
+    setRenaming(true);
+  }
+  async function commitRename() {
+    const next = renameDraft.trim();
+    setRenaming(false);
+    setRenameDraft('');
+    if (!next || next === viewTitle) return;
+    await onRenameViewTitle?.(next);
+  }
+  function cancelRename() {
+    setRenaming(false);
+    setRenameDraft('');
+  }
   // Slider is inverted so dragging right = bigger cards = fewer columns.
   const sliderValue = (typeof columns === 'number')
     ? COLS_MAX + COLS_MIN - columns
@@ -58,9 +82,34 @@ export default function SmartChipRail({
                 <ChevronLeft size={18} strokeWidth={1.6} aria-hidden="true" />
               </button>
             )}
-            <span className={styles.title} title={viewTitle}>
-              {viewTitle}
-            </span>
+            {renaming ? (
+              <input
+                autoFocus
+                type="text"
+                className={styles.titleInput}
+                value={renameDraft}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                  else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span
+                className={`${styles.title}${onRenameViewTitle ? ` ${styles.titleEditable}` : ''}`}
+                title={onRenameViewTitle ? `${viewTitle} — click to rename` : viewTitle}
+                onClick={onRenameViewTitle ? startRename : undefined}
+                role={onRenameViewTitle ? 'button' : undefined}
+                tabIndex={onRenameViewTitle ? 0 : undefined}
+                onKeyDown={onRenameViewTitle ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startRename(); }
+                } : undefined}
+              >
+                {viewTitle}
+              </span>
+            )}
           </>
         ) : (
           CHIPS.map(({ id, label }) => {
