@@ -74,23 +74,16 @@
   align-self: center;
 }
 
-/* Adds a subtle hover affordance when inline-rename is wired up so
-   users discover that clicking the title is interactive. */
+/* Just a cursor hint — no padding / hover background, so clicking
+   into edit mode doesn't shift the title's position. */
 .titleEditable {
   cursor: text;
-  border-radius: var(--radius-md);
-  padding: 2px 6px;
-  margin: -2px -6px;
-  transition: background var(--dur-instant) ease;
 }
 
-.titleEditable:hover {
-  background: var(--hover-bg);
-}
-
-/* Match the Sidebar rename pattern — transparent, borderless,
-   no focus ring. The editable input should look identical to the
-   static title plus a caret. */
+/* Match the Sidebar rename pattern — transparent, borderless, no
+   focus ring. field-sizing: content makes the input size to its
+   value the same way the static <span> sized to its text, so the
+   moment of swapping doesn't bump the title to the right. */
 .titleInput {
   font-family: var(--font-ui);
   font-size: var(--text-lg);
@@ -100,10 +93,10 @@
   background: transparent;
   border: none;
   outline: none;
-  padding: 2px 6px;
-  margin: -2px -6px;
-  min-width: 120px;
+  padding: 0;
+  margin: 0;
   align-self: center;
+  field-sizing: content;
 }
 
 .right {
