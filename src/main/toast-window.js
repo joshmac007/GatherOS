@@ -32,7 +32,10 @@ function targetBounds() {
     : screen.getPrimaryDisplay();
   const { x, y, width, height } = display.workArea;
   return {
-    x: x + EDGE_INSET,
+    // Bottom-right corner of the chosen display, inset by EDGE_INSET
+    // on both axes. workArea already excludes the menu bar + Dock,
+    // so this lands above whatever's anchored to those edges.
+    x: x + width - TOAST_WIDTH - EDGE_INSET,
     y: y + height - TOAST_HEIGHT - EDGE_INSET,
     width: TOAST_WIDTH,
     height: TOAST_HEIGHT,

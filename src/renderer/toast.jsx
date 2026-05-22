@@ -52,7 +52,8 @@ function ToastStack() {
         right: 0,
         padding: 16,
         display: 'flex',
-        alignItems: 'flex-start',
+        alignItems: 'flex-end',
+        justifyContent: 'flex-end',
       }}
     >
       {current && (
