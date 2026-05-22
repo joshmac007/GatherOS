@@ -5,8 +5,12 @@ const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:5173';
 
 const TOAST_WIDTH = 300;
-const TOAST_HEIGHT = 340;
-const EDGE_INSET = 20;
+// Window only needs to be tall enough to hold one pill (~50px) plus
+// breathing room for the box-shadow + slide-in animation. The
+// previous 340px left ~290px of dead space below the pill which
+// made the toast appear to float way above the screen corner.
+const TOAST_HEIGHT = 100;
+const EDGE_INSET = 12;
 
 let toastWin = null;
 let ready = false;

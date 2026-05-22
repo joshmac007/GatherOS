@@ -47,10 +47,11 @@ function ToastStack() {
     <div
       style={{
         position: 'fixed',
-        left: 0,
-        bottom: 0,
-        right: 0,
-        padding: 16,
+        inset: 0,
+        // Just enough internal breathing room so the pill's box-shadow
+        // doesn't get clipped at the window edges. Screen-edge inset
+        // is handled by EDGE_INSET in toast-window.js.
+        padding: 6,
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'flex-end',
