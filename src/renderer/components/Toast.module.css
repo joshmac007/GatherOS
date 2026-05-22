@@ -1,24 +1,43 @@
+/* Solid surface instead of glass — the heavy backdrop-blur read as
+   "see-through ghost" against busy desktop backgrounds. Now grounded
+   with an opaque fill + a softened drop shadow so the pill clearly
+   sits above whatever's behind the toast window. */
 .toast {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 14px 10px 10px;
   min-width: 220px;
-  background:
-    linear-gradient(180deg, var(--glass-from) 0%, var(--glass-to) 100%);
-  border: 0.5px solid var(--glass-border);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border);
   border-radius: var(--radius-xl);
   cursor: pointer;
-  backdrop-filter: blur(40px) saturate(1.9);
-  -webkit-backdrop-filter: blur(40px) saturate(1.9);
-  box-shadow: var(--shadow-glass);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 12px 32px rgba(0, 0, 0, 0.14);
   animation: slideIn 0.22s var(--ease-pop);
-  transition: background var(--dur-instant) ease, transform var(--dur-instant) ease;
+  transition: background var(--dur-instant) ease, transform var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
 }
 
 .toast:hover {
-  background:
-    linear-gradient(180deg, var(--glass-from-hover) 0%, var(--glass-to-hover) 100%);
+  background: var(--surface-2, var(--surface-1));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+/* Dark theme: lighten the surface a touch and deepen the shadow so
+   the pill stays distinguishable from a dark wallpaper. */
+:root[data-theme="dark"] .toast {
+  background: #2a2a2c;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+:root[data-theme="dark"] .toast:hover {
+  background: #323234;
 }
 
 .toast:active {
