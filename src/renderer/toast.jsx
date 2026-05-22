@@ -2,6 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fontsource-variable/geist';
 import '@fontsource-variable/geist-mono';
+// Pull in the design tokens defined in variables.css — without this,
+// every var(--surface-1) / var(--border) / var(--text-primary) inside
+// Toast.module.css resolves to the empty fallback, which is why the
+// pill looked transparent against busy desktop backgrounds.
+import './styles/variables.css';
 import Toast from './components/Toast.jsx';
 
 const TOAST_TTL_MS = 2500;
