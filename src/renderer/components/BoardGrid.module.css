@@ -22,6 +22,10 @@
 .tile {
   display: flex;
   flex-direction: column;
+  /* Pin a baseline height so a populated space card and the dashed
+     "New space" placeholder always match, regardless of how tall
+     the meta row happens to be. */
+  min-height: 200px;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -60,11 +64,12 @@
 .tileArt {
   position: relative;
   width: 100%;
-  /* Matches the FeaturedBuckets stack height so a space tile and a
-     collection tile have the same total vertical rhythm — title +
-     subtitle sit at the same y-offset regardless of which surface
-     you're looking at. */
-  height: 110px;
+  /* Take whatever vertical room the tile has left after the meta
+     row claims its share. With .tile pinned to min-height: 200px,
+     this lets the snapshot fill the entire visual area above the
+     meta divider — no fixed height baked in. */
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -244,13 +249,10 @@
 }
 
 /* "+" new-board tile — same footprint as a real tile so the grid
-   rhythm doesn't break. */
+   rhythm doesn't break. .tile's min-height: 200px owns the
+   matching-height contract now. */
 .tileNew {
   position: relative;
-  /* Match a real board tile's body height (art 140 + gap 12 + meta
-     22 + padding 26) so the dashed-outline card keeps its size even
-     after .tileArtNew goes absolute. */
-  min-height: 200px;
   background: transparent;
   border: 1px dashed var(--border-strong);
   box-shadow: none;
