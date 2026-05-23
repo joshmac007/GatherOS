@@ -295,6 +295,28 @@
   margin: 4px 2px;
 }
 
+/* Present button — wider than the square tool buttons because it
+   has an inline label, and tinted with the accent so it reads as
+   the primary action of the workspace ("show this off"). */
+.toolBtnPresent {
+  width: auto;
+  padding: 0 12px;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.toolBtnPresent:hover {
+  background: var(--accent-bg-soft);
+  color: var(--accent);
+}
+
+.toolBtnLabel {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
 /* Shape tool flyout — opens to the right of the tool button when
    the user clicks Shapes. Vertical menu with one row per shape
    kind: leading icon, label, trailing keyboard shortcut hint.

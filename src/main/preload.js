@@ -134,6 +134,10 @@ contextBridge.exposeInMainWorld('moodmark', {
       ipcRenderer.invoke('image:export', { filePath, defaultName }),
     copyToClipboard: (filePath) => ipcRenderer.invoke('image:copy-to-clipboard', filePath),
   },
+  window: {
+    setFullscreen: (on) => ipcRenderer.invoke('window:set-fullscreen', !!on),
+    toggleFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
+  },
   shell: {
     openUrl: (url) => ipcRenderer.invoke('shell:open-url', url),
   },

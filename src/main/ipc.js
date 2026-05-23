@@ -420,6 +420,24 @@ function registerIpcHandlers() {
     captureFullscreen();
     return { ok: true };
   });
+
+  // Window full-screen toggle, used by the Present button on Spaces.
+  // Operates on the focused window (which in normal use is the only
+  // BrowserWindow — toast / overlay windows can't take focus).
+  ipcMain.handle('window:set-fullscreen', (e, on) => {
+    const { BrowserWindow } = require('electron');
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (!win || win.isDestroyed()) return { ok: false };
+    win.setFullScreen(!!on);
+    return { ok: true, fullscreen: win.isFullScreen() };
+  });
+  ipcMain.handle('window:toggle-fullscreen', (e) => {
+    const { BrowserWindow } = require('electron');
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (!win || win.isDestroyed()) return { ok: false };
+    win.setFullScreen(!win.isFullScreen());
+    return { ok: true, fullscreen: win.isFullScreen() };
+  });
   ipcMain.handle('capture:window', () => {
     captureWindow();
     return { ok: true };

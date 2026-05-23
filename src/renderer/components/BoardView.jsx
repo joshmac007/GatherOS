@@ -32,6 +32,7 @@ import {
   Slash,
   CornerDownRight,
   Pencil,
+  Play,
 } from 'lucide-react';
 import styles from './BoardView.module.css';
 import BoardCanvas from './BoardCanvas.jsx';
@@ -2057,6 +2058,16 @@ export default function BoardView({
           disabled={exporting}
         >
           <Download {...TOOL_ICON} />
+        </button>
+        <div className={styles.toolDivider} />
+        <button
+          type="button"
+          className={`${styles.toolBtn} ${styles.toolBtnPresent}`}
+          title="Present — full screen this space"
+          onClick={() => { try { window.moodmark?.window?.setFullscreen?.(true); } catch {} }}
+        >
+          <Play {...TOOL_ICON} />
+          <span className={styles.toolBtnLabel}>Present</span>
         </button>
       </div>
 
