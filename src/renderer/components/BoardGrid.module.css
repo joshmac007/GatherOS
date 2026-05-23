@@ -64,12 +64,12 @@
 .tileArt {
   position: relative;
   width: 100%;
-  /* Take whatever vertical room the tile has left after the meta
-     row claims its share. With .tile pinned to min-height: 200px,
-     this lets the snapshot fill the entire visual area above the
-     meta divider — no fixed height baked in. */
-  flex: 1 1 auto;
-  min-height: 0;
+  /* Fixed height sized so that art (140) + meta (~58) + 2px border
+     = 200, matching the .tile min-height. The SVG snapshot has no
+     intrinsic constraint, so flex-grow would have let it inflate
+     the tile to whatever the viewBox happened to be. */
+  height: 140px;
+  flex: 0 0 140px;
   display: flex;
   align-items: center;
   justify-content: center;
