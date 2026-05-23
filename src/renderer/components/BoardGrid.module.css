@@ -295,6 +295,15 @@
   justify-content: center;
   color: var(--text-tertiary);
   pointer-events: none;
+  /* The "New space" placeholder is empty — no canvas means no dot
+     grid. Suppress the radial-gradient background the populated
+     .tileArt uses. */
+  background-image: none;
+  border-bottom: 0;
+}
+
+:root[data-theme="dark"] .tileArtNew {
+  background-image: none;
 }
 
 .tileNew .tileMeta {
