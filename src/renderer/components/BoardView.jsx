@@ -1954,7 +1954,7 @@ export default function BoardView({
         title="Present — full screen this space"
         aria-label="Present"
       >
-        <Play size={14} strokeWidth={1.8} aria-hidden="true" />
+        <Play size={12} strokeWidth={1.8} fill="currentColor" aria-hidden="true" />
         <span>Present</span>
       </button>
 
