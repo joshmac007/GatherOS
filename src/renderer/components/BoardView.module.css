@@ -299,6 +299,11 @@
    .backBtn's top inset. Solid accent pill so it reads as the
    workspace's primary action without competing with the floating
    tool palette. */
+/* Present button — top-right corner of the space, mirrors the
+   .backBtn's top inset and surface treatment so the two floating
+   controls feel like a matched pair. Same surface fill the back
+   button uses, so it picks up the right theme background (white
+   in light, dark in dark) automatically. */
 .presentBtn {
   position: absolute;
   top: 50px;
@@ -308,9 +313,9 @@
   gap: 6px;
   padding: 0 14px;
   height: 32px;
-  background: var(--text-primary);
-  color: var(--surface-1);
-  border: none;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   box-shadow: var(--shadow-control);
   font-family: var(--font-ui);
@@ -320,11 +325,12 @@
   cursor: pointer;
   flex-shrink: 0;
   z-index: 5;
-  transition: filter var(--dur-instant) ease, transform var(--dur-instant) ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease, transform var(--dur-instant) ease;
 }
 
 .presentBtn:hover {
-  filter: brightness(1.1);
+  background: var(--hover-bg);
+  color: var(--text-primary);
 }
 
 .presentBtn:active {
