@@ -27,7 +27,11 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 38px 16px 10px var(--titlebar-left-pad, 16px);
+  /* Top padding chosen so the row's 28px controls vertically centre
+     with the macOS stoplights at ~y=19 (default macOS title bar
+     inset). 6 + 14 = 20 → buttons sit one pixel below the stoplight
+     centre, close enough to read as aligned. */
+  padding: 6px 16px 8px var(--titlebar-left-pad, 16px);
   background: var(--content-bg);
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
@@ -198,8 +202,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  /* Same 28px height as .iconBtn so the whole row has one
+     vertical centre when aligned with the stoplights. */
+  width: 28px;
+  height: 28px;
   padding: 0;
   background: var(--surface-1);
   border: 1px solid var(--border);
