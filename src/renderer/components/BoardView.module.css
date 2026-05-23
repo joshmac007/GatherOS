@@ -91,7 +91,7 @@
      a hair below the stoplights' ~y=19 centre (close enough to
      read aligned). Left inset 88 clears the stoplights themselves
      with an 8px visual breath, matching FocusedView's same recipe. */
-  top: 10px;
+  top: 8px;
   left: 88px;
   width: 32px;
   height: 32px;
@@ -123,7 +123,7 @@
   position: absolute;
   /* Same row as .backBtn / .presentBtn so the three top items
      share a single horizontal axis aligned with the stoplights. */
-  top: 10px;
+  top: 8px;
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
@@ -314,7 +314,7 @@
   position: absolute;
   /* Sits on the same row as .backBtn / .titleBar. Right side has
      no stoplights so the existing 14px inset is fine. */
-  top: 10px;
+  top: 8px;
   right: 14px;
   display: inline-flex;
   align-items: center;
