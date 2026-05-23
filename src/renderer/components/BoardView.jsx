@@ -1947,6 +1947,17 @@ export default function BoardView({
         </button>
       )}
 
+      <button
+        type="button"
+        className={styles.presentBtn}
+        onClick={() => { try { window.moodmark?.window?.setFullscreen?.(true); } catch {} }}
+        title="Present — full screen this space"
+        aria-label="Present"
+      >
+        <Play size={14} strokeWidth={1.8} aria-hidden="true" />
+        <span>Present</span>
+      </button>
+
       <div className={styles.titleBar}>
         {titleEditing ? (
           <input
@@ -2058,16 +2069,6 @@ export default function BoardView({
           disabled={exporting}
         >
           <Download {...TOOL_ICON} />
-        </button>
-        <div className={styles.toolDivider} />
-        <button
-          type="button"
-          className={`${styles.toolBtn} ${styles.toolBtnPresent}`}
-          title="Present — full screen this space"
-          onClick={() => { try { window.moodmark?.window?.setFullscreen?.(true); } catch {} }}
-        >
-          <Play {...TOOL_ICON} />
-          <span className={styles.toolBtnLabel}>Present</span>
         </button>
       </div>
 
