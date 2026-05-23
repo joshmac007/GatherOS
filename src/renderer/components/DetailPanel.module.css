@@ -1177,3 +1177,70 @@
   width: 14px;
   height: 14px;
 }
+
+/* ── Panel-scoped glass overrides ───────────────────────────────────
+   The DetailPanel itself is rendered as glass over the FocusedView's
+   blurred backdrop. Every interactive surface inside it (inputs,
+   buttons, tag pills, collection pills) gets the same translucent-
+   white-on-dark recipe as the .variantBtn CTA so the pane reads as
+   one coherent glass family rather than a mix of opaque + glass
+   elements. These overrides are scoped to .panel so other surfaces
+   using the same classes (e.g. inputCanonical elsewhere) are
+   untouched. */
+.panel .metaInput,
+.panel .notesInput {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.panel .metaInput::placeholder,
+.panel .notesInput::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.panel .metaInput:focus,
+.panel .notesInput:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 2.5px rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.panel .autoTagBtn {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.panel .autoTagBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.panel .tagPill {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.panel .collectionPill {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.panel .addNoteBtn {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.panel .addNoteBtn:hover {
+  color: rgba(255, 255, 255, 0.95);
+}
