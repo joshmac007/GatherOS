@@ -165,13 +165,15 @@
   align-items: center;
   justify-content: center;
   width: 0;
-  height: 18px;
+  height: 22px;
   margin-left: 0;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  border-radius: var(--radius-sm);
+  /* Circle so the affordance reads as a chip inside the pill,
+     not a rectangle inside a rectangle. */
+  border-radius: var(--radius-circle);
   cursor: pointer;
   opacity: 0;
   overflow: hidden;
@@ -184,9 +186,16 @@
 
 .titleBar:hover .titleEditBtn,
 .titleEditBtn:focus-visible {
-  width: 18px;
+  width: 22px;
   margin-left: 6px;
   opacity: 1;
+}
+
+/* Tighten the pill's right padding to 5px on hover so the circle
+   has the same 5px breath on top, bottom, AND right — pill is
+   32px tall, button is 22px, (32-22)/2 = 5. */
+.titleBar:hover {
+  padding-right: 5px;
 }
 
 .titleEditBtn:hover {
