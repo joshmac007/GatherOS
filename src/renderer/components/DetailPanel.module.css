@@ -263,6 +263,40 @@
   }
 }
 
+/* Subtle shine — a soft diagonal highlight sweeps across the
+   preview image every 10s. Most of the cycle is "off" (the
+   gradient sits past the right edge), the sweep happens in the
+   first 20% of the loop, then it stays parked until next time.
+   Low alpha + mix-blend-mode: screen keeps it from looking like
+   a holographic sticker. */
+.imageWrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 8px;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 65%
+  );
+  background-size: 250% 100%;
+  background-position: -50% 0;
+  animation: previewShine 10s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes previewShine {
+  0%   { background-position: -50% 0; }
+  20%  { background-position: 150% 0; }
+  100% { background-position: 150% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imageWrap::after { animation: none; opacity: 0; }
+}
+
 .typeBadge {
   position: absolute;
   top: 8px;
