@@ -1326,3 +1326,10 @@
 .panel .addNoteBtn:hover {
   color: rgba(255, 255, 255, 0.95);
 }
+
+/* Force light tag-hash + tag-remove regardless of app theme,
+   since the panel surface is always dark glass. */
+.panel .tagHash,
+.panel .tagRemove {
+  color: rgba(255, 255, 255, 0.95);
+}

@@ -1270,3 +1270,12 @@
 .panel .addNoteBtn:hover {
   color: rgba(255, 255, 255, 0.95);
 }
+
+/* .tagHash + .tagRemove had hardcoded #000 in light mode that
+   only flipped to white via [data-theme="dark"]. Inside the panel
+   the surface is always dark glass regardless of theme, so force
+   white. */
+.panel .tagHash,
+.panel .tagRemove {
+  color: rgba(255, 255, 255, 0.95);
+}
