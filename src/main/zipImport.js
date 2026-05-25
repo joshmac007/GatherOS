@@ -48,10 +48,14 @@ function titleFromEntry(entry) {
 // archive behaves predictably.
 //
 // Options:
-//   onInserted(record): called for each freshly-inserted save (not
-//     fired for duplicates / skipped / errored entries). Used by
-//     the starter-pack installer to tag each new save.
-function ingestZip(zipPath, { onInserted } = {}) {
+//   onInserted(record):  called for each freshly-inserted save.
+//   onDuplicate(existing): called when an entry's content hash
+//     matches a live save already in the library. Used by the
+//     starter-pack installer so existing matches still get the
+//     '__starter__' tag — otherwise a user who already has the
+//     same image would never have it tagged, and "Start fresh"
+//     would silently spare it.
+function ingestZip(zipPath, { onInserted, onDuplicate } = {}) {
   return new Promise((resolve, reject) => {
     yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
       if (err) return reject(err);
@@ -72,12 +76,15 @@ function ingestZip(zipPath, { onInserted } = {}) {
             if (imgData.duplicateOf) {
               notifyDuplicate(imgData.existing);
               counts.duplicates += 1;
+              if (typeof onDuplicate === 'function') {
+                try { onDuplicate(imgData.existing); } catch { /* non-fatal */ }
+              }
             } else {
               const record = insertSave({ ...imgData, title: titleFromEntry(entry) });
               notifySaved(record);
               counts.inserted += 1;
               if (typeof onInserted === 'function') {
-                try { onInserted(record); } catch { /* callback failure is non-fatal */ }
+                try { onInserted(record); } catch { /* non-fatal */ }
               }
             }
           } catch (e) {

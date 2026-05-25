@@ -52,6 +52,11 @@ async function installStarterPack() {
   try {
     const counts = await ingestZip(STARTER_PACK_PATH, {
       onInserted: (record) => tagAsStarter(record.id),
+      // Tag pre-existing matches too — the user might already have
+      // the same image in their library (content_hash match). If we
+      // skipped tagging those, "Start fresh" would silently leave
+      // them behind.
+      onDuplicate: (existing) => tagAsStarter(existing.id),
     });
     return { ok: true, present: true, ...counts };
   } catch (err) {
