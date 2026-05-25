@@ -2016,9 +2016,9 @@ export default function BoardView({
         aria-label={presenting ? 'Stop' : 'Present'}
       >
         {presenting ? (
-          <Square size={11} strokeWidth={1.8} fill="currentColor" aria-hidden="true" />
+          <Square size={11} stroke="none" fill="currentColor" aria-hidden="true" />
         ) : (
-          <Play size={12} strokeWidth={1.8} fill="currentColor" aria-hidden="true" />
+          <Play size={12} stroke="none" fill="currentColor" aria-hidden="true" />
         )}
         <span>{presenting ? 'Stop' : 'Present'}</span>
       </button>
