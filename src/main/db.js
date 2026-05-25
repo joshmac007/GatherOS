@@ -903,9 +903,15 @@ function getAllCollectionsWithThumbs() {
   const rows = getDatabase().prepare(`
     WITH ranked AS (
       -- thumb_or_file mirrors the FeaturedBuckets fallback so legacy
-      -- saves with empty thumb_path still feed the fanned tile.
+      -- saves with empty thumb_path still feed the fanned tile. GIFs
+      -- get the original file_path so they animate in the stack
+      -- instead of showing the static first-frame JPG that sharp
+      -- generates for the thumb_path.
       SELECT ci.collection_id,
-             COALESCE(NULLIF(s.thumb_path, ''), s.file_path) AS thumb_or_file,
+             CASE
+               WHEN LOWER(s.file_path) LIKE '%.gif' THEN s.file_path
+               ELSE COALESCE(NULLIF(s.thumb_path, ''), s.file_path)
+             END AS thumb_or_file,
              s.created_at,
              ROW_NUMBER() OVER (
                PARTITION BY ci.collection_id
@@ -1207,7 +1213,10 @@ function listBoardsWithThumbs() {
              json_extract(bi.data, '$.fontSize')     AS font_size,
              json_extract(bi.data, '$.text')         AS text_content,
              CASE WHEN bi.type = 'image'
-                  THEN COALESCE(NULLIF(s.thumb_path, ''), s.file_path)
+                  THEN CASE
+                         WHEN LOWER(s.file_path) LIKE '%.gif' THEN s.file_path
+                         ELSE COALESCE(NULLIF(s.thumb_path, ''), s.file_path)
+                       END
                   ELSE NULL END                       AS thumb_path
         FROM board_items bi
         LEFT JOIN saves s
