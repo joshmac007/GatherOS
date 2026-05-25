@@ -28,11 +28,13 @@ export const STEPS = [
     advance: { type: 'next', label: 'Get started' },
   },
   // 2. Spotlight an image, advance when the detail panel mounts.
-  // The image name is omitted on purpose — the spotlight points to
-  // the right one, no need to repeat it in copy.
+  // No stroke ring — instead we dim every other card so the target
+  // pops by contrast. The image name is omitted on purpose: the
+  // visual treatment points to the right one.
   {
     id: 'pick-image',
     target: '[data-save-title="Bold Typography Design"]',
+    dimSiblings: '[data-save-id]',
     title: 'Open a save',
     body: 'Double-click the highlighted image to open it in the detail view.',
     advance: { type: 'appears', selector: '[data-onboarding="detail-panel"]' },

@@ -87,6 +87,40 @@ export default function OnboardingOverlay() {
     };
   }, [active, step?.target, step?.advance?.type, advance]);
 
+  // Steps can declare a `dimSiblings` selector to fade every
+  // matching element EXCEPT the target — pulls the eye to the
+  // target without drawing a stroke around it. Inline-style
+  // mutation so we don't have to ship CSS rules that know about
+  // app-specific selectors; cleanup restores the original opacity.
+  useEffect(() => {
+    if (!active) return undefined;
+    const dimSel = step?.dimSiblings;
+    if (!dimSel) return undefined;
+    const targetSel = step?.target;
+    const targetEl = targetSel ? document.querySelector(targetSel) : null;
+    const dimmed = [];
+    document.querySelectorAll(dimSel).forEach((el) => {
+      // Skip the target itself and any ancestor/descendant of it
+      // (the target's own card might be matched by the same
+      // selector — we don't want to dim it).
+      if (targetEl && (el === targetEl
+        || el.contains(targetEl) || targetEl.contains(el))) return;
+      dimmed.push({
+        el,
+        prevOpacity: el.style.opacity,
+        prevTransition: el.style.transition,
+      });
+      el.style.transition = 'opacity 200ms ease';
+      el.style.opacity = '0.25';
+    });
+    return () => {
+      dimmed.forEach(({ el, prevOpacity, prevTransition }) => {
+        el.style.opacity = prevOpacity;
+        el.style.transition = prevTransition;
+      });
+    };
+  }, [active, step?.id, step?.dimSiblings, step?.target, targetRect]);
+
   // Steps can declare an `onEnter` selector that the overlay
   // clicks for the user — used to auto-switch to the Collections /
   // Spaces tab without making them tap an extra Next. Deferred to
@@ -144,11 +178,10 @@ export default function OnboardingOverlay() {
 
   return createPortal(
     <div className={styles.overlay} aria-live="polite">
-      {/* Just a focus ring around the target — no scrim, no dim.
-          Pointer-events: none; the document-level capture handler
-          still gates clicks so the walkthrough stays "locked in"
-          even though nothing visually blocks the rest of the UI. */}
-      {targetRect && (
+      {/* Focus ring around the target. Suppressed when the step
+          uses dimSiblings — that step pulls the eye via opacity
+          contrast and explicitly doesn't want a stroke. */}
+      {targetRect && !step.dimSiblings && (
         <div
           className={styles.spotlight}
           style={{
