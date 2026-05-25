@@ -88,38 +88,41 @@ export default function OnboardingOverlay() {
   }, [active, step?.target, step?.advance?.type, advance]);
 
   // Steps can declare a `dimSiblings` selector to fade every
-  // matching element EXCEPT the target — pulls the eye to the
-  // target without drawing a stroke around it. Inline-style
-  // mutation so we don't have to ship CSS rules that know about
-  // app-specific selectors; cleanup restores the original opacity.
+  // matching element EXCEPT the target. We can't use inline-style
+  // mutation here — ImageCard re-renders with its own style={} on
+  // every parent update, which clobbers the change. Instead we
+  // toggle a data-attribute on <body> + mark the target with
+  // data-onboarding-target, and let CSS do the work via global
+  // rules below. CSS class wins over the component's inline style
+  // for opacity because it's scoped to the body-attribute parent.
   useEffect(() => {
     if (!active) return undefined;
     const dimSel = step?.dimSiblings;
     if (!dimSel) return undefined;
     const targetSel = step?.target;
-    const targetEl = targetSel ? document.querySelector(targetSel) : null;
-    const dimmed = [];
-    document.querySelectorAll(dimSel).forEach((el) => {
-      // Skip the target itself and any ancestor/descendant of it
-      // (the target's own card might be matched by the same
-      // selector — we don't want to dim it).
-      if (targetEl && (el === targetEl
-        || el.contains(targetEl) || targetEl.contains(el))) return;
-      dimmed.push({
-        el,
-        prevOpacity: el.style.opacity,
-        prevTransition: el.style.transition,
+    const tagTarget = () => {
+      document.querySelectorAll('[data-onboarding-target]').forEach((el) => {
+        el.removeAttribute('data-onboarding-target');
       });
-      el.style.transition = 'opacity 200ms ease';
-      el.style.opacity = '0.25';
-    });
+      if (targetSel) {
+        const t = document.querySelector(targetSel);
+        if (t) t.setAttribute('data-onboarding-target', '');
+      }
+    };
+    document.body.dataset.onboardingDim = 'cards';
+    tagTarget();
+    // Re-tag if the target enters the DOM after the first pass
+    // (the masonry can lazy-render rows).
+    const mo = new MutationObserver(tagTarget);
+    mo.observe(document.body, { childList: true, subtree: true });
     return () => {
-      dimmed.forEach(({ el, prevOpacity, prevTransition }) => {
-        el.style.opacity = prevOpacity;
-        el.style.transition = prevTransition;
+      mo.disconnect();
+      delete document.body.dataset.onboardingDim;
+      document.querySelectorAll('[data-onboarding-target]').forEach((el) => {
+        el.removeAttribute('data-onboarding-target');
       });
     };
-  }, [active, step?.id, step?.dimSiblings, step?.target, targetRect]);
+  }, [active, step?.id, step?.dimSiblings, step?.target]);
 
   // Steps can declare an `onEnter` selector that the overlay
   // clicks for the user — used to auto-switch to the Collections /

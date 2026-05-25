@@ -5,9 +5,15 @@
 // pinned bottom-left either way).
 //
 // Optional fields:
-//   - onEnter: selector the overlay clicks on its own when the
-//              step becomes active (used to auto-navigate the user
-//              between modes without an extra Next click).
+//   - onEnter:      selector the overlay clicks on its own when
+//                   the step becomes active (used to auto-navigate
+//                   the user between modes without an extra Next).
+//   - dimSiblings:  true to fade every card except the target,
+//                   pulling the eye by contrast instead of a
+//                   stroke ring. The fade is applied via a CSS
+//                   rule on body[data-onboarding-dim="cards"] —
+//                   ImageCard sets its own inline style so a JS-
+//                   driven approach gets clobbered on re-render.
 //
 // Advance types:
 //   - { type: 'next', label, clickBefore } explicit Next button.
@@ -34,7 +40,7 @@ export const STEPS = [
   {
     id: 'pick-image',
     target: '[data-save-title="Bold Typography Design"]',
-    dimSiblings: '[data-save-id]',
+    dimSiblings: true,
     title: 'Open a save',
     body: 'Double-click the highlighted image to open it in the detail view.',
     advance: { type: 'appears', selector: '[data-onboarding="detail-panel"]' },
