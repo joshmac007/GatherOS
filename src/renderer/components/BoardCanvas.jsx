@@ -1019,14 +1019,29 @@ export default function BoardCanvas({
     const rect = canvasRef.current.getBoundingClientRect();
     const cursor = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, pan, zoom);
 
-    // If the user starts dragging a non-selected item, snap selection
-    // to just that item; otherwise drag the whole current selection.
-    // Group-aware: dragging an unselected group member promotes the
-    // selection to the whole group so the group moves as a unit.
+    // Selection / moving-set wiring. BoardItem's mousedown fires
+    // onSelect(id, shiftKey) *before* this — so by the time we run,
+    // the additive case has already routed an onSelectIds() call,
+    // but React hasn't flushed yet, so `selectedIds` here is still
+    // the pre-click value. Use e.shiftKey to figure out the intended
+    // post-click selection without clobbering what onSelect just
+    // dispatched.
+    //
+    // Group-aware: dragging any unselected group member promotes
+    // the moving set to the whole group so it travels as a unit.
     let movingIds;
     if (selectedIds.has(item.id)) {
-      movingIds = Array.from(selectedIds);
+      // Already in the selection — move the whole (group-expanded) set.
+      movingIds = Array.from(expandToGroups(selectedIds, items));
+    } else if (e.shiftKey) {
+      // onSelect just additively added this item; don't overwrite
+      // that. Drag the prior selection + the new item, group-expanded.
+      const next = new Set(selectedIds);
+      next.add(item.id);
+      movingIds = Array.from(expandToGroups(next, items));
     } else {
+      // Plain click on an unselected item — snap selection to it (or
+      // its whole group) and drag that set.
       const expanded = expandToGroups(new Set([item.id]), items);
       movingIds = Array.from(expanded);
       onSelectIds(expanded);
