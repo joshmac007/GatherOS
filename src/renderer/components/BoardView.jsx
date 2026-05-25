@@ -33,7 +33,6 @@ import {
   CornerDownRight,
   Pencil,
   Play,
-  Square,
 } from 'lucide-react';
 import styles from './BoardView.module.css';
 import BoardCanvas from './BoardCanvas.jsx';
