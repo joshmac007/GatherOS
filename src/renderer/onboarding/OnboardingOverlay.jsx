@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { X as XIcon } from 'lucide-react';
 import { useOnboarding } from './OnboardingContext.jsx';
 import styles from './OnboardingOverlay.module.css';
 
@@ -205,8 +206,9 @@ export default function OnboardingOverlay() {
             className={styles.exitBtn}
             onClick={exit}
             aria-label="Exit walkthrough"
+            title="Exit walkthrough"
           >
-            Exit
+            <XIcon size={14} strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
         {step.title && <div className={styles.title}>{step.title}</div>}
