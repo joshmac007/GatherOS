@@ -59,6 +59,11 @@ export default function OnboardingOverlay() {
     const wantsClick = step?.advance?.type === 'click';
     const targetSel = step?.target;
     const handler = (e) => {
+      // Programmatic clicks the overlay dispatches itself (onEnter
+      // navigation, clickBefore actions) carry isTrusted=false.
+      // Let those through unconditionally so the walkthrough can
+      // drive the app even on steps with no spotlight target.
+      if (e.isTrusted === false) return;
       const t = e.target;
       if (!t || typeof t.closest !== 'function') return;
       // Overlay UI always passes through.
@@ -81,6 +86,22 @@ export default function OnboardingOverlay() {
       document.removeEventListener('contextmenu', handler, true);
     };
   }, [active, step?.target, step?.advance?.type, advance]);
+
+  // Steps can declare an `onEnter` selector that the overlay
+  // clicks for the user — used to auto-switch to the Collections /
+  // Spaces tab without making them tap an extra Next. Deferred to
+  // the next frame so any clickBefore from the previous step has
+  // already settled.
+  useEffect(() => {
+    if (!active) return undefined;
+    const sel = step?.onEnter;
+    if (!sel) return undefined;
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector(sel);
+      if (el && typeof el.click === 'function') el.click();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [active, step?.id, step?.onEnter]);
 
   // Listen for the theme attribute flipping when a step is waiting
   // on the dark-mode toggle.
