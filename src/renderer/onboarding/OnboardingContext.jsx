@@ -51,6 +51,9 @@ export function OnboardingProvider({ children }) {
   const advance = useCallback(() => {
     setStepIndex((i) => (i + 1 >= STEPS.length ? -1 : i + 1));
   }, []);
+  const back = useCallback(() => {
+    setStepIndex((i) => Math.max(0, i - 1));
+  }, []);
   const goTo = useCallback((id) => {
     const i = STEPS.findIndex((s) => s.id === id);
     if (i >= 0) setStepIndex(i);
@@ -61,8 +64,8 @@ export function OnboardingProvider({ children }) {
     step: active ? STEPS[stepIndex] : null,
     stepIndex,
     totalSteps: STEPS.length,
-    start, exit, advance, goTo,
-  }), [active, stepIndex, start, exit, advance, goTo]);
+    start, exit, advance, back, goTo,
+  }), [active, stepIndex, start, exit, advance, back, goTo]);
 
   return (
     <OnboardingContext.Provider value={value}>

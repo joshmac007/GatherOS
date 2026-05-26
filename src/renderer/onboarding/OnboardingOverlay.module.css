@@ -28,32 +28,31 @@
      stable across steps — your eye doesn't have to hunt for it. */
   left: 20px;
   bottom: 20px;
-  max-width: 280px;
-  min-width: 220px;
-  padding: 10px 12px 12px;
-  background: var(--surface-1, #ffffff);
-  color: var(--text-primary, #000000);
-  border: 0.5px solid var(--border, rgba(0, 0, 0, 0.12));
-  border-radius: 10px;
+  max-width: 320px;
+  min-width: 260px;
+  padding: 12px 14px 12px;
+  /* Liquid-glass: dark translucent fill with backdrop blur, so the
+     page behind shows through. The dark base reads well against
+     both light and dark canvases, which is why we don't theme-flip
+     the colors. */
+  background: rgba(28, 28, 30, 0.72);
+  color: #ffffff;
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
   box-shadow:
-    0 6px 20px rgba(0, 0, 0, 0.16),
-    0 1px 4px rgba(0, 0, 0, 0.08);
+    0 10px 32px rgba(0, 0, 0, 0.32),
+    0 2px 8px rgba(0, 0, 0, 0.18),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   font-family: var(--font-ui, system-ui, sans-serif);
   pointer-events: auto;
   animation: tooltipIn 180ms ease-out;
 }
 
-:root[data-theme="dark"] .tooltip {
-  background: #1c1c1e;
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
 .tooltipHeader {
   display: flex;
   align-items: center;
-  /* No step counter anymore — the Exit X sits on its own at the
-     top-right of the bubble. */
   justify-content: flex-end;
   margin-bottom: 2px;
   height: 16px;
@@ -63,56 +62,62 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border: none;
   background: transparent;
   padding: 0;
   margin: -4px -4px 0 0;
-  border-radius: 5px;
-  color: var(--text-tertiary, rgba(0, 0, 0, 0.55));
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .exitBtn:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--text-primary, #000);
-}
-
-:root[data-theme="dark"] .exitBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
 }
 
 .title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.3;
   margin-bottom: 4px;
   letter-spacing: -0.01em;
+  color: #ffffff;
 }
 
 .body {
   font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-secondary, rgba(0, 0, 0, 0.72));
-  margin-bottom: 10px;
-}
-
-:root[data-theme="dark"] .body {
+  line-height: 1.45;
   color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 12px;
 }
 
-/* Match the app's primary CTA recipe — same one the toolbar's
-   "+ Add" and the modal "Got it" buttons use. Ink-filled pill,
-   opacity hover, tiny press scale. */
+/* Footer holds Previous / Next / choice buttons. All right-aligned
+   like the reference layout, with a small gap between them. */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* Primary CTA: ink-filled pill on the glass, white label. Matches
+   the geometry of the app's other primary buttons (radius-pill,
+   text-md, weight 500) — color values are hard-set to read against
+   the dark glass regardless of theme. */
 .primaryBtn {
-  width: 100%;
-  padding: 8px 18px;
-  background: var(--text-primary);
-  color: var(--surface-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 16px;
+  background: #ffffff;
+  color: #0b0b0d;
   border: none;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-pill, 999px);
   font-family: var(--font-ui, inherit);
   font-size: var(--text-md, 13px);
   font-weight: 500;
@@ -126,38 +131,35 @@
 .primaryBtn:hover { opacity: 0.92; }
 .primaryBtn:active { transform: scale(0.98); }
 
-/* Secondary / destructive — outline pill so 'Start fresh' reads
-   as the less-emphasized of the two choices, with a red hover
-   tint to flag the destructive intent. */
-.dangerBtn {
+/* Ghost button: borderless text button for Previous and the
+   destructive choice (Start fresh). Quiet by default, lifts on
+   hover with a subtle wash. */
+.ghostBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
   background: transparent;
-  color: var(--text-secondary, rgba(0, 0, 0, 0.72));
-  border: 0.5px solid var(--border, rgba(0, 0, 0, 0.16));
+  color: rgba(255, 255, 255, 0.78);
+  border: none;
+  border-radius: var(--radius-pill, 999px);
+  font-family: var(--font-ui, inherit);
+  font-size: var(--text-md, 13px);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    transform var(--dur-instant, 80ms) ease;
 }
 
-.dangerBtn:hover {
-  opacity: 1;
-  background: rgba(211, 61, 61, 0.08);
-  color: #d33d3d;
-  border-color: rgba(211, 61, 61, 0.45);
+.ghostBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
 }
 
-:root[data-theme="dark"] .dangerBtn {
-  color: rgba(255, 255, 255, 0.72);
-  border-color: rgba(255, 255, 255, 0.16);
-}
-
-:root[data-theme="dark"] .dangerBtn:hover {
-  background: rgba(211, 61, 61, 0.15);
-  color: #ff8a8a;
-  border-color: rgba(255, 138, 138, 0.45);
-}
-
-.choices {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+.ghostBtn:active { transform: scale(0.98); }
 
 /* Dim siblings for the 'open a save' step. Lives at the global
    level (and uses !important) because ImageCard sets its own

@@ -8,7 +8,9 @@ import styles from './OnboardingOverlay.module.css';
 const PAD = 6;
 
 export default function OnboardingOverlay() {
-  const { active, step, advance, exit } = useOnboarding();
+  const {
+    active, step, stepIndex, advance, back, exit,
+  } = useOnboarding();
   const [targetRect, setTargetRect] = useState(null);
 
   // Resolve + watch the target's bbox. If the target isn't in the
@@ -208,51 +210,55 @@ export default function OnboardingOverlay() {
         </div>
         {step.title && <div className={styles.title}>{step.title}</div>}
         {step.body && <div className={styles.body}>{step.body}</div>}
-        {step.advance?.type === 'next' && (
-          <button
-            type="button"
-            className={styles.primaryBtn}
-            onClick={() => {
-              // Some steps need to nudge the app state before
-              // advancing (e.g. closing the detail panel so step 4
-              // can spotlight the Collections tab in the library
-              // view). The selector is dispatched a click before
-              // the index moves forward.
-              const sel = step.advance?.clickBefore;
-              if (sel) {
-                const el = document.querySelector(sel);
-                if (el && typeof el.click === 'function') el.click();
-              }
-              advance();
-            }}
-          >
-            {step.advance.label || 'Next'}
-          </button>
-        )}
-        {step.advance?.type === 'choice' && (
-          <div className={styles.choices}>
-            {step.advance.options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className={[
-                  styles.primaryBtn,
-                  opt.danger && styles.dangerBtn,
-                ].filter(Boolean).join(' ')}
-                onClick={async () => {
-                  if (opt.action === 'remove-starter-pack') {
-                    try {
-                      await window.moodmark?.onboarding?.removeStarterPack?.();
-                    } catch { /* non-fatal — overlay still closes */ }
-                  }
-                  advance();
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className={styles.footer}>
+          {stepIndex > 0 && !step.noBack && (
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              onClick={back}
+            >
+              Previous
+            </button>
+          )}
+          {step.advance?.type === 'next' && (
+            <button
+              type="button"
+              className={styles.primaryBtn}
+              onClick={() => {
+                // Some steps need to nudge the app state before
+                // advancing (e.g. closing the detail panel so step 4
+                // can spotlight the Collections tab in the library
+                // view). The selector is dispatched a click before
+                // the index moves forward.
+                const sel = step.advance?.clickBefore;
+                if (sel) {
+                  const el = document.querySelector(sel);
+                  if (el && typeof el.click === 'function') el.click();
+                }
+                advance();
+              }}
+            >
+              {step.advance.label || 'Next'}
+            </button>
+          )}
+          {step.advance?.type === 'choice' && step.advance.options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={opt.danger ? styles.ghostBtn : styles.primaryBtn}
+              onClick={async () => {
+                if (opt.action === 'remove-starter-pack') {
+                  try {
+                    await window.moodmark?.onboarding?.removeStarterPack?.();
+                  } catch { /* non-fatal — overlay still closes */ }
+                }
+                advance();
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>,
     document.body,

@@ -5,6 +5,9 @@
 // pinned bottom-left either way).
 //
 // Optional fields:
+//   - noBack:       true to hide the Previous button on this step.
+//                   Used when reverse navigation would land in a
+//                   state the previous step doesn't expect.
 //   - onEnter:      selector the overlay clicks on its own when
 //                   the step becomes active (used to auto-navigate
 //                   the user between modes without an extra Next).
@@ -52,10 +55,13 @@ export const STEPS = [
     advance: { type: 'appears', selector: '[data-onboarding="detail-panel"]' },
   },
   // 3. Detail view explainer. No spotlight — the panel is already
-  // on screen. Next closes the panel for the user.
+  // on screen. Next closes the panel for the user. noBack: going
+  // back to step 2 would immediately re-fire its 'appears' check
+  // (the panel is still open) and bounce us right back here.
   {
     id: 'detail-panel',
     target: null,
+    noBack: true,
     title: 'Detail view',
     body: 'Tags, source URL, palette, and AI-extracted text live here. Click anything to edit inline — autosaves as you type.',
     advance: {
@@ -65,10 +71,13 @@ export const STEPS = [
     },
   },
   // 4. Collections — the overlay switches to the Collections tab
-  // on entry, then explains it.
+  // on entry, then explains it. noBack: step 3 assumes the detail
+  // panel is open; we'd have to re-open it on reverse nav, which
+  // isn't worth the plumbing.
   {
     id: 'collections',
     target: null,
+    noBack: true,
     onEnter: '[data-onboarding="mode-folders"]',
     title: 'Collections',
     body: "Group saves by project, mood, or anything else. A save can live in many collections at once — they're tags, not folders.",
@@ -90,6 +99,7 @@ export const STEPS = [
   {
     id: 'finale',
     target: null,
+    noBack: true,
     onEnter: '[data-onboarding="mode-library"]',
     title: 'Keep the starter pack?',
     body: "These images came pre-loaded so you'd have something to look at. Hang on to them, or clear them out to start with an empty library.",
