@@ -137,14 +137,10 @@ export interface LSSubscriptionAttributes {
 }
 
 async function handleEvent(env: Env, eventName: string, evt: LSEvent): Promise<void> {
-  // TEMP: log the meta payload so we can see why custom_data.user_id
-  // isn't reaching us on some webhooks. Remove once verified.
-  console.log('[lemonsqueezy] event', eventName, 'meta:', JSON.stringify(evt.meta || null));
-
   // Opportunistically link the LS customer to our user row using
-  // meta.custom_data.user_id. The desktop app's create-checkout flow
-  // stamps this in. Linking on every event self-heals against
-  // out-of-order delivery.
+  // meta.custom_data.user_id when present. LS strips custom_data on
+  // some webhooks (we've seen it empty on subscription_* events) —
+  // upsertSubscription has a user_email fallback for that case.
   const userId = evt.meta?.custom_data?.user_id;
   const customerId = evt.data?.attributes?.customer_id
     ? String(evt.data.attributes.customer_id)
@@ -240,13 +236,29 @@ export async function upsertSubscription(
   const cancelAtPeriodEnd = d.cancelled && periodEnd && periodEnd > Date.now() ? 1 : 0;
 
   if (!customerId) return;
-  const user = await env.DB.prepare(
+  let user = await env.DB.prepare(
     `SELECT id FROM users WHERE lemonsqueezy_customer_id = ?`,
   )
     .bind(customerId)
     .first<{ id: string }>();
+  // Fall back to email match when customer_id isn't linked yet. LS
+  // doesn't always surface checkout_data.custom on webhooks (we've
+  // seen subscription_* events arrive with empty meta), so the
+  // customer-id link can be missing on the first event. Looking up
+  // by user_email recovers, and we re-link the customer id so
+  // future events take the fast path.
+  if (!user && d.user_email) {
+    user = await env.DB.prepare(
+      `SELECT id FROM users WHERE email = ?`,
+    )
+      .bind(d.user_email.trim().toLowerCase())
+      .first<{ id: string }>();
+    if (user) {
+      await linkCustomerToUser(env, user.id, customerId);
+    }
+  }
   if (!user) {
-    console.warn('[lemonsqueezy] unknown customer, dropping event:', customerId);
+    console.warn('[lemonsqueezy] unknown customer, dropping event:', customerId, 'email:', d.user_email);
     return;
   }
 
