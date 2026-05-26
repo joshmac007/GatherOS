@@ -105,9 +105,13 @@ export const STEPS = [
     body: "These images came pre-loaded so you'd have something to look at. Hang on to them, or clear them out to start with an empty library.",
     advance: {
       type: 'choice',
+      // Right-most option is treated as the primary CTA — order
+      // here matters. 'Start fresh' is the affirmative answer to
+      // the prompt ("Keep the starter pack?"), so it gets the
+      // filled pill on the right.
       options: [
         { label: 'Keep them', value: 'keep' },
-        { label: 'Start fresh', value: 'fresh', action: 'remove-starter-pack', danger: true },
+        { label: 'Start fresh', value: 'fresh', action: 'remove-starter-pack' },
       ],
     },
   },

@@ -241,11 +241,14 @@ export default function OnboardingOverlay() {
               {step.advance.label || 'Next'}
             </button>
           )}
-          {step.advance?.type === 'choice' && step.advance.options.map((opt) => (
+          {step.advance?.type === 'choice' && step.advance.options.map((opt, i, arr) => (
             <button
               key={opt.value}
               type="button"
-              className={opt.danger ? styles.ghostBtn : styles.primaryBtn}
+              // Last option in the array renders as the primary
+              // CTA (filled pill on the right); everything before
+              // it is a ghost button to its left.
+              className={i === arr.length - 1 ? styles.primaryBtn : styles.ghostBtn}
               onClick={async () => {
                 if (opt.action === 'remove-starter-pack') {
                   try {
