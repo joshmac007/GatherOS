@@ -71,42 +71,9 @@ export default function OnboardingOverlay() {
     };
   }, [active, step?.id, step?.target]);
 
-  // Click gating: while active, swallow every mouse interaction
-  // unless it lands on (a) the overlay's own tooltip or (b) the
-  // currently-required target. Capture phase so we beat any
-  // synthetic-event delegation in React.
-  useEffect(() => {
-    if (!active) return undefined;
-    const wantsClick = step?.advance?.type === 'click';
-    const targetSel = step?.target;
-    const handler = (e) => {
-      // Programmatic clicks the overlay dispatches itself (onEnter
-      // navigation, clickBefore actions) carry isTrusted=false.
-      // Let those through unconditionally so the walkthrough can
-      // drive the app even on steps with no spotlight target.
-      if (e.isTrusted === false) return;
-      const t = e.target;
-      if (!t || typeof t.closest !== 'function') return;
-      // Overlay UI always passes through.
-      if (t.closest(`.${styles.tooltip}`)) return;
-      // Required target — allow the original click, advance after
-      // any handlers it triggers have a chance to settle.
-      if (targetSel && t.closest(targetSel)) {
-        if (wantsClick) queueMicrotask(advance);
-        return;
-      }
-      e.stopPropagation();
-      e.preventDefault();
-    };
-    document.addEventListener('mousedown', handler, true);
-    document.addEventListener('click', handler, true);
-    document.addEventListener('contextmenu', handler, true);
-    return () => {
-      document.removeEventListener('mousedown', handler, true);
-      document.removeEventListener('click', handler, true);
-      document.removeEventListener('contextmenu', handler, true);
-    };
-  }, [active, step?.target, step?.advance?.type, advance]);
+  // (No click gating — the user is free to interact with the app
+  // while the walkthrough runs. Each step advances via its own
+  // tooltip button, so locking the rest of the UI is overkill.)
 
   // Steps can declare an `onEnter` action — either a single
   // selector or an array of selectors — that the overlay clicks

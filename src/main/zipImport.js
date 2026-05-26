@@ -77,14 +77,14 @@ function ingestZip(zipPath, { onInserted, onDuplicate } = {}) {
               notifyDuplicate(imgData.existing);
               counts.duplicates += 1;
               if (typeof onDuplicate === 'function') {
-                try { onDuplicate(imgData.existing); } catch { /* non-fatal */ }
+                try { onDuplicate(imgData.existing, entry.fileName); } catch { /* non-fatal */ }
               }
             } else {
               const record = insertSave({ ...imgData, title: titleFromEntry(entry) });
               notifySaved(record);
               counts.inserted += 1;
               if (typeof onInserted === 'function') {
-                try { onInserted(record); } catch { /* non-fatal */ }
+                try { onInserted(record, entry.fileName); } catch { /* non-fatal */ }
               }
             }
           } catch (e) {

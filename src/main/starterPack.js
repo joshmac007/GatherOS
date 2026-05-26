@@ -17,12 +17,13 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const yauzl = require('yauzl');
 const { app } = require('electron');
 const { ingestZip } = require('./zipImport');
 const {
   getDatabase, deleteSave, restoreSave,
-  getAllCollections, deleteCollection,
-  listBoards, deleteBoard,
+  getAllCollections, createCollection, deleteCollection, addSaveToCollection,
+  listBoards, createBoard, deleteBoard, upsertBoardItem,
 } = require('./db');
 
 const STARTER_TAG = '__starter__';
@@ -58,22 +59,117 @@ function tagAsStarter(saveId) {
   tx();
 }
 
+// Pull just the manifest.json entry out of the zip without
+// extracting anything else. Returns null if the zip has no
+// manifest (pre-collections starter packs).
+function readManifestFromZip(zipPath) {
+  return new Promise((resolve) => {
+    yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+      if (err) return resolve(null);
+      let found = null;
+      zipfile.on('error', () => resolve(null));
+      zipfile.on('end', () => resolve(found));
+      zipfile.on('entry', (entry) => {
+        if (entry.fileName !== 'manifest.json') {
+          zipfile.readEntry();
+          return;
+        }
+        zipfile.openReadStream(entry, (e, stream) => {
+          if (e) { zipfile.readEntry(); return; }
+          const chunks = [];
+          stream.on('data', (c) => chunks.push(c));
+          stream.on('end', () => {
+            try { found = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+            catch { /* malformed manifest — fall back to images-only install */ }
+            zipfile.readEntry();
+          });
+          stream.on('error', () => zipfile.readEntry());
+        });
+      });
+      zipfile.readEntry();
+    });
+  });
+}
+
 async function installStarterPack() {
   if (!fs.existsSync(STARTER_PACK_PATH)) {
     console.log(`[starter-pack] no zip at ${STARTER_PACK_PATH} — skipping install. Run 'npm run pack:starter' to build one.`);
     return { ok: true, present: false, inserted: 0, duplicates: 0 };
   }
   try {
+    const manifest = await readManifestFromZip(STARTER_PACK_PATH);
+
+    // filename → saveId map, populated as ingestZip processes each
+    // image. Lets us wire collections + board items back up to the
+    // newly-inserted save rows after ingest finishes.
+    const filenameToSaveId = new Map();
     const counts = await ingestZip(STARTER_PACK_PATH, {
-      onInserted: (record) => tagAsStarter(record.id),
+      onInserted: (record, fileName) => {
+        tagAsStarter(record.id);
+        if (fileName) filenameToSaveId.set(fileName, record.id);
+      },
       // Tag pre-existing matches too — the user might already have
       // the same image in their library (content_hash match). If we
       // skipped tagging those, "Start fresh" would silently leave
       // them behind.
-      onDuplicate: (existing) => tagAsStarter(existing.id),
+      onDuplicate: (existing, fileName) => {
+        tagAsStarter(existing.id);
+        if (fileName) filenameToSaveId.set(fileName, existing.id);
+      },
     });
-    console.log(`[starter-pack] installed: ${counts.inserted} new + ${counts.duplicates} tagged existing (${counts.skipped} skipped, ${counts.errors} errors)`);
-    return { ok: true, present: true, ...counts };
+
+    let collectionsCreated = 0;
+    let boardsCreated = 0;
+    if (manifest) {
+      // Recreate each collection and attach the mapped saves.
+      for (const col of (manifest.collections || [])) {
+        if (!col?.name) continue;
+        const created = createCollection({ name: col.name, color: col.color });
+        const collectionId = created?.id || created?.collection?.id;
+        if (!collectionId) continue;
+        collectionsCreated += 1;
+        for (const itemName of (col.items || [])) {
+          const saveId = filenameToSaveId.get(itemName);
+          if (saveId) addSaveToCollection({ collectionId, saveId });
+        }
+      }
+      // Recreate each board (Space) and its items. Image items get
+      // their data.saveId remapped from the staged filename to the
+      // freshly-inserted save id; other item types pass through.
+      for (const board of (manifest.boards || [])) {
+        if (!board?.name) continue;
+        const createdBoard = createBoard({ name: board.name });
+        const boardId = createdBoard?.id || createdBoard?.board?.id;
+        if (!boardId) continue;
+        boardsCreated += 1;
+        for (const it of (board.items || [])) {
+          let data = it.data || {};
+          if (it.type === 'image' && data.saveId) {
+            const mapped = filenameToSaveId.get(data.saveId);
+            // Drop image items that point at saves we couldn't ingest
+            // — otherwise the board renders a broken tile.
+            if (!mapped) continue;
+            data = { ...data, saveId: mapped };
+          }
+          upsertBoardItem({
+            boardId,
+            item: {
+              type: it.type,
+              x: it.x,
+              y: it.y,
+              width: it.width,
+              height: it.height,
+              rotation: it.rotation,
+              z_index: it.z_index,
+              data,
+            },
+          });
+        }
+      }
+    }
+
+    console.log(`[starter-pack] installed: ${counts.inserted} new + ${counts.duplicates} tagged existing, ${collectionsCreated} collection(s), ${boardsCreated} board(s) (${counts.skipped} skipped, ${counts.errors} errors)`);
+    return { ok: true, present: true, ...counts, collectionsCreated, boardsCreated };
   } catch (err) {
     console.error('[starter-pack] install failed:', err?.message || err);
     return { ok: false, error: err?.message || String(err) };
