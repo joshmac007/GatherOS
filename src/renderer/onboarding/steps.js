@@ -74,6 +74,7 @@ export const STEPS = [
   {
     id: 'detail-panel',
     target: null,
+    icon: 'detail',
     onEnter: [
       '[data-onboarding="mode-library"]',
       '[data-save-title="Bold Typography Design"]',
@@ -116,6 +117,9 @@ export const STEPS = [
   {
     id: 'finale',
     target: null,
+    icon: 'starter',
+    // Terminal step — Previous from the choice screen feels off.
+    noBack: true,
     onEnter: '[data-onboarding="mode-library"]',
     title: 'Keep the starter pack?',
     body: "These images came pre-loaded so you'd have something to look at. Hang on to them, or wipe the slate — clears the seeded saves, collections, and spaces so you can start your own.",

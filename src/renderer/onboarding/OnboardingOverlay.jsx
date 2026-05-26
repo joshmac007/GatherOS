@@ -5,17 +5,23 @@ import {
   SquareLibrary as LibraryIcon,
   Folder as FolderIcon,
   Eclipse as LayersIcon,
+  PanelRight as DetailIcon,
+  Gift as GiftIcon,
 } from 'lucide-react';
 import { useOnboarding } from './OnboardingContext.jsx';
 import styles from './OnboardingOverlay.module.css';
 
-// Map the step's `icon` string to the same lucide glyph the
-// toolbar's mode pill uses — keeps the walkthrough's visual
-// vocabulary aligned with the live UI it's pointing at.
+// Map the step's `icon` string to a lucide glyph. The first three
+// match the toolbar's mode pill (Library/Collections/Spaces) so
+// the walkthrough's visual vocabulary stays aligned with the live
+// UI; 'detail' nods to the right-side panel that step opens, and
+// 'starter' fronts the keep/fresh decision.
 const STEP_ICONS = {
   library: LibraryIcon,
   collections: FolderIcon,
   spaces: LayersIcon,
+  detail: DetailIcon,
+  starter: GiftIcon,
 };
 
 // Visual padding around the spotlight ring, in CSS px.
