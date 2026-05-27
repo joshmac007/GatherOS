@@ -3091,8 +3091,14 @@ export default function App() {
           // Main library grid (not Unsorted, not Trash), or inside
           // a specific collection. Anywhere else the affordance
           // would be ambiguous about where the new save lands.
-          (appMode === 'library' && view.type === 'all')
-          || (appMode === 'folders' && view.type === 'collection')
+          // Also hidden whenever the focused detail view is open —
+          // the FAB sat over the focused image which made the
+          // "Add image" affordance read as a per-save action.
+          !focusedId
+          && (
+            (appMode === 'library' && view.type === 'all')
+            || (appMode === 'folders' && view.type === 'collection')
+          )
         }
         onUpload={handleUploadClick}
         onSaveUrl={() => setSaveUrlOpen(true)}
