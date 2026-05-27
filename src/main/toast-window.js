@@ -103,10 +103,20 @@ function ensureToastWindow() {
 
   toastWin.webContents.once('did-finish-load', () => {
     ready = true;
+    // Mount the window invisibly so macOS attaches the
+    // NSVisualEffectView once and keeps it attached for the
+    // session. hide()/show() cycles between toasts used to flash
+    // the system default appearance for one frame before vibrancy
+    // re-painted; opacity 0 keeps the window mounted (vibrancy
+    // alive) without any visible chrome.
+    toastWin.setOpacity(0);
+    toastWin.showInactive();
     const items = pending;
     pending = [];
-    for (const p of items) toastWin.webContents.send('toast:show', p);
-    if (items.length > 0 && !toastWin.isVisible()) toastWin.showInactive();
+    if (items.length > 0) {
+      for (const p of items) toastWin.webContents.send('toast:show', p);
+      toastWin.setOpacity(1);
+    }
   });
 
   toastWin.on('closed', () => {
@@ -134,6 +144,7 @@ function showToast(record) {
   if (ready) {
     win.webContents.send('toast:show', record);
     if (!win.isVisible()) win.showInactive();
+    win.setOpacity(1);
   } else {
     pending.push(record);
   }
@@ -153,12 +164,15 @@ function setToastInteractive(interactive) {
   toastWin.setIgnoreMouseEvents(!interactive, { forward: true });
 }
 
-// Called by the renderer once every toast has been dismissed. Hide the
-// window so it doesn't sit as a transparent compositing surface eating
-// GPU. Shown again the next time showToast() fires.
+// Called by the renderer once every toast has been dismissed. We
+// keep the window MOUNTED (so the NSVisualEffectView material
+// stays attached for the next show — re-mounting was causing a
+// one-frame flash of the system default appearance) and just
+// fade it out via setOpacity. Click-through is restored so the
+// invisible window doesn't eat clicks at the screen corner.
 function onToastsEmpty() {
   setToastInteractive(false);
-  if (toastWin && !toastWin.isDestroyed()) toastWin.hide();
+  if (toastWin && !toastWin.isDestroyed()) toastWin.setOpacity(0);
 }
 
 module.exports = {
