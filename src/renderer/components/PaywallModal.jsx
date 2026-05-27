@@ -36,8 +36,8 @@ export default function PaywallModal({ onSignOut, onSubscribe }) {
   const price = interval === 'yearly' ? '$49' : '$4.99';
   const unit = interval === 'yearly' ? '/yr' : '/mo';
   const subnote = interval === 'yearly'
-    ? 'Free for 14 days, then $49/yr — save ~18%'
-    : 'Free for 14 days, then $4.99/mo — cancel anytime';
+    ? 'Free for 7 days, then $49/yr — save ~18%'
+    : 'Free for 7 days, then $4.99/mo — cancel anytime';
 
   return (
     <div className={styles.scrim}>
@@ -49,7 +49,7 @@ export default function PaywallModal({ onSignOut, onSubscribe }) {
             alt="GatherOS"
             draggable={false}
           />
-          <h1 className={styles.heading}>Start your 14-day free trial</h1>
+          <h1 className={styles.heading}>Start your 7-day free trial today.</h1>
           <p className={styles.body}>
             Full access to every feature while you decide if it&apos;s for you.
             No card charged until your trial ends.
@@ -94,7 +94,7 @@ export default function PaywallModal({ onSignOut, onSubscribe }) {
             disabled={opening}
             onClick={handleSubscribe}
           >
-            {opening ? 'Opening…' : 'Start 14-day free trial'}
+            {opening ? 'Opening…' : 'Start 7-day free trial'}
           </button>
         </div>
       </div>
