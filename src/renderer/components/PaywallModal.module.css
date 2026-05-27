@@ -11,22 +11,27 @@
   padding: 32px;
 }
 
-/* Two-column card: pitch on the left, pricing on the right. Narrow
+/* Two-column card: pitch on the left, pricing on the right. The
+   thin border draws the outer card silhouette; the right column
+   gets a light-grey wash to read as the "pricing" pane. Narrow
    windows collapse to a single column via the media query below. */
 .card {
   width: 820px;
   max-width: 100%;
-  padding: 48px 56px;
-  background: transparent;
-  border: none;
-  border-radius: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 14px;
   box-shadow: none;
   -webkit-app-region: no-drag;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 64px;
-  align-items: center;
+  align-items: stretch;
   text-align: left;
+  overflow: hidden;
+}
+
+:root[data-theme="dark"] .card {
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 .left,
@@ -34,29 +39,39 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: center;
 }
 
-/* Vertical divider between the pitch column and the pricing
-   column. Rendered via the left column's right border so it sits
-   centered in the grid gap. */
+/* Vertical divider — 1px hairline on the left cell's right edge so
+   it sits flush against the right cell's tinted background. */
 .left {
+  padding: 48px 40px 48px 48px;
   border-right: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  padding-right: 32px;
 }
 
 :root[data-theme="dark"] .left {
   border-right-color: rgba(255, 255, 255, 0.10);
 }
 
+/* Pricing pane gets a light-grey wash so the two halves of the
+   card read as distinct surfaces. Uses the same neutral tint the
+   segmented toggle uses, so it stays inside the existing palette. */
 .right {
-  padding-left: 32px;
+  padding: 48px 48px 48px 40px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:root[data-theme="dark"] .right {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .brand {
   display: block;
   width: 64px;
   height: auto;
-  margin: 0 0 16px;
+  /* Tighter gap to the headline below so the lockup reads as a
+     single block — the previous 16px left the logo floating. */
+  margin: 0 0 6px;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -205,25 +220,19 @@
 @media (max-width: 760px) {
   .card {
     grid-template-columns: 1fr;
-    gap: 32px;
-    padding: 36px 28px;
     text-align: center;
   }
   .left,
   .right {
     align-items: center;
+    padding: 32px 28px;
   }
   .left {
     border-right: none;
     border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-    padding-right: 0;
-    padding-bottom: 32px;
   }
   :root[data-theme="dark"] .left {
     border-bottom-color: rgba(255, 255, 255, 0.10);
-  }
-  .right {
-    padding-left: 0;
   }
   .body {
     max-width: 44ch;
