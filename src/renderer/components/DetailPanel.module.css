@@ -734,28 +734,22 @@
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
-  background: #EAEAEA;
-  border: none;
+  background: rgba(20, 20, 22, 0.55);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-pill);
   box-shadow: none;
   font-size: var(--text-xs);
-  color: #000000;
+  color: rgba(255, 255, 255, 0.95);
   cursor: pointer;
   max-width: 100%;
-  transition: background var(--dur-instant) ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
 
 .spacePill:hover {
-  background: #DCDCDC;
-}
-
-:root[data-theme="dark"] .spacePill {
-  background: #3A3A3C;
-  color: #FFFFFF;
-}
-
-:root[data-theme="dark"] .spacePill:hover {
-  background: #48484A;
+  background: rgba(40, 40, 44, 0.6);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .spacePillIcon {
@@ -778,18 +772,15 @@
   align-items: center;
   gap: 5px;
   padding: 3px 4px 3px 8px;
-  background: #EAEAEA;
-  border: none;
+  background: rgba(20, 20, 22, 0.55);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-pill);
   box-shadow: none;
   font-size: var(--text-xs);
-  color: #000000;
+  color: rgba(255, 255, 255, 0.95);
   max-width: 100%;
-}
-
-:root[data-theme="dark"] .collectionPill {
-  background: #3A3A3C;
-  color: #FFFFFF;
 }
 
 .collectionPillIcon {
@@ -953,19 +944,16 @@
   align-items: center;
   gap: 1px;
   padding: 2px 2px 2px 6px;
-  background: #EAEAEA;
-  border: none;
+  background: rgba(20, 20, 22, 0.55);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-pill);
   box-shadow: none;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: #000000;
+  color: rgba(255, 255, 255, 0.95);
   max-width: 100%;
-}
-
-:root[data-theme="dark"] .tagPill {
-  background: #3A3A3C;
-  color: #FFFFFF;
 }
 
 .tagHash {
@@ -1293,19 +1281,22 @@
   background: rgba(255, 255, 255, 0.24);
 }
 
-.panel .tagPill {
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+.panel .tagPill,
+.panel .collectionPill,
+.panel .spacePill {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.18);
   color: rgba(255, 255, 255, 0.95);
 }
 
-.panel .collectionPill {
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.95);
+.panel .spacePill:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .panel .addNoteBtn {

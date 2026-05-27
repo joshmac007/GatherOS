@@ -215,6 +215,11 @@ export default function RediscoverMode({
           <XIcon size={18} strokeWidth={1.8} aria-hidden="true" />
         </button>
         <div className={styles.empty}>
+          {!neverHadAnything && (
+            <div className={styles.emptyCheck} aria-hidden="true">
+              <CheckIcon size={28} strokeWidth={2.2} />
+            </div>
+          )}
           <div className={styles.emptyTitle}>
             {neverHadAnything ? 'Nothing to rediscover yet' : "You've seen everything"}
           </div>

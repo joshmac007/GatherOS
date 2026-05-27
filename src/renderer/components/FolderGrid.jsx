@@ -1,10 +1,52 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Folder as FolderClosed, Pencil, Trash2, Plus, Eclipse as Layers } from 'lucide-react';
 import styles from './FolderGrid.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
+import Dropdown from './Dropdown.jsx';
 
 const SAVE_DROP_MIME = 'application/x-moodmark-save-ids';
+
+const COLLECTION_SORT_OPTIONS = [
+  { value: 'manual',    label: 'Manual order' },
+  { value: 'newest',    label: 'Newest' },
+  { value: 'oldest',    label: 'Oldest' },
+  { value: 'name_asc',  label: 'Name A→Z' },
+  { value: 'name_desc', label: 'Name Z→A' },
+  { value: 'most',      label: 'Most saves' },
+  { value: 'fewest',    label: 'Fewest saves' },
+];
+
+const COLLECTION_SORT_STORAGE_KEY = 'moodmark.collections.sort';
+
+function readStoredSort(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    if (v) return v;
+  } catch { /* localStorage unavailable */ }
+  return fallback;
+}
+
+function sortFolders(folders, mode) {
+  const arr = [...folders];
+  switch (mode) {
+    case 'newest':
+      return arr.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    case 'oldest':
+      return arr.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+    case 'name_asc':
+      return arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    case 'name_desc':
+      return arr.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+    case 'most':
+      return arr.sort((a, b) => (b.save_count || 0) - (a.save_count || 0));
+    case 'fewest':
+      return arr.sort((a, b) => (a.save_count || 0) - (b.save_count || 0));
+    case 'manual':
+    default:
+      return arr;
+  }
+}
 
 function PencilIcon() { return <Pencil size={14} strokeWidth={1.6} aria-hidden="true" />; }
 function TrashIcon()  { return <Trash2 size={14} strokeWidth={1.6} aria-hidden="true" />; }
@@ -31,6 +73,7 @@ function FolderTile({
   onDragEnd,
   reorderHint,
   isReorderDragging,
+  draggable = true,
 }) {
   const thumbs = Array.isArray(folder.thumbs) ? folder.thumbs.slice(0, 4) : [];
   const count = folder.save_count || 0;
@@ -44,7 +87,7 @@ function FolderTile({
         reorderHint === 'after' && styles.tileReorderAfter,
       ].filter(Boolean).join(' ')}
       role="button"
-      draggable={!isRenaming}
+      draggable={draggable && !isRenaming}
       onDragStart={onDragStart}
       tabIndex={isRenaming ? -1 : 0}
       onClick={(e) => {
@@ -168,6 +211,17 @@ export default function FolderGrid({
   // Drag-to-reorder state: { id, hintBefore, hintAfter } — only one
   // hint position renders at a time, on whichever side the cursor sits.
   const [reorderState, setReorderState] = useState({ draggingId: null, overId: null, side: null });
+  const [sortMode, setSortMode] = useState(() =>
+    readStoredSort(COLLECTION_SORT_STORAGE_KEY, 'manual'));
+  function handleSortChange(next) {
+    setSortMode(next);
+    try { localStorage.setItem(COLLECTION_SORT_STORAGE_KEY, next); } catch { /* unavailable */ }
+  }
+  const displayFolders = useMemo(
+    () => sortFolders(visible, sortMode),
+    [visible, sortMode],
+  );
+  const reorderEnabled = sortMode === 'manual';
 
   function startRename(folder) {
     setRenamingId(folder.id);
@@ -299,11 +353,19 @@ export default function FolderGrid({
 
   return (
     <div className={styles.scroll}>
+      <div className={styles.gridHeader}>
+        <Dropdown
+          value={sortMode}
+          options={COLLECTION_SORT_OPTIONS}
+          onChange={handleSortChange}
+          ariaLabel="Sort collections by"
+        />
+      </div>
       <div className={styles.grid}>
         {onCreateFolder && (
           <NewFolderTile onActivate={onCreateFolder} />
         )}
-        {visible.map((folder) => (
+        {displayFolders.map((folder) => (
           <FolderTile
             key={folder.id}
             folder={folder}
@@ -321,7 +383,8 @@ export default function FolderGrid({
             isDropTarget={dropTargetId === folder.id}
             isReorderDragging={reorderState.draggingId === folder.id}
             reorderHint={reorderState.overId === folder.id ? reorderState.side : null}
-            onDragStart={(e) => handleTileReorderDragStart(e, folder.id)}
+            draggable={reorderEnabled}
+            onDragStart={reorderEnabled ? (e) => handleTileReorderDragStart(e, folder.id) : undefined}
             onDragOver={(e) => handleTileDragOver(e, folder.id)}
             onDragLeave={handleTileDragLeave}
             onDrop={(e) => handleTileDrop(e, folder.id)}
