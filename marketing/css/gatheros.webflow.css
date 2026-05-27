@@ -41,9 +41,9 @@ h1 {
    regular-only. */
 .hero h1 {
   font-family: Geist, Arial, sans-serif;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.02em;
-  max-width: 12ch;
+  max-width: 22ch;
 }
 
 .hero {
