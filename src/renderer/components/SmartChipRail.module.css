@@ -24,9 +24,11 @@
 
 /* When the left cluster is rendering the folder-view title +
    back button instead of the smart-view chips, tighten the gap
-   so the chevron sits close to the name. */
-.left:has(.title) {
-  gap: 4px;
+   so the chevron sits close to the name. The title is rendered as
+   an <input class=.titleInput> (so the browser never relayouts
+   on enter/exit edit mode), not a .title span, so target that. */
+.left:has(.titleInput) {
+  gap: 10px;
 }
 
 /* Folder-view variant of the left cluster: back chevron + folder
