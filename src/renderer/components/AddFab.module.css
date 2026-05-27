@@ -1,0 +1,99 @@
+.fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--text-primary);
+  color: var(--surface-1);
+  border: none;
+  border-radius: var(--radius-circle);
+  cursor: pointer;
+  z-index: 90;
+  /* Soft halo + light internal highlight so the circle reads as a
+     pressed ink-disc against any wallpaper. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 2px 6px rgba(0, 0, 0, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.22);
+  -webkit-app-region: no-drag;
+  transition:
+    transform var(--dur-instant, 80ms) ease,
+    opacity var(--dur-instant, 80ms) ease;
+  animation: fabIn var(--dur-pronounced, 220ms) var(--ease-out, ease-out) both;
+}
+
+.fab:hover {
+  opacity: 0.92;
+}
+
+.fab:active {
+  transform: scale(0.96);
+}
+
+/* Floating menu anchored above the FAB. Same visual vocabulary as
+   the toolbar's popovers so the UX stays consistent. */
+.menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow:
+    inset 0 0.5px 0 var(--glass-inset),
+    0 2px 6px rgba(0, 0, 0, 0.06),
+    0 14px 36px rgba(0, 0, 0, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: menuIn 160ms var(--ease-out, ease-out) both;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-instant, 80ms) ease;
+}
+
+.item:hover {
+  background: var(--hover-bg-soft, rgba(0, 0, 0, 0.05));
+}
+
+.itemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.itemLabel {
+  flex: 1 1 auto;
+}
+
+@keyframes fabIn {
+  from { opacity: 0; transform: scale(0.85) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes menuIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

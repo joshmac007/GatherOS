@@ -225,6 +225,7 @@ export default function FocusedView({
             title="Close (Esc)"
             aria-label="Close focused view"
             onClick={onBack}
+            data-onboarding="detail-close"
           >
             <CloseIcon />
           </button>

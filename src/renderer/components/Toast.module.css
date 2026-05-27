@@ -1,33 +1,24 @@
-/* Solid surface instead of glass — the heavy backdrop-blur read as
-   "see-through ghost" against busy desktop backgrounds. Now grounded
-   with an opaque fill + a softened drop shadow so the pill clearly
-   sits above whatever's behind the toast window. */
+/* Liquid-glass toast — dark translucent surface with backdrop blur
+   so it reads against any wallpaper. Color treatment is hard-set
+   (not theme-flipped) so the toast looks the same in light + dark
+   modes. */
 .toast {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px 10px 10px;
+  padding: 10px 8px 10px 10px;
   min-width: 220px;
-  background: var(--surface-1);
-  border: 0.5px solid var(--border);
+  background: rgba(20, 20, 22, 0.72);
+  color: #ffffff;
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-xl);
-  cursor: pointer;
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.06),
-    0 12px 32px rgba(0, 0, 0, 0.14);
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.22),
+    0 12px 32px rgba(0, 0, 0, 0.32);
   animation: slideIn 0.22s var(--ease-pop);
-  transition: background var(--dur-instant) ease, transform var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
-}
-
-.toast:hover {
-  background: var(--surface-2, var(--surface-1));
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    0 16px 40px rgba(0, 0, 0, 0.18);
-}
-
-.toast:active {
-  transform: scale(0.99);
 }
 
 .thumbWrap {
@@ -40,9 +31,9 @@
   height: 32px;
   object-fit: cover;
   border-radius: var(--radius-sm);
-  background: var(--hover-bg-soft);
+  background: rgba(255, 255, 255, 0.08);
   display: block;
-  box-shadow: 0 0 0 0.5px var(--border);
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12);
   animation: thumbSwap var(--dur-medium) var(--ease-pop);
 }
 
@@ -56,16 +47,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent);
-  color: var(--text-on-accent);
+  background: #ffffff;
+  color: #0b0b0d;
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.01em;
   border-radius: var(--radius-pill);
   box-shadow:
-    0 0 0 1.5px var(--surface-1),
-    0 1px 2px rgba(0, 0, 0, 0.2);
+    0 0 0 1.5px rgba(20, 20, 22, 0.72),
+    0 1px 2px rgba(0, 0, 0, 0.4);
   animation: badgePop var(--dur-medium) var(--ease-bounce);
 }
 
@@ -80,53 +71,38 @@
 }
 
 .label {
-  color: var(--text-primary);
+  flex: 1 1 auto;
+  color: rgba(255, 255, 255, 0.95);
   font-size: var(--text-md);
   font-weight: 500;
   letter-spacing: -0.01em;
 }
 
-@keyframes slideIn {
-  from { transform: translateY(20px) scale(0.96); opacity: 0; }
-  to   { transform: translateY(0) scale(1);       opacity: 1; }
+/* Subtle grey X on the right. Tightly visible at rest, brightens on
+   hover so a hesitant click target reads clearly. */
+.dismissBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-left: 2px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
-/* Dark theme — applied either via the app's explicit
-   <html data-theme="dark"> attribute OR (in practice for the
-   toast window, which doesn't inherit that attribute) the OS
-   prefers-color-scheme. Placed at the end of the file so it
-   overrides the base .label rule above without specificity
-   gymnastics. */
-:root[data-theme="dark"] .toast {
-  background: #2a2a2c;
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    0 16px 40px rgba(0, 0, 0, 0.55);
-}
-
-:root[data-theme="dark"] .toast:hover {
-  background: #323234;
-}
-
-:root[data-theme="dark"] .label {
+.dismissBtn:hover {
+  background: rgba(255, 255, 255, 0.10);
   color: rgba(255, 255, 255, 0.95);
 }
 
-@media (prefers-color-scheme: dark) {
-  .toast {
-    background: #2a2a2c;
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.5),
-      0 16px 40px rgba(0, 0, 0, 0.55);
-  }
-
-  .toast:hover {
-    background: #323234;
-  }
-
-  .label {
-    color: rgba(255, 255, 255, 0.95);
-  }
+@keyframes slideIn {
+  from { transform: translateY(20px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0) scale(1);       opacity: 1; }
 }

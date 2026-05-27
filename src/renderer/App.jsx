@@ -12,6 +12,7 @@ import RediscoverMode from './components/RediscoverMode.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import SaveUrlModal from './components/SaveUrlModal.jsx';
+import AddFab from './components/AddFab.jsx';
 import WhatsNewModal from './components/WhatsNewModal.jsx';
 import { pickNotesForUpgrade, RELEASE_NOTES } from './data/releaseNotes.js';
 import ShortcutsModal from './components/ShortcutsModal.jsx';
@@ -2401,17 +2402,32 @@ export default function App() {
         console.error('Zip upload failed:', err);
       }
     }
-    let lastId = null;
+    // Track every fresh save id so we can route them into the
+    // active collection when the user added them while viewing
+    // one (FAB context).
+    const newIds = [];
     for (const file of images) {
       try {
         const record = await window.moodmark.saves.dropFile(file);
-        if (record?.id) lastId = record.id;
+        if (record?.id) newIds.push(record.id);
       } catch (err) {
         console.error('Upload failed:', err);
       }
     }
-    if (lastId) focusAfterDrop();
-  }, [focusAfterDrop]);
+    if (view.type === 'collection' && view.id && newIds.length) {
+      for (const saveId of newIds) {
+        try {
+          await window.moodmark.collections.addSave({
+            collectionId: view.id, saveId,
+          });
+        } catch (err) {
+          console.error('Add-to-collection-on-upload failed:', err);
+        }
+      }
+      loadCollections();
+    }
+    if (newIds.length) focusAfterDrop();
+  }, [focusAfterDrop, view, loadCollections]);
 
   // Drop Finder files directly onto a featured-buckets / folder-grid
   // card. Imports each file via the standard dropFile pipeline, then
@@ -3043,7 +3059,31 @@ export default function App() {
       <SaveUrlModal
         open={saveUrlOpen}
         onClose={() => setSaveUrlOpen(false)}
-        onSaved={() => { reload(); }}
+        onSaved={async (record) => {
+          // Same FAB-in-collection behavior as the image upload
+          // path: file the new save into the collection the user
+          // was viewing.
+          if (view.type === 'collection' && view.id && record?.id) {
+            try {
+              await window.moodmark.collections.addSave({
+                collectionId: view.id, saveId: record.id,
+              });
+              loadCollections();
+            } catch (err) {
+              console.error('Add-URL-to-collection failed:', err);
+            }
+          }
+          reload();
+        }}
+      />
+
+      <AddFab
+        visible={
+          appMode === 'library'
+          || (appMode === 'folders' && view.type === 'collection')
+        }
+        onUpload={handleUploadClick}
+        onSaveUrl={() => setSaveUrlOpen(true)}
       />
 
       <ConfirmHost />

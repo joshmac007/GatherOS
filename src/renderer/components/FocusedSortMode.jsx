@@ -8,18 +8,6 @@ import { flyToCollection } from '../lib/flyToCollection.js';
 // images still chew GPU on lower-end Macs.
 const BG_THUMBS = 9;
 
-const CELEBRATION_COLORS = [
-  '#34c759', '#ffcc00', '#ff9500', '#0a84ff',
-  '#af52de', '#ff3b30', '#5ac8fa', '#ff2d55',
-];
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 12.5 L10 17.5 L19 7" />
-    </svg>
-  );
-}
 
 function CloseIcon() {
   return (
@@ -114,24 +102,6 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
     delay: `${(i * 1.3) % 9}s`,
   })), [pendingIds]);
 
-  // Confetti pieces — pre-rolled when entering the done state.
-  const confetti = useMemo(() => {
-    if (!done) return [];
-    return Array.from({ length: 36 }, (_, i) => {
-      const angle = -180 + Math.random() * 180;
-      const distance = 140 + Math.random() * 180;
-      return {
-        id: i,
-        dx: Math.cos((angle * Math.PI) / 180) * distance,
-        dy: Math.sin((angle * Math.PI) / 180) * distance,
-        rot: Math.random() * 720 - 360,
-        delay: Math.random() * 200,
-        size: 5 + Math.random() * 5,
-        color: CELEBRATION_COLORS[i % CELEBRATION_COLORS.length],
-      };
-    });
-  }, [done]);
-
   return createPortal(
     <div className={[styles.overlay, exiting && styles.exiting].filter(Boolean).join(' ')}>
       {/* Background scatter — uses upcoming-queue thumbs so the user
@@ -223,30 +193,12 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
 
       {/* ── Done state ──────────────────────────────────────────── */}
       {done && (
-        <>
-          <div className={styles.confetti} aria-hidden="true">
-            {confetti.map((p) => (
-              <span
-                key={p.id}
-                className={styles.confettiPiece}
-                style={{
-                  '--dx': `${p.dx}px`,
-                  '--dy': `${p.dy}px`,
-                  '--rot': `${p.rot}deg`,
-                  '--delay': `${p.delay}ms`,
-                  width: `${p.size}px`,
-                  height: `${p.size}px`,
-                  background: p.color,
-                }}
-              />
-            ))}
-          </div>
-          <div className={styles.done}>
-            <span className={styles.doneCheck}><CheckIcon /></span>
-            <h1>All sorted.</h1>
-            <p>Inbox zero. {total === 1 ? '1 save' : `${total} saves`} sorted.</p>
-          </div>
-        </>
+        <div className={styles.done}>
+          <h1 className={styles.doneTitle}>All sorted</h1>
+          <p className={styles.doneSub}>
+            {total === 1 ? '1 save' : `${total} saves`} filed into their collections.
+          </p>
+        </div>
       )}
     </div>,
     document.body,

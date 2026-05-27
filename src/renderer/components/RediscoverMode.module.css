@@ -248,46 +248,101 @@
 
 /* End-of-queue panel. Centered glassy card with a "you've seen
    everything" headline and a Done button. */
+/* No card / box — text floats directly on the dark scrim. Tighter
+   gap stack so the title + sub + Done read as one quiet group
+   rather than a stuffed dialog. */
 .empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 36px 40px 30px;
-  background: rgba(28, 28, 30, 0.92);
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-xl);
+  gap: 10px;
   text-align: center;
   animation: cardIn var(--dur-medium) var(--ease-out);
 }
 
 .emptyTitle {
-  font-size: var(--text-lg);
+  font-size: 22px;
   font-weight: 600;
-  letter-spacing: -0.015em;
-  color: #fff;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .emptySub {
   font-size: var(--text-md);
-  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.55);
+  max-width: 36ch;
 }
 
 .doneBtn {
-  margin-top: 6px;
-  height: 32px;
-  padding: 0 18px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 0.5px solid rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-md);
-  color: #fff;
+  margin-top: 18px;
+  padding: 8px 22px;
+  background: transparent;
+  border: 0.5px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-pill);
+  color: rgba(255, 255, 255, 0.85);
   font-family: var(--font-ui);
   font-size: var(--text-md);
   font-weight: 500;
+  letter-spacing: -0.005em;
   cursor: pointer;
-  transition: background var(--dur-instant) ease;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
 
 .doneBtn:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+/* Top-right close affordance. Pinned to the scrim corner so it
+   doesn't shift with the card layout. */
+.closeBtn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
+  -webkit-app-region: no-drag;
+}
+
+.closeBtn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+/* "In" badge on picker rows for collections the current save is
+   already a member of. Quiet pill so the rest of the list keeps
+   priority — the badge is informational, not destructive. */
+.pickerName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickerInBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px 1px 5px;
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.75);
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }

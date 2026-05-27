@@ -242,88 +242,52 @@
 /* ── Empty + done states ──────────────────────────────────────── */
 
 .empty,
+/* Quiet sort-complete state — title + sub, centred, floating on
+   the existing dark overlay. No giant check, no confetti, no
+   green. Matches the rest of the app's restrained vocabulary. */
 .done {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   text-align: center;
-  color: #fff;
+  animation: doneIn var(--dur-medium) var(--ease-out) both;
 }
 
-.empty h2,
-.done h1 {
+.doneTitle {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.doneSub {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Empty-state title / body kept on their old shared rules. */
+.empty h2 {
   margin: 0;
   font-size: var(--text-display);
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: #ffffff;
 }
 
-.empty p,
-.done p {
+.empty p {
   margin: 0;
   font-size: var(--text-md);
   color: rgba(255, 255, 255, 0.7);
 }
 
-.done {
-  animation: doneIn var(--dur-long) var(--ease-out) both;
-}
-
-.doneCheck {
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-circle);
-  background: linear-gradient(135deg, #34c759, var(--accent));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 12px 32px rgba(52, 199, 89, 0.45);
-  animation: doneCheckPop var(--dur-long) var(--ease-out) both;
-}
-
-.doneCheck svg {
-  width: 40px;
-  height: 40px;
-  color: #fff;
-}
-
 @keyframes doneIn {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes doneCheckPop {
-  0%   { transform: scale(0);   opacity: 0; }
-  60%  { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(1);   opacity: 1; }
-}
-
-/* Confetti — quick celebratory burst on the done state. */
-.confetti {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.confettiPiece {
-  position: absolute;
-  top: 0;
-  left: 0;
-  border-radius: var(--radius-sm);
-  opacity: 0;
-  animation: confettiFly 1.6s var(--ease-out) forwards;
-  animation-delay: var(--delay, 0ms);
-}
-
-@keyframes confettiFly {
-  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg); }
-  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); }
 }

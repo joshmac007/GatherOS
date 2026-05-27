@@ -309,10 +309,14 @@
   top: 8px;
   right: 8px;
   padding: 3px 7px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
+  /* Liquid-glass: dark translucent fill + backdrop blur of the
+     image behind. Reads white-on-glass against any image. */
+  background: rgba(20, 20, 22, 0.55);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  color: rgba(255, 255, 255, 0.95);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 600;

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { X as XIcon, Check as CheckIcon } from 'lucide-react';
 import styles from './RediscoverMode.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import { fuzzyMatch } from '../lib/fuzzy.js';
@@ -36,6 +37,11 @@ export default function RediscoverMode({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerFilter, setPickerFilter] = useState('');
   const [pickerActiveIdx, setPickerActiveIdx] = useState(0);
+  // Collections that already contain the current save. Used to mark
+  // them in the picker so the user doesn't add a duplicate by
+  // accident. Reloaded whenever the current save changes or the
+  // picker opens.
+  const [currentCollectionIds, setCurrentCollectionIds] = useState(new Set());
   // Direction of the most recent action so the card-leave animation
   // can lean the right way (left for trash, right for skip, up for
   // bucket). Cleared after the next save renders.
@@ -70,6 +76,23 @@ export default function RediscoverMode({
       .slice(0, 12)
       .map((x) => x.c);
   }, [collections, pickerFilter]);
+
+  // Look up which collections currently contain this save so we can
+  // mark them in the picker. Refetches whenever the current save
+  // changes (so trashing / bucketing one card and moving to the
+  // next gives accurate membership for the new card).
+  useEffect(() => {
+    if (!open || !currentId) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const cols = await window.moodmark?.collections?.getForSave?.(currentId);
+        if (cancelled) return;
+        setCurrentCollectionIds(new Set((cols || []).map((c) => c.id)));
+      } catch { /* non-fatal — picker just won't show membership */ }
+    })();
+    return () => { cancelled = true; };
+  }, [open, currentId]);
 
   function advance(direction) {
     if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
@@ -168,14 +191,30 @@ export default function RediscoverMode({
 
   if (!open) return null;
 
-  // Two empty states with different copy: a library that has nothing
-  // to rediscover (queue never had anything in it) vs. one where the
-  // user has walked through every save.
+  // Click on the scrim (NOT on any inner element) closes. e.target
+  // === e.currentTarget makes sure clicks that bubbled up from the
+  // card / hints / picker don't dismiss.
+  const handleScrimClick = (e) => {
+    if (e.target === e.currentTarget) onClose?.();
+  };
+
+  // Two empty states with different copy: a library that has
+  // nothing to rediscover (queue never had anything in it) vs. one
+  // where the user has walked through every save. No box / card —
+  // text and a Done button float directly on the dark scrim.
   if (!current) {
     const neverHadAnything = queue.length === 0;
     return (
-      <div className={styles.scrim} onClick={onClose} role="dialog" aria-modal="true">
-        <div className={styles.empty} onClick={(e) => e.stopPropagation()}>
+      <div className={styles.scrim} onClick={handleScrimClick} role="dialog" aria-modal="true">
+        <button
+          type="button"
+          className={styles.closeBtn}
+          onClick={onClose}
+          aria-label="Close"
+        >
+          <XIcon size={18} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+        <div className={styles.empty}>
           <div className={styles.emptyTitle}>
             {neverHadAnything ? 'Nothing to rediscover yet' : "You've seen everything"}
           </div>
@@ -193,7 +232,22 @@ export default function RediscoverMode({
   }
 
   return (
-    <div className={styles.scrim} role="dialog" aria-modal="true" aria-label="Rediscover">
+    <div
+      className={styles.scrim}
+      onClick={handleScrimClick}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Rediscover"
+    >
+      <button
+        type="button"
+        className={styles.closeBtn}
+        onClick={onClose}
+        aria-label="Close rediscover"
+      >
+        <XIcon size={18} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+
       <div className={styles.progress}>
         {idx + 1} <span className={styles.progressTotal}>/ {queue.length}</span>
       </div>
@@ -201,6 +255,7 @@ export default function RediscoverMode({
       <div
         key={currentId}
         className={`${styles.card} ${leaving ? styles[`leaving_${leaving}`] : ''}`}
+        onClick={(e) => e.stopPropagation()}
       >
         <img
           src={fileUrl(current.file_path)}
@@ -253,21 +308,30 @@ export default function RediscoverMode({
                   : `No collection matches "${pickerFilter}".`}
               </div>
             ) : (
-              filteredCollections.map((c, i) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`${styles.pickerItem} ${i === pickerActiveIdx ? styles.pickerItemActive : ''}`}
-                  onMouseDown={(e) => { e.preventDefault(); pickBucket(c.id); }}
-                  onMouseEnter={() => setPickerActiveIdx(i)}
-                >
-                  <span
-                    className={styles.pickerDot}
-                    style={{ background: c.color || 'var(--icon-blue)' }}
-                  />
-                  {c.name}
-                </button>
-              ))
+              filteredCollections.map((c, i) => {
+                const isIn = currentCollectionIds.has(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`${styles.pickerItem} ${i === pickerActiveIdx ? styles.pickerItemActive : ''}`}
+                    onMouseDown={(e) => { e.preventDefault(); pickBucket(c.id); }}
+                    onMouseEnter={() => setPickerActiveIdx(i)}
+                  >
+                    <span
+                      className={styles.pickerDot}
+                      style={{ background: c.color || 'var(--icon-blue)' }}
+                    />
+                    <span className={styles.pickerName}>{c.name}</span>
+                    {isIn && (
+                      <span className={styles.pickerInBadge} title="Already in this collection">
+                        <CheckIcon size={12} strokeWidth={2.2} aria-hidden="true" />
+                        <span>In</span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })
             )}
           </div>
         </div>

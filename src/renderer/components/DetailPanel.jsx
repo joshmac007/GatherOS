@@ -605,14 +605,12 @@ export default function DetailPanel({
           >
             <InfoIcon size={14} strokeWidth={1.8} aria-hidden="true" />
           </button>
-          <button
-            className={styles.closeBtn}
-            onClick={onClose}
-            title="Close"
-            data-onboarding="detail-close"
-          >
-            ×
-          </button>
+          {/* Close X used to live here; redundant with the
+              FocusedView top-bar Close that points at the same
+              onBack/setFocusedId(null) state, so we keep only the
+              top one. data-onboarding="detail-close" moved there
+              too so the walkthrough's step-3 clickBefore still
+              works. */}
         </div>
       </header>
 

@@ -361,7 +361,7 @@ function AddMenu({ compact = false, onUpload, onSaveUrl }) {
               <span className={styles.helpItemIcon}>
                 <LinkGlyph {...ICON} />
               </span>
-              <span className={styles.helpItemLabel}>Save URL…</span>
+              <span className={styles.helpItemLabel}>Save URL</span>
             </button>
           )}
         </div>,
@@ -630,13 +630,11 @@ export default function Toolbar({
             <SettingsIcon />
           </button>
         )}
-        {(onUpload || onSaveUrl) && (
-          <AddMenu
-            compact={modePillCompact}
-            onUpload={onUpload}
-            onSaveUrl={onSaveUrl}
-          />
-        )}
+        {/* + Add lives in a floating FAB at the bottom-right now —
+            see AddFab. Removed from the toolbar so the right
+            cluster stays focused on chrome (theme / rediscover /
+            settings) and the primary capture affordance reads as
+            its own action zone. */}
       </div>
     </div>
   );
