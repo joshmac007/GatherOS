@@ -19,6 +19,8 @@ import {
   SquareLibrary as LibraryIcon,
   Folder as FolderIcon,
   Eclipse as LayersIcon,
+  Image as ImageGlyph,
+  Link as LinkGlyph,
 } from 'lucide-react';
 import styles from './Toolbar.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -271,6 +273,104 @@ function HelpMenu({
   );
 }
 
+// The toolbar's + Add button. Click opens a popover menu with the
+// supported save types (an image upload or a URL capture). Anchored
+// + portaled the same way HelpMenu is — toolbar overflow:hidden
+// would clip an inline menu otherwise.
+function AddMenu({ compact = false, onUpload, onSaveUrl }) {
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState(null);
+  const btnRef = useRef(null);
+  const popRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    setAnchor({ top: r.bottom + 6, right: window.innerWidth - r.right });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onDown(e) {
+      if (
+        popRef.current && !popRef.current.contains(e.target) &&
+        btnRef.current && !btnRef.current.contains(e.target)
+      ) setOpen(false);
+    }
+    function onEsc(e) { if (e.key === 'Escape') setOpen(false); }
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onEsc);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  function go(action) {
+    return () => {
+      setOpen(false);
+      action?.();
+    };
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className={[styles.addBtn, compact && styles.addBtnCompact]
+          .filter(Boolean)
+          .join(' ')}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Add to library"
+      >
+        <span className={styles.addBtnIcon} aria-hidden="true">
+          <Plus strokeWidth={1.8} />
+        </span>
+        <span className={styles.addBtnLabel}>Add</span>
+      </button>
+      {open && anchor && createPortal(
+        <div
+          ref={popRef}
+          role="menu"
+          className={styles.helpPopover}
+          style={{ top: `${anchor.top}px`, right: `${anchor.right}px` }}
+        >
+          {onUpload && (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.helpItem}
+              onClick={go(onUpload)}
+            >
+              <span className={styles.helpItemIcon}>
+                <ImageGlyph {...ICON} />
+              </span>
+              <span className={styles.helpItemLabel}>Add image…</span>
+            </button>
+          )}
+          {onSaveUrl && (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.helpItem}
+              onClick={go(onSaveUrl)}
+            >
+              <span className={styles.helpItemIcon}>
+                <LinkGlyph {...ICON} />
+              </span>
+              <span className={styles.helpItemLabel}>Save URL…</span>
+            </button>
+          )}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 function ModePill({ mode, onModeChange, compact = false }) {
   const activeIndex = Math.max(0, MODE_SEGMENTS.findIndex((s) => s.id === mode));
   return (
@@ -343,6 +443,7 @@ export default function Toolbar({
   onDeleteLibrary,
   onManageLibraries,
   onUpload,
+  onSaveUrl,
 }) {
   // Slider is inverted so dragging right = bigger cards = fewer columns.
   const sliderValue = COLS_MAX + COLS_MIN - columns;
@@ -529,21 +630,12 @@ export default function Toolbar({
             <SettingsIcon />
           </button>
         )}
-        {onUpload && (
-          <button
-            type="button"
-            className={[styles.addBtn, modePillCompact && styles.addBtnCompact]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={onUpload}
-            title="Add image"
-            aria-label="Add image"
-          >
-            <span className={styles.addBtnIcon} aria-hidden="true">
-              <Plus strokeWidth={1.8} />
-            </span>
-            <span className={styles.addBtnLabel}>Add</span>
-          </button>
+        {(onUpload || onSaveUrl) && (
+          <AddMenu
+            compact={modePillCompact}
+            onUpload={onUpload}
+            onSaveUrl={onSaveUrl}
+          />
         )}
       </div>
     </div>

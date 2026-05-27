@@ -334,6 +334,21 @@
   object-fit: contain;
 }
 
+/* URL-kind saves render here. Fills the wrap like .image does so
+   the zoom slider scales the live page just like a screenshot.
+   Rounded chrome so the rendered site has a polished frame
+   against the dark backdrop. */
+.webview {
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  /* Webview tags default to display: inline, which causes a
+     baseline-aligned gap below them. Block fixes the layout. */
+  display: inline-flex;
+}
+
 .navHint {
   /* Center inside the stage's content box (not the box itself).
      The stage reserves 340px on the right for the floating

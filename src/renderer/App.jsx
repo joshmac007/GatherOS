@@ -11,6 +11,7 @@ import BulkTagPicker from './components/BulkTagPicker.jsx';
 import RediscoverMode from './components/RediscoverMode.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
+import SaveUrlModal from './components/SaveUrlModal.jsx';
 import WhatsNewModal from './components/WhatsNewModal.jsx';
 import { pickNotesForUpgrade, RELEASE_NOTES } from './data/releaseNotes.js';
 import ShortcutsModal from './components/ShortcutsModal.jsx';
@@ -503,6 +504,7 @@ export default function App() {
   // can effect-listen for it without us tracking dirty flags here.
   const [settingsDrawerHint, setSettingsDrawerHint] = useState(null);
   const [aiUnlockedOpen, setAiUnlockedOpen] = useState(false);
+  const [saveUrlOpen, setSaveUrlOpen] = useState(false);
   const [whatsNewNotes, setWhatsNewNotes] = useState(null);
   // Tracks the last version whose release notes the user explicitly
   // clicked through via the sidebar's "What's New" button. Drives the
@@ -2542,6 +2544,7 @@ export default function App() {
                   setSettingsOpen(true);
                 }}
                 onUpload={handleUploadClick}
+                onSaveUrl={() => setSaveUrlOpen(true)}
               />
               {appMode === 'folders' && view.type === 'all' ? (
                 // Folders mode, no folder picked yet → tile grid of
@@ -3035,6 +3038,12 @@ export default function App() {
       <AIUnlockedModal
         open={aiUnlockedOpen}
         onClose={() => setAiUnlockedOpen(false)}
+      />
+
+      <SaveUrlModal
+        open={saveUrlOpen}
+        onClose={() => setSaveUrlOpen(false)}
+        onSaved={() => { reload(); }}
       />
 
       <ConfirmHost />

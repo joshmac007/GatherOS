@@ -176,17 +176,19 @@ export default function FocusedView({
 
           <span className={styles.divider} aria-hidden="true" />
 
-          <button
-            type="button"
-            className={[styles.iconBtn, picking && styles.iconBtnActive]
-              .filter(Boolean)
-              .join(' ')}
-            title={picking ? 'Click image to sample (Esc to cancel)' : 'Pick a color from the image'}
-            onClick={togglePicking}
-            aria-pressed={picking}
-          >
-            <EyedropperIcon />
-          </button>
+          {record.kind !== 'url' && (
+            <button
+              type="button"
+              className={[styles.iconBtn, picking && styles.iconBtnActive]
+                .filter(Boolean)
+                .join(' ')}
+              title={picking ? 'Click image to sample (Esc to cancel)' : 'Pick a color from the image'}
+              onClick={togglePicking}
+              aria-pressed={picking}
+            >
+              <EyedropperIcon />
+            </button>
+          )}
 
           <button
             type="button"
@@ -278,7 +280,23 @@ export default function FocusedView({
           onBack?.();
         }}
       >
-        {src && (
+        {record.kind === 'url' && record.source_url ? (
+          // URL-kind save: render the live page in a <webview>. The
+          // header-strip on the persist:url-view session (set in
+          // src/main/index.js) removes X-Frame-Options +
+          // frame-ancestors so even iframing-hostile sites load.
+          <div
+            className={styles.imageWrap}
+            style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
+          >
+            <webview
+              src={record.source_url}
+              partition="persist:url-view"
+              allowpopups="true"
+              className={styles.webview}
+            />
+          </div>
+        ) : src && (
           <div
             className={styles.imageWrap}
             style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
