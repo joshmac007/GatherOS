@@ -400,8 +400,12 @@ body:has(.selection-bar) .trash-toast {
    away from any bottom-pinned UI (selection-bar, sort-fab). */
 .update-pill {
   position: fixed;
-  top: 14px;
-  right: 14px;
+  /* Bottom-center so it doesn't overlap the toolbar's + Add
+     button or any other corner-anchored UI. translateX centers
+     it against the viewport. */
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 80;
   display: inline-flex;
   align-items: center;
@@ -439,8 +443,11 @@ body:has(.selection-bar) .trash-toast {
 }
 
 @keyframes updatePillIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  /* Slides up from below while preserving the X centering set on
+     the resting state. Without the translateX(-50%) on the `to`
+     keyframe the pill would snap left as the animation ends. */
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
 @keyframes updateDotPulse {
