@@ -1243,8 +1243,26 @@
   border-radius: var(--radius-circle);
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(2px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.18);
   transform: translate(-50%, -50%);
-  cursor: default;
-  z-index: 2;
+  cursor: grab;
+  /* Has to beat every item's inline z_index (which increments with
+     each new item) AND every selection-chrome z-index in this file
+     (998/999). A static high number is the simplest fix; raising
+     this above the actual painted item range was the bug — without
+     it, the arrow's own wrapper (zIndex = item.z_index, often ≥3)
+     covered the handles and stole the mousedown. */
+  z-index: 100000;
+}
+.arrowEndpoint:active { cursor: grabbing; }
+
+.arrowEndpoint::before {
+  /* Invisible halo extends the hit area by ~6px on every side so
+     the handle is easy to grab without making the visible circle
+     larger. Required at low zoom levels where the visible 11px
+     handle becomes a tiny target. */
+  content: '';
+  position: absolute;
+  inset: calc(-6px / var(--board-zoom, 1));
+  border-radius: var(--radius-circle);
 }
 
 /* Internal-vertex handle — filled accent disc at an existing bend
@@ -1260,8 +1278,16 @@
   border-radius: var(--radius-circle);
   box-shadow: 0 calc(1px / var(--board-zoom, 1)) calc(3px / var(--board-zoom, 1)) rgba(0, 0, 0, 0.22);
   transform: translate(-50%, -50%);
-  cursor: default;
-  z-index: 2;
+  cursor: grab;
+  z-index: 100000;
+}
+.arrowMidpoint:active { cursor: grabbing; }
+
+.arrowMidpoint::before {
+  content: '';
+  position: absolute;
+  inset: calc(-6px / var(--board-zoom, 1));
+  border-radius: var(--radius-circle);
 }
 
 /* Midpoint-insert handle — drag to add a new vertex between two
@@ -1275,9 +1301,17 @@
   border-radius: var(--radius-circle);
   opacity: 0.6;
   transform: translate(-50%, -50%);
-  cursor: default;
-  z-index: 2;
+  cursor: grab;
+  z-index: 100000;
   transition: opacity var(--dur-instant) ease, transform var(--dur-instant) ease;
+}
+.arrowMidpointInsert:active { cursor: grabbing; }
+
+.arrowMidpointInsert::before {
+  content: '';
+  position: absolute;
+  inset: calc(-8px / var(--board-zoom, 1));
+  border-radius: var(--radius-circle);
 }
 
 .arrowMidpointInsert:hover {

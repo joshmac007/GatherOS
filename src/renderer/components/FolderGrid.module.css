@@ -12,6 +12,15 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Sort dropdown lives above the tile grid, right-aligned. Padding
+   matches the grid below so the dropdown sits flush with the right
+   edge of the last column. */
+.gridHeader {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 32px 0;
+}
+
 .grid {
   display: grid;
   gap: 24px 20px;

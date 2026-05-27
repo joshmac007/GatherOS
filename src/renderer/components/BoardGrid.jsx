@@ -1,8 +1,47 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Frame, Pencil, Trash2, Plus } from 'lucide-react';
 import styles from './BoardGrid.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
+import Dropdown from './Dropdown.jsx';
+
+const BOARD_SORT_OPTIONS = [
+  { value: 'manual',    label: 'Manual order' },
+  { value: 'recent',    label: 'Recently used' },
+  { value: 'newest',    label: 'Newest' },
+  { value: 'oldest',    label: 'Oldest' },
+  { value: 'name_asc',  label: 'Name A→Z' },
+  { value: 'name_desc', label: 'Name Z→A' },
+];
+
+const BOARD_SORT_STORAGE_KEY = 'moodmark.boards.sort';
+
+function readStoredSort(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    if (v) return v;
+  } catch { /* localStorage unavailable */ }
+  return fallback;
+}
+
+function sortBoards(boards, mode) {
+  const arr = [...boards];
+  switch (mode) {
+    case 'recent':
+      return arr.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+    case 'newest':
+      return arr.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    case 'oldest':
+      return arr.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+    case 'name_asc':
+      return arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    case 'name_desc':
+      return arr.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+    case 'manual':
+    default:
+      return arr;
+  }
+}
 
 function PencilIcon() { return <Pencil size={14} strokeWidth={1.6} aria-hidden="true" />; }
 function TrashIcon()  { return <Trash2 size={14} strokeWidth={1.6} aria-hidden="true" />; }
@@ -195,6 +234,7 @@ function BoardTile({
   onDragEnd,
   reorderHint,
   isReorderDragging,
+  draggable = true,
 }) {
   const items = Array.isArray(board.items) ? board.items : [];
   const hasItems = items.length > 0;
@@ -207,7 +247,7 @@ function BoardTile({
         reorderHint === 'after' && styles.tileReorderAfter,
       ].filter(Boolean).join(' ')}
       role="button"
-      draggable={!isRenaming}
+      draggable={draggable && !isRenaming}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -298,6 +338,20 @@ export default function BoardGrid({
   const [renameDraft, setRenameDraft] = useState('');
   const renameInputRef = useRef(null);
   const [reorderState, setReorderState] = useState({ draggingId: null, overId: null, side: null });
+  const [sortMode, setSortMode] = useState(() =>
+    readStoredSort(BOARD_SORT_STORAGE_KEY, 'manual'));
+  function handleSortChange(next) {
+    setSortMode(next);
+    try { localStorage.setItem(BOARD_SORT_STORAGE_KEY, next); } catch { /* unavailable */ }
+  }
+  const displayBoards = useMemo(
+    () => sortBoards(boards || [], sortMode),
+    [boards, sortMode],
+  );
+  // Drag-reorder only makes sense when the user's manual order is the
+  // active arrangement; any other sort would just snap the dragged
+  // tile back to its sorted position.
+  const reorderEnabled = sortMode === 'manual';
 
   function handleTileReorderDragStart(e, id) {
     if (!onReorderBoards) return;
@@ -386,11 +440,19 @@ export default function BoardGrid({
 
   return (
     <div className={styles.scroll}>
+      <div className={styles.gridHeader}>
+        <Dropdown
+          value={sortMode}
+          options={BOARD_SORT_OPTIONS}
+          onChange={handleSortChange}
+          ariaLabel="Sort spaces by"
+        />
+      </div>
       <div className={styles.grid}>
         {onCreateBoard && (
           <NewBoardTile onActivate={onCreateBoard} />
         )}
-        {boards.map((board) => (
+        {displayBoards.map((board) => (
           <BoardTile
             key={board.id}
             board={board}
@@ -407,11 +469,12 @@ export default function BoardGrid({
             onRenameCancel={cancelRename}
             isReorderDragging={reorderState.draggingId === board.id}
             reorderHint={reorderState.overId === board.id ? reorderState.side : null}
-            onDragStart={(e) => handleTileReorderDragStart(e, board.id)}
-            onDragOver={(e) => handleTileDragOver(e, board.id)}
-            onDragLeave={handleTileDragLeave}
-            onDrop={(e) => handleTileDrop(e, board.id)}
-            onDragEnd={handleTileDragEnd}
+            draggable={reorderEnabled}
+            onDragStart={reorderEnabled ? (e) => handleTileReorderDragStart(e, board.id) : undefined}
+            onDragOver={reorderEnabled ? (e) => handleTileDragOver(e, board.id) : undefined}
+            onDragLeave={reorderEnabled ? handleTileDragLeave : undefined}
+            onDrop={reorderEnabled ? (e) => handleTileDrop(e, board.id) : undefined}
+            onDragEnd={reorderEnabled ? handleTileDragEnd : undefined}
           />
         ))}
       </div>
