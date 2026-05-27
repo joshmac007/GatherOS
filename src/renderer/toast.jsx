@@ -56,16 +56,20 @@ function ToastStack() {
   }
 
   // The window is sized exactly to the pill now (so macOS
-  // vibrancy on the window only frosts the pill area). Render
-  // the toast as the entire body's content instead of pinning it
-  // to a corner inside a larger viewport.
-  return current ? (
+  // vibrancy on the window only frosts the pill area). Toast is
+  // always rendered — when there's no current item it returns an
+  // empty dark shell. The toast BrowserWindow stays mounted at
+  // opacity: 0 between toasts; rendering the dark shell keeps the
+  // glass-material vocabulary intact through the gap between
+  // window-show and state-update so we never see raw light-mode
+  // vibrancy.
+  return (
     <Toast
-      record={current.record}
-      count={current.count}
+      record={current?.record || null}
+      count={current?.count || 1}
       onDismiss={handleDismiss}
     />
-  ) : null;
+  );
 }
 
 createRoot(document.getElementById('root')).render(<ToastStack />);
