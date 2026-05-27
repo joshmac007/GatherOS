@@ -328,7 +328,7 @@ export default function FocusedView({
         )}
       </div>
 
-      {picking && ReactDOM.createPortal(
+      {picking && (hoverHex || justCopied) && ReactDOM.createPortal(
         <div
           className={[
             styles.cursorTooltip,
@@ -342,7 +342,7 @@ export default function FocusedView({
         >
           {justCopied ? (
             <span>Copied</span>
-          ) : hoverHex ? (
+          ) : (
             <>
               <span
                 className={styles.cursorTooltipSwatch}
@@ -350,8 +350,6 @@ export default function FocusedView({
               />
               <span>{hoverHex}</span>
             </>
-          ) : (
-            <span>Hover image…</span>
           )}
         </div>,
         document.body,
