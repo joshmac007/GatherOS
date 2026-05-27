@@ -229,13 +229,7 @@ function BoardTile({
       onContextMenu={onContextMenu}
     >
       <div className={styles.tileArt}>
-        {hasItems ? (
-          <BoardSnapshot items={items} />
-        ) : (
-          <span className={styles.tileEmpty} aria-hidden="true">
-            <Frame size={32} strokeWidth={1.4} />
-          </span>
-        )}
+        {hasItems ? <BoardSnapshot items={items} /> : null}
       </div>
       <div className={styles.tileMeta}>
         {isRenaming ? (
