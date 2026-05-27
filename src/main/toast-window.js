@@ -63,8 +63,11 @@ function ensureToastWindow() {
     width: TOAST_WIDTH,
     height: TOAST_HEIGHT,
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    // No `transparent: true` here on purpose — with vibrancy the
+    // window background IS the frosted material, and transparent
+    // mode used to cause a brief white flash before the vibrancy
+    // layer kicked in. Letting the NSVisualEffectView be the
+    // window background eliminates the flash.
     resizable: false,
     movable: false,
     minimizable: false,
@@ -74,11 +77,11 @@ function ensureToastWindow() {
     hasShadow: false,
     show: false,
     acceptFirstMouse: true,
-    // macOS-native blur of whatever's behind the window. The window
-    // rect equals the pill rect (TOAST_WIDTH × TOAST_HEIGHT) so the
-    // frosted material lines up with the visible pill — vibrancy
-    // fills the whole window, so any extra padding would show a
-    // halo of glass around the pill.
+    // macOS-native blur of whatever's behind the window. Window
+    // rect = pill rect (TOAST_WIDTH × TOAST_HEIGHT) so the frosted
+    // material lines up with the visible pill — vibrancy fills
+    // the whole window, so any extra padding would show a halo of
+    // glass around the pill.
     vibrancy: 'hud',
     visualEffectState: 'active',
     // Rounds the NSVisualEffectView itself so the system blur stays
