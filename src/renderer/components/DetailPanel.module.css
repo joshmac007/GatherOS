@@ -250,6 +250,13 @@
   transform-style: preserve-3d;
   transition: transform var(--dur-pronounced) var(--ease-out);
   will-change: transform;
+  /* The 3D rotation can extend the hit box past the wrap's layout
+     bounds and steal clicks from the palette swatches that sit
+     directly below it. The image itself isn't clickable, and the
+     tilt's mousemove handler lives on the .preview parent — so
+     making the wrap pointer-events-transparent costs nothing and
+     restores clicks on every sibling. */
+  pointer-events: none;
 }
 
 .imageWrapTilting {

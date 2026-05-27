@@ -38,10 +38,10 @@ export default function SigninScreen({ onRequestMagicLink, reason }) {
   // something and the prompt should read as protecting that, not
   // blocking access.
   const isPostSave = reason === 'post-save';
-  const headline = isPostSave ? 'Save your library' : 'Sign in to continue';
+  const headline = isPostSave ? 'Save your library' : 'Sign in or create an account';
   const subhead = isPostSave
-    ? 'Sign in with your email so you don’t lose what you just saved. No passwords — we’ll send you a magic link.'
-    : 'Enter your email for a magic link — no password required.';
+    ? 'Enter your email so you don’t lose what you just saved — we’ll send a magic link, no password.'
+    : 'New here? Same form — enter your email and we’ll send you a magic link. No password.';
 
   return (
     <div className={styles.scrim}>

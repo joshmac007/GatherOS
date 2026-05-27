@@ -128,9 +128,9 @@ export default function OnboardingOverlay() {
   }, [active, step?.advance?.type, step?.advance?.value, advance]);
 
   // Watch for a step that advances when a selector appears in the
-  // DOM — used by 'pick-image' to wait until the detail panel
-  // actually mounts, regardless of how the user opened it
-  // (double-click, keyboard, etc).
+  // DOM. No active step uses this today (kept for the case where a
+  // future step wants to react to a panel / mode opening on its
+  // own rather than from a Next click).
   useEffect(() => {
     if (!active) return undefined;
     if (step?.advance?.type !== 'appears') return undefined;
