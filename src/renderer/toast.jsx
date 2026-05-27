@@ -55,30 +55,17 @@ function ToastStack() {
     setCurrent(null);
   }
 
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        // Single source of corner inset. EDGE_INSET in
-        // toast-window.js is 0, so this padding IS the visual gap
-        // from the work-area corner — equal on right and bottom
-        // regardless of where the Dock lives.
-        padding: 12,
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'flex-end',
-      }}
-    >
-      {current && (
-        <Toast
-          record={current.record}
-          count={current.count}
-          onDismiss={handleDismiss}
-        />
-      )}
-    </div>
-  );
+  // The window is sized exactly to the pill now (so macOS
+  // vibrancy on the window only frosts the pill area). Render
+  // the toast as the entire body's content instead of pinning it
+  // to a corner inside a larger viewport.
+  return current ? (
+    <Toast
+      record={current.record}
+      count={current.count}
+      onDismiss={handleDismiss}
+    />
+  ) : null;
 }
 
 createRoot(document.getElementById('root')).render(<ToastStack />);

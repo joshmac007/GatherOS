@@ -4,14 +4,16 @@ const path = require('node:path');
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:5173';
 
-const TOAST_WIDTH = 300;
-// Window only needs to be tall enough to hold one pill (~50px) plus
-// breathing room for the box-shadow + slide-in animation.
-const TOAST_HEIGHT = 100;
-// The window itself hugs the work-area corner; visual gap is owned
-// by the renderer's container padding (CORNER_GAP in toast.jsx),
-// so both axes are guaranteed equal regardless of Dock position.
-const EDGE_INSET = 0;
+// Window matches the pill's actual extents so macOS vibrancy
+// (set below) frosts ONLY the pill area — extra window padding
+// would show a visible halo of frosted glass around it.
+const TOAST_WIDTH = 280;
+const TOAST_HEIGHT = 56;
+// Distance from the work-area corner. The visual gap used to be
+// owned by the renderer's padding wrapper, but with vibrancy
+// constrained to the window rect the gap has to live in the
+// window's position instead.
+const EDGE_INSET = 16;
 
 let toastWin = null;
 let ready = false;
@@ -39,7 +41,10 @@ function targetBounds() {
   return {
     // Bottom-right corner of the chosen display, inset by EDGE_INSET
     // on both axes. workArea already excludes the menu bar + Dock,
-    // so this lands above whatever's anchored to those edges.
+    // so this lands above whatever's anchored to those edges. The
+    // gap from the corner used to live in renderer padding; with
+    // the window now sized to the pill exactly, it has to live in
+    // the window's position instead.
     x: x + width - TOAST_WIDTH - EDGE_INSET,
     y: y + height - TOAST_HEIGHT - EDGE_INSET,
     width: TOAST_WIDTH,
@@ -69,6 +74,17 @@ function ensureToastWindow() {
     hasShadow: false,
     show: false,
     acceptFirstMouse: true,
+    // macOS-native blur of whatever's behind the window. The window
+    // rect equals the pill rect (TOAST_WIDTH × TOAST_HEIGHT) so the
+    // frosted material lines up with the visible pill — vibrancy
+    // fills the whole window, so any extra padding would show a
+    // halo of glass around the pill.
+    vibrancy: 'hud',
+    visualEffectState: 'active',
+    // Rounds the NSVisualEffectView itself so the system blur stays
+    // inside the pill's corner radius instead of poking out as a
+    // 90° rectangle behind it.
+    roundedCorners: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload-toast.js'),
       contextIsolation: true,

@@ -3079,7 +3079,10 @@ export default function App() {
 
       <AddFab
         visible={
-          appMode === 'library'
+          // Main library grid (not Unsorted, not Trash), or inside
+          // a specific collection. Anywhere else the affordance
+          // would be ambiguous about where the new save lands.
+          (appMode === 'library' && view.type === 'all')
           || (appMode === 'folders' && view.type === 'collection')
         }
         onUpload={handleUploadClick}
