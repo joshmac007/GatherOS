@@ -34,10 +34,16 @@ h1 {
 /* Hero headline uses Geist — the same display face as the app
    itself — so the landing copy and the in-product UI feel like one
    typographic family. Letter-spacing nudged in slightly to suit
-   Geist's wider default tracking at large display sizes. */
+   Geist's wider default tracking at large display sizes. The
+   max-width forces "design" onto line two so the headline reads
+   as a more compact, deliberate block. Geist 700 comes from the
+   Google Fonts <link> in index.html — the locally bundled .otf is
+   regular-only. */
 .hero h1 {
   font-family: Geist, Arial, sans-serif;
+  font-weight: 700;
   letter-spacing: -0.02em;
+  max-width: 12ch;
 }
 
 .hero {
