@@ -76,6 +76,10 @@ contextBridge.exposeInMainWorld('moodmark', {
       ipcRenderer.invoke('saves:drop-url', {
         urls: Array.isArray(urls) ? urls : [urls],
       }),
+    // URL-kind save: screenshot the page and store as a save with
+    // kind='url'. Returns { ok, record, duplicate? } on success,
+    // { ok: false, error } otherwise.
+    captureUrl: (url) => ipcRenderer.invoke('saves:capture-url', url),
   },
   collections: {
     getAll: () => ipcRenderer.invoke('collections:get-all'),

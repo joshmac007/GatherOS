@@ -173,6 +173,12 @@ const MIGRATIONS = [
     // extras (e.g. the "font" tag stores name/designer/buy_url here).
     addColumnIfMissing(database, 'saves', 'meta', 'TEXT');
     addColumnIfMissing(database, 'saves', 'notes', 'TEXT');
+    // Save kind. 'image' is the original/default; 'url' marks a save
+    // that represents a saved website rather than a saved image — the
+    // file_path still points to the screenshot taken at save time,
+    // source_url holds the page URL, and FocusedView swaps the image
+    // for a live <webview> at view time.
+    addColumnIfMissing(database, 'saves', 'kind', "TEXT NOT NULL DEFAULT 'image'");
     // One level of bucket nesting; cascade-on-delete handled in
     // application code (SQLite ALTER doesn't allow REFERENCES).
     addColumnIfMissing(database, 'collections', 'parent_id', 'TEXT');
@@ -327,6 +333,7 @@ function insertSave({
   title,
   palette,
   contentHash,
+  kind,
 } = {}) {
   const db = getDatabase();
   const paletteArr = Array.isArray(palette) && palette.length ? palette : null;
@@ -350,13 +357,14 @@ function insertSave({
       ? JSON.stringify(paletteLabArr)
       : null,
     content_hash: contentHash || null,
+    kind: kind || 'image',
     created_at: Date.now(),
   };
   db.prepare(`
     INSERT INTO saves
-      (id, file_path, thumb_path, title, source_url, width, height, file_size, palette, palette_lab, content_hash, created_at)
+      (id, file_path, thumb_path, title, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, created_at)
     VALUES
-      (@id, @file_path, @thumb_path, @title, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @created_at)
+      (@id, @file_path, @thumb_path, @title, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @created_at)
   `).run(record);
   return record;
 }

@@ -32,6 +32,7 @@ const settings = require('./settings');
 const { quitAndInstall } = require('./updater');
 const { ingestZip } = require('./zipImport');
 const { installStarterPack, removeStarterPack, restoreSnapshot } = require('./starterPack');
+const { captureUrl } = require('./urlCapture');
 const {
   hasSession: hasAiSession,
   autoTagImage,
@@ -344,6 +345,34 @@ function registerIpcHandlers() {
   ipcMain.handle('onboarding:install-starter-pack', () => installStarterPack());
   ipcMain.handle('onboarding:remove-starter-pack', () => removeStarterPack());
   ipcMain.handle('onboarding:restore-snapshot', () => restoreSnapshot());
+
+  // URL-kind saves: take a page URL, screenshot it via a hidden
+  // BrowserWindow, insert a save row with kind='url' so the
+  // FocusedView knows to swap the image for a live webview at
+  // view time. Distinct from saves:drop-url, which treats the URL
+  // as a direct image-file URL and downloads it.
+  ipcMain.handle('saves:capture-url', async (_e, url) => {
+    if (typeof url !== 'string' || !url.trim()) {
+      return { ok: false, error: 'missing_url' };
+    }
+    try {
+      const captured = await captureUrl(url.trim());
+      if (captured.duplicateOf) {
+        notifyDuplicate(captured.existing);
+        return { ok: true, record: captured.existing, duplicate: true };
+      }
+      const record = insertSave({
+        ...captured,
+        sourceUrl: url.trim(),
+        kind: 'url',
+      });
+      notifySaved(record);
+      return { ok: true, record };
+    } catch (err) {
+      console.error('[saves:capture-url] failed:', err?.message || err);
+      return { ok: false, error: err?.message || String(err) };
+    }
+  });
 
   ipcMain.handle('saves:drop-url', async (_e, payload) => {
     const candidates = Array.isArray(payload?.urls)

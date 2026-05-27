@@ -7,6 +7,7 @@ const {
   nativeImage,
   nativeTheme,
   protocol,
+  session,
   shell,
 } = require('electron');
 const fs = require('node:fs');
@@ -445,6 +446,11 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // FocusedView's URL-kind saves render the live site in a
+      // <webview> tag. Off by default in modern Electron for
+      // security — we own the renderer + scrub framing headers in
+      // the webview's session below, so it's safe to enable.
+      webviewTag: true,
     },
   });
 
@@ -762,7 +768,50 @@ ipcMain.handle('library:switch', (_e, id) => {
   return { ok: true };
 });
 
+// Strip framing-block headers from every response served to the
+// sessions we render third-party pages in — the URL-capture
+// hidden window AND the FocusedView <webview>. Sites set these
+// headers to refuse being iframed; Electron lets us scrub them so
+// the same workaround Eagle uses works here too. Scoped to the
+// two partitions we control; everything else (main window, etc.)
+// keeps the headers intact.
+const URL_RENDER_PARTITIONS = ['persist:url-capture', 'persist:url-view'];
+
+function stripFramingHeaders(sessionInstance) {
+  sessionInstance.webRequest.onHeadersReceived((details, callback) => {
+    const headers = details.responseHeaders || {};
+    // Header keys arrive normalized-case from Chromium but be
+    // defensive — match case-insensitively.
+    for (const key of Object.keys(headers)) {
+      const lower = key.toLowerCase();
+      if (lower === 'x-frame-options') {
+        delete headers[key];
+      } else if (lower === 'content-security-policy') {
+        // Strip just the frame-ancestors directive; leave the rest
+        // of the CSP intact so JS / image / connect-src rules the
+        // page set up still apply.
+        const values = Array.isArray(headers[key]) ? headers[key] : [headers[key]];
+        const cleaned = values
+          .map((v) => v.replace(/(^|;)\s*frame-ancestors[^;]*;?/gi, '$1').trim())
+          .filter(Boolean);
+        if (cleaned.length === 0) delete headers[key];
+        else headers[key] = cleaned;
+      }
+    }
+    callback({ responseHeaders: headers });
+  });
+}
+
 app.whenReady().then(() => {
+  // Install the header-strip on the partitions the URL features use.
+  // session.fromPartition lazily creates the session if it doesn't
+  // exist, so doing this before the first capture / webview mount
+  // is safe.
+  for (const p of URL_RENDER_PARTITIONS) {
+    try { stripFramingHeaders(session.fromPartition(p)); }
+    catch (err) { console.warn(`[gatheros] header-strip on ${p} failed:`, err?.message || err); }
+  }
+
   if (process.platform === 'darwin') {
     // Drive the macOS native chrome (title bar text, traffic-light
     // hover state, native scrollbars) off the same prefs.theme value
