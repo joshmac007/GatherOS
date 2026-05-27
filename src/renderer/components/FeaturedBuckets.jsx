@@ -320,11 +320,6 @@ export default function FeaturedBuckets({
               icon: <PencilIcon />,
               onClick: () => startRename(ctxMenu.collection),
             },
-            ...(onOpenCollectionAsSpace ? [{
-              label: 'Open as space',
-              icon: <Layers size={14} strokeWidth={1.6} aria-hidden="true" />,
-              onClick: () => onOpenCollectionAsSpace(ctxMenu.collection.id),
-            }] : []),
             {
               label: 'Delete collection',
               icon: <TrashIcon />,

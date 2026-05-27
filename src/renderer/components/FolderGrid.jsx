@@ -339,11 +339,6 @@ export default function FolderGrid({
               icon: <PencilIcon />,
               onClick: () => startRename(ctxMenu.folder),
             },
-            ...(onOpenCollectionAsSpace ? [{
-              label: 'Open as space',
-              icon: <Layers size={14} strokeWidth={1.6} aria-hidden="true" />,
-              onClick: () => onOpenCollectionAsSpace(ctxMenu.folder.id),
-            }] : []),
             {
               label: 'Delete collection',
               icon: <TrashIcon />,
