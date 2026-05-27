@@ -193,14 +193,14 @@
   align-items: center;
   justify-content: center;
   padding: 60px 40px;
-  gap: 8px;
+  gap: 4px;
   color: var(--text-tertiary);
   text-align: center;
 }
 
 .emptyIcon {
   color: var(--icon-muted);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .emptyTitle {
@@ -218,7 +218,7 @@
 }
 
 .emptyAction {
-  margin-top: 14px;
+  margin-top: 8px;
   padding: 9px 18px;
   border-radius: var(--radius-pill);
   border: none;
