@@ -56,13 +56,28 @@ export function useEyedropper(imageRef, recordId) {
   function ensureCanvas() {
     if (canvasDataRef.current) return canvasDataRef.current;
     const img = imageRef.current;
-    if (!img || !img.naturalWidth) return null;
+    if (!img) {
+      console.warn('[eyedropper] no image ref');
+      return null;
+    }
+    if (!img.naturalWidth) {
+      console.warn('[eyedropper] image has no natural dimensions yet');
+      return null;
+    }
     try {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(img, 0, 0);
+      // Probe getImageData once now so a tainted-canvas SecurityError
+      // surfaces in the console immediately instead of failing
+      // silently on every hover via the pixelAt catch.
+      try { ctx.getImageData(0, 0, 1, 1); }
+      catch (err) {
+        console.error('[eyedropper] canvas tainted — getImageData blocked:', err);
+        return null;
+      }
       canvasDataRef.current = {
         ctx,
         width: img.naturalWidth,

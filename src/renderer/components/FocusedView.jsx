@@ -289,6 +289,14 @@ export default function FocusedView({
               className={styles.image}
               alt={record.title || ''}
               draggable={!picking}
+              /* Required for the eyedropper's getImageData call
+                 on the canvas built from this img to succeed —
+                 without an explicit CORS fetch the canvas gets
+                 tainted and reads throw SecurityError. The
+                 moodmark-file:// scheme is registered with
+                 corsEnabled and responds with Access-Control-
+                 Allow-Origin: * for exactly this case. */
+              crossOrigin="anonymous"
               style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
               onClick={handlePickerClick}
               onMouseMove={handleImageMouseMove}

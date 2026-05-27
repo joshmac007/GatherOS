@@ -262,6 +262,11 @@ protocol.registerSchemesAsPrivileged([
       supportFetchAPI: true,
       stream: true,
       bypassCSP: true,
+      // Required so an <img crossOrigin="anonymous"> served over
+      // this scheme produces an un-tainted canvas — the eyedropper
+      // needs getImageData() against the focused image, which
+      // throws SecurityError on tainted canvases.
+      corsEnabled: true,
     },
   },
 ]);
@@ -292,7 +297,16 @@ function registerMoodmarkFileProtocol() {
     const ext = path.extname(abs).slice(1).toLowerCase();
     const contentType = CONTENT_TYPES[ext] || 'application/octet-stream';
     return new Response(Readable.toWeb(fs.createReadStream(abs)), {
-      headers: { 'Content-Type': contentType },
+      headers: {
+        'Content-Type': contentType,
+        // CORS allow-all so an <img crossOrigin="anonymous"> loaded
+        // from this scheme produces an un-tainted canvas. The
+        // FocusedView eyedropper calls getImageData() against the
+        // focused image, which throws SecurityError on a tainted
+        // canvas. Same scheme is used everywhere in-app so allow-all
+        // is the right answer; the renderer is the only consumer.
+        'Access-Control-Allow-Origin': '*',
+      },
     });
   });
 }
