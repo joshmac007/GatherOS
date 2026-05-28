@@ -10,7 +10,7 @@ function ChevronRightIcon() {
   );
 }
 
-export default function ContextMenu({ x, y, items, onClose }) {
+export default function ContextMenu({ x, y, items, onClose, className }) {
   const ref = useRef(null);
   const submenuRef = useRef(null);
   // Index of the submenu item whose children are currently inline-
@@ -108,7 +108,11 @@ export default function ContextMenu({ x, y, items, onClose }) {
       {ReactDOM.createPortal(
         <div
           ref={ref}
-          className={[styles.menu, hasIcons && styles.menuWithIcons].filter(Boolean).join(' ')}
+          className={[
+            styles.menu,
+            hasIcons && styles.menuWithIcons,
+            className,
+          ].filter(Boolean).join(' ')}
           style={{
             position: 'fixed',
             top: pos.y,
@@ -164,7 +168,11 @@ export default function ContextMenu({ x, y, items, onClose }) {
       {activeSub && ReactDOM.createPortal(
         <div
           ref={submenuRef}
-          className={[styles.submenu, subHasIcons && styles.menuWithIcons].filter(Boolean).join(' ')}
+          className={[
+            styles.submenu,
+            subHasIcons && styles.menuWithIcons,
+            className,
+          ].filter(Boolean).join(' ')}
           style={{
             position: 'fixed',
             top: openSubmenu.y,

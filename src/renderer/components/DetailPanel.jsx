@@ -4,6 +4,7 @@ import { Info as InfoIcon, Eclipse as LayersIcon } from 'lucide-react';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
+import contextMenuStyles from './ContextMenu.module.css';
 import TagSuggestions from './TagSuggestions.jsx';
 import { fuzzyMatch } from '../lib/fuzzy.js';
 import { CollectionIcon } from './Sidebar.jsx';
@@ -1104,6 +1105,7 @@ export default function DetailPanel({
           y={picker.y}
           items={pickerItems}
           onClose={() => setPicker(null)}
+          className={contextMenuStyles.menuGlass}
         />
       )}
     </aside>
