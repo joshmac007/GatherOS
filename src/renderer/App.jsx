@@ -2355,15 +2355,38 @@ export default function App() {
 
     if (images.length > 0) {
       let lastId = null;
+      const newIds = [];
       for (const file of images) {
         try {
           const record = await window.moodmark.saves.dropFile(file);
-          if (record?.id) lastId = record.id;
+          if (record?.id) {
+            lastId = record.id;
+            newIds.push(record.id);
+          }
         } catch (err) {
           console.error('Drop failed:', err);
         }
       }
-      if (lastId) focusAfterDrop();
+      // Inside a collection view, attach the freshly-imported saves
+      // to that collection and stay put — focusAfterDrop would jump
+      // back to view=all, which loses context. Mirrors the same
+      // behaviour the FAB upload path uses in handleFileInput.
+      if (view.type === 'collection' && view.id && newIds.length) {
+        for (const saveId of newIds) {
+          try {
+            await window.moodmark.collections.addSave({
+              collectionId: view.id, saveId,
+            });
+          } catch (err) {
+            console.error('Add-to-collection-on-drop failed:', err);
+          }
+        }
+        loadCollections();
+        reload();
+        setSelected(new Set());
+      } else if (lastId) {
+        focusAfterDrop();
+      }
     }
 
     if (zips.length > 0 || images.length > 0) return;
@@ -2377,7 +2400,7 @@ export default function App() {
     } catch (err) {
       console.error('URL drop failed:', err);
     }
-  }, [focusAfterDrop]);
+  }, [focusAfterDrop, view, loadCollections, reload]);
 
   // Hidden file picker — triggered by the "+" button on the All Saves
   // sidebar row. Routes the chosen files through the same dropFile +
@@ -3088,16 +3111,16 @@ export default function App() {
 
       <AddFab
         visible={
-          // Main library grid (not Unsorted, not Trash), or inside
-          // a specific collection. Anywhere else the affordance
-          // would be ambiguous about where the new save lands.
-          // Also hidden whenever the focused detail view is open —
-          // the FAB sat over the focused image which made the
-          // "Add image" affordance read as a per-save action.
+          // Library "All" view, or any collection view — regardless
+          // of how the user got into the collection (FeaturedBuckets
+          // card above the masonry, Collections tab tile, or a
+          // sidebar entry). The folder-grid "all" on the Folders tab
+          // is still excluded because there's no destination
+          // collection for the new save to land in.
           !focusedId
           && (
             (appMode === 'library' && view.type === 'all')
-            || (appMode === 'folders' && view.type === 'collection')
+            || view.type === 'collection'
           )
         }
         onUpload={handleUploadClick}
