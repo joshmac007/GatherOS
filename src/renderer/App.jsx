@@ -2396,7 +2396,26 @@ export default function App() {
 
     try {
       const record = await window.moodmark.saves.dropUrl(candidates);
-      if (record?.id) focusAfterDrop();
+      if (!record?.id) return;
+      // Same collection-scoping rule the Finder-file branch above
+      // uses: if we're inside a collection, attach the new save to
+      // it and stay put. Without this, dragging an image off a
+      // browser tab into an open collection would import the image
+      // but bounce the user back to view=all via focusAfterDrop.
+      if (view.type === 'collection' && view.id) {
+        try {
+          await window.moodmark.collections.addSave({
+            collectionId: view.id, saveId: record.id,
+          });
+        } catch (err) {
+          console.error('Add-to-collection-on-drop-url failed:', err);
+        }
+        loadCollections();
+        reload();
+        setSelected(new Set());
+      } else {
+        focusAfterDrop();
+      }
     } catch (err) {
       console.error('URL drop failed:', err);
     }
