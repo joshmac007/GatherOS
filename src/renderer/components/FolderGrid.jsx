@@ -4,6 +4,7 @@ import styles from './FolderGrid.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
 import Dropdown from './Dropdown.jsx';
+import { extractDropImageUrls } from '../lib/dropUrls.js';
 
 const SAVE_DROP_MIME = 'application/x-moodmark-save-ids';
 
@@ -196,6 +197,10 @@ export default function FolderGrid({
   onReorderFolders,
   onAddSavesToBucket,
   onDropFilesToBucket,
+  // Handles browser drags (text/uri-list) onto a folder tile. Routed
+  // through App's handleExternalDropToBucket, which already knows how
+  // to deal with mixed file + url payloads.
+  onExternalDropToBucket,
   onSetAppDragging,
   onOpenCollectionAsSpace,
   // Same hook BoardGrid uses — App attaches its scroll listener here
@@ -255,6 +260,14 @@ export default function FolderGrid({
   function isFileDrag(e) {
     return e.dataTransfer.types.includes('Files');
   }
+  // Browser image drag: tab-image-onto-app supplies text/uri-list
+  // (and usually text/html with the <img> wrapper). Either signal
+  // is enough to know the drop carries a URL we can hand off to
+  // saves.dropUrl on the main process.
+  function isUrlDrag(e) {
+    const t = e.dataTransfer.types;
+    return t.includes('text/uri-list') || t.includes('text/html');
+  }
   function isReorderDrag(e) {
     return e.dataTransfer.types.includes(FOLDER_REORDER_MIME);
   }
@@ -277,7 +290,7 @@ export default function FolderGrid({
       }
       return;
     }
-    if (!isSaveDrag(e) && !isFileDrag(e)) return;
+    if (!isSaveDrag(e) && !isFileDrag(e) && !isUrlDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
@@ -312,15 +325,28 @@ export default function FolderGrid({
       onReorderFolders?.(ordered);
       return;
     }
-    if (!isSaveDrag(e) && !isFileDrag(e)) return;
+    if (!isSaveDrag(e) && !isFileDrag(e) && !isUrlDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setDropTargetId(null);
     // Tile owns this drop, so the global "Drop to save" overlay must
     // not linger on screen after release.
     onSetAppDragging?.(false);
-    if (isFileDrag(e) && e.dataTransfer.files?.length > 0) {
-      await onDropFilesToBucket?.(id, e.dataTransfer.files);
+    // External-source drops: Finder files (text/uri-list isn't set)
+    // OR browser images (no Files but text/uri-list / text/html).
+    // Some browsers attach BOTH a synthetic File and a uri-list — in
+    // that case we prefer the URL because the synthesised File is
+    // usually a tiny <img> screenshot, not the original asset.
+    const files = isFileDrag(e) ? [...e.dataTransfer.files] : [];
+    const urls = isUrlDrag(e) ? extractDropImageUrls(e.dataTransfer) : [];
+    if (files.length > 0 || urls.length > 0) {
+      if (onExternalDropToBucket) {
+        await onExternalDropToBucket(id, { files, urls });
+      } else if (files.length > 0) {
+        // Fallback to the file-only callback if the parent hasn't
+        // wired up the unified handler yet.
+        await onDropFilesToBucket?.(id, e.dataTransfer.files);
+      }
       return;
     }
     let ids;

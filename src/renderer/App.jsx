@@ -2629,6 +2629,7 @@ export default function App() {
                   onReorderFolders={handleReorderCollections}
                   onAddSavesToBucket={handleAddSavesToBucket}
                   onDropFilesToBucket={handleDropFilesToBucket}
+                  onExternalDropToBucket={handleExternalDropToBucket}
                   onSetAppDragging={setDragging}
                   onOpenCollectionAsSpace={handleOpenCollectionAsSpace}
                   scrollRef={setGridScrollNode}
@@ -2686,6 +2687,7 @@ export default function App() {
                     onShuffleView={handleShuffleView}
                     onAddSavesToBucket={handleAddSavesToBucket}
                     onDropFilesToBucket={handleDropFilesToBucket}
+                    onExternalDropToBucket={handleExternalDropToBucket}
                     onSetAppDragging={setDragging}
                     onOpenCollectionAsSpace={handleOpenCollectionAsSpace}
                   />

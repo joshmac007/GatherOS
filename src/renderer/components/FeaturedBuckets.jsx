@@ -3,6 +3,7 @@ import { Eclipse as Layers } from 'lucide-react';
 import styles from './FeaturedBuckets.module.css';
 import { CollectionIcon } from './Sidebar.jsx';
 import { fileUrl } from '../lib/fileUrl.js';
+import { extractDropImageUrls } from '../lib/dropUrls.js';
 import ContextMenu from './ContextMenu.jsx';
 
 const PREVIEW_COUNT = 4;
@@ -42,6 +43,10 @@ export default function FeaturedBuckets({
   onShuffleView,
   onAddSavesToBucket,
   onDropFilesToBucket,
+  // Handles browser image drags (text/uri-list) onto a card. Routed
+  // through App's handleExternalDropToBucket which takes mixed
+  // { files, urls } payloads.
+  onExternalDropToBucket,
   onSetAppDragging,
   onOpenCollectionAsSpace,
 }) {
@@ -103,9 +108,15 @@ export default function FeaturedBuckets({
   function isFileDrag(e) {
     return e.dataTransfer.types.includes('Files');
   }
+  // Browser image drag (tab-image → app). Provides text/uri-list
+  // and/or text/html with the <img> wrapper but no Files entry.
+  function isUrlDrag(e) {
+    const t = e.dataTransfer.types;
+    return t.includes('text/uri-list') || t.includes('text/html');
+  }
 
   function handleCardDragOver(e, bucketId) {
-    if (!isSaveDrag(e) && !isFileDrag(e)) return;
+    if (!isSaveDrag(e) && !isFileDrag(e) && !isUrlDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
@@ -122,16 +133,23 @@ export default function FeaturedBuckets({
   }
 
   async function handleCardDrop(e, bucketId) {
-    if (!isSaveDrag(e) && !isFileDrag(e)) return;
+    if (!isSaveDrag(e) && !isFileDrag(e) && !isUrlDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setDropTargetId(null);
     onSetAppDragging?.(false);
-    // Files take priority — if the user drags both an in-app card
-    // AND an OS file, only one of those branches will be true at a
-    // time in practice.
-    if (isFileDrag(e) && e.dataTransfer.files?.length > 0) {
-      await onDropFilesToBucket?.(bucketId, e.dataTransfer.files);
+    // External-source drops (Finder files + browser URLs). Prefer the
+    // URL when the browser supplies both a synthetic File and a uri-
+    // list — the synthesised File is usually a tiny <img> screenshot
+    // rather than the original asset.
+    const files = isFileDrag(e) ? [...e.dataTransfer.files] : [];
+    const urls = isUrlDrag(e) ? extractDropImageUrls(e.dataTransfer) : [];
+    if (files.length > 0 || urls.length > 0) {
+      if (onExternalDropToBucket) {
+        await onExternalDropToBucket(bucketId, { files, urls });
+      } else if (files.length > 0) {
+        await onDropFilesToBucket?.(bucketId, e.dataTransfer.files);
+      }
       return;
     }
     let ids;
