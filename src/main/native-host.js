@@ -233,6 +233,7 @@ async function handleMessage(msg) {
         imageUrl: msg.imageUrl,
         pageUrl: msg.pageUrl || null,
         pageTitle: msg.pageTitle || null,
+        notes: msg.notes || null,
       },
       token,
     );

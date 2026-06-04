@@ -97,14 +97,44 @@ function findImageUrls(article) {
   return out;
 }
 
-// Try to read the tweet author's display name from the article for a
-// nicer save title. data-testid="User-Name" wraps the author block;
-// the first line of its innerText is the display name. Falls back to
-// the tweet URL if anything's missing.
-function findTitle(article, tweetUrl) {
+// Read the author's display name + @handle from the User-Name block.
+// X renders these on two adjacent lines inside the same wrapper:
+//   "Brett ✦ DesignJoy
+//    @brettfromdj"
+// We split on newlines, take the first non-empty line as the display
+// name and the first line starting with @ as the handle. Either may
+// be missing depending on layout (verified/locked accounts add extra
+// lines for badges); both fall back gracefully.
+function findAuthorInfo(article) {
   const nameEl = article.querySelector('[data-testid="User-Name"]');
-  const name = nameEl ? nameEl.innerText.split('\n')[0].trim() : '';
-  return name ? `Bookmark from ${name}` : tweetUrl;
+  if (!nameEl) return { displayName: '', handle: '' };
+  const lines = nameEl.innerText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const displayName = lines[0] || '';
+  const handle = lines.find((l) => l.startsWith('@')) || '';
+  return { displayName, handle };
+}
+
+// Build a save title from the author info. Prefer "Display Name
+// (@handle)" so the user can scan their library and tell at a glance
+// who tweeted what. Falls back to whichever piece is present, then
+// finally the URL.
+function buildTitle({ displayName, handle }, tweetUrl) {
+  if (displayName && handle) return `${displayName} (${handle})`;
+  if (displayName) return displayName;
+  if (handle) return handle;
+  return tweetUrl;
+}
+
+// The tweet body lives in data-testid="tweetText". innerText
+// preserves line breaks but flattens hashtag / mention link wrappers
+// into plain text, which is what we want for searchable notes.
+// Returns an empty string when the tweet has no body (image-only).
+function findCaption(article) {
+  const captionEl = article.querySelector('[data-testid="tweetText"]');
+  return captionEl ? captionEl.innerText.trim() : '';
 }
 
 // Use the capture phase so we read the article BEFORE X's own click
@@ -124,12 +154,15 @@ document.addEventListener('click', (e) => {
   const imageUrls = findImageUrls(article);
   if (imageUrls.length === 0) return; // image-bearing only in v1
 
-  const title = findTitle(article, tweetUrl);
+  const author = findAuthorInfo(article);
+  const title = buildTitle(author, tweetUrl);
+  const caption = findCaption(article);
 
   chrome.runtime.sendMessage({
     type: 'gatheros:x-bookmark',
     imageUrl: imageUrls[0],
     pageUrl: tweetUrl,
     pageTitle: title,
+    notes: caption,
   });
 }, true);

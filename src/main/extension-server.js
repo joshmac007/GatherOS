@@ -5,7 +5,7 @@
 // extension doesn't have to discover it.
 //
 // One endpoint:
-//   POST /save  { imageUrl, pageUrl?, pageTitle? }  with header X-GatherOS-Token
+//   POST /save  { imageUrl, pageUrl?, pageTitle?, notes? }  with header X-GatherOS-Token
 //
 // Plus an unauthenticated GET /ping for the extension's "Test
 // connection" button.
@@ -119,7 +119,19 @@ async function handleSave(req, res) {
     // Preserve the page the user was browsing — that's the whole
     // value of a browser save over drag-drop.
     const pageUrl = typeof body?.pageUrl === 'string' ? body.pageUrl : null;
-    const record = insertSave({ ...imgData, sourceUrl: pageUrl || imageUrl });
+    // Optional title + notes from the extension. The X-bookmark
+    // capture path uses these to seed the save with the tweet
+    // author / handle as the title and the caption as the notes;
+    // the right-click "Save to GatherOS" path leaves them blank
+    // and falls back to the title autonamer downstream.
+    const pageTitle = typeof body?.pageTitle === 'string' ? body.pageTitle.trim() : null;
+    const notes = typeof body?.notes === 'string' ? body.notes.trim() : null;
+    const record = insertSave({
+      ...imgData,
+      sourceUrl: pageUrl || imageUrl,
+      title: pageTitle || imgData.title || null,
+      notes: notes || null,
+    });
     notifySaved(record);
     sendJson(res, 200, { ok: true, id: record.id });
   } catch (err) {

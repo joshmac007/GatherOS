@@ -78,6 +78,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     imageUrl: msg.imageUrl,
     pageUrl: msg.pageUrl,
     pageTitle: msg.pageTitle,
+    notes: msg.notes,
   }).then((response) => {
     if (response && response.ok) return;
     const err = response?.error || '';

@@ -332,6 +332,12 @@ function insertSave({
   fileSize,
   sourceUrl,
   title,
+  // Optional pre-populated notes — currently set by the X-bookmark
+  // capture path with the tweet's caption text so the user sees the
+  // tweet context in the detail panel right after the save lands.
+  // The notes column is added via the saves-notes migration in
+  // MIGRATIONS, so it's safe to write to here unconditionally.
+  notes,
   palette,
   contentHash,
   kind,
@@ -349,6 +355,7 @@ function insertSave({
     file_path: filePath,
     thumb_path: thumbPath,
     title: title || null,
+    notes: notes || null,
     source_url: sourceUrl || null,
     width: width || null,
     height: height || null,
@@ -363,9 +370,9 @@ function insertSave({
   };
   db.prepare(`
     INSERT INTO saves
-      (id, file_path, thumb_path, title, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, created_at)
+      (id, file_path, thumb_path, title, notes, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, created_at)
     VALUES
-      (@id, @file_path, @thumb_path, @title, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @created_at)
+      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @created_at)
   `).run(record);
   return record;
 }
