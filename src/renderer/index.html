@@ -2,7 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; script-src 'self'; connect-src 'self' ws: http://localhost:5173; img-src 'self' data: blob: moodmark-file:" />
+    <!--
+      img-src includes https: so remote thumbnails fetched at render
+      time can load — needed for X bookmark image grids (pbs.twimg.com)
+      and any future feature that surfaces a remote image preview
+      (avatars, link unfurls, …). The renderer is single-origin and
+      doesn't accept untrusted HTML, so allowing any HTTPS image
+      source is acceptable for our threat model.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; script-src 'self'; connect-src 'self' ws: http://localhost:5173; img-src 'self' data: blob: https: moodmark-file:" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GatherOS</title>
   </head>
