@@ -154,13 +154,20 @@ function XGlyphIcon() {
 }
 
 // Twitter rewrites image URLs to include &name=<variant>. The
-// content script stores them at name=orig (the highest-fidelity
-// original); when we render thumbnails we downgrade to name=small
-// so the strip loads fast on slow connections.
+// content script stores them with no variant set; the renderer
+// picks one at display time. CRITICAL: twimg's /media/ endpoint
+// requires a format= query (or a path extension) — without one
+// it returns 404. We always set format=jpg here since the vast
+// majority of tweet images are JPEG; the onError handler in
+// DetailPanel's thumb strip retries with format=png for the
+// occasional PNG-only tweet.
 function twimgVariant(url, name) {
   try {
     const u = new URL(url);
     u.searchParams.set('name', name);
+    if (!u.searchParams.has('format')) {
+      u.searchParams.set('format', 'jpg');
+    }
     return u.toString();
   } catch {
     return url;
@@ -871,15 +878,14 @@ export default function DetailPanel({
                           const failed = e.currentTarget.src;
                           try {
                             const u = new URL(failed);
-                            u.search = '';
-                            const bare = u.toString();
-                            if (bare !== failed) {
-                              // eslint-disable-next-line no-console
-                              console.warn('[tweet-card] retry without query for', failed);
-                              e.currentTarget.src = bare;
+                            // First retry: format=jpg → format=png
+                            // for the occasional PNG-only tweet.
+                            if (u.searchParams.get('format') === 'jpg') {
+                              u.searchParams.set('format', 'png');
+                              e.currentTarget.src = u.toString();
                               return;
                             }
-                          } catch { /* not a URL — let it stay broken */ }
+                          } catch { /* not a URL — leave broken */ }
                           // eslint-disable-next-line no-console
                           console.warn('[tweet-card] image failed', failed);
                         }}
