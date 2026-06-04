@@ -232,6 +232,15 @@ const MIGRATIONS = [
   (database) => {
     addColumnIfMissing(database, 'saves', 'kind', "TEXT NOT NULL DEFAULT 'image'");
   },
+  // X-bookmark capture: holds the source tweet's author + handle +
+  // avatar + caption + every image URL on the tweet so the detail
+  // panel can render a glass tweet card and let the user click any
+  // image on the tweet to swap into the focused view. Stored as
+  // JSON so future Twitter / X / Bluesky / Threads payloads can
+  // share the same field without another migration.
+  (database) => {
+    addColumnIfMissing(database, 'saves', 'tweet_meta', 'TEXT');
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -338,6 +347,11 @@ function insertSave({
   // The notes column is added via the saves-notes migration in
   // MIGRATIONS, so it's safe to write to here unconditionally.
   notes,
+  // X-bookmark capture only. Object with keys authorName, authorHandle,
+  // authorAvatarUrl, caption, imageUrls — see the content script
+  // (extension/content/x-bookmark-watcher.js) and DetailPanel's tweet
+  // card section for the consumer.
+  tweetMeta,
   palette,
   contentHash,
   kind,
@@ -366,13 +380,14 @@ function insertSave({
       : null,
     content_hash: contentHash || null,
     kind: kind || 'image',
+    tweet_meta: tweetMeta ? JSON.stringify(tweetMeta) : null,
     created_at: Date.now(),
   };
   db.prepare(`
     INSERT INTO saves
-      (id, file_path, thumb_path, title, notes, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, created_at)
+      (id, file_path, thumb_path, title, notes, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, created_at)
     VALUES
-      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @created_at)
+      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @created_at)
   `).run(record);
   return record;
 }

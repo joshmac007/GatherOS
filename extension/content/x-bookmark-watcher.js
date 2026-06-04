@@ -117,21 +117,21 @@ function findAuthorInfo(article) {
   return { displayName, handle };
 }
 
-// Build a save title from the author info. Prefer "Display Name
-// (@handle)" so the user can scan their library and tell at a glance
-// who tweeted what. Falls back to whichever piece is present, then
-// finally the URL.
-function buildTitle({ displayName, handle }, tweetUrl) {
-  if (displayName && handle) return `${displayName} (${handle})`;
-  if (displayName) return displayName;
-  if (handle) return handle;
-  return tweetUrl;
+// The author's avatar lives inside data-testid="Tweet-User-Avatar"
+// (the outer wrapper); the actual rendered <img> is one or two
+// levels deep. Grab whatever src twitter shipped — it's already
+// scaled for the timeline so we leave it as-is.
+function findAvatarUrl(article) {
+  const wrap = article.querySelector('[data-testid="Tweet-User-Avatar"]');
+  if (!wrap) return '';
+  const img = wrap.querySelector('img');
+  return img ? (img.getAttribute('src') || '') : '';
 }
 
 // The tweet body lives in data-testid="tweetText". innerText
 // preserves line breaks but flattens hashtag / mention link wrappers
-// into plain text, which is what we want for searchable notes.
-// Returns an empty string when the tweet has no body (image-only).
+// into plain text, which is what we want for searchable / displayable
+// content. Returns an empty string when the tweet has no body.
 function findCaption(article) {
   const captionEl = article.querySelector('[data-testid="tweetText"]');
   return captionEl ? captionEl.innerText.trim() : '';
@@ -155,14 +155,24 @@ document.addEventListener('click', (e) => {
   if (imageUrls.length === 0) return; // image-bearing only in v1
 
   const author = findAuthorInfo(article);
-  const title = buildTitle(author, tweetUrl);
+  const avatarUrl = findAvatarUrl(article);
   const caption = findCaption(article);
 
+  // tweet_meta is the durable payload — DetailPanel renders a glass
+  // tweet card from this, including the secondary-image thumbnail
+  // strip and click-to-swap. The grid title + detail-panel notes
+  // stay empty so the rest of the app reads identically to any
+  // other image save.
   chrome.runtime.sendMessage({
     type: 'gatheros:x-bookmark',
     imageUrl: imageUrls[0],
     pageUrl: tweetUrl,
-    pageTitle: title,
-    notes: caption,
+    tweetMeta: {
+      authorName: author.displayName,
+      authorHandle: author.handle,
+      authorAvatarUrl: avatarUrl,
+      caption,
+      imageUrls,
+    },
   });
 }, true);

@@ -77,8 +77,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     type: 'save',
     imageUrl: msg.imageUrl,
     pageUrl: msg.pageUrl,
-    pageTitle: msg.pageTitle,
-    notes: msg.notes,
+    tweetMeta: msg.tweetMeta,
   }).then((response) => {
     if (response && response.ok) return;
     const err = response?.error || '';

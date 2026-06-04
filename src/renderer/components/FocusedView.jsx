@@ -46,6 +46,13 @@ export default function FocusedView({
   onToggleSidebar,
   morphSource = false,
   onContextMenu,
+  // X-bookmark multi-image support. App owns the index; DetailPanel's
+  // tweet thumbnail strip writes to it. 0 = the locally saved primary
+  // image (rendered from record.file_path), >0 = the corresponding
+  // entry in record.tweet_meta.imageUrls, rendered straight from
+  // pbs.twimg.com so we don't have to download every image on the
+  // tweet at save time.
+  altImageIdx = 0,
 }) {
   const [zoom, setZoom] = useState(1);
   // Capture once on mount: was this focused view opened via a morph
@@ -105,7 +112,22 @@ export default function FocusedView({
     return () => window.removeEventListener('keydown', onKey);
   }, [onBack, onPrev, onNext, hasPrev, hasNext, picking, togglePicking]);
 
-  const src = fileUrl(record.file_path);
+  // For multi-image X-bookmark saves, the user can click any of the
+  // tweet's images in the DetailPanel's tweet card to bring it into
+  // the focused view. idx 0 always renders the locally saved file
+  // (faster, offline-safe) — alt indices render straight from twimg.
+  let tweetImageUrls = null;
+  if (record.tweet_meta) {
+    try {
+      const parsed = JSON.parse(record.tweet_meta);
+      if (Array.isArray(parsed?.imageUrls) && parsed.imageUrls.length > 1) {
+        tweetImageUrls = parsed.imageUrls;
+      }
+    } catch { /* malformed tweet_meta — fall through to single image */ }
+  }
+  const src = (tweetImageUrls && altImageIdx > 0 && altImageIdx < tweetImageUrls.length)
+    ? tweetImageUrls[altImageIdx]
+    : fileUrl(record.file_path);
   const zoomFillPct = ((zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN)) * 100;
 
   const handleExport = () => {

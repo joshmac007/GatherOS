@@ -234,6 +234,7 @@ async function handleMessage(msg) {
         pageUrl: msg.pageUrl || null,
         pageTitle: msg.pageTitle || null,
         notes: msg.notes || null,
+        tweetMeta: msg.tweetMeta || null,
       },
       token,
     );

@@ -350,6 +350,13 @@ export default function App() {
   const [focusedId, setFocusedId] = useState(
     () => window.moodmark?.app?.windowState?.focusedId || null,
   );
+  // Which image to display in the focused view when the save's a
+  // multi-image X bookmark. 0 = the locally saved primary; >0 = the
+  // corresponding twimg URL from tweet_meta.imageUrls. Reset whenever
+  // the focused save changes — flipping between saves shouldn't carry
+  // a stale alt-image selection across.
+  const [focusedAltImageIdx, setFocusedAltImageIdx] = useState(0);
+  useEffect(() => { setFocusedAltImageIdx(0); }, [focusedId]);
   // Spacebar Quick Look — a lightweight, dismissible peek of the
   // currently-focused save without opening the full focused view.
   // Holds a save id while the overlay is up, null when dismissed.
@@ -2567,6 +2574,7 @@ export default function App() {
               onDelete={handleDelete}
               morphSource={morphId === focused.id}
               onContextMenu={handleFocusedContextMenu}
+              altImageIdx={focusedAltImageIdx}
             />
           ) : (
             <>
@@ -2725,6 +2733,8 @@ export default function App() {
             allTags={allTags}
             aiConfigured={aiConfigured}
             aiIndexing={indexingIds.has(focused.id)}
+            altImageIdx={focusedAltImageIdx}
+            onAltImageIdxChange={setFocusedAltImageIdx}
             onClose={() => setFocusedId(null)}
             onCollectionsChanged={loadCollections}
             onTagsChanged={loadAllTags}

@@ -5,7 +5,7 @@
 // extension doesn't have to discover it.
 //
 // One endpoint:
-//   POST /save  { imageUrl, pageUrl?, pageTitle?, notes? }  with header X-GatherOS-Token
+//   POST /save  { imageUrl, pageUrl?, pageTitle?, notes?, tweetMeta? }  with header X-GatherOS-Token
 //
 // Plus an unauthenticated GET /ping for the extension's "Test
 // connection" button.
@@ -119,18 +119,23 @@ async function handleSave(req, res) {
     // Preserve the page the user was browsing — that's the whole
     // value of a browser save over drag-drop.
     const pageUrl = typeof body?.pageUrl === 'string' ? body.pageUrl : null;
-    // Optional title + notes from the extension. The X-bookmark
-    // capture path uses these to seed the save with the tweet
-    // author / handle as the title and the caption as the notes;
-    // the right-click "Save to GatherOS" path leaves them blank
-    // and falls back to the title autonamer downstream.
+    // Optional title — both current extension flows leave it blank
+    // so the existing autonamer takes over.
     const pageTitle = typeof body?.pageTitle === 'string' ? body.pageTitle.trim() : null;
+    // Optional notes — same. Left blank by both current flows.
     const notes = typeof body?.notes === 'string' ? body.notes.trim() : null;
+    // X-bookmark structured payload. Stored as JSON in saves.tweet_meta
+    // so DetailPanel can render the glass tweet card (author + handle +
+    // avatar + caption + every image on the tweet, with click-to-swap).
+    const tweetMeta = (body && typeof body.tweetMeta === 'object' && body.tweetMeta !== null)
+      ? body.tweetMeta
+      : null;
     const record = insertSave({
       ...imgData,
       sourceUrl: pageUrl || imageUrl,
       title: pageTitle || imgData.title || null,
       notes: notes || null,
+      tweetMeta,
     });
     notifySaved(record);
     sendJson(res, 200, { ok: true, id: record.id });

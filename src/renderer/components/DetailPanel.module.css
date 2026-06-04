@@ -669,6 +669,149 @@
   .loadingDots span { animation: none; opacity: 0.6; }
 }
 
+/* ── Tweet card ─────────────────────────────────────────────────
+   Rendered above the collections section whenever the focused
+   save has tweet_meta (i.e. it was captured via the X bookmark
+   watcher). Same liquid-glass recipe the AddFab popover / collection
+   pills use so the surface belongs to the same family. The X glyph
+   in the header marks the source. */
+.tweetCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.tweetCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tweetAuthor {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tweetAvatar,
+.tweetAvatarFallback {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+}
+
+.tweetAvatar {
+  object-fit: cover;
+  display: block;
+}
+
+.tweetAuthorText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tweetName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tweetHandle {
+  font-size: var(--text-xs);
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* X glyph in the top-right of the card. Dimmer than the author
+   block so it reads as a quiet source tag rather than competing
+   for attention. */
+.tweetSourceIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: rgba(255, 255, 255, 0.65);
+  flex-shrink: 0;
+}
+
+.tweetCaption {
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Auto-fit grid so the strip wraps gracefully whether the tweet
+   has 2, 3, or 4 images. Square aspect ratio per tile keeps the
+   strip readable regardless of source aspect. */
+.tweetThumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.tweetThumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform var(--dur-instant) ease,
+    border-color var(--dur-instant) ease,
+    box-shadow var(--dur-instant) ease;
+}
+
+.tweetThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tweetThumb:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.30);
+}
+
+/* Active state — the thumb whose image is currently in the focused
+   view. White ring picks it out without competing with the rest of
+   the card chrome. */
+.tweetThumbActive,
+.tweetThumbActive:hover {
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
 .collectionsSection {
   padding: 12px 16px 14px;
   border-bottom: none;

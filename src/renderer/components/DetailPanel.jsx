@@ -136,6 +136,37 @@ function ExternalLinkIcon() {
   );
 }
 
+// Official-ish X glyph — rendered next to the tweet card header so
+// the user immediately reads the surface as "this came from X". The
+// path is the canonical X logomark scaled inside a 24-unit viewBox.
+function XGlyphIcon() {
+  return (
+    <svg
+      viewBox="0 0 1200 1227"
+      width="14"
+      height="14"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M714 519L1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z" />
+    </svg>
+  );
+}
+
+// Twitter rewrites image URLs to include &name=<variant>. The
+// content script stores them at name=orig (the highest-fidelity
+// original); when we render thumbnails we downgrade to name=small
+// so the strip loads fast on slow connections.
+function twimgVariant(url, name) {
+  try {
+    const u = new URL(url);
+    u.searchParams.set('name', name);
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 export default function DetailPanel({
   record,
   allCollections = [],
@@ -150,7 +181,21 @@ export default function DetailPanel({
   onOpenSave,
   onGenerateVariant,
   onOpenSpace,
+  // Multi-image X-bookmark support: which tweet image is currently
+  // displayed in FocusedView. App owns the state; we render a
+  // thumbnail strip in the glass tweet card and call back with the
+  // chosen index. 0 = the locally saved primary image.
+  altImageIdx = 0,
+  onAltImageIdxChange,
 }) {
+  // X-bookmark capture stashes the tweet's author + handle + avatar +
+  // caption + every image URL into tweet_meta as JSON. Parse once per
+  // record so the conditional render below stays cheap.
+  const tweetMeta = useMemo(() => {
+    if (!record?.tweet_meta) return null;
+    try { return JSON.parse(record.tweet_meta); }
+    catch { return null; }
+  }, [record?.tweet_meta]);
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
   const [copiedColor, setCopiedColor] = useState(null);
@@ -856,6 +901,80 @@ export default function DetailPanel({
           <div className={styles.autoTagError}>{promptError}</div>
         )}
       </div>
+
+      {tweetMeta && (
+        // Glass tweet card. Shows author + handle + caption pulled
+        // from the bookmarked tweet, plus a thumbnail strip when the
+        // tweet had more than one image — clicking a thumbnail tells
+        // App to swap the focused-view src to that image. The X glyph
+        // top-right marks the surface as a tweet source.
+        <div className={styles.tweetCard}>
+          <div className={styles.tweetCardHeader}>
+            <div className={styles.tweetAuthor}>
+              {tweetMeta.authorAvatarUrl ? (
+                <img
+                  className={styles.tweetAvatar}
+                  src={tweetMeta.authorAvatarUrl}
+                  alt=""
+                  draggable={false}
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className={styles.tweetAvatarFallback} aria-hidden="true" />
+              )}
+              <div className={styles.tweetAuthorText}>
+                {tweetMeta.authorName && (
+                  <span className={styles.tweetName}>{tweetMeta.authorName}</span>
+                )}
+                {tweetMeta.authorHandle && (
+                  <span className={styles.tweetHandle}>{tweetMeta.authorHandle}</span>
+                )}
+              </div>
+            </div>
+            <span className={styles.tweetSourceIcon} title="From X" aria-label="From X">
+              <XGlyphIcon />
+            </span>
+          </div>
+
+          {tweetMeta.caption && (
+            <div className={styles.tweetCaption}>{tweetMeta.caption}</div>
+          )}
+
+          {Array.isArray(tweetMeta.imageUrls) && tweetMeta.imageUrls.length > 1 && (
+            <div className={styles.tweetThumbs}>
+              {tweetMeta.imageUrls.map((url, i) => {
+                // idx 0 == the locally-saved primary, so render the
+                // existing thumb_path for an instant, offline-safe
+                // tile. The rest come from twimg directly; downgrade
+                // to name=small so the strip loads fast.
+                const thumbSrc = i === 0
+                  ? fileUrl(record.thumb_path || record.file_path)
+                  : twimgVariant(url, 'small');
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className={[
+                      styles.tweetThumb,
+                      i === altImageIdx && styles.tweetThumbActive,
+                    ].filter(Boolean).join(' ')}
+                    onClick={() => onAltImageIdxChange?.(i)}
+                    aria-label={`Show image ${i + 1}`}
+                    aria-pressed={i === altImageIdx}
+                  >
+                    <img
+                      src={thumbSrc}
+                      alt=""
+                      draggable={false}
+                      referrerPolicy="no-referrer"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className={styles.collectionsSection}>
         <div className={styles.collectionsLabel}>
