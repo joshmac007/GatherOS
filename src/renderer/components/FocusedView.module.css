@@ -335,31 +335,25 @@
   object-fit: contain;
 }
 
-/* Theme the HTML5 video controls strip to match the app's
-   background. The browser default is a generic black-fade gradient
-   that reads as foreign chrome against our themed surface — the
-   strip looked like it was "floating" because its bottom edge
-   didn't blend into anything around it. Tinting the gradient to
-   land on the same hex we use for the page bg makes the strip
-   feel like a continuation of the surface beneath. The .image
-   class targets both <img> and <video>, but ::-webkit-media-
-   controls-panel only matches inside <video>, so this rule is a
-   no-op on image saves. */
+/* HTML5 video controls strip. Earlier iteration tinted the gradient
+   to land on a fixed app-background hex, but the focused view's
+   backdrop is the per-save poster (heavily blurred + tinted), so
+   the per-save colour varies wildly and a locked hex left a visible
+   dark seam everywhere the backdrop was anything but black.
+   Semi-transparent black instead — dark enough to read white
+   control glyphs against any image, transparent enough that the
+   bottom edge picks up whatever colour the backdrop happens to be,
+   so the strip blends instead of stamping. Same value in both
+   themes — Chromium renders the native control glyphs as white
+   either way. The .image class targets both <img> and <video>; the
+   pseudo-element only matches inside <video> so this is a no-op on
+   image saves. */
 .image::-webkit-media-controls-panel {
   background-image: linear-gradient(
     to bottom,
-    rgba(250, 250, 249, 0) 0%,
-    rgba(250, 250, 249, 0.6) 60%,
-    var(--content-bg) 100%
-  );
-}
-
-:root[data-theme="dark"] .image::-webkit-media-controls-panel {
-  background-image: linear-gradient(
-    to bottom,
-    rgba(11, 11, 11, 0) 0%,
-    rgba(11, 11, 11, 0.6) 60%,
-    #0B0B0B 100%
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.32) 55%,
+    rgba(0, 0, 0, 0.55) 100%
   );
 }
 
