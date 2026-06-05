@@ -63,7 +63,14 @@ export default function BoardLibraryDrawer({ collections, boardId, onClose }) {
             : undefined,
       });
       if (requestId.current !== myId) return;
-      setSaves(Array.isArray(data) ? data : []);
+      // Filter out video saves — the canvas can only render images
+      // (no <video> item type), so a video tile in the drawer
+      // would just refuse to drop. Hiding them keeps the picker
+      // honest about what can land on the board.
+      const filtered = Array.isArray(data)
+        ? data.filter((s) => s.kind !== 'video')
+        : [];
+      setSaves(filtered);
       setLoading(false);
     })();
   }, [debouncedSearch, collectionId, refreshTick]);

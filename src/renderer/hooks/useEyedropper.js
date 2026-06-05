@@ -90,13 +90,51 @@ export function useEyedropper(imageRef, recordId) {
     }
   }
 
+  // Map a viewport cursor coord to a pixel in the source image,
+  // accounting for object-fit: contain letterboxing. The previous
+  // implementation scaled cursor → natural dims using the element's
+  // bounding rect, which is wrong because object-fit: contain shrinks
+  // the rendered image to whichever axis is more constrained and
+  // centers it — so the element box has empty (letterbox) bands on
+  // the other axis. Sampling at the cursor offset relative to the
+  // ELEMENT was sampling the image at the wrong pixel by however
+  // wide the letterbox happened to be.
+  //
+  // Here we compute the rendered image rect inside the element, then
+  // map the cursor relative to THAT rect. Hits in the letterbox area
+  // return null so the hover swatch / click sampler doesn't lie.
   function pixelAt(clientX, clientY) {
     const data = ensureCanvas();
     const img = imageRef.current;
     if (!data || !img) return null;
+
     const rect = img.getBoundingClientRect();
-    const sx = Math.floor((clientX - rect.left) * (data.width / rect.width));
-    const sy = Math.floor((clientY - rect.top) * (data.height / rect.height));
+    const elAspect = rect.width / rect.height;
+    const imgAspect = data.width / data.height;
+
+    let renderedW;
+    let renderedH;
+    if (elAspect > imgAspect) {
+      // Element wider than image → letterboxed on left + right.
+      renderedH = rect.height;
+      renderedW = rect.height * imgAspect;
+    } else {
+      // Element taller than image → letterboxed on top + bottom.
+      renderedW = rect.width;
+      renderedH = rect.width / imgAspect;
+    }
+    const offsetX = (rect.width - renderedW) / 2;
+    const offsetY = (rect.height - renderedH) / 2;
+
+    const localX = clientX - rect.left - offsetX;
+    const localY = clientY - rect.top - offsetY;
+    // Outside the rendered image (in the letterbox bands) → no sample.
+    if (localX < 0 || localY < 0 || localX >= renderedW || localY >= renderedH) {
+      return null;
+    }
+
+    const sx = Math.floor(localX * (data.width / renderedW));
+    const sy = Math.floor(localY * (data.height / renderedH));
     if (sx < 0 || sy < 0 || sx >= data.width || sy >= data.height) return null;
     try {
       const px = data.ctx.getImageData(sx, sy, 1, 1).data;
