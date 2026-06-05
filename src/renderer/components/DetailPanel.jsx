@@ -712,7 +712,14 @@ export default function DetailPanel({
           >
             <img
               ref={imageRef}
-              src={src}
+              // Video saves: render the poster JPEG (record.thumb_path)
+              // instead of the MP4 — an <img> can't paint a video
+              // file, which is why the preview was blank for tweet
+              // videos. Playback lives in the focused view; this
+              // surface is just the preview thumbnail.
+              src={record.kind === 'video' && record.thumb_path
+                ? fileUrl(record.thumb_path)
+                : src}
               className={styles.image}
               alt={record.title || ''}
               draggable={false}
