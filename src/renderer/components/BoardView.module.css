@@ -89,10 +89,12 @@
   position: absolute;
   /* Align with the macOS stoplight row: button centre at y=22 sits
      a hair below the stoplights' ~y=19 centre (close enough to
-     read aligned). Left inset 88 clears the stoplights themselves
-     with an 8px visual breath, matching FocusedView's same recipe. */
+     read aligned). Left inset 104 clears the stoplights with a
+     comfortable ~26px breathing band, matching the global
+     --titlebar-left-pad: 104px convention used everywhere else
+     once the sidebar is collapsed. */
   top: 8px;
-  left: 88px;
+  left: 104px;
   width: 32px;
   height: 32px;
   display: inline-flex;

@@ -8,9 +8,10 @@
      edge, so the macOS stoplights always overlap its top-left.
      Override the layout-level inset so the back button + topBar
      row clear them regardless of sidebar state. 80px clears the
-     stoplights themselves; the extra 8 gives the back button a
-     visible breath of space before the first stoplight. */
-  --titlebar-left-pad: 88px;
+     stoplights themselves; 104 leaves ~26px of breathing band so
+     the back button reads as intentional rather than crammed
+     against the OS chrome. */
+  --titlebar-left-pad: 104px;
   /* Same trick the .panel uses: the FocusedView's backdrop is
      always dark glass regardless of theme, so re-declare every
      colour token locally so children that still read from them
