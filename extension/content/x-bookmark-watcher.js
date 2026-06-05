@@ -13,6 +13,58 @@
 // it's been stable since 2023.
 const BOOKMARK_TESTID = 'bookmark';
 
+// Cache of tweet ID → { videoUrl, posterUrl }, populated by the
+// MAIN-world x-graphql-interceptor.js as Twitter's GraphQL endpoints
+// return tweet payloads. We listen for window messages on the page's
+// own origin to receive them. This is the only way to learn a tweet
+// video's real http(s) MP4 URL — the DOM's <video src> is a blob:
+// URL produced by Twitter's MSE player and can't be fetched out of
+// the page.
+const tweetVideoCache = new Map();
+window.addEventListener('message', (event) => {
+  if (event.source !== window) return;
+  const data = event.data;
+  if (!data || data.source !== 'gatheros-interceptor') return;
+  if (data.type === 'tweet-videos' && Array.isArray(data.videos)) {
+    for (const [id, info] of data.videos) {
+      if (id && info && info.videoUrl) tweetVideoCache.set(id, info);
+    }
+  }
+});
+
+// Pull the numeric tweet id out of a permalink. /user/status/12345
+// → "12345", anything else → null. Used as the cache key against
+// tweetVideoCache.
+function tweetIdFromUrl(url) {
+  const m = (url || '').match(/\/status\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+// The GraphQL response often arrives within ~200-500ms of a tweet
+// scrolling into view, but a user can click bookmark fast enough to
+// beat it. Poll the cache briefly so the common case "cache cold,
+// fills moments later" still finds the URL. Resolves with the
+// cached entry, or null if the deadline passed with nothing.
+function awaitTweetVideo(tweetId, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const cached = tweetVideoCache.get(tweetId);
+    if (cached) { resolve(cached); return; }
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const c = tweetVideoCache.get(tweetId);
+      if (c) {
+        clearInterval(interval);
+        resolve(c);
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        clearInterval(interval);
+        resolve(null);
+      }
+    }, 80);
+  });
+}
+
 // Reusable in-page toast pinned to the bottom-right. Lives entirely
 // inside the content script's own DOM node so X's styles can't
 // bleed in. Each call replaces any earlier visible toast so a
@@ -311,7 +363,10 @@ function findTweetVideo(article) {
 // Use the capture phase so we read the article BEFORE X's own click
 // handler can re-render or detach it. Reading is synchronous so
 // there's no race with the subsequent state flip.
-document.addEventListener('click', (e) => {
+// async because we may need to wait briefly for the GraphQL
+// interceptor's cache to populate before we can send the real MP4
+// URL through to the native host.
+document.addEventListener('click', async (e) => {
   const button = findBookmarkButton(e.target);
   if (!button) return;
   if (!isBookmarkAddAction(button)) return;
@@ -323,12 +378,34 @@ document.addEventListener('click', (e) => {
   if (!tweetUrl) return;
 
   const imageUrls = findImageUrls(article);
-  const tweetVideo = findTweetVideo(article);
-  // findTweetVideo may return { videoUrl: null, posterUrl } when the
-  // tweet has a video but the MP4 lives behind a blob:/MSE URL we
-  // can't fetch. Fold the poster into imageUrls so the bookmark
-  // still lands — the user gets a still of the tweet in their
-  // library instead of nothing.
+  let tweetVideo = findTweetVideo(article);
+
+  // If the article has a <video> but DOM extraction couldn't find a
+  // usable http(s) MP4 (blob: URL from Twitter's MSE player), ask
+  // the GraphQL interceptor's cache. That cache is fed by the real
+  // tweet payloads Twitter's app fetches anyway, which contain the
+  // direct https MP4 variants. Briefly poll the cache so a "just-
+  // landed-on-the-page-and-clicked-fast" case isn't a miss.
+  const articleHasVideo = !!article.querySelector('video');
+  if (articleHasVideo && (!tweetVideo || !tweetVideo.videoUrl)) {
+    const tweetId = tweetIdFromUrl(tweetUrl);
+    if (tweetId) {
+      const cached = await awaitTweetVideo(tweetId);
+      if (cached && cached.videoUrl) {
+        tweetVideo = {
+          videoUrl: cached.videoUrl,
+          // Fall back to the cached poster if we don't have one
+          // from the DOM — both sources should agree.
+          posterUrl: (tweetVideo && tweetVideo.posterUrl) || cached.posterUrl || '',
+        };
+      }
+    }
+  }
+
+  // After cache lookup: tweetVideo may still be { videoUrl: null,
+  // posterUrl } if the cache missed entirely. Fold its poster into
+  // imageUrls so the bookmark still lands — the user gets a still
+  // of the tweet in their library instead of nothing.
   if (tweetVideo && !tweetVideo.videoUrl && tweetVideo.posterUrl) {
     imageUrls.unshift(tweetVideo.posterUrl);
   }
