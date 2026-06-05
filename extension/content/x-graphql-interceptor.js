@@ -193,7 +193,14 @@
   }
 
   function isBookmarksEndpoint(url) {
-    return typeof url === 'string' && /\/graphql\/[^/]+\/Bookmarks/.test(url);
+    const matched = typeof url === 'string' && /\/graphql\/[^/]+\/Bookmarks/.test(url);
+    // Debug instrumentation — remove once cross-device sync verified
+    // on real Twitter URLs. Logs every URL that flows through any of
+    // our wrapped fetch/XHR paths plus whether we recognise it as
+    // the bookmarks list.
+    // eslint-disable-next-line no-console
+    console.log('[gatheros] intercept', { url, isBookmarks: matched });
+    return matched;
   }
 
   function shouldIntercept(url) {
@@ -221,7 +228,10 @@
         extractTweetVideos(json, videoMap);
         postVideos(videoMap);
         if (isBookmarksEndpoint(reqUrl)) {
-          postBookmarks(extractBookmarkEntries(json));
+          const entries = extractBookmarkEntries(json);
+          // eslint-disable-next-line no-console
+          console.log('[gatheros] bookmarks extracted', entries.length, 'entries from', reqUrl);
+          postBookmarks(entries);
         }
       }).catch(() => { /* non-JSON or parse error — silently ignore */ });
     }).catch(() => { /* fetch error — page-level concern, ignore */ });
@@ -245,7 +255,10 @@
         extractTweetVideos(json, videoMap);
         postVideos(videoMap);
         if (isBookmarksEndpoint(this.__gatherUrl)) {
-          postBookmarks(extractBookmarkEntries(json));
+          const entries = extractBookmarkEntries(json);
+          // eslint-disable-next-line no-console
+          console.log('[gatheros] bookmarks extracted', entries.length, 'entries from', this.__gatherUrl);
+          postBookmarks(entries);
         }
       } catch { /* non-JSON or parse error */ }
     });
