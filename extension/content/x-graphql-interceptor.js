@@ -207,14 +207,58 @@
   }
 
   function isBookmarksEndpoint(url) {
-    const matched = typeof url === 'string' && /\/graphql\/[^/]+\/Bookmarks/.test(url);
-    // Debug instrumentation — remove once cross-device sync verified
-    // on real Twitter URLs. Logs every URL that flows through any of
-    // our wrapped fetch/XHR paths plus whether we recognise it as
-    // the bookmarks list.
-    // eslint-disable-next-line no-console
-    console.log('[gatheros] intercept', { url, isBookmarks: matched });
-    return matched;
+    return typeof url === 'string' && /\/graphql\/[^/]+\/Bookmarks/.test(url);
+  }
+
+  // Returns true when the captured request is the "top of bookmarks
+  // list" fetch (no pagination cursor in variables). We save the URL
+  // of these as the refresh template the background service worker
+  // re-fires on a schedule. Paginated requests (variables contain
+  // cursor) are still processed for entry extraction but never saved
+  // as the template — re-firing them would only ever return that one
+  // page rather than any newly-bookmarked tweets.
+  function isTopOfBookmarksRequest(url) {
+    try {
+      const u = new URL(url);
+      const vars = u.searchParams.get('variables');
+      if (!vars) return true; // no variables == default top
+      const decoded = JSON.parse(vars);
+      return !decoded || !decoded.cursor;
+    } catch {
+      return false;
+    }
+  }
+
+  // Pull the Authorization header off a wrapped fetch / XHR call so
+  // the background service worker can replay the request later. The
+  // bearer token x.com uses for its web client has been stable for
+  // years but sniffing it is more robust than hardcoding — if X ever
+  // rotates it, the next user visit captures the new value
+  // automatically. Returns null when no header was attached.
+  function readAuthorization(init) {
+    if (!init || !init.headers) return null;
+    const h = init.headers;
+    if (h && typeof h.get === 'function') return h.get('authorization') || h.get('Authorization');
+    if (Array.isArray(h)) {
+      for (const [k, v] of h) if (k && k.toLowerCase() === 'authorization') return v;
+      return null;
+    }
+    if (typeof h === 'object') {
+      for (const k of Object.keys(h)) if (k.toLowerCase() === 'authorization') return h[k];
+    }
+    return null;
+  }
+
+  function postRefreshTemplate(url, authorization) {
+    window.postMessage(
+      {
+        source: 'gatheros-interceptor',
+        type: 'bookmark-refresh-template',
+        url,
+        authorization: authorization || null,
+      },
+      window.location.origin,
+    );
   }
 
   function shouldIntercept(url) {
@@ -242,29 +286,15 @@
         extractTweetVideos(json, videoMap);
         postVideos(videoMap);
         if (isBookmarksEndpoint(reqUrl)) {
-          const entries = extractBookmarkEntries(json);
-          // eslint-disable-next-line no-console
-          console.log('[gatheros] bookmarks extracted', entries.length, 'entries from', reqUrl);
-          if (entries.length === 0) {
-            // eslint-disable-next-line no-console
-            console.log('[gatheros] bookmarks raw response:', json);
-            // Drill straight to the entries array we expect and log
-            // the first one so we can see its actual shape vs what
-            // parseTweetForBookmark assumes.
-            const instructions =
-              json && json.data && json.data.bookmark_timeline_v2
-              && json.data.bookmark_timeline_v2.timeline
-              && json.data.bookmark_timeline_v2.timeline.instructions;
-            const addEntries = Array.isArray(instructions)
-              ? instructions.find((i) => i && i.type === 'TimelineAddEntries')
-              : null;
-            const sampleEntry = addEntries
-              && Array.isArray(addEntries.entries)
-              && addEntries.entries[0];
-            // eslint-disable-next-line no-console
-            console.log('[gatheros] first entry sample:', sampleEntry);
+          postBookmarks(extractBookmarkEntries(json));
+          if (isTopOfBookmarksRequest(reqUrl)) {
+            // fetch(Request) puts the headers on args[0]; fetch(url,
+            // init) puts them on args[1]. Read both.
+            const reqInit = (args[0] && typeof args[0] === 'object' && args[0].headers)
+              ? args[0]
+              : args[1];
+            postRefreshTemplate(reqUrl, readAuthorization(reqInit));
           }
-          postBookmarks(entries);
         }
       }).catch(() => { /* non-JSON or parse error — silently ignore */ });
     }).catch(() => { /* fetch error — page-level concern, ignore */ });
@@ -274,10 +304,22 @@
   // Wrap XMLHttpRequest. X uses fetch in most places but XHR shows up
   // in a few older code paths and the lazy-loaded video player code.
   const XHR_OPEN = XMLHttpRequest.prototype.open;
+  const XHR_SET_HEADER = XMLHttpRequest.prototype.setRequestHeader;
   const XHR_SEND = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function gatherXhrOpen(method, url, ...rest) {
     this.__gatherUrl = url;
+    this.__gatherHeaders = {};
     return XHR_OPEN.call(this, method, url, ...rest);
+  };
+  // Capture every header the page sets so we can replay Authorization
+  // (and friends) on background-polled refreshes later. The page
+  // doesn't see our hooked map — we just record values as they pass
+  // through and then forward them along to the real setter.
+  XMLHttpRequest.prototype.setRequestHeader = function gatherXhrSetHeader(name, value) {
+    if (this.__gatherHeaders && typeof name === 'string') {
+      this.__gatherHeaders[name.toLowerCase()] = value;
+    }
+    return XHR_SET_HEADER.call(this, name, value);
   };
   XMLHttpRequest.prototype.send = function gatherXhrSend(...args) {
     this.addEventListener('load', () => {
@@ -288,29 +330,11 @@
         extractTweetVideos(json, videoMap);
         postVideos(videoMap);
         if (isBookmarksEndpoint(this.__gatherUrl)) {
-          const entries = extractBookmarkEntries(json);
-          // eslint-disable-next-line no-console
-          console.log('[gatheros] bookmarks extracted', entries.length, 'entries from', this.__gatherUrl);
-          if (entries.length === 0) {
-            // eslint-disable-next-line no-console
-            console.log('[gatheros] bookmarks raw response:', json);
-            // Drill straight to the entries array we expect and log
-            // the first one so we can see its actual shape vs what
-            // parseTweetForBookmark assumes.
-            const instructions =
-              json && json.data && json.data.bookmark_timeline_v2
-              && json.data.bookmark_timeline_v2.timeline
-              && json.data.bookmark_timeline_v2.timeline.instructions;
-            const addEntries = Array.isArray(instructions)
-              ? instructions.find((i) => i && i.type === 'TimelineAddEntries')
-              : null;
-            const sampleEntry = addEntries
-              && Array.isArray(addEntries.entries)
-              && addEntries.entries[0];
-            // eslint-disable-next-line no-console
-            console.log('[gatheros] first entry sample:', sampleEntry);
+          postBookmarks(extractBookmarkEntries(json));
+          if (isTopOfBookmarksRequest(this.__gatherUrl)) {
+            const auth = this.__gatherHeaders && this.__gatherHeaders.authorization;
+            postRefreshTemplate(this.__gatherUrl, auth || null);
           }
-          postBookmarks(entries);
         }
       } catch { /* non-JSON or parse error */ }
     });

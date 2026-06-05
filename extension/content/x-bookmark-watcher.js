@@ -44,6 +44,18 @@ window.addEventListener('message', (event) => {
       bookmarks: data.bookmarks,
     });
   }
+  // Refresh-template messages carry the full URL of the most recent
+  // top-of-bookmarks GraphQL request plus the Authorization header
+  // x.com attached. The background service worker stores both so a
+  // chrome.alarms-driven poll can re-fire the same request later
+  // without needing the bookmarks page to be open.
+  if (data.type === 'bookmark-refresh-template' && data.url) {
+    chrome.runtime.sendMessage({
+      type: 'gatheros:bookmark-refresh-template',
+      url: data.url,
+      authorization: data.authorization || null,
+    });
+  }
 });
 
 // Pull the numeric tweet id out of a permalink. /user/status/12345

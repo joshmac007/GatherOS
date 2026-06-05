@@ -8,6 +8,11 @@
 
 const HOST_NAME = 'co.gatheros.host';
 const MENU_ID = 'gatheros-save-image';
+// chrome.alarms identifier for the recurring "check x.com for new
+// bookmarks" job. Five minutes balances "phone bookmarks appear
+// promptly" against "don't hammer twitter for users who never
+// bookmark anything."
+const BOOKMARK_POLL_ALARM = 'gatherosBookmarkPoll';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -15,6 +20,14 @@ chrome.runtime.onInstalled.addListener(() => {
     title: 'Save to GatherOS',
     contexts: ['image'],
   });
+  // Register the polling alarm on install and on every browser
+  // startup. chrome.alarms persists across service-worker idles so
+  // this only needs to fire-and-forget; the alarm itself wakes the
+  // worker every 5 minutes to run pollBookmarksRefresh().
+  chrome.alarms.create(BOOKMARK_POLL_ALARM, { periodInMinutes: 5 });
+});
+chrome.runtime.onStartup.addListener(() => {
+  chrome.alarms.create(BOOKMARK_POLL_ALARM, { periodInMinutes: 5 });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -79,6 +92,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'gatheros:bookmark-batch') {
     handleBookmarkBatch(msg.bookmarks);
+    return false;
+  }
+  if (msg.type === 'gatheros:bookmark-refresh-template') {
+    saveRefreshTemplate(msg.url, msg.authorization);
     return false;
   }
   return undefined;
@@ -226,6 +243,186 @@ async function syncBookmarkToGather(b) {
     return;
   }
   return chrome.runtime.sendNativeMessage(HOST_NAME, payload);
+}
+
+// ── Background polling for cross-device bookmarks ──────────────────
+//
+// The interceptor stores the URL of the most recent top-of-list
+// /Bookmarks request plus the Authorization bearer header that
+// accompanied it. Every 5 minutes (chrome.alarms), the service
+// worker re-fires that exact URL with the bearer + the user's CSRF
+// token (from cookies). Response goes through the same extractor +
+// handleBookmarkBatch path the interceptor uses for in-page
+// captures, so phone-bookmarked tweets land in GatherOS without the
+// user needing to visit x.com on desktop.
+
+const STORAGE_TEMPLATE_KEY = 'gatherosBookmarkRefreshTemplate';
+
+async function saveRefreshTemplate(url, authorization) {
+  if (!url) return;
+  // We don't want to overwrite a known-good authorization with null
+  // — some XHR captures don't expose the header, but a previous
+  // fetch capture might already have it stored.
+  const { [STORAGE_TEMPLATE_KEY]: existing } = await chrome.storage.local.get(STORAGE_TEMPLATE_KEY);
+  const next = {
+    url,
+    authorization: authorization || (existing && existing.authorization) || null,
+    updatedAt: Date.now(),
+  };
+  await chrome.storage.local.set({ [STORAGE_TEMPLATE_KEY]: next });
+}
+
+async function pollBookmarksRefresh() {
+  const { [STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(STORAGE_TEMPLATE_KEY);
+  if (!template || !template.url || !template.authorization) {
+    // No template yet — user hasn't visited /i/bookmarks since the
+    // poll alarm was registered. Quietly no-op until they do.
+    return;
+  }
+
+  let csrf = null;
+  try {
+    const cookie = await chrome.cookies.get({ url: 'https://x.com/', name: 'ct0' });
+    if (cookie && cookie.value) csrf = cookie.value;
+  } catch (err) {
+    console.warn('[gatheros] reading ct0 cookie failed:', err?.message || err);
+    return;
+  }
+  if (!csrf) return; // user not signed in to x.com in this Chrome profile
+
+  let res;
+  try {
+    res = await fetch(template.url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        authorization: template.authorization,
+        'x-csrf-token': csrf,
+        // x.com checks these to recognise its own web client.
+        'x-twitter-active-user': 'yes',
+        'x-twitter-auth-type': 'OAuth2Session',
+        'x-twitter-client-language': 'en',
+        accept: '*/*',
+      },
+    });
+  } catch (err) {
+    // Network blip or x.com rejected the request — try again next
+    // alarm. No need to clear the template; transient.
+    console.warn('[gatheros] bookmark poll fetch failed:', err?.message || err);
+    return;
+  }
+  if (!res.ok) {
+    // 401 / 403 / 404: bearer or hash likely stale. Keep the
+    // template so the next interceptor capture (the user's next
+    // x.com visit) refreshes it; just skip this round.
+    return;
+  }
+
+  let json;
+  try { json = await res.json(); }
+  catch { return; }
+
+  const entries = pollExtractBookmarkEntries(json);
+  if (entries.length > 0) {
+    await handleBookmarkBatch(entries);
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm && alarm.name === BOOKMARK_POLL_ALARM) {
+    pollBookmarksRefresh();
+  }
+});
+
+// Background-side mirror of extractBookmarkEntries + parseTweetForBookmark
+// from x-graphql-interceptor.js. Lives here so the service worker
+// can parse responses from its own fetch (the MAIN-world interceptor
+// is only available inside a tab). Keep these in sync with the
+// interceptor's versions — same shape, same field-migration handling.
+function pollExtractBookmarkEntries(json) {
+  const out = [];
+  function walk(node) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child);
+      return;
+    }
+    if (typeof node.entryId === 'string' && node.entryId.startsWith('tweet-')) {
+      const wrapped = node.content && node.content.itemContent
+        && node.content.itemContent.tweet_results
+        && node.content.itemContent.tweet_results.result;
+      if (wrapped) {
+        const parsed = pollParseTweetForBookmark(wrapped);
+        if (parsed) out.push(parsed);
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === '__typename') continue;
+      walk(node[key]);
+    }
+  }
+  walk(json);
+  return out;
+}
+
+function pollParseTweetForBookmark(result) {
+  const t = result.tweet || result;
+  const legacy = t.legacy;
+  if (!legacy || !legacy.id_str) return null;
+  const userResult = t.core && t.core.user_results && t.core.user_results.result;
+  if (!userResult) return null;
+  const userCore = userResult.core || {};
+  const userLegacy = userResult.legacy || {};
+  const screenName = userCore.screen_name || userLegacy.screen_name;
+  const displayName = userCore.name || userLegacy.name || '';
+  const avatarUrl =
+    (userResult.avatar && userResult.avatar.image_url)
+    || userLegacy.profile_image_url_https
+    || '';
+  if (!screenName) return null;
+
+  const tweetId = legacy.id_str;
+  const tweetUrl = `https://x.com/${screenName}/status/${tweetId}`;
+  const mediaList = (legacy.extended_entities && legacy.extended_entities.media)
+    || (legacy.entities && legacy.entities.media)
+    || [];
+  const imageUrls = [];
+  let videoUrl = null;
+  let posterUrl = '';
+  for (const m of mediaList) {
+    if (!m) continue;
+    if (m.type === 'photo' && m.media_url_https) {
+      imageUrls.push(`${m.media_url_https}?format=jpg&name=large`);
+    } else if (
+      (m.type === 'video' || m.type === 'animated_gif')
+      && m.video_info && Array.isArray(m.video_info.variants)
+    ) {
+      let best = null;
+      for (const v of m.video_info.variants) {
+        if (!v || v.content_type !== 'video/mp4' || !v.url) continue;
+        const br = typeof v.bitrate === 'number' ? v.bitrate : 0;
+        if (!best || br > best.bitrate) best = { url: v.url, bitrate: br };
+      }
+      if (best && !videoUrl) {
+        videoUrl = best.url;
+        posterUrl = m.media_url_https || '';
+      }
+    }
+  }
+
+  if (imageUrls.length === 0 && !videoUrl) return null;
+
+  return {
+    tweetId,
+    tweetUrl,
+    authorName: displayName,
+    authorHandle: `@${screenName}`,
+    authorAvatarUrl: avatarUrl,
+    caption: legacy.full_text || '',
+    imageUrls,
+    videoUrl,
+    posterUrl,
+  };
 }
 
 function notify(message) {
