@@ -332,6 +332,30 @@ export default function FocusedView({
               className={styles.webview}
             />
           </div>
+        ) : record.kind === 'video' ? (
+          // Video-kind save (currently only created by the X
+          // bookmark watcher for video-only tweets). HTML5 <video>
+          // — works natively in Electron with no extra deps. We
+          // mount with autoPlay loop muted so the focused view
+          // feels closer to viewing a GIF on a moodboard than to
+          // a YouTube player. controls let the user pause / unmute
+          // when they actually want to watch with audio.
+          <div
+            className={styles.imageWrap}
+            style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
+          >
+            <video
+              src={fileUrl(record.file_path)}
+              className={styles.image}
+              controls
+              autoPlay
+              loop
+              muted
+              playsInline
+              poster={record.thumb_path ? fileUrl(record.thumb_path) : undefined}
+              style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
+            />
+          </div>
         ) : src && (
           <div
             className={styles.imageWrap}

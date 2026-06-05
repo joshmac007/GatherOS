@@ -330,6 +330,116 @@ async function composeMoodBoard(saves, outputPath) {
   return { width: totalWidth, height: totalHeight, count: tiles.length };
 }
 
+// Download a remote video (MP4) into the library and write a JPEG
+// thumbnail from a separately-fetched poster image. Used by the
+// X-bookmark capture path when the bookmarked tweet has a video
+// attached but no still images.
+//
+// Returns the same { id, filePath, thumbPath, width, height,
+// fileSize, palette, contentHash, kind } shape as
+// saveImageFromUrl so the caller can spread the result into
+// insertSave without special-casing. Dedups by SHA-256 of the
+// video bytes — re-bookmarking the same video is a silent no-op.
+async function saveVideoFromUrl(videoUrl, posterUrl) {
+  if (!videoUrl) throw new Error('videoUrl required');
+
+  const vres = await fetch(videoUrl, {
+    redirect: 'follow',
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+      Accept: 'video/mp4,video/*,*/*;q=0.8',
+    },
+  });
+  if (!vres.ok) {
+    throw new Error(`Failed to fetch video: ${vres.status} ${vres.statusText}`);
+  }
+  const videoBuffer = Buffer.from(await vres.arrayBuffer());
+  if (videoBuffer.length === 0) {
+    throw new Error('Empty video response');
+  }
+
+  // Dedup against the existing library before writing anything to
+  // disk. Hash is over the video bytes — different bitrate variants
+  // of the same tweet hash differently and would each save once
+  // (acceptable; the user can't actually trigger that from the UI).
+  const contentHash = crypto.createHash('sha256').update(videoBuffer).digest('hex');
+  try {
+    const { findSaveByHash } = require('./db');
+    const existing = findSaveByHash(contentHash);
+    if (existing) {
+      return { duplicateOf: existing.id, existing };
+    }
+  } catch (err) {
+    console.warn('[gatheros] video dedup lookup failed, treating as new:', err.message);
+  }
+
+  const id = crypto.randomUUID();
+  const ext = (extFromUrl(videoUrl) || 'mp4').toLowerCase();
+  const filePath = path.join(getImagesDir(), `${id}.${ext}`);
+  fs.writeFileSync(filePath, videoBuffer);
+
+  // Try to parse the video's pixel dimensions out of the twimg URL.
+  // Twitter encodes them in the path (e.g. /vid/avc1/1280x720/...).
+  // Falls through to the poster's dimensions below if the URL
+  // doesn't follow that pattern (older / non-twimg sources).
+  let width = null;
+  let height = null;
+  const urlDims = videoUrl.match(/\/(\d{2,5})x(\d{2,5})\//);
+  if (urlDims) {
+    width = parseInt(urlDims[1], 10);
+    height = parseInt(urlDims[2], 10);
+  }
+
+  // Fetch the poster image and use it as the save's thumbnail. We
+  // need sharp anyway to downscale the poster to thumb size; same
+  // 400x300 cap the image pipeline uses so grid layout math stays
+  // identical between image and video saves.
+  let thumbPath = null;
+  if (posterUrl) {
+    try {
+      const sharp = require('sharp');
+      const pres = await fetch(posterUrl, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+          Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        },
+      });
+      if (pres.ok) {
+        const pbuf = Buffer.from(await pres.arrayBuffer());
+        if (pbuf.length > 0) {
+          thumbPath = path.join(getThumbsDir(), `${id}.jpg`);
+          await sharp(pbuf)
+            .resize(400, 300, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 80 })
+            .toFile(thumbPath);
+          if (!width || !height) {
+            const pmeta = await sharp(pbuf).metadata();
+            width = width || pmeta.width || null;
+            height = height || pmeta.height || null;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[gatheros] video poster fetch failed:', err.message);
+    }
+  }
+
+  return {
+    id,
+    filePath,
+    thumbPath,
+    width,
+    height,
+    fileSize: videoBuffer.length,
+    palette: null,
+    contentHash,
+    kind: 'video',
+  };
+}
+
 module.exports = {
   ensureStorageDirs,
   getImagesDir,
@@ -338,6 +448,7 @@ module.exports = {
   saveImageFromFile,
   saveImageFromBuffer,
   saveImageFromUrl,
+  saveVideoFromUrl,
   deleteImageFiles,
   composeMoodBoard,
 };

@@ -244,6 +244,52 @@ function findCaption(article) {
   return captionEl ? captionEl.innerText.trim() : '';
 }
 
+// Tweet video extraction. X embeds video as a <video> element with
+// one or more <source> children — usually a single MP4 source with
+// the highest available bitrate already pre-selected. Returns the
+// MP4 URL + poster URL, or null when the tweet has no video.
+//
+// The MP4 URL pattern bakes the resolution into the path:
+//     https://video.twimg.com/.../1280x720/<id>.mp4
+// We pick the source with the largest path-encoded width so the
+// save lands at the best quality X is willing to serve. The poster
+// frame comes from the <video poster=...> attribute and gets used
+// as the save's thumbnail downstream.
+function findTweetVideo(article) {
+  const video = article.querySelector('video');
+  if (!video) return null;
+
+  const sources = Array.from(video.querySelectorAll('source'));
+  // Some tweets render their MP4 directly on the <video> element
+  // rather than nesting it in a <source>; add that as a fallback.
+  if (video.getAttribute('src')) {
+    sources.push(video);
+  }
+
+  let best = null;
+  for (const s of sources) {
+    const src = s.getAttribute('src');
+    if (!src) continue;
+    // Twitter videos are MP4; HLS / m3u8 streams need ffmpeg to
+    // download, which we don't have. Skip those so the user gets a
+    // clear "no video found" rather than a corrupt save.
+    if (!/\.mp4(\?|$)/i.test(src) && !/video\/mp4/i.test(s.getAttribute?.('type') || '')) {
+      continue;
+    }
+    const match = src.match(/\/(\d{2,5})x(\d{2,5})\//);
+    const width = match ? parseInt(match[1], 10) : 0;
+    if (!best || width > best.width) {
+      best = { src, width };
+    }
+  }
+  if (!best) return null;
+
+  return {
+    videoUrl: best.src,
+    posterUrl: video.getAttribute('poster') || '',
+  };
+}
+
 // Use the capture phase so we read the article BEFORE X's own click
 // handler can re-render or detach it. Reading is synchronous so
 // there's no race with the subsequent state flip.
@@ -259,7 +305,10 @@ document.addEventListener('click', (e) => {
   if (!tweetUrl) return;
 
   const imageUrls = findImageUrls(article);
-  if (imageUrls.length === 0) return; // image-bearing only in v1
+  const tweetVideo = findTweetVideo(article);
+  // Skip tweets that have neither images nor a video — there's
+  // nothing for the library to anchor the bookmark to.
+  if (imageUrls.length === 0 && !tweetVideo) return;
 
   const author = findAuthorInfo(article);
   const avatarUrl = findAvatarUrl(article);
@@ -287,9 +336,13 @@ document.addEventListener('click', (e) => {
   // strip and click-to-swap. The grid title + detail-panel notes
   // stay empty so the rest of the app reads identically to any
   // other image save.
-  chrome.runtime.sendMessage({
+  //
+  // Branching: if the tweet has images, save as image (primary +
+  // optional alt thumbs). If it's video-only, send videoUrl +
+  // posterUrl instead — the desktop's /save endpoint detects the
+  // video branch and routes to saveVideoFromUrl.
+  const payload = {
     type: 'gatheros:x-bookmark',
-    imageUrl: twimgLarge(imageUrls[0]),
     pageUrl: tweetUrl,
     // Auto-tag every X bookmark so the user can filter their library
     // to "just my X bookmarks" via the existing tag picker. The
@@ -303,8 +356,18 @@ document.addEventListener('click', (e) => {
       authorAvatarUrl: avatarUrl,
       caption,
       imageUrls,
+      videoUrl: tweetVideo?.videoUrl || null,
+      posterUrl: tweetVideo?.posterUrl || null,
     },
-  }, (response) => {
+  };
+  if (imageUrls.length > 0) {
+    payload.imageUrl = twimgLarge(imageUrls[0]);
+  } else if (tweetVideo) {
+    payload.videoUrl = tweetVideo.videoUrl;
+    payload.posterUrl = tweetVideo.posterUrl;
+  }
+
+  chrome.runtime.sendMessage(payload, (response) => {
     // Background hands back { ok, duplicate, offline, error } once the
     // native host has answered. Stay silent when GatherOS isn't
     // running (offline=true) — otherwise every bookmark click would

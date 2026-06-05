@@ -230,7 +230,9 @@ async function handleMessage(msg) {
     }
     const result = await postToApp(
       {
-        imageUrl: msg.imageUrl,
+        imageUrl: msg.imageUrl || null,
+        videoUrl: msg.videoUrl || null,
+        posterUrl: msg.posterUrl || null,
         pageUrl: msg.pageUrl || null,
         pageTitle: msg.pageTitle || null,
         notes: msg.notes || null,

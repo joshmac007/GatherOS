@@ -5,7 +5,7 @@
 // extension doesn't have to discover it.
 //
 // One endpoint:
-//   POST /save  { imageUrl, pageUrl?, pageTitle?, notes?, tweetMeta?, tags? }  with header X-GatherOS-Token
+//   POST /save  { imageUrl?, videoUrl?, posterUrl?, pageUrl?, pageTitle?, notes?, tweetMeta?, tags? }  with header X-GatherOS-Token
 //
 // Plus an unauthenticated GET /ping for the extension's "Test
 // connection" button.
@@ -100,20 +100,39 @@ async function handleSave(req, res) {
   }
 
   const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
-  if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
-    sendJson(res, 400, { ok: false, error: 'imageUrl required (http/https)' });
+  const videoUrl = typeof body?.videoUrl === 'string' ? body.videoUrl.trim() : '';
+  const posterUrl = typeof body?.posterUrl === 'string' ? body.posterUrl.trim() : '';
+  // Either an imageUrl or a videoUrl must be present. The X-bookmark
+  // capture sends videoUrl for video-only tweets; the right-click
+  // context-menu path only ever sends imageUrl.
+  if (!imageUrl && !videoUrl) {
+    sendJson(res, 400, { ok: false, error: 'imageUrl or videoUrl required (http/https)' });
+    return;
+  }
+  if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+    sendJson(res, 400, { ok: false, error: 'imageUrl must be http/https' });
+    return;
+  }
+  if (videoUrl && !/^https?:\/\//i.test(videoUrl)) {
+    sendJson(res, 400, { ok: false, error: 'videoUrl must be http/https' });
     return;
   }
 
   try {
-    const { saveImageFromUrl } = require('./storage');
+    const { saveImageFromUrl, saveVideoFromUrl } = require('./storage');
     const { insertSave } = require('./db');
     const { notifySaved, notifyDuplicate } = require('./notify');
 
-    const imgData = await saveImageFromUrl(imageUrl);
-    if (imgData.duplicateOf) {
-      notifyDuplicate(imgData.existing);
-      sendJson(res, 200, { ok: true, duplicate: true, id: imgData.existing.id });
+    // Branch on whether the capture is a video or an image. Tweets
+    // with both still images and a video bookmark as an image
+    // (the still is what the user usually wants in a moodboard); we
+    // only enter the video branch when there's no image at all.
+    const mediaData = (videoUrl && !imageUrl)
+      ? await saveVideoFromUrl(videoUrl, posterUrl || null)
+      : await saveImageFromUrl(imageUrl);
+    if (mediaData.duplicateOf) {
+      notifyDuplicate(mediaData.existing);
+      sendJson(res, 200, { ok: true, duplicate: true, id: mediaData.existing.id });
       return;
     }
     // Preserve the page the user was browsing — that's the whole
@@ -131,9 +150,9 @@ async function handleSave(req, res) {
       ? body.tweetMeta
       : null;
     const record = insertSave({
-      ...imgData,
-      sourceUrl: pageUrl || imageUrl,
-      title: pageTitle || imgData.title || null,
+      ...mediaData,
+      sourceUrl: pageUrl || imageUrl || videoUrl,
+      title: pageTitle || mediaData.title || null,
       notes: notes || null,
       tweetMeta,
     });
