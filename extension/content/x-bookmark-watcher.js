@@ -30,6 +30,20 @@ window.addEventListener('message', (event) => {
       if (id && info && info.videoUrl) tweetVideoCache.set(id, info);
     }
   }
+  // Cross-device bookmark sync. The interceptor extracts every
+  // bookmark it sees in a /Bookmarks GraphQL response and forwards
+  // the batch here; we relay it to the background service worker,
+  // which owns the "seen" baseline in chrome.storage and routes any
+  // new (not-yet-seen) tweet through the same /save pipeline the
+  // click capture uses. End result: bookmarks made on iOS / web /
+  // any device land in GatherOS the next time the desktop browser
+  // pulls the bookmarks feed (visit x.com or /i/bookmarks).
+  if (data.type === 'bookmark-batch' && Array.isArray(data.bookmarks)) {
+    chrome.runtime.sendMessage({
+      type: 'gatheros:bookmark-batch',
+      bookmarks: data.bookmarks,
+    });
+  }
 });
 
 // Pull the numeric tweet id out of a permalink. /user/status/12345
@@ -446,6 +460,10 @@ document.addEventListener('click', async (e) => {
   // video branch and routes to saveVideoFromUrl.
   const payload = {
     type: 'gatheros:x-bookmark',
+    // Background uses this to add the tweet to the "seen" baseline
+    // after a successful save, so the bookmark-batch flow (cross-
+    // device sync) doesn't re-import the same tweet later.
+    tweetId: tweetIdFromUrl(tweetUrl),
     pageUrl: tweetUrl,
     // Auto-tag every X bookmark so the user can filter their library
     // to "just my X bookmarks" via the existing tag picker. The

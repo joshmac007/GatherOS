@@ -72,7 +72,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // route through the same channel; the content script decides what
 // to show (or to stay silent if GatherOS isn't running).
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg || msg.type !== 'gatheros:x-bookmark') return undefined;
+  if (!msg) return undefined;
+  if (msg.type === 'gatheros:x-bookmark') {
+    handleClickBookmark(msg, sendResponse);
+    return true;
+  }
+  if (msg.type === 'gatheros:bookmark-batch') {
+    handleBookmarkBatch(msg.bookmarks);
+    return false;
+  }
+  return undefined;
+});
+
+function handleClickBookmark(msg, sendResponse) {
   chrome.runtime.sendNativeMessage(HOST_NAME, {
     type: 'save',
     imageUrl: msg.imageUrl,
@@ -81,12 +93,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     posterUrl: msg.posterUrl,
     tweetMeta: msg.tweetMeta,
     tags: msg.tags,
-  }).then((response) => {
+  }).then(async (response) => {
+    const ok = !!(response && response.ok);
     sendResponse({
-      ok: !!(response && response.ok),
+      ok,
       duplicate: !!(response && response.duplicate),
       error: response?.error || null,
     });
+    // Mark this tweet as seen so the bookmark-batch flow (cross-
+    // device sync) doesn't re-import it later. We do this even on
+    // duplicate so the seen set stays in sync with what GatherOS
+    // actually has.
+    if (ok && msg.tweetId) {
+      await markBookmarksSeen([msg.tweetId]);
+    }
   }).catch((err) => {
     const text = err?.message || String(err);
     // Distinguish "GatherOS isn't running / installed" from real
@@ -99,11 +119,114 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       error: text,
     });
   });
-  // Returning true keeps the message channel open until sendResponse
-  // fires asynchronously — without this the content script's
-  // callback would receive undefined immediately.
-  return true;
-});
+}
+
+// ── Cross-device bookmark sync ─────────────────────────────────────
+//
+// The interceptor (content/x-graphql-interceptor.js) extracts every
+// bookmark from every /Bookmarks GraphQL response it sees and ships
+// the batch here through the content script. We compare each tweet
+// id against a "seen" set in chrome.storage.local and route any
+// new ones through the same /save pipeline the click capture uses.
+//
+// Baseline: the first batch we ever see is recorded silently (the
+// user's existing archive — do not flood the library). From the
+// second batch onward, anything not in the seen set is treated as
+// a new bookmark from another device (iOS, web, etc.) and imported.
+const STORAGE_SEEN_KEY = 'gatherosBookmarksSeen';
+const STORAGE_BASELINE_KEY = 'gatherosBookmarksBaselineEstablished';
+
+async function readSeenSet() {
+  const data = await chrome.storage.local.get([STORAGE_SEEN_KEY, STORAGE_BASELINE_KEY]);
+  const seen = new Set(Array.isArray(data[STORAGE_SEEN_KEY]) ? data[STORAGE_SEEN_KEY] : []);
+  const baseline = !!data[STORAGE_BASELINE_KEY];
+  return { seen, baseline };
+}
+
+async function writeSeenSet(seen, { baseline } = {}) {
+  const update = { [STORAGE_SEEN_KEY]: Array.from(seen) };
+  if (baseline !== undefined) update[STORAGE_BASELINE_KEY] = !!baseline;
+  await chrome.storage.local.set(update);
+}
+
+async function markBookmarksSeen(ids) {
+  if (!ids || !ids.length) return;
+  const { seen } = await readSeenSet();
+  let changed = false;
+  for (const id of ids) {
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      changed = true;
+    }
+  }
+  if (changed) await writeSeenSet(seen);
+}
+
+async function handleBookmarkBatch(bookmarks) {
+  if (!Array.isArray(bookmarks) || bookmarks.length === 0) return;
+  const { seen, baseline } = await readSeenSet();
+
+  if (!baseline) {
+    // First batch — this is the user's existing archive at install
+    // time. Record everything silently; no imports.
+    for (const b of bookmarks) {
+      if (b && b.tweetId) seen.add(b.tweetId);
+    }
+    await writeSeenSet(seen, { baseline: true });
+    return;
+  }
+
+  // Established baseline — anything not in the seen set is a new
+  // bookmark from any device. Import sequentially so we don't hit
+  // the native host with a burst of parallel saves.
+  const toImport = bookmarks.filter((b) => b && b.tweetId && !seen.has(b.tweetId));
+  for (const b of toImport) {
+    try {
+      await syncBookmarkToGather(b);
+      // Add to seen even when the save fails offline — the next
+      // visit will retry naturally because the bookmark will appear
+      // in the response again. Tracking it as "seen" only on
+      // confirmed save would otherwise re-attempt on every poll.
+      seen.add(b.tweetId);
+    } catch (err) {
+      console.warn('[gatheros] cross-device bookmark sync failed:', err?.message || err);
+      // Still mark seen — same reasoning as above; an unrecoverable
+      // failure (e.g. content_hash bug) shouldn't loop forever.
+      seen.add(b.tweetId);
+    }
+  }
+  await writeSeenSet(seen);
+}
+
+// Send a single bookmark down the same /save pipeline as the click
+// capture. Mirrors the payload shape the bookmark watcher uses so
+// the native-host + extension-server contract stays single-source.
+async function syncBookmarkToGather(b) {
+  const payload = {
+    type: 'save',
+    pageUrl: b.tweetUrl,
+    tags: ['x:bookmark'],
+    tweetMeta: {
+      authorName: b.authorName || '',
+      authorHandle: b.authorHandle || '',
+      authorAvatarUrl: b.authorAvatarUrl || '',
+      caption: b.caption || '',
+      imageUrls: Array.isArray(b.imageUrls) ? b.imageUrls : [],
+      videoUrl: b.videoUrl || null,
+      posterUrl: b.posterUrl || '',
+    },
+  };
+  if (b.videoUrl) {
+    payload.videoUrl = b.videoUrl;
+    payload.posterUrl = b.posterUrl;
+  } else if (Array.isArray(b.imageUrls) && b.imageUrls.length > 0) {
+    payload.imageUrl = b.imageUrls[0];
+  } else {
+    // No media — nothing to anchor the save to. Skip silently.
+    return;
+  }
+  return chrome.runtime.sendNativeMessage(HOST_NAME, payload);
+}
 
 function notify(message) {
   try {

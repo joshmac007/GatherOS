@@ -79,6 +79,123 @@
     );
   }
 
+  // Walk the bookmark timeline response and extract a flat array of
+  // tweet objects in the shape GatherOS expects. Twitter returns its
+  // bookmark feed inside data.bookmark_timeline_v2.timeline.
+  // instructions[].entries[] — each entry that's a tweet has an
+  // entryId starting with "tweet-" and the tweet payload at
+  // content.itemContent.tweet_results.result.
+  function extractBookmarkEntries(json) {
+    const out = [];
+    function walk(node) {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        for (const child of node) walk(child);
+        return;
+      }
+      if (typeof node.entryId === 'string' && node.entryId.startsWith('tweet-')) {
+        const wrapped = node.content && node.content.itemContent
+          && node.content.itemContent.tweet_results
+          && node.content.itemContent.tweet_results.result;
+        if (wrapped) {
+          const parsed = parseTweetForBookmark(wrapped);
+          if (parsed) out.push(parsed);
+        }
+      }
+      for (const key of Object.keys(node)) {
+        if (key === '__typename') continue;
+        walk(node[key]);
+      }
+    }
+    walk(json);
+    return out;
+  }
+
+  // Pull author / media / caption out of a single tweet result.
+  // Returns null when the tweet has no media we can save (text-only
+  // tweets are skipped — GatherOS is image-anchored, the click-
+  // capture path skips them too).
+  function parseTweetForBookmark(result) {
+    // Quote-tweet / visibility wrappers nest the real tweet one
+    // level deeper.
+    const t = result.tweet || result;
+    const legacy = t.legacy;
+    if (!legacy || !legacy.id_str) return null;
+    const userResult = t.core && t.core.user_results && t.core.user_results.result;
+    const userLegacy = userResult && userResult.legacy;
+    if (!userLegacy || !userLegacy.screen_name) return null;
+
+    const tweetId = legacy.id_str;
+    const screenName = userLegacy.screen_name;
+    const tweetUrl = `https://x.com/${screenName}/status/${tweetId}`;
+
+    // Media extraction. extended_entities.media is the authoritative
+    // list (entities.media truncates to the first photo for legacy
+    // clients). Photos give us imageUrls; the first video on the
+    // tweet (if any) gives us a single videoUrl + posterUrl pair
+    // that the desktop's /save endpoint routes through
+    // saveVideoFromUrl.
+    const mediaList = (legacy.extended_entities && legacy.extended_entities.media)
+      || (legacy.entities && legacy.entities.media)
+      || [];
+    const imageUrls = [];
+    let videoUrl = null;
+    let posterUrl = '';
+    for (const m of mediaList) {
+      if (!m) continue;
+      if (m.type === 'photo' && m.media_url_https) {
+        // Store with format+name params so the renderer can use the
+        // URL verbatim. Matches the click-capture path which derives
+        // its URLs from img.currentSrc (already param-encoded).
+        imageUrls.push(`${m.media_url_https}?format=jpg&name=large`);
+      } else if (
+        (m.type === 'video' || m.type === 'animated_gif')
+        && m.video_info && Array.isArray(m.video_info.variants)
+      ) {
+        let best = null;
+        for (const v of m.video_info.variants) {
+          if (!v || v.content_type !== 'video/mp4' || !v.url) continue;
+          const br = typeof v.bitrate === 'number' ? v.bitrate : 0;
+          if (!best || br > best.bitrate) best = { url: v.url, bitrate: br };
+        }
+        if (best && !videoUrl) {
+          videoUrl = best.url;
+          posterUrl = m.media_url_https || '';
+        }
+      }
+    }
+
+    if (imageUrls.length === 0 && !videoUrl) return null;
+
+    return {
+      tweetId,
+      tweetUrl,
+      authorName: userLegacy.name || '',
+      authorHandle: `@${screenName}`,
+      authorAvatarUrl: userLegacy.profile_image_url_https || '',
+      caption: legacy.full_text || '',
+      imageUrls,
+      videoUrl,
+      posterUrl,
+    };
+  }
+
+  function postBookmarks(bookmarks) {
+    if (bookmarks.length === 0) return;
+    window.postMessage(
+      {
+        source: 'gatheros-interceptor',
+        type: 'bookmark-batch',
+        bookmarks,
+      },
+      window.location.origin,
+    );
+  }
+
+  function isBookmarksEndpoint(url) {
+    return typeof url === 'string' && /\/graphql\/[^/]+\/Bookmarks/.test(url);
+  }
+
   function shouldIntercept(url) {
     if (typeof url !== 'string') return false;
     // Twitter routes everything through /graphql/ or /api/.../<endpoint>.
@@ -100,9 +217,12 @@
       if (!res || !res.ok) return;
       const clone = res.clone();
       clone.json().then((json) => {
-        const out = new Map();
-        extractTweetVideos(json, out);
-        postVideos(out);
+        const videoMap = new Map();
+        extractTweetVideos(json, videoMap);
+        postVideos(videoMap);
+        if (isBookmarksEndpoint(reqUrl)) {
+          postBookmarks(extractBookmarkEntries(json));
+        }
       }).catch(() => { /* non-JSON or parse error — silently ignore */ });
     }).catch(() => { /* fetch error — page-level concern, ignore */ });
     return p;
@@ -121,9 +241,12 @@
       if (!shouldIntercept(this.__gatherUrl)) return;
       try {
         const json = JSON.parse(this.responseText);
-        const out = new Map();
-        extractTweetVideos(json, out);
-        postVideos(out);
+        const videoMap = new Map();
+        extractTweetVideos(json, videoMap);
+        postVideos(videoMap);
+        if (isBookmarksEndpoint(this.__gatherUrl)) {
+          postBookmarks(extractBookmarkEntries(json));
+        }
       } catch { /* non-JSON or parse error */ }
     });
     return XHR_SEND.apply(this, args);
