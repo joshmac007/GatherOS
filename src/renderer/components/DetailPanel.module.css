@@ -689,7 +689,10 @@
      card's content. 0.5px at lower alpha drops to the same
      barely-there outline the rest of the app's glass surfaces use. */
   border: 0.5px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  /* Match the surrounding panel chrome (which uses 8-10px radii
+     throughout) — the previous 14px was the largest radius in the
+     detail panel and read as a different family of surface. */
+  border-radius: 10px;
   box-shadow:
     inset 0 0.5px 0 rgba(255, 255, 255, 0.14),
     0 1px 2px rgba(0, 0, 0, 0.22),

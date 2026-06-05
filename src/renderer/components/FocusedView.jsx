@@ -55,6 +55,11 @@ export default function FocusedView({
   altImageIdx = 0,
 }) {
   const [zoom, setZoom] = useState(1);
+  // Tracks whether the cursor is over the focused-view video so the
+  // ← / → nav hint below can hide while the native HTML5 controls
+  // strip is visible — the two pieces of chrome were stacking on top
+  // of each other and reading as one floating slab.
+  const [videoHovered, setVideoHovered] = useState(false);
   // Capture once on mount: was this focused view opened via a morph
   // transition? If so, the .focused fadeIn keyframe is permanently
   // suppressed for this mount. Toggling it with the live morphSource
@@ -359,6 +364,8 @@ export default function FocusedView({
               disablePictureInPicture
               controlsList="nodownload noplaybackrate"
               poster={record.thumb_path ? fileUrl(record.thumb_path) : undefined}
+              onMouseEnter={() => setVideoHovered(true)}
+              onMouseLeave={() => setVideoHovered(false)}
               style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
             />
           </div>
@@ -403,7 +410,7 @@ export default function FocusedView({
           </div>
         )}
 
-        {(hasPrev || hasNext) && zoom <= 1 && !picking && (
+        {(hasPrev || hasNext) && zoom <= 1 && !picking && !(record.kind === 'video' && videoHovered) && (
           <div className={styles.navHint}>
             <kbd className={styles.kbd}>←</kbd>
             <kbd className={styles.kbd}>→</kbd>
