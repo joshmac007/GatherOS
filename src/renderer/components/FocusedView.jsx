@@ -161,8 +161,15 @@ export default function FocusedView({
       /* Atmospheric backdrop — heavy blur + dark overlay layer
          painted via .focused::before. Lives on the root so it
          covers the topBar too (the divider stays via topBar's
-         border-bottom). */
-      style={src ? { '--stage-bg': `url(${JSON.stringify(src)})` } : undefined}
+         border-bottom). For video saves we use the poster image
+         (thumb_path) instead of file_path — file_path is the MP4
+         and CSS background-image can't render video. */
+      style={(() => {
+        const bg = record.kind === 'video' && record.thumb_path
+          ? fileUrl(record.thumb_path)
+          : src;
+        return bg ? { '--stage-bg': `url(${JSON.stringify(bg)})` } : undefined;
+      })()}
     >
       <div className={styles.topBar}>
         {onToggleSidebar && (
