@@ -272,9 +272,14 @@ async function composeMoodBoard(saves, outputPath) {
   // Resize each save to the column width so heights are deterministic.
   const tiles = [];
   for (const save of saves) {
-    if (!save?.file_path || !fs.existsSync(save.file_path)) continue;
+    // Video saves store an MP4 at file_path that sharp can't decode.
+    // Use the poster still (thumb_path) so the video lands in the
+    // board as its first frame instead of being silently skipped.
+    const sourcePath =
+      save?.kind === 'video' && save?.thumb_path ? save.thumb_path : save?.file_path;
+    if (!sourcePath || !fs.existsSync(sourcePath)) continue;
     try {
-      const resized = await sharp(save.file_path)
+      const resized = await sharp(sourcePath)
         .resize({ width: COL_WIDTH, withoutEnlargement: false })
         .png()
         .toBuffer({ resolveWithObject: true });
@@ -284,7 +289,7 @@ async function composeMoodBoard(saves, outputPath) {
         height: resized.info.height,
       });
     } catch (err) {
-      console.error('Skipping unreadable save in board:', save.file_path, err.message);
+      console.error('Skipping unreadable save in board:', sourcePath, err.message);
     }
   }
   if (tiles.length === 0) throw new Error('No readable images to compose');
