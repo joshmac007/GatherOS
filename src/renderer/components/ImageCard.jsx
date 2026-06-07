@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Video as VideoIcon } from 'lucide-react';
 import styles from './ImageCard.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 
@@ -256,14 +255,6 @@ export default function ImageCard({
             style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
           />
         ))}
-        {inView && record.kind === 'video' && (
-          // Top-right glass badge — marks the card as a video at a
-          // glance, even before the user hovers and the inline
-          // playback kicks in.
-          <span className={styles.kindBadge} aria-label="Video">
-            <VideoIcon size={12} strokeWidth={1.8} aria-hidden="true" />
-          </span>
-        )}
         {inView && record.tweet_meta && (
           // Bottom-left glass badge — marks saves captured via the
           // X bookmark watcher. Same XGlyphIcon the DetailPanel

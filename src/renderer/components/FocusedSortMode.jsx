@@ -159,13 +159,31 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
       {!done && current && (
         <>
           <div className={styles.focusFrame}>
-            <img
-              key={current.id}
-              className={styles.focusImage}
-              src={fileUrl(current.file_path)}
-              alt=""
-              draggable={false}
-            />
+            {current.kind === 'video' ? (
+              // Video saves: file_path is an MP4 that an <img> can't
+              // render. Autoplay muted + loop so triage feels like
+              // glancing at a GIF; poster shows the saved first frame
+              // before playback kicks in.
+              <video
+                key={current.id}
+                className={styles.focusImage}
+                src={fileUrl(current.file_path)}
+                poster={current.thumb_path ? fileUrl(current.thumb_path) : undefined}
+                autoPlay
+                muted
+                loop
+                playsInline
+                draggable={false}
+              />
+            ) : (
+              <img
+                key={current.id}
+                className={styles.focusImage}
+                src={fileUrl(current.file_path)}
+                alt=""
+                draggable={false}
+              />
+            )}
           </div>
 
           <div className={styles.buckets}>

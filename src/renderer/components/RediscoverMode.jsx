@@ -262,13 +262,29 @@ export default function RediscoverMode({
         className={`${styles.card} ${leaving ? styles[`leaving_${leaving}`] : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <img
-          src={fileUrl(current.file_path)}
-          alt={current.title || ''}
-          className={styles.image}
-          draggable={false}
-          decoding="async"
-        />
+        {current.kind === 'video' ? (
+          // Video saves: file_path is an MP4 an <img> can't render.
+          // Autoplay muted + loop so the card behaves like the rest
+          // of the deck; poster shows the saved first frame.
+          <video
+            src={fileUrl(current.file_path)}
+            poster={current.thumb_path ? fileUrl(current.thumb_path) : undefined}
+            className={styles.image}
+            autoPlay
+            muted
+            loop
+            playsInline
+            draggable={false}
+          />
+        ) : (
+          <img
+            src={fileUrl(current.file_path)}
+            alt={current.title || ''}
+            className={styles.image}
+            draggable={false}
+            decoding="async"
+          />
+        )}
         {current.title && <div className={styles.caption}>{current.title}</div>}
       </div>
 
