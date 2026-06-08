@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Save sound effects — 10 ways</title>
+<style>
+  :root {
+    --content-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --text-primary: #000;
+    --text-secondary: rgba(0,0,0,0.55);
+    --text-tertiary: rgba(0,0,0,0.4);
+    --accent: #000;
+    --hover-bg: #f1f1ef;
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font); color: var(--text-primary); background: var(--content-bg); -webkit-font-smoothing: antialiased; }
+
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 14px 20px; background: rgba(250,250,249,0.88); backdrop-filter: saturate(1.6) blur(12px); border-bottom: 1px solid var(--border); }
+  h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  header .sub { font-size: 12px; color: var(--text-tertiary); }
+  .vol { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+  .vol input { width: 110px; accent-color: #000; }
+
+  main { max-width: 1000px; margin: 0 auto; padding: 22px 18px 80px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (max-width: 680px) { .grid { grid-template-columns: 1fr; } }
+
+  .tile { position: relative; display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-1); box-shadow: var(--shadow-control); cursor: pointer; text-align: left; font: inherit; transition: transform 0.08s ease, background 0.12s ease; overflow: hidden; }
+  .tile:hover { background: var(--hover-bg); }
+  .tile:active { transform: scale(0.99); }
+  .key { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: rgba(0,0,0,0.05); font-size: 13px; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .body { flex: 1 1 auto; min-width: 0; }
+  .name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .desc { margin-top: 3px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.4; }
+  .play { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); color: var(--text-primary); background: var(--surface-1); }
+  .tile:hover .play { background: #000; color: #fff; border-color: #000; }
+  /* ripple pulse on play */
+  .tile.played::after { content: ""; position: absolute; inset: 0; border-radius: 14px; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6); animation: ping 0.5s ease-out; pointer-events: none; }
+  @keyframes ping { from { opacity: 1; } to { opacity: 0; } }
+  .foot { margin-top: 18px; font-size: 12px; color: var(--text-tertiary); }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Save sound effects</h1>
+      <div class="sub">click a tile (or press its key) to hear it · synthesized live, no files</div>
+    </div>
+    <label class="vol">volume <input id="vol" type="range" min="0" max="100" value="55" /></label>
+  </header>
+  <main>
+    <div class="grid" id="grid"></div>
+    <div class="foot">Tip: keys <b>1–9</b> and <b>0</b> play sounds 1–10. Audio starts on your first click (browser requirement).</div>
+  </main>
+
+<script>
+  // ── tiny Web Audio engine ──────────────────────────────────────
+  let ac, masterGain;
+  function ctx() {
+    if (!ac) { ac = new (window.AudioContext || window.webkitAudioContext)(); masterGain = ac.createGain(); masterGain.connect(ac.destination); masterGain.gain.value = 0.55; }
+    if (ac.state === 'suspended') ac.resume();
+    return ac;
+  }
+  function setVol(v) { if (masterGain) masterGain.gain.value = v; }
+
+  function env(g, t, a, d, peak) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + Math.max(a, 0.001));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+  }
+  function tone(o) {
+    const c = ctx(); const t = o.t0 ?? c.currentTime;
+    const osc = c.createOscillator(); osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(o.f0, t);
+    if (o.f1 != null) osc.frequency.exponentialRampToValueAtTime(o.f1, t + o.dur);
+    let node = osc;
+    if (o.lp) { const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.lp; osc.connect(f); node = f; }
+    const g = c.createGain(); node.connect(g); g.connect(masterGain);
+    env(g, t, o.a ?? 0.004, o.dur - (o.a ?? 0.004), o.peak ?? 0.3);
+    osc.start(t); osc.stop(t + o.dur + 0.03);
+  }
+  function noise(o) {
+    const c = ctx(); const t = o.t0 ?? c.currentTime;
+    const n = c.createBufferSource();
+    const len = Math.ceil(c.sampleRate * Math.max(o.dur, 0.05));
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    n.buffer = buf;
+    const filt = c.createBiquadFilter(); filt.type = o.type || 'bandpass'; filt.frequency.setValueAtTime(o.f || 1500, t); filt.Q.value = o.q || 1;
+    if (o.f1) filt.frequency.exponentialRampToValueAtTime(o.f1, t + o.dur);
+    const g = c.createGain(); n.connect(filt); filt.connect(g); g.connect(masterGain);
+    env(g, t, o.a ?? 0.002, o.dur - (o.a ?? 0.002), o.peak ?? 0.3);
+    n.start(t); n.stop(t + o.dur + 0.03);
+  }
+  const at = (off) => ctx().currentTime + off;
+
+  // ── the 10 save sounds ─────────────────────────────────────────
+  const SOUNDS = [
+    { name: 'Soft pop', desc: 'A small rounded low pop — quiet and unobtrusive.',
+      play() { tone({ type:'sine', f0:210, f1:90, dur:0.13, a:0.002, peak:0.5, lp:1300 }); } },
+    { name: 'Camera shutter', desc: 'A crisp click-clack, like a photo being taken.',
+      play() { noise({ dur:0.04, type:'highpass', f:2200, peak:0.4 }); noise({ t0:at(0.06), dur:0.05, type:'bandpass', f:1100, q:1.6, peak:0.32 }); } },
+    { name: 'Pluck', desc: 'A single plucked string note — warm, brief.',
+      play() { tone({ type:'triangle', f0:494, dur:0.30, a:0.001, peak:0.34, lp:2600 }); } },
+    { name: 'Marimba', desc: 'A soft wooden mallet note with a gentle overtone.',
+      play() { tone({ type:'sine', f0:523, dur:0.42, a:0.002, peak:0.34 }); tone({ type:'sine', f0:1046, dur:0.22, a:0.002, peak:0.10 }); } },
+    { name: 'Collect', desc: 'Two quick rising blips — a playful "got it".',
+      play() { tone({ type:'triangle', f0:660, dur:0.07, peak:0.22, lp:3200 }); tone({ t0:at(0.075), type:'triangle', f0:990, dur:0.13, peak:0.22, lp:3200 }); } },
+    { name: 'Whoosh into place', desc: 'A short airy swell that lands on a soft tap.',
+      play() { noise({ dur:0.17, type:'lowpass', f:300, f1:1100, peak:0.26, a:0.06 }); tone({ t0:at(0.15), type:'sine', f0:520, f1:360, dur:0.06, peak:0.3 }); } },
+    { name: 'Glass tap', desc: 'A bright high tink, like tapping a glass.',
+      play() { tone({ type:'sine', f0:1500, dur:0.18, a:0.001, peak:0.24 }); tone({ type:'sine', f0:2700, dur:0.10, a:0.001, peak:0.07 }); } },
+    { name: 'Bubble', desc: 'A watery rising pop — light and friendly.',
+      play() { tone({ type:'sine', f0:240, f1:680, dur:0.12, a:0.005, peak:0.4, lp:2200 }); } },
+    { name: 'Chime', desc: 'Two soft bell notes a third apart — calm.',
+      play() { tone({ type:'sine', f0:523, dur:0.5, a:0.004, peak:0.27 }); tone({ t0:at(0.05), type:'sine', f0:659, dur:0.55, a:0.004, peak:0.2 }); } },
+    { name: 'Thock', desc: 'A deep, satisfying mechanical-key thock.',
+      play() { tone({ type:'sine', f0:135, f1:80, dur:0.10, a:0.001, peak:0.55, lp:650 }); noise({ dur:0.05, type:'lowpass', f:1100, peak:0.22 }); } },
+  ];
+
+  const grid = document.getElementById('grid');
+  grid.innerHTML = SOUNDS.map((s, i) => `
+    <button class="tile" data-i="${i}">
+      <span class="key">${(i+1) % 10}</span>
+      <span class="body"><span class="name">${s.name}</span><span class="desc">${s.desc}</span></span>
+      <span class="play" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </span>
+    </button>`).join('');
+
+  function fire(i) {
+    const tile = grid.querySelector(`[data-i="${i}"]`); if (!tile) return;
+    try { SOUNDS[i].play(); } catch (e) { /* ignore */ }
+    tile.classList.remove('played'); void tile.offsetWidth; tile.classList.add('played');
+  }
+  grid.addEventListener('click', (e) => { const t = e.target.closest('.tile'); if (t) fire(+t.dataset.i); });
+  document.getElementById('vol').addEventListener('input', (e) => { ctx(); setVol(e.target.value / 100); });
+  window.addEventListener('keydown', (e) => {
+    if (e.key >= '1' && e.key <= '9') fire(+e.key - 1);
+    else if (e.key === '0') fire(9);
+  });
+</script>
+</body>
+</html>
