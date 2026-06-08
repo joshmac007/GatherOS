@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>5 zoom bars for the grid</title>
+<style>
+  :root {
+    --content-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border: rgba(0,0,0,0.07);
+    --border-strong: rgba(0,0,0,0.14);
+    --text-primary: #000;
+    --text-secondary: rgba(0,0,0,0.55);
+    --text-tertiary: rgba(0,0,0,0.4);
+    --accent: #000;
+    --hover-bg: #eaeaea;
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --shadow-pop: 0 8px 30px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
+    --radius: 8px;
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--font);
+    color: var(--text-primary);
+    background: var(--content-bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  /* ── tab chrome ─────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 18px;
+    background: rgba(250,250,249,0.85);
+    backdrop-filter: saturate(1.6) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tab {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 11px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-1); box-shadow: var(--shadow-control);
+    font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary);
+    cursor: pointer; white-space: nowrap;
+  }
+  .tab:hover { background: var(--hover-bg); }
+  .tab .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 5px;
+    background: rgba(0,0,0,0.06); font-size: 10.5px; color: var(--text-tertiary);
+  }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active .num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  /* ── stage ──────────────────────────────────────────────── */
+  main { max-width: 980px; margin: 0 auto; padding: 26px 18px 60px; }
+  .iter { display: none; }
+  .iter.active { display: block; animation: fade 0.18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .meta { margin: 2px 2px 16px; }
+  .meta .name { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .meta .why { margin-top: 5px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); max-width: 62ch; }
+
+  /* The fake app toolbar that hosts each zoom bar */
+  .toolbar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 14px;
+    background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow-control);
+  }
+  .toolbar .crumb { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+  .toolbar .spacer { margin-left: auto; }
+  .colreadout { font-size: 11.5px; color: var(--text-tertiary); min-width: 64px; text-align: right; }
+
+  /* preview grid (masonry via CSS columns) */
+  .preview { margin-top: 16px; column-gap: 10px; transition: column-count 0.1s; }
+  .card {
+    break-inside: avoid; margin-bottom: 10px; border-radius: 9px;
+    border: 1px solid var(--border); box-shadow: var(--shadow-control);
+  }
+  .ico { width: 14px; height: 14px; color: var(--text-tertiary); flex: none; }
+
+  /* ── 1 · refined slider ─────────────────────────────────── */
+  .zb-slider { display: flex; align-items: center; gap: 8px; position: relative; }
+  .slider {
+    -webkit-appearance: none; appearance: none;
+    width: 120px; height: 16px; background: transparent; cursor: pointer; margin: 0;
+  }
+  .slider::-webkit-slider-runnable-track { height: 3px; background: var(--border-strong); border-radius: 4px; }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none; margin-top: -5px;
+    width: 20px; height: 13px; border-radius: 999px;
+    background: linear-gradient(180deg,#fff,#f3f3f5);
+    border: 0.5px solid rgba(0,0,0,0.18);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .bubble {
+    position: absolute; top: -26px; transform: translateX(-50%);
+    padding: 2px 7px; border-radius: 6px; background: var(--accent); color: #fff;
+    font-size: 11px; white-space: nowrap; opacity: 0; transition: opacity 0.12s; pointer-events: none;
+  }
+  .zb-slider:hover .bubble, .zb-slider.dragging .bubble { opacity: 1; }
+
+  /* ── 2 · stepped notches ────────────────────────────────── */
+  .zb-notches { display: flex; align-items: flex-end; gap: 3px; height: 20px; }
+  .notch {
+    width: 6px; border: none; padding: 0; background: var(--border-strong); border-radius: 3px;
+    cursor: pointer; transition: background 0.1s, height 0.1s; align-self: center;
+  }
+  .notch:hover { background: rgba(0,0,0,0.32); }
+  .notch.on { background: var(--accent); }
+
+  /* ── 3 · density presets ────────────────────────────────── */
+  .zb-presets { display: flex; gap: 4px; padding: 2px; background: rgba(0,0,0,0.04); border-radius: 999px; }
+  .preset {
+    border: none; background: transparent; padding: 5px 12px; border-radius: 999px;
+    font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer;
+  }
+  .preset:hover { color: var(--text-primary); }
+  .preset.on { background: var(--surface-1); color: var(--text-primary); box-shadow: var(--shadow-control); }
+
+  /* ── 4 · stepper ────────────────────────────────────────── */
+  .zb-stepper { display: flex; align-items: center; gap: 8px; }
+  .step {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface-1); box-shadow: var(--shadow-control);
+    cursor: pointer; color: var(--text-primary); font-size: 15px; line-height: 1;
+  }
+  .step:hover { background: var(--hover-bg); }
+  .step:disabled { opacity: 0.35; cursor: default; }
+  .dots { display: flex; gap: 4px; align-items: center; }
+  .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong); transition: background 0.1s; }
+  .pip.on { background: var(--accent); }
+
+  /* ── 5 · grid-size popover ──────────────────────────────── */
+  .zb-pop { position: relative; }
+  .popbtn {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border); background: var(--surface-1); box-shadow: var(--shadow-control);
+    border-radius: 8px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 500;
+  }
+  .popbtn:hover { background: var(--hover-bg); }
+  .pop {
+    position: absolute; top: calc(100% + 8px); left: 0; z-index: 5;
+    padding: 12px; border-radius: 12px; background: var(--surface-1); box-shadow: var(--shadow-pop);
+    border: 1px solid var(--border); display: none;
+  }
+  .pop.open { display: block; }
+  .popgrid { display: grid; grid-template-columns: repeat(7, 16px); gap: 4px; }
+  .cell { width: 16px; height: 16px; border-radius: 4px; background: rgba(0,0,0,0.08); cursor: pointer; }
+  .cell.hl { background: var(--accent); }
+  .poplabel { margin-top: 9px; font-size: 11.5px; color: var(--text-secondary); text-align: center; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>5 zoom bars for the grid</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-i="1"><span class="num">1</span>Refined slider</button>
+      <button class="tab" data-i="2"><span class="num">2</span>Stepped notches</button>
+      <button class="tab" data-i="3"><span class="num">3</span>Density presets</button>
+      <button class="tab" data-i="4"><span class="num">4</span>Zoom stepper</button>
+      <button class="tab" data-i="5"><span class="num">5</span>Grid-size popover</button>
+    </div>
+  </div>
+
+  <main>
+    <!-- 1 -->
+    <section class="iter active" data-i="1">
+      <div class="meta">
+        <div class="name">1 · Refined slider</div>
+        <div class="why">The current pattern, tightened: small/large grid glyphs anchor the track, the app's pill thumb stays, and a value bubble appears on drag so you know the exact column count. Familiar, zero learning curve.</div>
+      </div>
+      <div class="toolbar">
+        <span class="crumb">All images</span>
+        <span class="spacer"></span>
+        <div class="zb-slider" data-stage="s1">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <input class="slider" type="range" min="2" max="8" value="5" />
+          <span class="bubble"></span>
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        </div>
+      </div>
+      <div class="preview" id="s1"></div>
+    </section>
+
+    <!-- 2 -->
+    <section class="iter" data-i="2">
+      <div class="meta">
+        <div class="name">2 · Stepped notches</div>
+        <div class="why">Discrete, click-anywhere notches — one per density step — read like an equalizer. No dragging precision needed, and the shape itself signals "small → large." Great for trackpad taps.</div>
+      </div>
+      <div class="toolbar">
+        <span class="crumb">All images</span>
+        <span class="spacer"></span>
+        <div class="zb-notches" id="n-host" data-stage="s2"></div>
+        <span class="colreadout" id="n-read">5 columns</span>
+      </div>
+      <div class="preview" id="s2"></div>
+    </section>
+
+    <!-- 3 -->
+    <section class="iter" data-i="3">
+      <div class="meta">
+        <div class="name">3 · Density presets</div>
+        <div class="why">Opinionated, named sizes instead of a continuum — one tap and you're done. Fastest for people who think "I want it cozy," not "I want 5 columns." A segmented pill, like a view switcher.</div>
+      </div>
+      <div class="toolbar">
+        <span class="crumb">All images</span>
+        <span class="spacer"></span>
+        <div class="zb-presets" id="p-host" data-stage="s3"></div>
+      </div>
+      <div class="preview" id="s3"></div>
+    </section>
+
+    <!-- 4 -->
+    <section class="iter" data-i="4">
+      <div class="meta">
+        <div class="name">4 · Zoom stepper</div>
+        <div class="why">A − / + stepper with pips for the current level, like a map or PDF zoom. Precise, keyboard-friendly, and tiny — leaves the most room in a crowded toolbar. Click-and-hold territory for power users.</div>
+      </div>
+      <div class="toolbar">
+        <span class="crumb">All images</span>
+        <span class="spacer"></span>
+        <div class="zb-stepper" data-stage="s4">
+          <button class="step" id="st-minus" title="Smaller">−</button>
+          <div class="dots" id="st-dots"></div>
+          <button class="step" id="st-plus" title="Bigger">+</button>
+        </div>
+      </div>
+      <div class="preview" id="s4"></div>
+    </section>
+
+    <!-- 5 -->
+    <section class="iter" data-i="5">
+      <div class="meta">
+        <div class="name">5 · Grid-size popover</div>
+        <div class="why">Collapses to a single button; clicking opens a hover-to-pick mini grid (think Notion/Word's table picker). Visual, space-saving, and a little delightful — you literally draw the density you want.</div>
+      </div>
+      <div class="toolbar">
+        <span class="crumb">All images</span>
+        <span class="spacer"></span>
+        <div class="zb-pop" data-stage="s5">
+          <button class="popbtn" id="pop-btn">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span id="pop-label">5 cols</span>
+          </button>
+          <div class="pop" id="pop">
+            <div class="popgrid" id="pop-grid"></div>
+            <div class="poplabel" id="pop-hint">5 columns</div>
+          </div>
+        </div>
+      </div>
+      <div class="preview" id="s5"></div>
+    </section>
+  </main>
+
+<script>
+  const MIN = 2, MAX = 8;
+  const grad = [
+    'linear-gradient(135deg,#ffd9a0,#ff9a76)','linear-gradient(135deg,#a0c4ff,#6c8cff)',
+    'linear-gradient(135deg,#b8f2c9,#5ed79a)','linear-gradient(135deg,#f6c1e1,#d98bd0)',
+    'linear-gradient(135deg,#d7c6ff,#9b7be8)','linear-gradient(135deg,#ffe08a,#f7b733)',
+    'linear-gradient(135deg,#c9e7ff,#7fb2e8)','linear-gradient(135deg,#ffc2c2,#ff7b7b)',
+    'linear-gradient(135deg,#bfeede,#62c6a8)','linear-gradient(135deg,#e7d3ff,#b48bff)'
+  ];
+  // Deterministic-ish heights so masonry looks real but stable.
+  const heights = [];
+  for (let i = 0; i < 30; i++) heights.push(80 + ((i * 53) % 9) * 18);
+
+  function fillPreview(el) {
+    el.innerHTML = '';
+    for (let i = 0; i < 30; i++) {
+      const c = document.createElement('div');
+      c.className = 'card';
+      c.style.height = heights[i] + 'px';
+      c.style.background = grad[i % grad.length];
+      el.appendChild(c);
+    }
+  }
+  function setCols(stageId, cols) {
+    document.getElementById(stageId).style.columnCount = cols;
+  }
+  ['s1','s2','s3','s4','s5'].forEach(id => { fillPreview(document.getElementById(id)); setCols(id, 5); });
+
+  // ── tabs ──
+  const tabs = [...document.querySelectorAll('.tab')];
+  const iters = [...document.querySelectorAll('.iter')];
+  function show(i) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i)));
+    iters.forEach(s => s.classList.toggle('active', s.dataset.i === String(i)));
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.i)));
+  window.addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '5') show(e.key); });
+
+  // ── 1 · slider (right = bigger cards = fewer cols) ──
+  (() => {
+    const wrap = document.querySelector('.zb-slider');
+    const input = wrap.querySelector('.slider');
+    const bubble = wrap.querySelector('.bubble');
+    const apply = () => {
+      const cols = MIN + MAX - +input.value; // invert
+      setCols('s1', cols);
+      bubble.textContent = cols + ' columns';
+      const pct = (input.value - MIN) / (MAX - MIN);
+      bubble.style.left = (24 + pct * 120) + 'px';
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('pointerdown', () => wrap.classList.add('dragging'));
+    window.addEventListener('pointerup', () => wrap.classList.remove('dragging'));
+    apply();
+  })();
+
+  // ── 2 · notches (left = small/8 cols, right = large/2 cols) ──
+  (() => {
+    const host = document.getElementById('n-host');
+    const read = document.getElementById('n-read');
+    const order = []; for (let c = MAX; c >= MIN; c--) order.push(c); // 8..2
+    let active = 5;
+    order.forEach((cols, idx) => {
+      const b = document.createElement('button');
+      b.className = 'notch';
+      b.style.height = (8 + idx * 2) + 'px'; // grows left→right
+      b.addEventListener('click', () => { active = cols; render(); });
+      b.addEventListener('mouseenter', () => preview(cols));
+      host.appendChild(b);
+    });
+    const notches = [...host.children];
+    function paint(cols) {
+      notches.forEach((n, idx) => n.classList.toggle('on', order[idx] >= cols));
+    }
+    function preview(cols) { paint(cols); }
+    function render() { setCols('s2', active); read.textContent = active + ' columns'; paint(active); }
+    host.addEventListener('mouseleave', render);
+    render();
+  })();
+
+  // ── 3 · presets ──
+  (() => {
+    const host = document.getElementById('p-host');
+    const presets = [['Compact',6],['Cozy',5],['Comfortable',4],['Large',3]];
+    presets.forEach(([label, cols], idx) => {
+      const b = document.createElement('button');
+      b.className = 'preset' + (idx === 1 ? ' on' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        [...host.children].forEach(c => c.classList.remove('on'));
+        b.classList.add('on');
+        setCols('s3', cols);
+      });
+      host.appendChild(b);
+    });
+    setCols('s3', 5);
+  })();
+
+  // ── 4 · stepper ──
+  (() => {
+    const dots = document.getElementById('st-dots');
+    const minus = document.getElementById('st-minus');
+    const plus = document.getElementById('st-plus');
+    let cols = 5;
+    for (let i = 0; i < (MAX - MIN + 1); i++) { const p = document.createElement('div'); p.className = 'pip'; dots.appendChild(p); }
+    const pips = [...dots.children];
+    function render() {
+      setCols('s4', cols);
+      // level: bigger cards (fewer cols) = more filled pips
+      const level = MAX - cols + 1;
+      pips.forEach((p, i) => p.classList.toggle('on', i < level));
+      minus.disabled = cols >= MAX; // can't get smaller than 8 cols
+      plus.disabled = cols <= MIN;  // can't get bigger than 2 cols
+    }
+    minus.addEventListener('click', () => { cols = Math.min(MAX, cols + 1); render(); }); // smaller cards
+    plus.addEventListener('click', () => { cols = Math.max(MIN, cols - 1); render(); });   // bigger cards
+    render();
+  })();
+
+  // ── 5 · grid-size popover ──
+  (() => {
+    const btn = document.getElementById('pop-btn');
+    const pop = document.getElementById('pop');
+    const gridEl = document.getElementById('pop-grid');
+    const hint = document.getElementById('pop-hint');
+    const label = document.getElementById('pop-label');
+    let cols = 5;
+    const cells = [];
+    for (let i = 0; i < (MAX - MIN + 1); i++) { // represents 2..8 columns
+      const cell = document.createElement('div'); cell.className = 'cell';
+      const value = MIN + i;
+      cell.addEventListener('mouseenter', () => paint(value, value + ' columns'));
+      cell.addEventListener('click', () => { cols = value; apply(); pop.classList.remove('open'); });
+      gridEl.appendChild(cell); cells.push({ cell, value });
+    }
+    function paint(v, text) { cells.forEach(({cell, value}) => cell.classList.toggle('hl', value <= v)); hint.textContent = text; }
+    function apply() { setCols('s5', cols); label.textContent = cols + ' cols'; paint(cols, cols + ' columns'); }
+    btn.addEventListener('click', e => { e.stopPropagation(); pop.classList.toggle('open'); paint(cols, cols + ' columns'); });
+    gridEl.addEventListener('mouseleave', () => paint(cols, cols + ' columns'));
+    document.addEventListener('click', e => { if (!pop.contains(e.target) && e.target !== btn) pop.classList.remove('open'); });
+    apply();
+  })();
+</script>
+</body>
+</html>
