@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>New-save entrance effects — 5 ways</title>
+<style>
+  :root {
+    --content-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --text-primary: #000;
+    --text-secondary: rgba(0,0,0,0.55);
+    --text-tertiary: rgba(0,0,0,0.4);
+    --accent: #000;
+    --hover-bg: #ececec;
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.05), 0 6px 18px rgba(0,0,0,0.06);
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font); color: var(--text-primary); background: var(--content-bg); -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  .topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: rgba(250,250,249,0.85); backdrop-filter: saturate(1.6) blur(12px); border-bottom: 1px solid var(--border); }
+  .tabs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+  .tab:hover { background: var(--hover-bg); }
+  .tab .num { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: rgba(0,0,0,0.06); font-size: 10.5px; color: var(--text-tertiary); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active .num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  main { max-width: 980px; margin: 0 auto; padding: 22px 18px 80px; }
+  .iter { display: none; }
+  .iter.active { display: block; animation: fade 0.18s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .head { display: flex; align-items: flex-start; gap: 18px; margin: 2px 2px 16px; }
+  .head .name { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .head .why { margin-top: 5px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); max-width: 60ch; }
+  .savebtn { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 9px 15px; border-radius: 999px; border: none; background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow-card); }
+  .savebtn:hover { background: #1f1f1f; }
+  .savebtn:active { transform: scale(0.97); }
+
+  .grid { column-count: 4; column-gap: 12px; }
+  @media (max-width: 720px) { .grid { column-count: 3; } }
+  .card { break-inside: avoid; margin-bottom: 12px; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-card); position: relative; background: #fff; }
+  .thumb { width: 100%; display: block; }
+
+  /* freshly saved highlight badge (brief) */
+  .badge { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 999px; background: rgba(20,20,22,0.82); color: #fff; font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; backdrop-filter: blur(6px); opacity: 0; animation: badgeIn 2.4s ease forwards; pointer-events: none; }
+  @keyframes badgeIn { 0%{opacity:0;transform:translateY(-4px);} 8%{opacity:1;transform:none;} 70%{opacity:1;} 100%{opacity:0;} }
+
+  /* ── 1 · Fade + rise ── */
+  .e1 { animation: e1 0.55s var(--ease-out) both; }
+  @keyframes e1 { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: none; } }
+
+  /* ── 2 · Spring pop ── */
+  .e2 { animation: e2 0.6s cubic-bezier(0.34, 1.56, 0.4, 1) both; transform-origin: top center; }
+  @keyframes e2 { 0% { opacity: 0; transform: scale(0.4); } 55% { opacity: 1; } 100% { transform: scale(1); } }
+
+  /* ── 3 · Develop (blur-up) ── */
+  .e3 { animation: fadeq 0.35s ease both; }
+  .e3 .thumb { animation: e3 0.85s var(--ease-out) both; }
+  @keyframes fadeq { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes e3 { from { filter: blur(16px) saturate(0.55) brightness(1.08); transform: scale(1.08); } to { filter: none; transform: none; } }
+
+  /* ── 4 · Shimmer sweep ── */
+  .e4 { animation: fadeq 0.4s ease both; }
+  .e4::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.65) 50%, transparent 70%); transform: translateX(-130%); animation: sweep 0.9s 0.1s var(--ease-out) both; pointer-events: none; }
+  @keyframes sweep { to { transform: translateX(130%); } }
+
+  /* ── 5 · Glow pulse ── */
+  .e5 { animation: e5 0.6s var(--ease-out) both; }
+  @keyframes e5 {
+    0% { opacity: 0; transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+    45% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 3px rgba(0,0,0,0.55), 0 0 28px 4px rgba(0,0,0,0.22); }
+    100% { transform: scale(1); box-shadow: var(--shadow-card); }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>New-save entrance effects</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-i="1"><span class="num">1</span>Fade + rise</button>
+      <button class="tab" data-i="2"><span class="num">2</span>Spring pop</button>
+      <button class="tab" data-i="3"><span class="num">3</span>Develop</button>
+      <button class="tab" data-i="4"><span class="num">4</span>Shimmer sweep</button>
+      <button class="tab" data-i="5"><span class="num">5</span>Glow pulse</button>
+    </div>
+  </div>
+
+  <main id="main"></main>
+
+<script>
+  const SPARK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>';
+  const GRADS = [
+    '135deg,#ffd9a0,#ff7a76','135deg,#a0c4ff,#6c8cff','135deg,#b8f2c9,#3fc98a','135deg,#d7c6ff,#9b7be8',
+    '135deg,#ffe08a,#f7a233','135deg,#9fe3ff,#3f9be8','135deg,#ffc2c2,#ff5b7b','135deg,#bfeede,#42b69a',
+    '135deg,#f6c1e1,#c45cd8','160deg,#1f6f7e,#0c2230','120deg,#ff9a3d,#ff4d6d','150deg,#7a8cff,#c45cff'
+  ];
+  // deterministic heights for stable masonry
+  const heights = []; for (let i=0;i<60;i++) heights.push(120 + ((i*47)%7)*34);
+  function cardHTML(idx, fresh, effect) {
+    const g = GRADS[idx % GRADS.length];
+    const h = heights[idx % heights.length];
+    const cls = 'card' + (fresh ? ' e'+effect : '');
+    const badge = fresh ? '<span class="badge">Saved</span>' : '';
+    return `<div class="${cls}">${badge}<div class="thumb" style="height:${h}px;background:linear-gradient(${g})"></div></div>`;
+  }
+
+  const ITERS = [
+    { i:1, name:'1 · Fade + rise', why:"Soft fade while the card rises and settles from a hair below, with a tiny scale-up. Calm, unobtrusive — it acknowledges the save without yanking your eye." },
+    { i:2, name:'2 · Spring pop', why:"The card springs up from small with a bouncy overshoot. Playful and unmistakable — best if you want saving to feel rewarding and tactile." },
+    { i:3, name:'3 · Develop', why:"The thumbnail resolves from a soft blur into focus, like a photo developing. Reads as 'your image just landed', and quietly disguises the moment the real thumbnail swaps in." },
+    { i:4, name:'4 · Shimmer sweep', why:"The card fades in and a single light sweep passes across it. Subtle 'fresh / new' sparkle — draws the eye for a beat without any motion of the card itself." },
+    { i:5, name:'5 · Glow pulse', why:"Fades in, then a quick ring + ambient glow pulses around it once and settles. The strongest 'look here' signal — useful when the new save lands among many existing ones." },
+  ];
+
+  document.getElementById('main').innerHTML = ITERS.map(it => `
+    <section class="iter${it.i===1?' active':''}" data-i="${it.i}">
+      <div class="head">
+        <div><div class="name">${it.name}</div><div class="why">${it.why}</div></div>
+        <button class="savebtn" data-save="${it.i}">${SPARK} Save image</button>
+      </div>
+      <div class="grid" data-grid="${it.i}">${Array.from({length:11},(_,k)=>cardHTML(k+1,false,it.i)).join('')}</div>
+    </section>`).join('');
+
+  let counter = 100;
+  document.getElementById('main').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-save]'); if (!b) return;
+    const i = b.getAttribute('data-save');
+    const grid = document.querySelector(`[data-grid="${i}"]`);
+    const wrap = document.createElement('div');
+    wrap.innerHTML = cardHTML(counter++, true, i);
+    grid.prepend(wrap.firstChild);
+    while (grid.children.length > 24) grid.removeChild(grid.lastChild);
+  });
+
+  const tabs = [...document.querySelectorAll('.tab')];
+  const iters = [...document.querySelectorAll('.iter')];
+  function show(i) { tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i))); iters.forEach(s => s.classList.toggle('active', s.dataset.i === String(i))); }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.i)));
+  window.addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '5') show(e.key); });
+</script>
+</body>
+</html>
