@@ -276,6 +276,18 @@ export default function BoardLibraryDrawer({ collections, boardId, onClose }) {
             }
             const renderThumb = (s) => {
               const inSpace = onCanvasIds.has(s.id);
+              // Thumbnails are fit to a 400×300 box, which under-resolves
+              // extreme aspect ratios — a very tall screenshot's width
+              // collapses to a few dozen px and upscales blurry at the
+              // drawer's column width. For those, render the full-res
+              // file so it stays crisp; normal-aspect images keep the
+              // lightweight thumb. loading="lazy" means only on-screen
+              // thumbs decode, so the full-res fallback stays cheap.
+              const ar = s.width && s.height ? s.height / s.width : 1;
+              const extremeAspect = ar >= 2 || ar <= 0.5;
+              const thumbSrc = extremeAspect
+                ? fileUrl(s.file_path || s.thumb_path)
+                : fileUrl(s.thumb_path || s.file_path);
               return (
                 <div
                   key={s.id}
@@ -307,9 +319,11 @@ export default function BoardLibraryDrawer({ collections, boardId, onClose }) {
                   }}
                 >
                   <img
-                    src={fileUrl(s.thumb_path || s.file_path)}
+                    src={thumbSrc}
                     alt=""
                     draggable={false}
+                    loading="lazy"
+                    decoding="async"
                   />
                   {inSpace && (
                     <span className={styles.drawerThumbBadge} aria-label="Already on this canvas">
