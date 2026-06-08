@@ -33,7 +33,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card { animation: none; }
+  .card,
+  .fresh { animation: none; }
 }
 
 .frame {
@@ -222,31 +223,18 @@
   to   { opacity: 1; transform: scale(1); }
 }
 
-/* "Just arrived" affordance — runs once when a save lands in the
-   grid. A soft white sheen sweeps diagonally across the frame. */
-.fresh .frame::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    100deg,
-    transparent 0%,
-    transparent 35%,
-    rgba(255, 255, 255, 0.55) 50%,
-    transparent 65%,
-    transparent 100%
-  );
-  background-size: 250% 100%;
-  background-position: -50% 0;
-  animation: freshShimmer 1.5s ease-out;
-  border-radius: inherit;
-  mix-blend-mode: screen;
+/* "Just arrived" affordance — a freshly-saved card fades and rises
+   into place with a touch more travel than the regular cardIn, so the
+   new save reads as landing at the top of the grid. (Replaces the old
+   diagonal shimmer sweep.) */
+.fresh {
+  animation: freshRise 0.55s var(--ease-out) both;
+  animation-delay: 0ms;
 }
 
-@keyframes freshShimmer {
-  from { background-position: -50% 0; }
-  to   { background-position: 150% 0; }
+@keyframes freshRise {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 
