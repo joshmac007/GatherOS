@@ -318,6 +318,7 @@ export default function DetailPanel({
 
   const [memberships, setMemberships] = useState([]);
   const [picker, setPicker] = useState(null); // { x, y }
+  const addBtnRef = useRef(null);
 
   // Spaces this save appears on (image items where data.saveId
   // matches). Loaded alongside collections / tags below.
@@ -1003,6 +1004,7 @@ export default function DetailPanel({
         <div className={styles.collectionPills}>
           {availableToAdd.length > 0 && (
             <button
+              ref={addBtnRef}
               type="button"
               className={styles.addPillBtn}
               onClick={openPicker}
@@ -1242,8 +1244,12 @@ export default function DetailPanel({
           x={picker.x}
           y={picker.y}
           items={pickerItems}
-          onClose={() => setPicker(null)}
-          className={contextMenuStyles.menuGlass}
+          onClose={() => {
+            setPicker(null);
+            // No phantom focus ring on the trigger after click → Esc.
+            addBtnRef.current?.blur();
+          }}
+          className={contextMenuStyles.darkGlass}
         />
       )}
     </aside>
