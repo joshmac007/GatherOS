@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Top toolbar layout — 5 directions</title>
+<style>
+  :root {
+    --content-bg: #fafaf9;
+    --titlebar-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --border-subtle: rgba(0,0,0,0.06);
+    --text-primary: #000;
+    --text-secondary: rgba(0,0,0,0.55);
+    --text-tertiary: rgba(0,0,0,0.4);
+    --accent: #000;
+    --hover-bg: #ececec;
+    --input-bg: rgba(0,0,0,0.04);
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --kbd-bg: #f1f1ee;
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font); color: var(--text-primary); background: var(--content-bg); -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  .topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: rgba(250,250,249,0.85); backdrop-filter: saturate(1.6) blur(12px); border-bottom: 1px solid var(--border); }
+  .tabs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+  .tab:hover { background: var(--hover-bg); }
+  .tab .num { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: rgba(0,0,0,0.06); font-size: 10.5px; color: var(--text-tertiary); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active .num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  main { max-width: 1000px; margin: 0 auto; padding: 26px 18px 120px; }
+  .iter { display: none; }
+  .iter.active { display: block; animation: fade 0.18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .meta { margin: 2px 2px 16px; }
+  .meta .name { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .meta .why { margin-top: 5px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
+
+  .window { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-control); background: var(--content-bg); }
+  .apptop { display: flex; align-items: center; gap: 14px; height: 58px; padding: 0 16px; background: var(--titlebar-bg); border-bottom: 1px solid var(--border-subtle); }
+  .body { height: 110px; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); font-size: 12px; }
+
+  .dots { display: flex; gap: 8px; flex: none; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .dots .r { background: #ff5f57; } .dots .y { background: #febc2e; } .dots .g { background: #28c840; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(160deg,#3a3a3c,#161617); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.3); flex: none; }
+  .lib { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px 4px 4px; border-radius: 8px; cursor: pointer; flex: none; }
+  .lib:hover { background: var(--hover-bg); }
+  .lib .name { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+  .ico { color: var(--text-tertiary); display: inline-flex; flex: none; }
+  .grow { flex: 1 1 auto; }
+  .divider { width: 1px; align-self: stretch; margin: 12px 2px; background: var(--border); flex: none; }
+
+  .search { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px 6px 11px; border-radius: 999px; background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow-control); color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: text; }
+  .search:hover { background: var(--hover-bg); }
+  .search.wide { flex: 1 1 auto; max-width: 460px; justify-content: flex-start; }
+  .search.wide .grow { font-weight: 500; color: var(--text-tertiary); }
+  .kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 17px; padding: 0 4px; border-radius: 5px; background: var(--kbd-bg); border: 1px solid var(--border); font-size: 11px; color: var(--text-tertiary); }
+
+  /* right-side faux controls for context */
+  .rctl { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); box-shadow: var(--shadow-control); font-size: 12.5px; color: var(--text-secondary); }
+  .slider { width: 70px; height: 3px; border-radius: 3px; background: rgba(0,0,0,0.16); position: relative; }
+  .slider::after { content: ""; position: absolute; left: 42%; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; border-radius: 50%; background: #000; }
+
+  /* unified Library + Search group (4) */
+  .grouped { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); box-shadow: var(--shadow-control); overflow: hidden; }
+  .grouped .seg { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .grouped .seg:hover { background: var(--hover-bg); }
+  .grouped .seg.scope { font-weight: 600; }
+  .grouped .gdiv { width: 1px; background: var(--border); }
+  .grouped .seg.q { color: var(--text-secondary); font-weight: 500; cursor: text; }
+
+  /* search-forward hero (5) */
+  .hero { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 auto; max-width: 560px; padding: 8px 10px 8px 14px; border-radius: 12px; background: var(--input-bg); color: var(--text-tertiary); font-size: 14px; cursor: text; }
+  .hero:hover { background: rgba(0,0,0,0.06); }
+  .scopechip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; background: var(--surface-1); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-primary); flex: none; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Top toolbar layout</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-i="1"><span class="num">1</span>Inline left</button>
+      <button class="tab" data-i="2"><span class="num">2</span>Centered search</button>
+      <button class="tab" data-i="3"><span class="num">3</span>Right-aligned</button>
+      <button class="tab" data-i="4"><span class="num">4</span>Library + search group</button>
+      <button class="tab" data-i="5"><span class="num">5</span>Search-forward</button>
+    </div>
+  </div>
+
+  <main id="main"></main>
+
+<script>
+  const SEARCH = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
+  const UPDOWN = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>';
+  const CHEVD = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  const dots = '<div class="dots"><i class="r"></i><i class="y"></i><i class="g"></i></div>';
+  const logo = '<div class="logo"></div>';
+  const lib = `<div class="lib"><span class="name">Library</span><span class="ico">${UPDOWN}</span></div>`;
+  const searchPill = `<div class="search"><span class="ico">${SEARCH}</span><span>Search</span><span class="kbd">⌘K</span></div>`;
+  const right = `<div class="rctl"><div class="slider"></div><span class="pill">Most recent ${CHEVD}</span></div>`;
+
+  const LAYOUTS = {
+    1: `<div class="apptop">${dots}${logo}${lib}<div class="divider"></div>${searchPill}<div class="grow"></div>${right}</div>`,
+    2: `<div class="apptop">${dots}${logo}${lib}<div class="grow"></div><div class="search wide"><span class="ico">${SEARCH}</span><span class="grow">Search collections, tags, saves…</span><span class="kbd">⌘K</span></div><div class="grow"></div>${right}</div>`,
+    3: `<div class="apptop">${dots}${logo}${lib}<div class="grow"></div>${searchPill}<div class="divider"></div>${right}</div>`,
+    4: `<div class="apptop">${dots}${logo}<div class="grouped"><span class="seg scope">Library ${CHEVD}</span><span class="gdiv"></span><span class="seg q"><span class="ico">${SEARCH}</span>Search</span></div><div class="grow"></div>${right}</div>`,
+    5: `<div class="apptop">${dots}${logo}<div class="hero"><span class="scopechip">Library ${CHEVD}</span><span class="ico">${SEARCH}</span><span class="grow">Search collections, tags, saves…</span><span class="kbd">⌘K</span></div><div class="grow"></div>${right}</div>`,
+  };
+
+  const ITERS = [
+    { i:1, name:'1 · Inline left', why:"Everything in one left cluster, with a hairline divider separating identity (logo + Library) from search. Closest to today — compact, leaves the whole right side for sort/zoom." },
+    { i:2, name:'2 · Centered search', why:"Identity stays left, search becomes a wide command bar centred in the bar, sort/zoom on the right. Symmetrical and gives search real prominence — reads like a browser address bar." },
+    { i:3, name:'3 · Right-aligned', why:"Push search to the right, grouped with the other controls (sort/zoom), where people instinctively reach for it. Left side is pure identity; the right becomes the 'tools' zone." },
+    { i:4, name:'4 · Library + search group', why:"Fuse the Library dropdown and search into one connected segmented control — scope on the left, query on the right. Frames search as 'scoped to Library', a single object." },
+    { i:5, name:'5 · Search-forward', why:"Make search the hero: a big field that owns the bar, with Library demoted to a scope chip inside it. Best if search is the primary way you navigate the library." },
+  ];
+
+  document.getElementById('main').innerHTML = ITERS.map(it => `
+    <section class="iter${it.i===1?' active':''}" data-i="${it.i}">
+      <div class="meta"><div class="name">${it.name}</div><div class="why">${it.why}</div></div>
+      <div class="window">${LAYOUTS[it.i]}<div class="body">Grid of saves…</div></div>
+    </section>`).join('');
+
+  const tabs = [...document.querySelectorAll('.tab')];
+  const iters = [...document.querySelectorAll('.iter')];
+  function show(i) { tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i))); iters.forEach(s => s.classList.toggle('active', s.dataset.i === String(i))); }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.i)));
+  window.addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '5') show(e.key); });
+</script>
+</body>
+</html>
