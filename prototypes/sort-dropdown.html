@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grid sort control — 5 directions</title>
+<style>
+  :root {
+    --content-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --border-subtle: rgba(0,0,0,0.05);
+    --text-primary: #000;
+    --text-secondary: rgba(0,0,0,0.55);
+    --text-tertiary: rgba(0,0,0,0.4);
+    --accent: #000;
+    --hover-bg: #ececec;
+    --hover-soft: rgba(0,0,0,0.045);
+    --active-row: #e8e8e8;
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --shadow-menu: 0 4px 14px rgba(0,0,0,0.08), 0 18px 44px rgba(0,0,0,0.12);
+    --radius: 8px;
+    --kbd-bg: #f1f1ee;
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font); color: var(--text-primary); background: var(--content-bg); -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  .topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: rgba(250,250,249,0.85); backdrop-filter: saturate(1.6) blur(12px); border-bottom: 1px solid var(--border); }
+  .tabs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+  .tab:hover { background: var(--hover-bg); }
+  .tab .num { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: rgba(0,0,0,0.06); font-size: 10.5px; color: var(--text-tertiary); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active .num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  main { max-width: 980px; margin: 0 auto; padding: 26px 18px 220px; }
+  .iter { display: none; }
+  .iter.active { display: block; animation: fade 0.18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .meta { margin: 2px 2px 18px; }
+  .meta .name { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .meta .why { margin-top: 5px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
+
+  /* mini grid-rail context: right-aligned control */
+  .rail { display: flex; align-items: center; padding: 14px 20px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-control); }
+  .rail .views { display: flex; gap: 20px; font-size: 17px; font-weight: 500; letter-spacing: -0.02em; }
+  .rail .views .on { color: var(--text-primary); } .rail .views .off { color: var(--text-tertiary); }
+  .rail .spacer { flex: 1; }
+  .ctl { position: relative; }
+
+  .ico { display: inline-flex; flex: none; }
+  .ico svg { width: 15px; height: 15px; }
+
+  /* shared trigger button */
+  .trigger { display: inline-flex; align-items: center; gap: 7px; padding: 7px 9px 7px 13px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 13px; font-weight: 500; color: var(--text-primary); cursor: pointer; white-space: nowrap; }
+  .trigger:hover { background: var(--hover-bg); }
+  .trigger .chev { color: var(--text-tertiary); transition: transform 0.15s ease; }
+  .ctl.open .trigger .chev { transform: rotate(180deg); }
+  .trigger .tlabel { color: var(--text-secondary); font-weight: 500; }
+  .trigger .tval { color: var(--text-primary); font-weight: 600; }
+
+  /* shared menu */
+  .menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 200px; padding: 5px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-menu); display: none; z-index: 5; animation: pop 0.12s ease; }
+  .ctl.open .menu { display: block; }
+  @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 9px; border: none; background: transparent; border-radius: 8px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-primary); text-align: left; cursor: pointer; }
+  .item:hover { background: var(--hover-soft); }
+  .item .check { margin-left: auto; color: var(--text-secondary); display: none; }
+  .item.sel .check { display: inline-flex; }
+  .item .ico { color: var(--text-tertiary); }
+  .sectlabel { padding: 8px 9px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-tertiary); }
+  .sep { height: 1px; background: var(--border-subtle); margin: 5px 4px; }
+  .sub { font-size: 11.5px; font-weight: 500; color: var(--text-tertiary); }
+  .itemcol { display: flex; flex-direction: column; gap: 1px; }
+
+  /* 2 · two-axis split (sort-by toggle + direction button) */
+  .split { display: inline-flex; align-items: center; gap: 6px; }
+  .seg { display: inline-flex; padding: 3px; background: rgba(0,0,0,0.05); border-radius: 9px; }
+  .seg button { border: none; background: transparent; padding: 6px 12px; border-radius: 7px; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; }
+  .seg button.on { background: var(--surface-1); color: var(--text-primary); font-weight: 600; box-shadow: var(--shadow-control); }
+  .dirbtn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); box-shadow: var(--shadow-control); cursor: pointer; color: var(--text-primary); }
+  .dirbtn:hover { background: var(--hover-bg); }
+
+  /* 3 · inline pills (no menu) */
+  .pills { display: inline-flex; gap: 4px; padding: 3px; background: rgba(0,0,0,0.05); border-radius: 999px; }
+  .pills button { border: none; background: transparent; padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+  .pills button.on { background: var(--surface-1); color: var(--text-primary); font-weight: 600; box-shadow: var(--shadow-control); }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Grid sort control</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-i="1"><span class="num">1</span>Icon menu</button>
+      <button class="tab" data-i="2"><span class="num">2</span>Sort-by + direction</button>
+      <button class="tab" data-i="3"><span class="num">3</span>Inline pills</button>
+      <button class="tab" data-i="4"><span class="num">4</span>Grouped sections</button>
+      <button class="tab" data-i="5"><span class="num">5</span>Rich rows</button>
+    </div>
+  </div>
+
+  <main id="main"></main>
+
+<script>
+  const I = {
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+    az:'<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M20 8h-5"/><path d="M15 8l2.5-4L20 8"/><path d="M15 20h5l-5-6h5"/>',
+    za:'<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M15 4h5l-5 6h5"/><path d="M20 18h-5"/><path d="M15 18l2.5 4L20 18"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>',
+    chev:'<path d="m6 9 6 6 6-6"/>',
+    arrowDown:'<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+    arrowUp:'<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
+    calendar:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M16 2v4"/>',
+    type:'<path d="M4 7V5h16v2"/><path d="M9 19h6"/><path d="M12 5v14"/>',
+  };
+  const svg = (p,w=15) => `<span class="ico"><svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg></span>`;
+
+  const OPTIONS = [
+    { id:'recent', label:'Most recent', sub:'Newest first', icon:I.clock },
+    { id:'oldest', label:'Oldest first', sub:'Oldest first', icon:I.history },
+    { id:'name_asc', label:'Name A→Z', sub:'Alphabetical', icon:I.az },
+    { id:'name_desc', label:'Name Z→A', sub:'Reverse alphabetical', icon:I.za },
+  ];
+  const LABEL = Object.fromEntries(OPTIONS.map(o => [o.id, o.label]));
+
+  function railWrap(controlHTML) {
+    return `<div class="rail"><div class="views"><span class="on">All</span><span class="off">Unsorted</span><span class="off">Trash</span></div><div class="spacer"></div>${controlHTML}</div>`;
+  }
+
+  // ── 1 · Icon menu (current evolved): leading icons + check, active value in trigger
+  function ctl1(state='recent') {
+    const items = OPTIONS.map(o => `<button class="item${o.id===state?' sel':''}" data-pick="${o.id}">${svg(o.icon)}<span>${o.label}</span><span class="check">${svg(I.check,15)}</span></button>`).join('');
+    return `<div class="ctl" data-variant="1" data-state="${state}">
+      <button class="trigger" data-toggle>${svg(I.clock)}<span class="tval">${LABEL[state]}</span><span class="chev ico">${svg(I.chev,14)}</span></button>
+      <div class="menu">${items}</div></div>`;
+  }
+
+  // ── 2 · Sort-by + direction
+  function ctl2(field='date', dir='desc') {
+    return `<div class="ctl split" data-variant="2" data-field="${field}" data-dir="${dir}">
+      <span class="seg">
+        <button data-field="date" class="${field==='date'?'on':''}">Date</button>
+        <button data-field="name" class="${field==='name'?'on':''}">Name</button>
+      </span>
+      <button class="dirbtn" data-dirtoggle title="Toggle direction">${svg(dir==='desc'?I.arrowDown:I.arrowUp,16)}</button>
+    </div>`;
+  }
+
+  // ── 3 · Inline pills (no menu)
+  function ctl3(state='recent') {
+    const pills = [['recent','Recent'],['oldest','Oldest'],['name_asc','A→Z'],['name_desc','Z→A']]
+      .map(([id,l]) => `<button data-pick="${id}" class="${id===state?'on':''}">${l}</button>`).join('');
+    return `<div class="ctl pills" data-variant="3" data-state="${state}">${pills}</div>`;
+  }
+
+  // ── 4 · Grouped sections (Date / Name headers)
+  function ctl4(state='recent') {
+    const row = o => `<button class="item${o.id===state?' sel':''}" data-pick="${o.id}">${svg(o.icon)}<span>${o.label}</span><span class="check">${svg(I.check,15)}</span></button>`;
+    return `<div class="ctl" data-variant="4" data-state="${state}">
+      <button class="trigger" data-toggle><span class="tlabel">Sort:</span><span class="tval">${LABEL[state]}</span><span class="chev ico">${svg(I.chev,14)}</span></button>
+      <div class="menu">
+        <div class="sectlabel">Date</div>${row(OPTIONS[0])}${row(OPTIONS[1])}
+        <div class="sep"></div>
+        <div class="sectlabel">Name</div>${row(OPTIONS[2])}${row(OPTIONS[3])}
+      </div></div>`;
+  }
+
+  // ── 5 · Rich rows (icon + label + subtitle)
+  function ctl5(state='recent') {
+    const items = OPTIONS.map(o => `<button class="item${o.id===state?' sel':''}" data-pick="${o.id}">${svg(o.icon)}<span class="itemcol"><span>${o.label}</span><span class="sub">${o.sub}</span></span><span class="check">${svg(I.check,15)}</span></button>`).join('');
+    return `<div class="ctl" data-variant="5" data-state="${state}">
+      <button class="trigger" data-toggle>${svg(I.clock)}<span class="tval">${LABEL[state]}</span><span class="chev ico">${svg(I.chev,14)}</span></button>
+      <div class="menu" style="min-width:230px">${items}</div></div>`;
+  }
+
+  const ITERS = [
+    { i:1, name:'1 · Icon menu', build:ctl1, why:"Closest to today: keep the trigger + checkmark menu, but give each option a leading glyph (clock, history, A→Z) and the trigger its active icon. Low-risk, just more scannable." },
+    { i:2, name:'2 · Sort-by + direction', build:ctl2, why:"Split the choice into its two real axes: a Date/Name segmented toggle plus a direction button that flips ascending/descending. Two clicks max, no menu — fastest for power users." },
+    { i:3, name:'3 · Inline pills', build:ctl3, why:"Surface all four as a segmented pill, always visible — no open/close. Best when the toolbar has room and you want sorting to feel like a one-tap filter." },
+    { i:4, name:'4 · Grouped sections', build:ctl4, why:"Same menu but organised under Date / Name headers, so the four options read as two pairs. Scales gracefully if more sort keys (size, source) get added later." },
+    { i:5, name:'5 · Rich rows', build:ctl5, why:"Each row gains a subtitle ('Newest first', 'Alphabetical') so the meaning is explicit, not inferred from a terse label. Most legible; slightly taller menu." },
+  ];
+
+  document.getElementById('main').innerHTML = ITERS.map(it => `
+    <section class="iter${it.i===1?' active':''}" data-i="${it.i}">
+      <div class="meta"><div class="name">${it.name}</div><div class="why">${it.why}</div></div>
+      ${railWrap(it.build())}
+    </section>`).join('');
+
+  // interactions
+  const main = document.getElementById('main');
+  function closeAll(except) { main.querySelectorAll('.ctl.open').forEach(c => { if (c !== except) c.classList.remove('open'); }); }
+  document.addEventListener('click', () => closeAll(null));
+
+  main.addEventListener('click', (e) => {
+    const toggle = e.target.closest('[data-toggle]');
+    if (toggle) { e.stopPropagation(); const ctl = toggle.closest('.ctl'); const willOpen = !ctl.classList.contains('open'); closeAll(ctl); ctl.classList.toggle('open', willOpen); return; }
+
+    const pick = e.target.closest('[data-pick]');
+    if (pick) {
+      e.stopPropagation();
+      const ctl = pick.closest('.ctl'); const id = pick.getAttribute('data-pick'); const v = ctl.getAttribute('data-variant');
+      const fn = { '1':ctl1, '3':ctl3, '4':ctl4, '5':ctl5 }[v];
+      if (fn) ctl.outerHTML = fn(id);
+      return;
+    }
+
+    // variant 2: field toggle + direction
+    const f = e.target.closest('[data-field]');
+    if (f && f.closest('.split')) { e.stopPropagation(); const ctl = f.closest('.ctl'); ctl.outerHTML = ctl2(f.getAttribute('data-field'), ctl.getAttribute('data-dir')); return; }
+    const d = e.target.closest('[data-dirtoggle]');
+    if (d) { e.stopPropagation(); const ctl = d.closest('.ctl'); const nd = ctl.getAttribute('data-dir')==='desc'?'asc':'desc'; ctl.outerHTML = ctl2(ctl.getAttribute('data-field'), nd); return; }
+  });
+
+  // iteration switching
+  const tabs = [...document.querySelectorAll('.tab')];
+  const iters = [...document.querySelectorAll('.iter')];
+  function show(i) { tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i))); iters.forEach(s => s.classList.toggle('active', s.dataset.i === String(i))); }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.i)));
+  window.addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '5') show(e.key); });
+</script>
+</body>
+</html>
