@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Active tab reveals its icon — 5 variations</title>
+<style>
+  :root {
+    --content-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border: rgba(0,0,0,0.07);
+    --border-subtle: rgba(0,0,0,0.05);
+    --text-primary: #000;
+    --text-secondary: rgba(0,0,0,0.55);
+    --text-tertiary: rgba(0,0,0,0.4);
+    --accent: #000;
+    --hover-bg: #eaeaea;
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --radius: 8px;
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font); color: var(--text-primary); background: var(--content-bg); -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 18px;
+    background: rgba(250,250,249,0.85); backdrop-filter: saturate(1.6) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+  .tab:hover { background: var(--hover-bg); }
+  .tab .num { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: rgba(0,0,0,0.06); font-size: 10.5px; color: var(--text-tertiary); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active .num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  main { max-width: 900px; margin: 0 auto; padding: 26px 18px 80px; }
+  .iter { display: none; }
+  .iter.active { display: block; animation: fade 0.18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .meta { margin: 2px 2px 18px; }
+  .meta .name { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .meta .why { margin-top: 5px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
+
+  /* a faux grid rail container so the tabs sit in context */
+  .stage { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-control); overflow: hidden; }
+  .rail { padding: 16px 22px; border-bottom: 1px solid var(--border-subtle); }
+  .hint { padding: 12px 22px; font-size: 11.5px; color: var(--text-tertiary); }
+
+  /* shared tab primitives */
+  .tabbar { display: flex; align-items: center; gap: 22px; }
+  .vtab { position: relative; display: inline-flex; align-items: center; gap: 7px; border: none; background: transparent; padding: 0; font: inherit; font-size: 18px; font-weight: 500; letter-spacing: -0.02em; color: var(--text-tertiary); cursor: pointer; line-height: 1.2; transition: color 0.15s ease; }
+  .vtab:hover { color: var(--text-secondary); }
+  .vtab .vicon { display: inline-flex; }
+  .vtab .vicon svg { width: 17px; height: 17px; }
+  /* per-view colour */
+  .vtab[data-view="all"]      { --vcolor: #007aff; }
+  .vtab[data-view="unsorted"] { --vcolor: #e0a000; }
+  .vtab[data-view="trash"]    { --vcolor: #ff453a; }
+
+  /* ───────── 1 · leading icon + ink underline (evolves current) ───────── */
+  .v1 .vtab .vicon { width: 0; overflow: hidden; opacity: 0; margin-right: -7px; transition: width 0.18s ease, opacity 0.18s ease, margin 0.18s ease; color: var(--vcolor); }
+  .v1 .vtab.active { color: var(--text-primary); font-weight: 600; }
+  .v1 .vtab.active .vicon { width: 17px; opacity: 1; margin-right: 0; }
+  .v1 .vtab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 2.5px; border-radius: 2px; background: var(--text-primary); }
+
+  /* ───────── 2 · colour-tinted pill ───────── */
+  .v2 { gap: 8px; }
+  .v2 .vtab { padding: 7px 13px; border-radius: 999px; font-size: 16px; }
+  .v2 .vtab .vicon { width: 0; overflow: hidden; opacity: 0; color: var(--vcolor); transition: width 0.16s ease, opacity 0.16s ease; }
+  .v2 .vtab.active { color: var(--vcolor); font-weight: 600; background: color-mix(in srgb, var(--vcolor) 13%, transparent); }
+  .v2 .vtab.active .vicon { width: 17px; opacity: 1; }
+
+  /* ───────── 3 · icon crown (stacked above label) ───────── */
+  .v3 { gap: 30px; align-items: flex-end; }
+  .v3 .vtab { flex-direction: column; gap: 3px; font-size: 16px; }
+  .v3 .vtab .vicon { height: 0; overflow: hidden; opacity: 0; color: var(--vcolor); transition: height 0.18s ease, opacity 0.18s ease; }
+  .v3 .vtab.active { color: var(--text-primary); font-weight: 600; }
+  .v3 .vtab.active .vicon { height: 18px; opacity: 1; }
+
+  /* ───────── 4 · segmented control ───────── */
+  .v4 { gap: 4px; padding: 4px; background: rgba(0,0,0,0.05); border-radius: 12px; align-self: flex-start; }
+  .v4 .vtab { padding: 7px 14px; border-radius: 9px; font-size: 15px; font-weight: 500; }
+  .v4 .vtab .vicon { width: 0; overflow: hidden; opacity: 0; color: var(--vcolor); transition: width 0.16s ease, opacity 0.16s ease; }
+  .v4 .vtab.active { background: var(--surface-1); color: var(--text-primary); font-weight: 600; box-shadow: var(--shadow-control); }
+  .v4 .vtab.active .vicon { width: 16px; opacity: 1; }
+
+  /* ───────── 5 · trailing icon + colour-matched underline ───────── */
+  .v5 .vtab .vicon { width: 0; overflow: hidden; opacity: 0; margin-left: -7px; color: var(--vcolor); transition: width 0.18s ease, opacity 0.18s ease, margin 0.18s ease; }
+  .v5 .vtab.active { color: var(--text-primary); font-weight: 600; }
+  .v5 .vtab.active .vicon { width: 16px; opacity: 1; margin-left: 0; }
+  .v5 .vtab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 2.5px; border-radius: 2px; background: var(--vcolor); }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Active tab reveals its icon</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-i="1"><span class="num">1</span>Leading icon + underline</button>
+      <button class="tab" data-i="2"><span class="num">2</span>Colour pill</button>
+      <button class="tab" data-i="3"><span class="num">3</span>Icon crown</button>
+      <button class="tab" data-i="4"><span class="num">4</span>Segmented</button>
+      <button class="tab" data-i="5"><span class="num">5</span>Trailing icon</button>
+    </div>
+  </div>
+
+  <main id="main"></main>
+
+<script>
+  const ICONS = {
+    all:  '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+    unsorted: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  };
+  const VIEWS = [['all','All'],['unsorted','Unsorted'],['trash','Trash']];
+  const svg = (p) => `<span class="vicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg></span>`;
+
+  const ITERS = [
+    { i:1, name:'1 · Leading icon + underline', cls:'v1', why:"Closest to today: keep the bold label and ink underline, but the active tab's coloured icon slides in to its left. Familiar, low-risk, adds just enough signal." },
+    { i:2, name:'2 · Colour pill', cls:'v2', why:"The active tab becomes a soft pill tinted with its own view colour, icon and label both in that colour. Reads as clearly 'selected' and colour-codes the three views." },
+    { i:3, name:'3 · Icon crown', cls:'v3', why:"The active icon appears stacked above the label like a little crown. Distinctive and bottom-aligned so inactive labels still line up — playful, app-launcher energy." },
+    { i:4, name:'4 · Segmented control', cls:'v4', why:"All three sit in a segmented track; the active segment lifts to a white chip with its coloured icon + label. Pro-tool feel, and the group reads as one control." },
+    { i:5, name:'5 · Trailing icon + matched underline', cls:'v5', why:"Icon trails the label and the underline takes the view's colour. The colour lives in the accent, not the text, so it stays calm while still revealing the icon." },
+  ];
+
+  function tabbar(cls) {
+    const tabs = VIEWS.map(([id,label],idx) =>
+      `<button class="vtab${idx===0?' active':''}" data-view="${id}">${svg(ICONS[id])}<span class="vlabel">${label}</span></button>`
+    ).join('');
+    return `<div class="tabbar ${cls}">${tabs}</div>`;
+  }
+
+  document.getElementById('main').innerHTML = ITERS.map(it => `
+    <section class="iter${it.i===1?' active':''}" data-i="${it.i}">
+      <div class="meta"><div class="name">${it.name}</div><div class="why">${it.why}</div></div>
+      <div class="stage">
+        <div class="rail">${tabbar(it.cls)}</div>
+        <div class="hint">Click a view — the active one reveals its icon.</div>
+      </div>
+    </section>
+  `).join('');
+
+  // per-tabbar active switching
+  document.querySelectorAll('.tabbar').forEach(bar => {
+    bar.addEventListener('click', e => {
+      const t = e.target.closest('.vtab'); if (!t) return;
+      bar.querySelectorAll('.vtab').forEach(v => v.classList.remove('active'));
+      t.classList.add('active');
+    });
+  });
+
+  // iteration switching
+  const tabs = [...document.querySelectorAll('.tab')];
+  const iters = [...document.querySelectorAll('.iter')];
+  function show(i) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i)));
+    iters.forEach(s => s.classList.toggle('active', s.dataset.i === String(i)));
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.i)));
+  window.addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '5') show(e.key); });
+</script>
+</body>
+</html>
