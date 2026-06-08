@@ -59,26 +59,28 @@
 html,
 body {
   margin: 0;
-}
-
-/* Round the popup. The radius + overflow live on <html> (the popup's
-   root) and it carries the surface colour, so the body's corners clip
-   cleanly with no square sliver behind them. */
-html {
-  border-radius: 14px;
-  overflow: hidden;
-  background: var(--content-bg);
+  /* Keep the popup's document canvas transparent. A background on the
+     root (html) or body propagates to the whole viewport and ignores
+     border-radius — which is why rounding those leaves square corners.
+     The rounded surface lives on .shell (a child div) instead, and the
+     transparent corners reveal Chrome's own popup shadow. */
+  background: transparent;
 }
 
 body {
-  width: 256px;
-  padding: 12px;
   font-family: var(--font-ui);
   font-size: 13px;
-  background: var(--content-bg);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+.shell {
+  width: 256px;
+  padding: 12px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--content-bg);
 }
 
 .head {
