@@ -235,10 +235,21 @@
    glyph (7px padding + 14px icon + 7px breathing). The input is
    still part of the row but its content area is squeezed to
    zero, which is fine since it's fully transparent. */
+/* Collapsed = a compact "Search ⌘K" pill that opens the Quick
+   Switcher on click. Hugs its contents (glyph + label + shortcut). */
 .searchWrapCollapsed {
-  flex: 0 0 28px;
-  width: 28px;
+  flex: 0 0 auto;
+  width: auto;
+  padding: 5px 8px 5px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-control);
   cursor: pointer;
+}
+
+.searchWrapCollapsed:hover {
+  background: var(--hover-bg);
 }
 
 .searchWrapCollapsed .search {
@@ -248,10 +259,45 @@
      click on the input's overflow area focused it before the wrap's
      onClick fired, so the user got the inline expand instead. */
   pointer-events: none;
+  /* Contribute no width while collapsed so the pill hugs the label.
+     width:0 (not display:none) keeps it focusable via Cmd+F. */
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  padding: 0;
 }
 
-.searchWrapCollapsed:hover .searchIcon {
+.searchWrapCollapsed:hover .searchIcon,
+.searchWrapCollapsed:hover .searchLabel {
   color: var(--text-primary);
+}
+
+/* Pill label + shortcut — only rendered while collapsed. */
+.searchLabel {
+  margin-left: 6px;
+  font-size: var(--text-md);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.searchKbd {
+  margin-left: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--hover-bg-soft);
+  border: 0.5px solid var(--border);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

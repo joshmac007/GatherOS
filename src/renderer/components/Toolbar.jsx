@@ -123,6 +123,12 @@ function SearchField({
           }
         }}
       />
+      {!expanded && (
+        <>
+          <span className={styles.searchLabel}>Search</span>
+          <span className={styles.searchKbd} aria-hidden="true">⌘K</span>
+        </>
+      )}
       {expanded && search && (
         <button
           type="button"
