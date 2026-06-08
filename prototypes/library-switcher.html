@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Library switcher dropdown — 5 designs</title>
+<style>
+  :root {
+    --content-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --border-subtle: rgba(0,0,0,0.06);
+    --text-primary: #000;
+    --text-secondary: rgba(0,0,0,0.55);
+    --text-tertiary: rgba(0,0,0,0.4);
+    --icon-muted: #c7c7c7;
+    --accent: #000;
+    --hover-bg: #ececec;
+    --hover-soft: rgba(0,0,0,0.045);
+    --active-row: #f0f0ef;
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --shadow-menu: 0 4px 14px rgba(0,0,0,0.08), 0 18px 50px rgba(0,0,0,0.14);
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font); color: var(--text-primary); background: var(--content-bg); -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  .topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: rgba(250,250,249,0.85); backdrop-filter: saturate(1.6) blur(12px); border-bottom: 1px solid var(--border); }
+  .tabs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+  .tab:hover { background: var(--hover-bg); }
+  .tab .num { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: rgba(0,0,0,0.06); font-size: 10.5px; color: var(--text-tertiary); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active .num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  main { max-width: 880px; margin: 0 auto; padding: 26px 18px 80px; }
+  .iter { display: none; }
+  .iter.active { display: block; animation: fade 0.18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .meta { margin: 2px 2px 18px; }
+  .meta .name { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .meta .why { margin-top: 5px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
+
+  .stage { display: flex; gap: 30px; align-items: flex-start; padding: 20px; background: var(--content-bg); border: 1px dashed var(--border); border-radius: 14px; min-height: 380px; }
+  .trigger { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px 7px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 17px; font-weight: 600; letter-spacing: -0.02em; cursor: pointer; flex: none; }
+  .trigger .ico { color: var(--text-tertiary); }
+
+  /* shared menu shell */
+  .menu { width: 260px; padding: 6px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-menu); }
+  .ico { display: inline-flex; flex: none; }
+  .sep { height: 1px; background: var(--border-subtle); margin: 6px 6px; }
+  .count { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-tertiary); }
+  .check { color: var(--text-primary); display: inline-flex; }
+
+  /* book icon tile */
+  .tile { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: var(--hover-soft); color: var(--text-secondary); font-size: 13px; font-weight: 700; flex: none; }
+
+  /* rows */
+  .row { display: flex; align-items: center; gap: 11px; width: 100%; padding: 8px 9px; border: none; background: transparent; border-radius: 9px; font: inherit; text-align: left; cursor: pointer; color: var(--text-primary); }
+  .row:hover { background: var(--hover-soft); }
+  .row.sel { background: var(--active-row); }
+  .rname { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .rsub { font-size: 11.5px; color: var(--text-tertiary); }
+  .rcol { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; }
+  .action { display: flex; align-items: center; gap: 11px; width: 100%; padding: 8px 9px; border: none; background: transparent; border-radius: 9px; font: inherit; font-size: 13.5px; font-weight: 500; color: var(--text-secondary); text-align: left; cursor: pointer; }
+  .action:hover { background: var(--hover-soft); color: var(--text-primary); }
+  .action .ico { color: var(--text-tertiary); }
+  .seclabel { padding: 8px 9px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-tertiary); }
+
+  /* grid (4) */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .card { display: flex; flex-direction: column; gap: 8px; padding: 11px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-1); cursor: pointer; }
+  .card:hover { background: var(--hover-soft); }
+  .card.sel { border-color: var(--text-primary); box-shadow: 0 0 0 1px var(--text-primary); }
+  .card .cname { font-size: 13.5px; font-weight: 600; }
+  .card.add { align-items: center; justify-content: center; border-style: dashed; color: var(--text-tertiary); font-size: 13px; font-weight: 500; }
+
+  /* cover stacks (5) */
+  .cover { position: relative; width: 38px; height: 32px; flex: none; }
+  .cover i { position: absolute; width: 24px; height: 24px; border-radius: 6px; border: 1.5px solid var(--surface-1); }
+  .cover i:nth-child(1){ left:0; top:4px; transform: rotate(-7deg); background: linear-gradient(135deg,#cdd9e6,#9bb2c9); }
+  .cover i:nth-child(2){ left:7px; top:2px; transform: rotate(3deg); background: linear-gradient(135deg,#e6d4c6,#caa98b); }
+  .cover i:nth-child(3){ left:13px; top:5px; transform: rotate(9deg); background: linear-gradient(135deg,#d6cfe6,#a98bca); }
+
+  /* filter field (3) */
+  .filter { display: flex; align-items: center; gap: 8px; margin: 2px 2px 6px; padding: 7px 10px; border-radius: 9px; background: rgba(0,0,0,0.04); color: var(--text-tertiary); font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Library switcher dropdown</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-i="1"><span class="num">1</span>Refined list</button>
+      <button class="tab" data-i="2"><span class="num">2</span>Workspace rows</button>
+      <button class="tab" data-i="3"><span class="num">3</span>Filter + sections</button>
+      <button class="tab" data-i="4"><span class="num">4</span>Tile grid</button>
+      <button class="tab" data-i="5"><span class="num">5</span>Cover previews</button>
+    </div>
+  </div>
+
+  <main id="main"></main>
+
+<script>
+  const BOOK = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+  const PLUS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
+  const GEAR = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>';
+  const CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  const UPDOWN = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>';
+  const SEARCH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
+  const ic = (p) => `<span class="ico">${p}</span>`;
+
+  const LIBS = [
+    { id:'lib', name:'Library', count:9 },
+    { id:'insp', name:'Inspiration', count:142 },
+    { id:'brand', name:'Brand work', count:38 },
+    { id:'shots', name:'Screenshots', count:74 },
+  ];
+
+  const trigger = (name='Library') => `<button class="trigger">${name} ${ic(UPDOWN)}</button>`;
+
+  function ctl(variant, body) { return `<div class="ctl" data-variant="${variant}">${trigger()}<div class="menu">${body}</div></div>`; }
+
+  function build(variant, sel='lib') {
+    const lib = id => LIBS.find(l => l.id===id);
+    if (variant==='1') {
+      const rows = LIBS.map(l => `<button class="row${l.id===sel?' sel':''}" data-pick="${l.id}">${ic(BOOK)}<span class="rname" style="flex:1 1 auto">${l.name}</span><span class="count">${l.count}</span>${l.id===sel?`<span class="check">${CHECK}</span>`:''}</button>`).join('');
+      return ctl('1', `${rows}<div class="sep"></div><button class="action">${ic(PLUS)}New library</button><button class="action">${ic(GEAR)}Manage libraries</button>`);
+    }
+    if (variant==='2') {
+      const rows = LIBS.map(l => `<button class="row${l.id===sel?' sel':''}" data-pick="${l.id}"><span class="tile">${l.name[0]}</span><span class="rcol"><span class="rname">${l.name}</span><span class="rsub">${l.count} saves</span></span>${l.id===sel?`<span class="check">${CHECK}</span>`:''}</button>`).join('');
+      return ctl('2', `${rows}<div class="sep"></div><button class="action">${ic(PLUS)}New library</button><button class="action">${ic(GEAR)}Manage libraries</button>`);
+    }
+    if (variant==='3') {
+      const rows = LIBS.map(l => `<button class="row${l.id===sel?' sel':''}" data-pick="${l.id}">${ic(BOOK)}<span class="rname" style="flex:1 1 auto">${l.name}</span><span class="count">${l.count}</span>${l.id===sel?`<span class="check">${CHECK}</span>`:''}</button>`).join('');
+      return ctl('3', `<div class="filter">${ic(SEARCH)}Find a library…</div><div class="seclabel">Libraries</div>${rows}<div class="sep"></div><button class="action">${ic(PLUS)}New library</button><button class="action">${ic(GEAR)}Manage libraries</button>`);
+    }
+    if (variant==='4') {
+      const cards = LIBS.map(l => `<button class="card${l.id===sel?' sel':''}" data-pick="${l.id}">${ic(BOOK)}<span class="cname">${l.name}</span><span class="count">${l.count} saves</span></button>`).join('');
+      return ctl('4', `<div class="grid">${cards}<button class="card add">${ic(PLUS)}New library</button></div><div class="sep"></div><button class="action">${ic(GEAR)}Manage libraries</button>`);
+    }
+    if (variant==='5') {
+      const rows = LIBS.map(l => `<button class="row${l.id===sel?' sel':''}" data-pick="${l.id}"><span class="cover"><i></i><i></i><i></i></span><span class="rcol"><span class="rname">${l.name}</span><span class="rsub">${l.count} saves</span></span>${l.id===sel?`<span class="check">${CHECK}</span>`:''}</button>`).join('');
+      return ctl('5', `${rows}<div class="sep"></div><button class="action">${ic(PLUS)}New library</button><button class="action">${ic(GEAR)}Manage libraries</button>`);
+    }
+  }
+
+  const ITERS = [
+    { i:1, name:'1 · Refined list', why:"Today's menu, tightened: book glyph + name + a muted count + check on the active library, then divider, then New / Manage. Lowest-risk; just cleaner alignment and a numeric count instead of a lone digit." },
+    { i:2, name:'2 · Workspace rows', why:"Each library becomes a richer row — a rounded initial tile + name + 'N saves' subtitle, Notion/Linear workspace-switcher style. Reads as 'spaces you can switch between', and scales nicely with more libraries." },
+    { i:3, name:'3 · Filter + sections', why:"Add a 'find a library' field and a Libraries section label. Overkill for two libraries, but the moment someone has 10+ it stays fast — type to jump. Future-proofed." },
+    { i:4, name:'4 · Tile grid', why:"Libraries as a 2-up grid of cards with a dashed 'New library' tile. Visual and tactile; the active card gets an ink ring. Best if libraries feel like distinct 'places', fewer in number." },
+    { i:5, name:'5 · Cover previews', why:"Each row shows a little stacked-thumbnail cover of that library's contents instead of a generic icon — so you recognise libraries by their look, not just their name. Most distinctive, most GatherOS-y." },
+  ];
+
+  document.getElementById('main').innerHTML = ITERS.map(it => `
+    <section class="iter${it.i===1?' active':''}" data-i="${it.i}">
+      <div class="meta"><div class="name">${it.name}</div><div class="why">${it.why}</div></div>
+      <div class="stage" data-host="${it.i}">${build(String(it.i))}</div>
+    </section>`).join('');
+
+  // pick a library → re-render that control with new selection
+  document.getElementById('main').addEventListener('click', (e) => {
+    const pick = e.target.closest('[data-pick]'); if (!pick) return;
+    const ctlEl = pick.closest('.ctl'); const v = ctlEl.getAttribute('data-variant');
+    ctlEl.outerHTML = build(v, pick.getAttribute('data-pick'));
+  });
+
+  const tabs = [...document.querySelectorAll('.tab')];
+  const iters = [...document.querySelectorAll('.iter')];
+  function show(i) { tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i))); iters.forEach(s => s.classList.toggle('active', s.dataset.i === String(i))); }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.i)));
+  window.addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '5') show(e.key); });
+</script>
+</body>
+</html>
