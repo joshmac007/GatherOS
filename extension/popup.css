@@ -75,12 +75,19 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* The only painted surface. It floats inside a transparent popup with
+   a margin, so its rounded corners + shadow are the sole edge the user
+   sees — nothing from the popup window competes with it. */
 .shell {
   width: 256px;
+  margin: 10px;
   padding: 12px;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   background: var(--content-bg);
+  box-shadow:
+    0 6px 22px rgba(0, 0, 0, 0.18),
+    0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .head {
