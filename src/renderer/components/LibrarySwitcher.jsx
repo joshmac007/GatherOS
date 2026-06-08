@@ -1,12 +1,39 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronsUpDown, Check, Plus, Settings as SettingsIcon, SquareLibrary } from 'lucide-react';
+import { ChevronsUpDown, Check, Plus, Settings as SettingsIcon, SquareLibrary, Search } from 'lucide-react';
 import styles from './LibrarySwitcher.module.css';
+import { fileUrl } from '../lib/fileUrl.js';
 
 const SwitcherIcon = () => <ChevronsUpDown size={15} strokeWidth={2} aria-hidden="true" />;
 const CheckIcon = () => <Check size={14} strokeWidth={2} aria-hidden="true" />;
 const PlusIcon = () => <Plus size={14} strokeWidth={2} aria-hidden="true" />;
 const ManageIcon = () => <SettingsIcon size={14} strokeWidth={1.8} aria-hidden="true" />;
-const LibraryRowIcon = () => <SquareLibrary size={14} strokeWidth={1.8} aria-hidden="true" />;
+const LibraryRowIcon = () => <SquareLibrary size={15} strokeWidth={1.8} aria-hidden="true" />;
+const SearchIcon = () => <Search size={14} strokeWidth={1.9} aria-hidden="true" />;
+
+// Show the filter field only once there are enough libraries that
+// scanning gets slow; below this it's just clutter above a short list.
+const FILTER_THRESHOLD = 6;
+
+// Up-to-three stacked thumbnails of a library's most recent saves, so
+// you recognise libraries by their contents. Falls back to the glyph
+// for an empty library.
+function LibraryCover({ covers }) {
+  const imgs = Array.isArray(covers) ? covers.slice(0, 3) : [];
+  if (imgs.length === 0) {
+    return (
+      <span className={styles.coverEmpty} aria-hidden="true">
+        <LibraryRowIcon />
+      </span>
+    );
+  }
+  return (
+    <span className={styles.cover} aria-hidden="true">
+      {imgs.map((p, i) => (
+        <img key={i} className={styles.coverImg} src={fileUrl(p)} alt="" draggable={false} />
+      ))}
+    </span>
+  );
+}
 
 // Top-of-toolbar dropdown that shows the active library and lets the
 // user switch between libraries. The "···" actions button beside the
@@ -23,11 +50,23 @@ export default function LibrarySwitcher({
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createDraft, setCreateDraft] = useState('');
+  const [filter, setFilter] = useState('');
   const triggerRef = useRef(null);
   const dropdownRef = useRef(null);
   const createInputRef = useRef(null);
 
   const active = libraries.find((l) => l.id === activeId) || libraries[0];
+
+  // Reset the filter each time the dropdown closes so it opens clean.
+  useEffect(() => {
+    if (!open) setFilter('');
+  }, [open]);
+
+  const showFilter = libraries.length >= FILTER_THRESHOLD;
+  const q = filter.trim().toLowerCase();
+  const filteredLibraries = q
+    ? libraries.filter((l) => l.name.toLowerCase().includes(q))
+    : libraries;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -97,14 +136,30 @@ export default function LibrarySwitcher({
           role="listbox"
           aria-label="Libraries"
         >
+          {showFilter && (
+            <div className={styles.filter}>
+              <span className={styles.filterIcon}><SearchIcon /></span>
+              <input
+                className={styles.filterInput}
+                placeholder="Find a library…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                aria-label="Find a library"
+              />
+            </div>
+          )}
+
+          <div className={styles.sectionLabel}>Libraries</div>
+
           <div className={styles.dropdownGroup}>
-            {libraries.map((lib, idx) => {
+            {filteredLibraries.map((lib, idx) => {
               const isActive = lib.id === active.id;
+              const count = typeof lib.save_count === 'number' ? lib.save_count : 0;
               return (
                 <button
                   key={lib.id}
                   type="button"
-                  className={[styles.row, isActive && styles.rowActive]
+                  className={[styles.row, styles.rowLibrary, isActive && styles.rowActive]
                     .filter(Boolean)
                     .join(' ')}
                   role="option"
@@ -115,12 +170,12 @@ export default function LibrarySwitcher({
                   }}
                   style={{ '--idx': idx }}
                 >
-                  <span className={styles.rowIcon}>
-                    <LibraryRowIcon />
-                  </span>
-                  <span className={styles.rowLabel}>{lib.name}</span>
-                  <span className={styles.rowCount}>
-                    {typeof lib.save_count === 'number' ? lib.save_count : ''}
+                  <LibraryCover covers={lib.covers} />
+                  <span className={styles.rowMain}>
+                    <span className={styles.rowName}>{lib.name}</span>
+                    <span className={styles.rowSub}>
+                      {count} {count === 1 ? 'save' : 'saves'}
+                    </span>
                   </span>
                   <span className={styles.rowCheck}>
                     {isActive ? <CheckIcon /> : null}
@@ -128,6 +183,9 @@ export default function LibrarySwitcher({
                 </button>
               );
             })}
+            {filteredLibraries.length === 0 && (
+              <div className={styles.empty}>No libraries match “{filter.trim()}”.</div>
+            )}
           </div>
 
           <div className={styles.divider} />

@@ -69,10 +69,119 @@
   box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.45);
 }
 
+/* Find-a-library filter (only shown past FILTER_THRESHOLD libraries). */
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 4px 6px;
+  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+}
+
+.filterIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.filterInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: var(--text-md);
+  color: var(--text-primary);
+}
+
+.filterInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.sectionLabel {
+  padding: 6px 10px 5px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
 .dropdownGroup {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+/* Library rows carry a stacked-thumbnail cover + name + count, so they
+   sit taller than the action rows below the divider. */
+.rowLibrary {
+  padding: 7px 10px;
+}
+
+.cover {
+  position: relative;
+  width: 40px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.coverImg {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  object-fit: cover;
+  border: 1.5px solid var(--surface-1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+.coverImg:nth-child(1) { left: 0;    top: 4px; transform: rotate(-7deg); }
+.coverImg:nth-child(2) { left: 8px;  top: 2px; transform: rotate(3deg); }
+.coverImg:nth-child(3) { left: 15px; top: 5px; transform: rotate(9deg); }
+
+.coverEmpty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  background: var(--hover-bg-soft);
+  color: var(--text-tertiary);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.rowName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  color: inherit;
+}
+
+.rowSub {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 .row {

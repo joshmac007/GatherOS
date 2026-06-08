@@ -217,6 +217,10 @@ function listLibraries() {
         name: l.name,
         createdAt: l.createdAt,
         save_count: countSavesInLibrary(l.id),
+        // A few recent thumbnails for the switcher's cover preview.
+        covers: getLibraryPreviews(l.id, 3)
+          .map((p) => p.thumb_path || p.file_path)
+          .filter(Boolean),
       }))
       .sort((a, b) => a.createdAt - b.createdAt),
   };
