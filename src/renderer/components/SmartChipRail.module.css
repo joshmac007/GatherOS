@@ -213,7 +213,10 @@
 }
 
 .zoomGlyph {
-  color: var(--text-tertiary);
+  /* Solid (not the translucent --text-tertiary): these glyphs have
+     self-overlapping strokes (the 2x2 grid's cross), which compound
+     brighter/darker where they cross when the colour is semi-opaque. */
+  color: var(--icon-muted);
   flex: none;
 }
 
