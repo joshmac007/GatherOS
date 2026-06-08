@@ -25,8 +25,11 @@
 
   const host = document.createElement('div');
   host.id = HOST_ID;
+  // NB: no `all:initial` here — it would reset the positioning below
+  // back to static. Page-style isolation is handled by `:host` in the
+  // shadow CSS, which inline styles override for position/top/right.
   host.style.cssText =
-    'position:fixed;top:16px;right:16px;z-index:2147483647;all:initial;';
+    'position:fixed;top:16px;right:16px;z-index:2147483647;';
   const root = host.attachShadow({ mode: 'open' });
 
   root.innerHTML = `
