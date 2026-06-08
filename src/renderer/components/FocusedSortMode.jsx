@@ -24,6 +24,8 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
   // from the parent on each render via savesById.
   const [pendingIds] = useState(() => saves.map((s) => s.id));
   const [completed, setCompleted] = useState(0);
+  // How many were actually filed (vs. skipped). Drives the done copy.
+  const [assignedCount, setAssignedCount] = useState(0);
   const [exiting, setExiting] = useState(false);
   // Ignore inbound key/click events during the fly + reload window
   // so a user mashing 1-2-3 doesn't trigger overlapping assignments.
@@ -58,8 +60,16 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
     } catch (err) {
       console.error('Focused-sort assign failed:', err);
     }
+    setAssignedCount((a) => a + 1);
     setCompleted((c) => c + 1);
     setAnimating(false);
+  };
+
+  // Skip: advance without filing. The save stays in Unsorted so it can
+  // be triaged later. Bound to the left/right arrow keys.
+  const handleSkip = () => {
+    if (!current || animating || done) return;
+    setCompleted((c) => c + 1);
   };
 
   // Auto-close shortly after the celebration finishes so we don't
@@ -82,6 +92,11 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
         return;
       }
       if (done || animating || !current) return;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleSkip();
+        return;
+      }
       const n = parseInt(e.key, 10);
       if (Number.isFinite(n) && n >= 1 && n <= 9 && n <= collections.length) {
         e.preventDefault();
@@ -204,6 +219,8 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
           <div className={styles.hint}>
             <span className={styles.kbd}>1</span>–<span className={styles.kbd}>9</span> assign
             <span style={{ margin: '0 8px', opacity: 0.5 }}>·</span>
+            <span className={styles.kbd}>←</span><span className={styles.kbd}>→</span> skip
+            <span style={{ margin: '0 8px', opacity: 0.5 }}>·</span>
             <span className={styles.kbd}>Esc</span> exit
           </div>
         </>
@@ -214,7 +231,12 @@ export default function FocusedSortMode({ saves, collections, onAssign, onClose 
         <div className={styles.done}>
           <h1 className={styles.doneTitle}>All sorted</h1>
           <p className={styles.doneSub}>
-            {total === 1 ? '1 save' : `${total} saves`} filed into their collections.
+            {assignedCount === 0
+              ? 'Everything skipped — nothing filed.'
+              : `${assignedCount === 1 ? '1 save' : `${assignedCount} saves`} filed into ${assignedCount === 1 ? 'its collection' : 'their collections'}.`}
+            {assignedCount > 0 && total - assignedCount > 0
+              ? ` ${total - assignedCount} skipped.`
+              : ''}
           </p>
         </div>
       )}
