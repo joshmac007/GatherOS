@@ -239,12 +239,13 @@ export default function FeaturedBuckets({
               }}
               title="New collection"
             >
-              <div className={`${styles.stack} ${styles.stackNew}`}>
-                <Plus size={26} strokeWidth={1.4} aria-hidden="true" />
-              </div>
-              <div className={styles.meta}>
+              <div className={styles.stack} aria-hidden="true" />
+              <div className={`${styles.meta} ${styles.metaNew}`}>
                 <span className={`${styles.name} ${styles.nameMuted}`}>New collection</span>
               </div>
+              <span className={styles.plus} aria-hidden="true">
+                <Plus size={26} strokeWidth={1.4} />
+              </span>
             </div>
           )}
           {collections.map((c) => {
