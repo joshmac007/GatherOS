@@ -66,6 +66,12 @@ export default function ImageCard({
   const aspect =
     record.width && record.height ? record.width / record.height : 4 / 3;
 
+  // Capture `fresh` at mount and keep it. The parent clears the fresh
+  // flag ~1.5s after a save lands; if we drove the class off the live
+  // prop, removing `.fresh` would revert the card's animation to the
+  // base cardIn and replay the entrance. Locking it in plays it once.
+  const [enteredFresh] = useState(() => !!fresh);
+
   // Hover-triggered lightbox preview. Open after the user has
   // intentionally hovered the icon for OPEN_DELAY ms — keeps
   // accidental cursor passes from popping the lightbox. Once open,
@@ -178,7 +184,7 @@ export default function ImageCard({
         styles.card,
         selected && styles.selected,
         selectionActive && styles.showSelectables,
-        fresh && styles.fresh,
+        enteredFresh && styles.fresh,
         springback && styles.springback,
         isPending && styles.cardPending,
       ].filter(Boolean).join(' ')}
