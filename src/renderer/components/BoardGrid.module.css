@@ -316,13 +316,17 @@
   pointer-events: none;
   /* The "New space" placeholder is empty — no canvas means no dot
      grid. Suppress the radial-gradient background the populated
-     .tileArt uses. */
+     .tileArt uses. The opaque surface-1 fill must go too: at inset:0
+     it would cover the dashed tile's hover bg change, and its square
+     bottom corners poke white past the tile's rounded border. */
   background-image: none;
+  background-color: transparent;
   border-bottom: 0;
 }
 
 :root[data-theme="dark"] .tileArtNew {
   background-image: none;
+  background-color: transparent;
 }
 
 .tileNew .tileMeta {
