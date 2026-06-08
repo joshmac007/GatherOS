@@ -208,8 +208,42 @@
 .zoom {
   display: inline-flex;
   align-items: center;
-  width: 110px;
+  gap: 6px;
   height: 32px;
+}
+
+.zoomGlyph {
+  color: var(--text-tertiary);
+  flex: none;
+}
+
+.zoomTrack {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 92px;
+}
+
+/* Column-count bubble — sits over the thumb on hover / drag. */
+.zoomBubble {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  transform: translateX(-50%);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--text-primary);
+  color: var(--text-on-accent);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-instant) ease;
+}
+
+.zoom:hover .zoomBubble,
+.zoomTrackDragging .zoomBubble {
+  opacity: 1;
 }
 
 /* Track is light hairline, thumb is solid ink. Cleaner than the

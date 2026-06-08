@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Grid2x2, Square } from 'lucide-react';
 import styles from './SmartChipRail.module.css';
 import Dropdown from './Dropdown.jsx';
 
@@ -75,6 +75,17 @@ export default function SmartChipRail({
   const sliderValue = (typeof columns === 'number')
     ? COLS_MAX + COLS_MIN - columns
     : COLS_MIN;
+  // Show a column-count bubble while hovering / dragging the zoom.
+  const [zoomDragging, setZoomDragging] = React.useState(false);
+  React.useEffect(() => {
+    if (!zoomDragging) return undefined;
+    const up = () => setZoomDragging(false);
+    window.addEventListener('pointerup', up);
+    return () => window.removeEventListener('pointerup', up);
+  }, [zoomDragging]);
+  // Thumb (14px) centre travels from 7px to (track − 7px); position the
+  // bubble over it from the slider's fractional value.
+  const zoomPct = (sliderValue - COLS_MIN) / (COLS_MAX - COLS_MIN);
   const inFolder = !!viewTitle;
   return (
     <div className={styles.rail} role={inFolder ? undefined : 'tablist'} aria-label={inFolder ? undefined : 'Smart views'}>
@@ -138,18 +149,36 @@ export default function SmartChipRail({
       <div className={styles.right}>
         {onColumnsChange && (
           <div className={styles.zoom} title="Card size">
-            <input
-              type="range"
-              min={COLS_MIN}
-              max={COLS_MAX}
-              step={1}
-              value={sliderValue}
-              onChange={(e) =>
-                onColumnsChange(COLS_MAX + COLS_MIN - Number(e.target.value))
-              }
-              className={styles.zoomSlider}
-              aria-label="Card size"
-            />
+            <Grid2x2 className={styles.zoomGlyph} size={13} strokeWidth={1.8} aria-hidden="true" />
+            <div
+              className={[styles.zoomTrack, zoomDragging && styles.zoomTrackDragging]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              <input
+                type="range"
+                min={COLS_MIN}
+                max={COLS_MAX}
+                step={1}
+                value={sliderValue}
+                onChange={(e) =>
+                  onColumnsChange(COLS_MAX + COLS_MIN - Number(e.target.value))
+                }
+                onPointerDown={() => setZoomDragging(true)}
+                className={styles.zoomSlider}
+                aria-label="Card size"
+              />
+              {typeof columns === 'number' && (
+                <span
+                  className={styles.zoomBubble}
+                  style={{ left: `calc(7px + ${zoomPct} * (100% - 14px))` }}
+                  aria-hidden="true"
+                >
+                  {columns} columns
+                </span>
+              )}
+            </div>
+            <Square className={styles.zoomGlyph} size={13} strokeWidth={1.8} aria-hidden="true" />
           </div>
         )}
         {onSortChange && (
