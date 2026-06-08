@@ -17,7 +17,7 @@
     area: '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>',
     link: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/>',
     open: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
-    close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+    close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     grip: '<circle cx="8" cy="6" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="8" cy="18" r="1"/><circle cx="14" cy="6" r="1"/><circle cx="14" cy="12" r="1"/><circle cx="14" cy="18" r="1"/>',
   };
   const svg = (paths, w = 17) =>
