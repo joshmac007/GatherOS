@@ -15,7 +15,11 @@ const crypto = require('node:crypto');
 
 const PORT = 53247;
 const HOST = '127.0.0.1';
-const MAX_BODY = 8 * 1024; // 8 kB JSON cap — URLs + titles, nothing bulky
+// Big enough for a base64 screen-capture data URL (the extension's
+// "capture page / area"). The native-messaging bridge caps the source
+// payload at ~1 MB, so 2 MB here is comfortable headroom; ordinary
+// URL/title saves are still a few hundred bytes.
+const MAX_BODY = 2 * 1024 * 1024;
 
 let server = null;
 let cachedToken = null;
