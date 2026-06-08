@@ -15,11 +15,16 @@ import {
   CreditCard as CreditCardIcon,
   FileArchive as FileArchiveIcon,
   Eraser as EraserIcon,
+  Volume2 as SoundIcon,
+  Play as PlayIcon,
 } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import { confirm } from '../lib/confirm.js';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
 import PrivacyModal from './PrivacyModal.jsx';
+import {
+  SAVE_SOUNDS, DEFAULT_SAVE_SOUND, previewSaveSound, configureSaveSound,
+} from '../lib/sounds.js';
 
 const SUPPORT_EMAIL = 'hey@gatheros.co';
 
@@ -35,6 +40,7 @@ const NAV_ITEMS = [
   { id: 'ai',         label: 'AI Usage',   Icon: Sparkles },
   { id: 'tags',       label: 'Tags',       Icon: Hash },
   { id: 'capture',    label: 'Capture',    Icon: CameraIcon },
+  { id: 'sound',      label: 'Sound',      Icon: SoundIcon },
   { id: 'updates',    label: 'Updates',    Icon: DownloadIcon },
   { id: 'data',       label: 'Data',       Icon: Database },
   { id: 'about',      label: 'About',      Icon: Info },
@@ -541,6 +547,79 @@ function FolderPickerRow({ value, onChange }) {
 // Updates page — auto-update toggle, manual check button, beta opt-in.
 // Talks to the existing electron-updater pipeline via new IPCs added
 // alongside this commit.
+function SoundPage({ prefs, updatePref }) {
+  const enabled = prefs.saveSoundEnabled !== false;
+  const selected = prefs.saveSound ?? DEFAULT_SAVE_SOUND;
+  const volume = typeof prefs.saveSoundVolume === 'number' ? prefs.saveSoundVolume : 0.6;
+
+  function selectSound(id) {
+    updatePref('saveSound', id);
+    configureSaveSound({ sound: id });
+    previewSaveSound(id);
+  }
+
+  return (
+    <div className={styles.page}>
+      <p className={styles.sectionHint}>
+        Play a short sound the moment an image lands in your library.
+      </p>
+
+      <div className={styles.toggleRow}>
+        <span className={styles.toggleLabel}>Play a sound when saving</span>
+        <ToggleSwitch
+          on={enabled}
+          onChange={(v) => { updatePref('saveSoundEnabled', v); configureSaveSound({ enabled: v }); }}
+        />
+      </div>
+
+      <div className={styles.toggleRow}>
+        <span className={styles.toggleLabel}>Volume</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={Math.round(volume * 100)}
+          disabled={!enabled}
+          className={styles.soundVolume}
+          aria-label="Save sound volume"
+          onChange={(e) => {
+            const v = Number(e.target.value) / 100;
+            updatePref('saveSoundVolume', v);
+            configureSaveSound({ volume: v });
+          }}
+        />
+      </div>
+
+      <div className={styles.soundList} data-disabled={!enabled || undefined}>
+        {SAVE_SOUNDS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`${styles.soundRow} ${selected === s.id ? styles.soundRowActive : ''}`}
+            onClick={() => selectSound(s.id)}
+            disabled={!enabled}
+          >
+            <span className={styles.soundRadio} aria-hidden="true" />
+            <span className={styles.soundText}>
+              <span className={styles.soundName}>{s.name}</span>
+              <span className={styles.soundDesc}>{s.desc}</span>
+            </span>
+            <span
+              className={styles.soundPreview}
+              role="button"
+              tabIndex={-1}
+              aria-label={`Preview ${s.name}`}
+              onClick={(e) => { e.stopPropagation(); previewSaveSound(s.id); }}
+            >
+              <PlayIcon size={13} strokeWidth={2} aria-hidden="true" />
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function UpdatesPage({ prefs, updatePref }) {
   const [state, setState] = useState({ checking: false, status: null, version: null });
 
@@ -1203,6 +1282,10 @@ export default function SettingsModal({
                 </span>
               </div>
             </div>
+          )}
+
+          {activePage === 'sound' && (
+            <SoundPage prefs={prefs} updatePref={updatePref} />
           )}
 
           {activePage === 'updates' && (

@@ -1186,3 +1186,88 @@
   background: var(--hover-bg);
 }
 
+
+/* ── Sound panel: save-sound picker ──────────────────────────────── */
+.soundVolume {
+  width: 160px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.soundList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 16px;
+}
+
+.soundList[data-disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.soundRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--text-primary);
+  transition: background var(--dur-instant) ease;
+}
+
+.soundRow:hover { background: var(--hover-bg-soft); }
+.soundRowActive,
+.soundRowActive:hover { background: var(--active-row-bg); }
+
+.soundRadio {
+  flex: none;
+  position: relative;
+  width: 15px;
+  height: 15px;
+  border-radius: var(--radius-circle);
+  border: 1.5px solid var(--border-strong);
+}
+
+.soundRowActive .soundRadio { border-color: var(--accent); }
+.soundRowActive .soundRadio::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: var(--radius-circle);
+  background: var(--accent);
+}
+
+.soundText {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.soundName { font-size: var(--text-md); font-weight: 500; }
+.soundDesc { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+.soundPreview {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-circle);
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.soundPreview:hover {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}

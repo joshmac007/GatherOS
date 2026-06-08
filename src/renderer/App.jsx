@@ -67,6 +67,7 @@ import { extractDropImageUrls } from './lib/dropUrls.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
 import { seededShuffle } from './lib/shuffle.js';
+import { configureSaveSound, DEFAULT_SAVE_SOUND } from './lib/sounds.js';
 import OnboardingOverlay from './onboarding/OnboardingOverlay.jsx';
 import { useOnboarding, ONBOARDING_DONE_PREF } from './onboarding/OnboardingContext.jsx';
 
@@ -607,6 +608,12 @@ export default function App() {
     window.moodmark.ai.hasSession().then(setAiConfigured);
     window.moodmark.settings.getPrefs().then((p) => {
       setPrefs(p);
+      // Prime the save-sound engine from saved prefs.
+      configureSaveSound({
+        sound: p?.saveSound ?? DEFAULT_SAVE_SOUND,
+        enabled: p?.saveSoundEnabled !== false,
+        volume: typeof p?.saveSoundVolume === 'number' ? p.saveSoundVolume : 0.6,
+      });
       // First-launch auto-trigger for the walkthrough. The flag is
       // written when the user finishes (or dismisses) the tour, so
       // it only fires on a truly fresh install. Settings → Help →
