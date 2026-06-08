@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Details panel — 5 layouts</title>
+<style>
+  :root {
+    --page-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border-l: rgba(0,0,0,0.08);
+    --text-l: #000; --text-l2: rgba(0,0,0,0.55); --text-l3: rgba(0,0,0,0.4);
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --accent: #000;
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+    /* dark panel tokens */
+    --p-bg: #161618;
+    --p-surface: rgba(255,255,255,0.045);
+    --p-surface-2: rgba(255,255,255,0.07);
+    --p-border: rgba(255,255,255,0.09);
+    --p-text: #f3f3f4;
+    --p-text2: rgba(255,255,255,0.55);
+    --p-text3: rgba(255,255,255,0.38);
+    --p-hover: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font); color: var(--text-l); background: var(--page-bg); -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  .topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: rgba(250,250,249,0.85); backdrop-filter: saturate(1.6) blur(12px); border-bottom: 1px solid var(--border-l); }
+  .tabs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border-l); border-radius: 999px; background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-l2); cursor: pointer; white-space: nowrap; }
+  .tab:hover { background: #ececec; }
+  .tab .num { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: rgba(0,0,0,0.06); font-size: 10.5px; color: var(--text-l3); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active .num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  main { max-width: 860px; margin: 0 auto; padding: 26px 18px 70px; }
+  .iter { display: none; }
+  .iter.active { display: grid; grid-template-columns: 360px 1fr; gap: 30px; align-items: start; animation: fade 0.18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .meta { padding-top: 6px; }
+  .meta .name { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .meta .why { margin-top: 7px; font-size: 13px; line-height: 1.55; color: var(--text-l2); }
+  .meta .note { margin-top: 14px; font-size: 12px; line-height: 1.5; color: var(--text-l3); }
+
+  /* ── the dark panel ── */
+  .panel { width: 360px; height: 640px; overflow-y: auto; background: var(--p-bg); border-radius: 16px; color: var(--p-text); padding: 0 16px 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); scrollbar-width: thin; }
+  .panel::-webkit-scrollbar { width: 8px; } .panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+  .phead { position: sticky; top: 0; background: var(--p-bg); display: flex; align-items: center; padding: 16px 0 12px; border-bottom: 1px solid var(--p-border); z-index: 2; }
+  .phead .t { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .phead .i { margin-left: auto; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--p-text2); border: 1px solid var(--p-border); }
+  .pbody { padding-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+
+  .sectlabel { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--p-text3); margin: 2px 0 -4px; }
+  .field-label { font-size: 12.5px; color: var(--p-text2); margin-bottom: 6px; }
+  .field { padding: 12px 14px; background: var(--p-surface); border: 1px solid var(--p-border); border-radius: 12px; font-size: 14px; color: var(--p-text); }
+  .field.link { display: flex; align-items: center; gap: 8px; }
+  .field.link span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ico { display: inline-flex; flex: none; }
+
+  .preview { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 1 / 1; background: linear-gradient(160deg,#1f6f7e,#123); }
+  .preview .art { position: absolute; inset: 0; background:
+    radial-gradient(circle at 30% 35%, rgba(255,150,180,0.5), transparent 30%),
+    radial-gradient(circle at 70% 60%, rgba(255,180,90,0.45), transparent 32%),
+    radial-gradient(circle at 50% 80%, rgba(120,200,160,0.4), transparent 30%),
+    linear-gradient(160deg,#1f6f7e,#0c1f2a); }
+  .preview .badge { position: absolute; top: 12px; right: 12px; padding: 5px 9px; border-radius: 8px; background: rgba(20,20,22,0.78); backdrop-filter: blur(8px); font-size: 12px; font-weight: 700; letter-spacing: 0.02em; }
+  .palette { display: flex; gap: 8px; }
+  .palette i { width: 26px; height: 26px; border-radius: 50%; flex: none; }
+
+  .aibtn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px; border-radius: 999px; background: var(--p-surface-2); border: 1px solid var(--p-border); color: var(--p-text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .aibtn:hover { background: var(--p-hover); }
+  .aibtn.sm { padding: 9px 14px; width: auto; border-radius: 999px; font-size: 13px; }
+  .spark { color: #c9b8ff; }
+
+  .tweet { background: var(--p-surface); border: 1px solid var(--p-border); border-radius: 14px; padding: 14px; }
+  .tweet .top { display: flex; align-items: center; gap: 9px; }
+  .tweet .av { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg,#7a8cff,#c45cff); flex: none; }
+  .tweet .nm { font-size: 14px; font-weight: 700; } .tweet .hd { font-size: 12px; color: var(--p-text3); }
+  .tweet .x { margin-left: auto; color: var(--p-text2); font-weight: 800; font-size: 16px; }
+  .tweet .cap { font-size: 13.5px; margin: 11px 0; line-height: 1.4; }
+  .tweet .refs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .tweet .refs i { aspect-ratio: 1; border-radius: 7px; background: linear-gradient(135deg,#e9a,#7ad); }
+  .tweet .refs i:nth-child(2){ background: linear-gradient(135deg,#fbb,#a8f); }
+  .tweet .refs i:nth-child(3){ background: linear-gradient(135deg,#bdf,#5c8); }
+  .tweet .refs i:nth-child(4){ background: linear-gradient(135deg,#9ce,#36a); }
+
+  .ghost { padding: 11px 14px; border: 1px dashed var(--p-border); border-radius: 12px; color: var(--p-text2); font-size: 13.5px; cursor: pointer; }
+  .ghost:hover { background: var(--p-hover); }
+  .rowhead { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--p-text2); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px dashed var(--p-border); border-radius: 999px; color: var(--p-text2); font-size: 13px; cursor: pointer; }
+  .chip:hover { background: var(--p-hover); }
+
+  .group { background: var(--p-surface); border: 1px solid var(--p-border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .group .gh { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--p-text3); }
+
+  /* tabs inside panel */
+  .ptabs { display: flex; gap: 4px; padding: 4px; background: rgba(255,255,255,0.05); border-radius: 999px; margin-bottom: 4px; }
+  .ptab { flex: 1; padding: 7px 6px; border: none; background: transparent; border-radius: 999px; color: var(--p-text2); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .ptab.on { background: rgba(255,255,255,0.12); color: var(--p-text); }
+  .ptabpane { display: none; flex-direction: column; gap: 14px; } .ptabpane.on { display: flex; }
+
+  /* accordion */
+  .acc { border: 1px solid var(--p-border); border-radius: 12px; overflow: hidden; }
+  .acch { display: flex; align-items: center; gap: 8px; width: 100%; padding: 13px 14px; background: var(--p-surface); border: none; color: var(--p-text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  .acch:hover { background: var(--p-hover); }
+  .acch .chev { margin-left: auto; color: var(--p-text3); transition: transform 0.16s ease; }
+  .acc.open .acch .chev { transform: rotate(180deg); }
+  .accbody { display: none; flex-direction: column; gap: 12px; padding: 4px 14px 14px; }
+  .acc.open .accbody { display: flex; }
+
+  .collapse { border-top: 1px solid var(--p-border); margin-top: 4px; padding-top: 12px; }
+  .collapse .ch { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; color: var(--p-text2); font: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; padding: 2px 0; }
+  .collapse .ch .chev { margin-left: auto; transition: transform 0.16s ease; }
+  .collapse.open .ch .chev { transform: rotate(180deg); }
+  .collapse .cbody { display: none; flex-direction: column; gap: 14px; padding-top: 12px; } .collapse.open .cbody { display: flex; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Details panel layout</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-i="1"><span class="num">1</span>Grouped &amp; labeled</button>
+      <button class="tab" data-i="2"><span class="num">2</span>Tabbed</button>
+      <button class="tab" data-i="3"><span class="num">3</span>Accordion</button>
+      <button class="tab" data-i="4"><span class="num">4</span>Essentials-first</button>
+      <button class="tab" data-i="5"><span class="num">5</span>Card-grouped</button>
+    </div>
+  </div>
+
+  <main id="main"></main>
+
+<script>
+  const INFO = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>';
+  const EXT = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+  const SPARK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>';
+  const PLUS = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  const FOLDER = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2z"/></svg>';
+  const CHEV = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  const PALETTE = ['#ef8a2b','#f0a3a8','#1f8c9e','#9a8fb0','#cdc3e8','#3f8f93','#aab1d8','#f2b6ad'];
+
+  const S = {
+    head: `<div class="phead"><span class="t">Details</span><span class="i ico">${INFO}</span></div>`,
+    preview: `<div class="preview"><div class="art"></div><div class="badge">JPEG</div></div>`,
+    palette: `<div class="palette">${PALETTE.map(c=>`<i style="background:${c}"></i>`).join('')}</div>`,
+    genVar: `<button class="aibtn"><span class="spark ico">${SPARK}</span>Generate variation</button>`,
+    name: `<div><div class="field-label">Name</div><div class="field">Knight Among Flowers</div></div>`,
+    url: `<div><div class="field-label">URL</div><div class="field link"><span>https://x.com/BrettFromDJ/status/19…</span><span class="ico">${EXT}</span></div></div>`,
+    tweet: `<div class="tweet"><div class="top"><span class="av"></span><span><div class="nm">Brett</div><div class="hd">@BrettFromDJ</div></span><span class="x">𝕏</span></div><div class="cap">Use these as style references.</div><div class="refs"><i></i><i></i><i></i><i></i></div></div>`,
+    note: `<div class="ghost">+ Add a note</div>`,
+    prompt: `<div><div class="rowhead"><span class="spark ico">${SPARK}</span>Image prompt</div><div style="margin-top:8px"><button class="aibtn sm"><span class="spark ico">${SPARK}</span>Generate prompt</button></div></div>`,
+    promptInline: `<button class="aibtn sm"><span class="spark ico">${SPARK}</span>Generate prompt</button>`,
+    collections: `<div><div class="rowhead"><span class="ico">${FOLDER}</span>Collections</div><div style="margin-top:8px"><span class="chip">${PLUS}Add</span></div></div>`,
+  };
+  const lbl = (t) => `<div class="sectlabel">${t}</div>`;
+
+  function panel(body) { return `<div class="panel">${S.head}<div class="pbody">${body}</div></div>`; }
+
+  // 1 · grouped & labeled (flat, with section labels; AI tools merged)
+  const p1 = panel(`
+    ${lbl('Preview')}${S.preview}${S.palette}
+    ${lbl('Details')}${S.name}${S.url}
+    ${lbl('Source')}${S.tweet}
+    ${lbl('Create')}${S.genVar}${S.promptInline}
+    ${lbl('Organize')}${S.collections}${S.note}
+  `);
+
+  // 2 · tabbed (preview pinned, tabs for the rest)
+  const p2 = panel(`
+    ${S.preview}${S.palette}
+    <div class="ptabs" data-ptabs>
+      <button class="ptab on" data-pt="0">Details</button>
+      <button class="ptab" data-pt="1">Source</button>
+      <button class="ptab" data-pt="2">Create</button>
+      <button class="ptab" data-pt="3">Organize</button>
+    </div>
+    <div class="ptabpane on" data-pp="0">${S.name}${S.url}</div>
+    <div class="ptabpane" data-pp="1">${S.tweet}</div>
+    <div class="ptabpane" data-pp="2">${S.genVar}${S.promptInline}</div>
+    <div class="ptabpane" data-pp="3">${S.collections}${S.note}</div>
+  `);
+
+  // 3 · accordion (preview pinned, collapsible sections)
+  const acc = (t, body, open) => `<div class="acc ${open?'open':''}"><button class="acch" data-acc><span>${t}</span><span class="chev ico">${CHEV}</span></button><div class="accbody">${body}</div></div>`;
+  const p3 = panel(`
+    ${S.preview}${S.palette}
+    ${acc('Details', S.name + S.url, true)}
+    ${acc('Source', S.tweet, false)}
+    ${acc('Create', S.genVar + S.promptInline, false)}
+    ${acc('Organize', S.collections + S.note, false)}
+  `);
+
+  // 4 · essentials-first (reorder by use; tuck AI / source under "More")
+  const p4 = panel(`
+    ${S.preview}
+    ${S.name}
+    ${S.collections}
+    ${S.note}
+    ${S.url}
+    <div class="collapse" data-collapse>
+      <button class="ch" data-coltoggle>More — palette, AI &amp; source<span class="chev ico">${CHEV}</span></button>
+      <div class="cbody">${S.palette}${S.genVar}${S.promptInline}${S.tweet}</div>
+    </div>
+  `);
+
+  // 5 · card-grouped (each group a raised card)
+  const card = (t, body) => `<div class="group"><div class="gh">${t}</div>${body}</div>`;
+  const p5 = panel(`
+    ${card('Preview', S.preview + S.palette)}
+    ${card('Details', S.name + S.url)}
+    ${card('Source', S.tweet)}
+    ${card('Create', S.genVar + S.promptInline)}
+    ${card('Organize', S.collections + S.note)}
+  `);
+
+  const ITERS = [
+    { i:1, name:'1 · Grouped & labeled', panel:p1, why:"Keep the single scroll but chunk it under quiet section labels — Preview, Details, Source, Create, Organize — and merge the two AI tools (Generate variation + Generate prompt) into one 'Create' block. Lowest-risk; just adds rhythm and scannable landmarks.", note:"Biggest fix: the two AI buttons are no longer scattered top & bottom." },
+    { i:2, name:'2 · Tabbed', panel:p2, why:"Pin the preview + palette, then split everything else across Details / Source / Create / Organize tabs. The panel stops being a long scroll — you jump straight to the part you want.", note:"Shortest panel; trades scanning-everything for fewer things on screen." },
+    { i:3, name:'3 · Accordion', panel:p3, why:"Preview pinned, the rest as collapsible sections (Details open by default). You expand only what you need, so the panel is as short or long as you make it.", note:"Click the section headers to expand/collapse." },
+    { i:4, name:'4 · Essentials-first', panel:p4, why:"Re-order by how often you touch things: name, collections, note and URL up top; palette, AI tools and the source card tucked behind a 'More' toggle. Surfaces the editable essentials, hides the heavy/secondary stuff.", note:"Click 'More' to reveal palette / AI / source." },
+    { i:5, name:'5 · Card-grouped', panel:p5, why:"Same grouping as #1 but each group is a raised card with breathing room, so the blocks read as distinct objects rather than a continuous wall. Most visually separated; a little taller.", note:"Strong visual separation at the cost of some vertical space." },
+  ];
+
+  document.getElementById('main').innerHTML = ITERS.map(it => `
+    <section class="iter${it.i===1?' active':''}" data-i="${it.i}">
+      ${it.panel}
+      <div class="meta"><div class="name">${it.name}</div><div class="why">${it.why}</div><div class="note">${it.note}</div></div>
+    </section>`).join('');
+
+  // in-panel interactions
+  const main = document.getElementById('main');
+  main.addEventListener('click', (e) => {
+    const pt = e.target.closest('[data-pt]');
+    if (pt) { const wrap = pt.closest('.panel'); const i = pt.getAttribute('data-pt');
+      wrap.querySelectorAll('.ptab').forEach(b=>b.classList.toggle('on', b===pt));
+      wrap.querySelectorAll('.ptabpane').forEach(p=>p.classList.toggle('on', p.getAttribute('data-pp')===i)); return; }
+    const ah = e.target.closest('[data-acc]');
+    if (ah) { ah.closest('.acc').classList.toggle('open'); return; }
+    const ct = e.target.closest('[data-coltoggle]');
+    if (ct) { ct.closest('.collapse').classList.toggle('open'); return; }
+  });
+
+  const tabs = [...document.querySelectorAll('.tab')];
+  const iters = [...document.querySelectorAll('.iter')];
+  function show(i) { tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i))); iters.forEach(s => s.classList.toggle('active', s.dataset.i === String(i))); }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.i)));
+  window.addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '5') show(e.key); });
+</script>
+</body>
+</html>
