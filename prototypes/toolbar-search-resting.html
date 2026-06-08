@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Toolbar search — resting state, 5 directions</title>
+<style>
+  :root {
+    --content-bg: #fafaf9;
+    --titlebar-bg: #fafaf9;
+    --surface-1: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --border-subtle: rgba(0,0,0,0.05);
+    --text-primary: #000;
+    --text-secondary: rgba(0,0,0,0.55);
+    --text-tertiary: rgba(0,0,0,0.4);
+    --accent: #000;
+    --hover-bg: #ececec;
+    --input-bg: rgba(0,0,0,0.04);
+    --shadow-control: 0 1px 3px -1px rgba(16,16,19,0.06);
+    --shadow-modal: 0 4px 14px rgba(0,0,0,0.08), 0 24px 60px rgba(0,0,0,0.18);
+    --kbd-bg: #f1f1ee;
+    --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font); color: var(--text-primary); background: var(--content-bg); -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  .topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: rgba(250,250,249,0.85); backdrop-filter: saturate(1.6) blur(12px); border-bottom: 1px solid var(--border); }
+  .tabs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .tab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); box-shadow: var(--shadow-control); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+  .tab:hover { background: var(--hover-bg); }
+  .tab .num { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: rgba(0,0,0,0.06); font-size: 10.5px; color: var(--text-tertiary); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active .num { background: rgba(255,255,255,0.22); color: #fff; }
+
+  main { max-width: 980px; margin: 0 auto; padding: 26px 18px 90px; }
+  .iter { display: none; }
+  .iter.active { display: block; animation: fade 0.18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .meta { margin: 2px 2px 16px; }
+  .meta .name { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .meta .why { margin-top: 5px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
+
+  /* faux app window */
+  .window { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-control); background: var(--content-bg); }
+  .apptop { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 16px; background: var(--titlebar-bg); border-bottom: 1px solid var(--border-subtle); }
+  .dots { display: flex; gap: 8px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .dots .r { background: #ff5f57; } .dots .y { background: #febc2e; } .dots .g { background: #28c840; }
+  .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(160deg,#3a3a3c,#161617); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.3); flex: none; }
+  .modepill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px 4px 4px; border-radius: 8px; cursor: pointer; }
+  .modepill:hover { background: var(--hover-bg); }
+  .modepill .name { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+  .ico { color: var(--text-tertiary); display: inline-flex; flex: none; }
+  .grow { flex: 1; }
+  .body { height: 120px; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); font-size: 12px; }
+  .kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 5px; background: var(--kbd-bg); border: 1px solid var(--border); font-size: 11px; color: var(--text-secondary); }
+
+  /* search affordances (per iteration) */
+  .searchTrigger { cursor: text; -webkit-user-select: none; user-select: none; }
+
+  /* 1 · inline field */
+  .s-field { display: inline-flex; align-items: center; gap: 8px; width: 240px; padding: 7px 12px; border-radius: 9px; background: var(--input-bg); color: var(--text-tertiary); font-size: 13px; }
+  .s-field:hover { background: rgba(0,0,0,0.06); }
+
+  /* 2 · command trigger that echoes the overlay */
+  .s-cmd { display: inline-flex; align-items: center; gap: 9px; width: 340px; padding: 8px 10px 8px 13px; border-radius: 10px; background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow-control); color: var(--text-tertiary); font-size: 13px; }
+  .s-cmd:hover { background: #fcfcfb; }
+  .s-cmd .grow { font-size: 13px; }
+
+  /* 3 · compact labelled pill */
+  .s-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow-control); color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+  .s-pill:hover { background: var(--hover-bg); }
+
+  /* 4 · glyph + shortcut badge */
+  .s-glyph { display: inline-flex; align-items: center; gap: 6px; padding: 6px; border-radius: 8px; color: var(--text-tertiary); }
+  .s-glyph:hover { background: var(--hover-bg); color: var(--text-secondary); }
+
+  /* 5 · right-aligned field handled by .grow before it */
+
+  /* ── shared expanded overlay (the look they like) ── */
+  .scrim { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.18); display: none; align-items: flex-start; justify-content: center; }
+  .scrim.open { display: flex; }
+  .palette { margin-top: 14vh; width: min(560px, 92vw); background: var(--surface-1); border-radius: 16px; box-shadow: var(--shadow-modal); overflow: hidden; animation: pop 0.14s ease; }
+  @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(0.99); } to { opacity: 1; transform: none; } }
+  .palette .row { display: flex; align-items: center; gap: 12px; padding: 16px 18px; }
+  .palette input { flex: 1; border: none; outline: none; background: transparent; font: inherit; font-size: 19px; letter-spacing: -0.01em; color: var(--text-primary); }
+  .palette input::placeholder { color: var(--text-tertiary); }
+  .palette .sep { height: 1px; background: var(--border-subtle); }
+  .palette .empty { padding: 28px; text-align: center; color: var(--text-tertiary); font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Toolbar search — resting state</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-i="1"><span class="num">1</span>Inline field</button>
+      <button class="tab" data-i="2"><span class="num">2</span>Command trigger</button>
+      <button class="tab" data-i="3"><span class="num">3</span>Compact pill</button>
+      <button class="tab" data-i="4"><span class="num">4</span>Glyph + shortcut</button>
+      <button class="tab" data-i="5"><span class="num">5</span>Right-aligned</button>
+    </div>
+  </div>
+
+  <main id="main"></main>
+
+  <div class="scrim" id="scrim">
+    <div class="palette" role="dialog" aria-label="Search">
+      <div class="row">
+        <span class="ico">__SEARCH__</span>
+        <input id="pinput" placeholder="Search collections, tags, saves…" />
+        <span class="kbd">esc</span>
+      </div>
+      <div class="sep"></div>
+      <div class="empty">Start typing to search…</div>
+    </div>
+  </div>
+
+<script>
+  const SEARCH = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
+  const CHEV = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>';
+  document.querySelector('#scrim .ico').innerHTML = SEARCH;
+
+  function bar(searchHTML, opts={}) {
+    return `<div class="window"><div class="apptop">
+      <div class="dots"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+      <div class="logo"></div>
+      <div class="modepill"><span class="name">Library</span><span class="ico">${CHEV}</span></div>
+      ${opts.searchRight ? '<div class="grow"></div>' : ''}
+      ${searchHTML}
+      ${opts.searchRight ? '' : '<div class="grow"></div>'}
+    </div><div class="body">Grid of saves…</div></div>`;
+  }
+
+  const SEARCHES = {
+    1: bar(`<div class="searchTrigger s-field">${SEARCH}<span>Search…</span></div>`),
+    2: bar(`<div class="searchTrigger s-cmd">${SEARCH}<span class="grow">Search collections, tags, saves…</span><span class="kbd">⌘K</span></div>`),
+    3: bar(`<div class="searchTrigger s-pill">${SEARCH}<span>Search</span><span class="kbd">⌘K</span></div>`),
+    4: bar(`<div class="searchTrigger s-glyph">${SEARCH}<span class="kbd">⌘K</span></div>`),
+    5: bar(`<div class="searchTrigger s-field" style="width:280px">${SEARCH}<span class="grow">Search collections, tags, saves…</span><span class="kbd">⌘K</span></div>`, { searchRight: true }),
+  };
+
+  const ITERS = [
+    { i:1, name:'1 · Inline field', why:"A real, always-visible search box sized to the bar. The most conventional fix — it reads unmistakably as 'type here', no discovery needed. Quietly muted at rest so it doesn't shout." },
+    { i:2, name:'2 · Command trigger', why:"Mirrors the overlay you already like: full placeholder copy + a ⌘K hint, as a soft card button. Resting and expanded states feel like the same object — strongest continuity." },
+    { i:3, name:'3 · Compact pill', why:"A small labelled 'Search ⌘K' pill, Linear/Raycast style. Keeps the bar tidy while still naming the action — a middle ground between a glyph and a full field." },
+    { i:4, name:'4 · Glyph + shortcut', why:"Nearly as minimal as today, but the ⌘K badge beside the glyph turns a lone icon into an obvious affordance. Lowest footprint; relies on the shortcut to teach." },
+    { i:5, name:'5 · Right-aligned bar', why:"Move search to the far right where people instinctively look for it, as a full field. Frees the left for identity (logo + Library) and gives search real estate." },
+  ];
+
+  document.getElementById('main').innerHTML = ITERS.map(it => `
+    <section class="iter${it.i===1?' active':''}" data-i="${it.i}">
+      <div class="meta"><div class="name">${it.name}</div><div class="why">${it.why}</div></div>
+      ${SEARCHES[it.i]}
+    </section>`).join('');
+
+  // open overlay from any trigger
+  const scrim = document.getElementById('scrim');
+  const pinput = document.getElementById('pinput');
+  function openP() { scrim.classList.add('open'); setTimeout(() => pinput.focus(), 30); }
+  function closeP() { scrim.classList.remove('open'); pinput.value = ''; }
+  document.getElementById('main').addEventListener('click', e => { if (e.target.closest('.searchTrigger')) openP(); });
+  scrim.addEventListener('click', e => { if (e.target === scrim) closeP(); });
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeP();
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openP(); }
+  });
+
+  // iteration switching (ignore number keys while typing in the palette)
+  const tabs = [...document.querySelectorAll('.tab')];
+  const iters = [...document.querySelectorAll('.iter')];
+  function show(i) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i)));
+    iters.forEach(s => s.classList.toggle('active', s.dataset.i === String(i)));
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.i)));
+  window.addEventListener('keydown', e => {
+    if (document.activeElement === pinput) return;
+    if (e.key >= '1' && e.key <= '5') show(e.key);
+  });
+</script>
+</body>
+</html>
