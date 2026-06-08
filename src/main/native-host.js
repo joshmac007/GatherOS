@@ -216,6 +216,13 @@ async function handleMessage(msg) {
     writeMessage({ ok: true, app: 'GatherOS', appRunning: await ping() });
     return;
   }
+  if (msg.type === 'open') {
+    // Launch / focus GatherOS without saving anything — backs the
+    // extension popup's "Open GatherOS" button.
+    const ok = await ensureAppRunning();
+    writeMessage({ ok, appRunning: ok });
+    return;
+  }
   if (msg.type === 'save') {
     const ready = await ensureAppRunning();
     if (!ready) {

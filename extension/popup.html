@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="head">
+      <span class="brand">GatherOS</span>
+      <span class="status" id="status" title="GatherOS connection">
+        <span class="dot dot-checking" id="dot"></span>
+        <span class="status-text" id="statusText">Checking…</span>
+      </span>
+    </header>
+
+    <div class="actions">
+      <button type="button" class="btn" id="capturePage">
+        <span class="btn-label">Capture page</span>
+        <span class="btn-sub">Visible browser tab</span>
+      </button>
+      <button type="button" class="btn" id="captureArea">
+        <span class="btn-label">Capture area</span>
+        <span class="btn-sub">Drag to select a region</span>
+      </button>
+      <button type="button" class="btn" id="saveUrl">
+        <span class="btn-label">Save URL</span>
+        <span class="btn-sub">This page as a link</span>
+      </button>
+    </div>
+
+    <button type="button" class="btn btn-open" id="openApp">Open GatherOS</button>
+
+    <div class="hint" id="hint" hidden></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

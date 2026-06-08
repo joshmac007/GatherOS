@@ -102,15 +102,20 @@ async function handleSave(req, res) {
   const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
   const videoUrl = typeof body?.videoUrl === 'string' ? body.videoUrl.trim() : '';
   const posterUrl = typeof body?.posterUrl === 'string' ? body.posterUrl.trim() : '';
-  // Either an imageUrl or a videoUrl must be present. The X-bookmark
-  // capture sends videoUrl for video-only tweets; the right-click
-  // context-menu path only ever sends imageUrl.
-  if (!imageUrl && !videoUrl) {
-    sendJson(res, 400, { ok: false, error: 'imageUrl or videoUrl required (http/https)' });
+  const pageUrl = typeof body?.pageUrl === 'string' ? body.pageUrl.trim() : '';
+  // Need at least one of: an image, a video, or a page URL. The X-
+  // bookmark capture sends videoUrl for video-only tweets; right-click
+  // sends an http(s) imageUrl; the extension's "capture page / area"
+  // sends a data:image imageUrl; "save URL" sends only pageUrl, which
+  // we screenshot into a kind='url' save below.
+  if (!imageUrl && !videoUrl && !pageUrl) {
+    sendJson(res, 400, { ok: false, error: 'imageUrl, videoUrl, or pageUrl required' });
     return;
   }
-  if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
-    sendJson(res, 400, { ok: false, error: 'imageUrl must be http/https' });
+  // imageUrl may be http(s) (right-click / bookmark) or a data:image
+  // URL (extension screen capture). Reject anything else.
+  if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !/^data:image\//i.test(imageUrl)) {
+    sendJson(res, 400, { ok: false, error: 'imageUrl must be http(s) or a data:image URL' });
     return;
   }
   if (videoUrl && !/^https?:\/\//i.test(videoUrl)) {
@@ -122,6 +127,29 @@ async function handleSave(req, res) {
     const { saveImageFromUrl, saveVideoFromUrl } = require('./storage');
     const { insertSave } = require('./db');
     const { notifySaved, notifyDuplicate } = require('./notify');
+
+    // URL-only save (extension "save URL"): no media to download —
+    // screenshot the page via a hidden BrowserWindow and store it as
+    // a kind='url' save, mirroring the drag-drop-a-URL path.
+    if (!imageUrl && !videoUrl && pageUrl) {
+      const { captureUrl } = require('./urlCapture');
+      const captured = await captureUrl(pageUrl);
+      if (captured.duplicateOf) {
+        notifyDuplicate(captured.existing);
+        sendJson(res, 200, { ok: true, duplicate: true, id: captured.existing.id });
+        return;
+      }
+      const pageTitle = typeof body?.pageTitle === 'string' ? body.pageTitle.trim() : '';
+      const urlRecord = insertSave({
+        ...captured,
+        sourceUrl: pageUrl,
+        title: pageTitle || captured.title || null,
+        kind: 'url',
+      });
+      notifySaved(urlRecord);
+      sendJson(res, 200, { ok: true, id: urlRecord.id });
+      return;
+    }
 
     // Branch on whether the capture is a video or an image. Tweets
     // with both still images and a video bookmark as an image
@@ -135,9 +163,8 @@ async function handleSave(req, res) {
       sendJson(res, 200, { ok: true, duplicate: true, id: mediaData.existing.id });
       return;
     }
-    // Preserve the page the user was browsing — that's the whole
-    // value of a browser save over drag-drop.
-    const pageUrl = typeof body?.pageUrl === 'string' ? body.pageUrl : null;
+    // pageUrl (parsed above) preserves the page the user was browsing
+    // — that's the whole value of a browser save over drag-drop.
     // Optional title — both current extension flows leave it blank
     // so the existing autonamer takes over.
     const pageTitle = typeof body?.pageTitle === 'string' ? body.pageTitle.trim() : null;

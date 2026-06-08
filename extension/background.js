@@ -129,6 +129,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     saveRefreshTemplate(msg.url, msg.authorization);
     return false;
   }
+  // Popup-driven actions. Each runs async and reports its own result
+  // through notify(); the popup closes immediately after sending, so
+  // there's no sendResponse to wait on.
+  if (msg.type === 'gatheros:capture-page') {
+    captureActivePage(msg);
+    return false;
+  }
+  if (msg.type === 'gatheros:capture-area') {
+    captureActiveArea(msg);
+    return false;
+  }
+  if (msg.type === 'gatheros:save-url') {
+    savePageUrl(msg);
+    return false;
+  }
   return undefined;
 });
 
@@ -485,4 +500,234 @@ function notify(message) {
     // Notifications can fail silently on some platforms; nothing
     // else to fall back on from a service worker.
   }
+}
+
+// ── Popup-driven browser capture + URL save ────────────────────────
+//
+// The toolbar popup (popup.html) drives these. Browser-page and area
+// captures are taken as JPEG and shipped to the desktop app as a
+// data:image URL through the same native-message 'save' path the
+// right-click flow uses. JPEG (+ a downscale fallback) keeps the
+// payload under the native-messaging 1 MB cap that a full PNG would
+// blow past. Area cropping happens here in the worker via
+// OffscreenCanvas. "Save URL" sends only pageUrl, which the app
+// screenshots into a kind='url' save.
+
+const NATIVE_MSG_LIMIT = 1024 * 1024;            // mirrors native-host MAX_MSG
+const SAFE_CAPTURE_BYTES = NATIVE_MSG_LIMIT - 16 * 1024; // headroom for JSON envelope
+const CAPTURE_JPEG_QUALITY = 80;                 // 0–100 for captureVisibleTab
+const CAPTURE_MAX_EDGE = 2000;                   // downscale ceiling so retina shots fit the cap
+
+async function captureActivePage({ windowId, pageUrl, pageTitle }) {
+  let dataUrl;
+  try {
+    dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+      format: 'jpeg',
+      quality: CAPTURE_JPEG_QUALITY,
+    });
+  } catch (err) {
+    notify(captureErrorText(err));
+    return;
+  }
+  dataUrl = await shrinkDataUrlIfNeeded(dataUrl);
+  await finishCaptureSave(dataUrl, pageUrl, pageTitle);
+}
+
+async function captureActiveArea({ tabId, windowId, pageUrl, pageTitle }) {
+  let rect = null;
+  try {
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: areaSelectOverlay,
+    });
+    rect = res?.result || null;
+  } catch (err) {
+    notify(captureErrorText(err));
+    return;
+  }
+  if (!rect) return; // user pressed Esc or made a tiny drag — stay silent
+
+  let shotUrl;
+  try {
+    shotUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 92 });
+  } catch (err) {
+    notify(captureErrorText(err));
+    return;
+  }
+
+  // Crop the captured viewport down to the selected rect. The rect is
+  // in CSS px; the screenshot is in device px, so scale by dpr.
+  let bmp;
+  try {
+    bmp = await createImageBitmap(await (await fetch(shotUrl)).blob());
+  } catch (err) {
+    notify(`Capture failed — ${err?.message || err}`);
+    return;
+  }
+  const dpr = rect.dpr || 1;
+  const sx = Math.max(0, Math.round(rect.x * dpr));
+  const sy = Math.max(0, Math.round(rect.y * dpr));
+  const sw = Math.min(bmp.width - sx, Math.round(rect.w * dpr));
+  const sh = Math.min(bmp.height - sy, Math.round(rect.h * dpr));
+  if (sw < 1 || sh < 1) { bmp.close?.(); return; }
+
+  const scale = Math.min(1, CAPTURE_MAX_EDGE / Math.max(sw, sh));
+  const cw = Math.max(1, Math.round(sw * scale));
+  const ch = Math.max(1, Math.round(sh * scale));
+  const canvas = new OffscreenCanvas(cw, ch);
+  canvas.getContext('2d').drawImage(bmp, sx, sy, sw, sh, 0, 0, cw, ch);
+  bmp.close?.();
+
+  let dataUrl = await blobToDataUrl(await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 }));
+  dataUrl = await shrinkDataUrlIfNeeded(dataUrl);
+  await finishCaptureSave(dataUrl, pageUrl, pageTitle);
+}
+
+async function savePageUrl({ pageUrl, pageTitle }) {
+  if (!pageUrl) { notify('No page URL to save.'); return; }
+  try {
+    const resp = await chrome.runtime.sendNativeMessage(HOST_NAME, {
+      type: 'save',
+      pageUrl,
+      pageTitle: pageTitle || null,
+    });
+    reportSaveResult(resp);
+  } catch (err) {
+    reportNativeError(err);
+  }
+}
+
+async function finishCaptureSave(dataUrl, pageUrl, pageTitle) {
+  if (!dataUrl) { notify('Capture produced no image.'); return; }
+  if (dataUrl.length > SAFE_CAPTURE_BYTES) {
+    notify('Capture too large to send — try a smaller area.');
+    return;
+  }
+  try {
+    const resp = await chrome.runtime.sendNativeMessage(HOST_NAME, {
+      type: 'save',
+      imageUrl: dataUrl,
+      pageUrl: pageUrl || null,
+      pageTitle: pageTitle || null,
+    });
+    reportSaveResult(resp);
+  } catch (err) {
+    reportNativeError(err);
+  }
+}
+
+function reportSaveResult(resp) {
+  if (!resp || !resp.ok) {
+    const msg = resp?.error || 'Save failed.';
+    notify(msg === 'app not running' ? 'Open GatherOS first, then try again.' : msg);
+    return;
+  }
+  notify(resp.duplicate ? 'Already in your library.' : 'Saved to GatherOS.');
+}
+
+function reportNativeError(err) {
+  const msg = err?.message || String(err);
+  if (msg.includes('host not found') || msg.includes('Specified native messaging host')) {
+    notify('Open GatherOS once to finish setup, then try again.');
+  } else {
+    notify(`Couldn't reach GatherOS — ${msg}`);
+  }
+}
+
+function captureErrorText(err) {
+  const m = err?.message || String(err);
+  if (/cannot be (captured|edited)|chrome:\/\/|extension gallery|activeTab|<all_urls>|No tab|cannot access/i.test(m)) {
+    return "This page can't be captured.";
+  }
+  return `Capture failed — ${m}`;
+}
+
+// Re-encode a data URL smaller until it fits the native-message cap.
+// Only kicks in for oversized captures (big retina viewports); normal
+// JPEGs pass straight through.
+async function shrinkDataUrlIfNeeded(dataUrl) {
+  if (!dataUrl || dataUrl.length <= SAFE_CAPTURE_BYTES) return dataUrl;
+  try {
+    const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob());
+    const scale = Math.min(1, CAPTURE_MAX_EDGE / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const canvas = new OffscreenCanvas(w, h);
+    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    let q = 0.8;
+    let out = await blobToDataUrl(await canvas.convertToBlob({ type: 'image/jpeg', quality: q }));
+    while (out.length > SAFE_CAPTURE_BYTES && q > 0.4) {
+      q -= 0.15;
+      out = await blobToDataUrl(await canvas.convertToBlob({ type: 'image/jpeg', quality: q }));
+    }
+    return out;
+  } catch {
+    return dataUrl; // best effort; finishCaptureSave guards the hard cap
+  }
+}
+
+async function blobToDataUrl(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return `data:${blob.type || 'image/jpeg'};base64,${btoa(binary)}`;
+}
+
+// Injected into the active tab to let the user drag-select a region.
+// Resolves to { x, y, w, h, dpr } in CSS px, or null if cancelled.
+// Must be self-contained — chrome.scripting serializes it, so it can't
+// reference anything from this module's scope.
+function areaSelectOverlay() {
+  return new Promise((resolve) => {
+    const root = document.documentElement || document.body;
+    const ov = document.createElement('div');
+    ov.style.cssText =
+      'position:fixed;inset:0;z-index:2147483647;cursor:crosshair;background:rgba(0,0,0,0.12);';
+    const sel = document.createElement('div');
+    sel.style.cssText =
+      'position:fixed;display:none;border:1.5px solid #fff;' +
+      'box-shadow:0 0 0 9999px rgba(0,0,0,0.30);background:rgba(255,255,255,0.04);';
+    ov.appendChild(sel);
+    root.appendChild(ov);
+
+    let sx = 0, sy = 0, drawing = false;
+    const teardown = () => {
+      ov.remove();
+      window.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); teardown(); resolve(null); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    ov.addEventListener('mousedown', (e) => {
+      drawing = true;
+      sx = e.clientX; sy = e.clientY;
+      sel.style.left = sx + 'px'; sel.style.top = sy + 'px';
+      sel.style.width = '0px'; sel.style.height = '0px';
+      sel.style.display = 'block';
+    });
+    ov.addEventListener('mousemove', (e) => {
+      if (!drawing) return;
+      sel.style.left = Math.min(sx, e.clientX) + 'px';
+      sel.style.top = Math.min(sy, e.clientY) + 'px';
+      sel.style.width = Math.abs(e.clientX - sx) + 'px';
+      sel.style.height = Math.abs(e.clientY - sy) + 'px';
+    });
+    ov.addEventListener('mouseup', (e) => {
+      if (!drawing) return;
+      drawing = false;
+      const x = Math.min(sx, e.clientX), y = Math.min(sy, e.clientY);
+      const w = Math.abs(e.clientX - sx), h = Math.abs(e.clientY - sy);
+      teardown();
+      if (w < 6 || h < 6) { resolve(null); return; }
+      // Let the overlay clear from the page before the screenshot.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          resolve({ x, y, w, h, dpr: window.devicePixelRatio || 1 })));
+    });
+  });
 }

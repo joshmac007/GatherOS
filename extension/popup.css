@@ -1,0 +1,143 @@
+:root {
+  --bg: #ebebeb;
+  --surface: #ffffff;
+  --surface-hover: #f4f4f5;
+  --border: rgba(0, 0, 0, 0.1);
+  --text: #1a1a1a;
+  --text-muted: #6b6b6f;
+  --accent: #1a1a1a;
+  --green: #2bb673;
+  --amber: #e0a020;
+  --red: #e0533d;
+  --gray: #b0b0b4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1d1d1f;
+    --surface: #2a2a2c;
+    --surface-hover: #333336;
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #f2f2f3;
+    --text-muted: #9a9a9f;
+    --accent: #f2f2f3;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  width: 264px;
+  padding: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 2px;
+}
+
+.brand {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gray);
+  flex: none;
+}
+
+.dot-checking { background: var(--gray); }
+.dot-on { background: var(--green); box-shadow: 0 0 0 3px rgba(43, 182, 115, 0.18); }
+.dot-idle { background: var(--amber); }
+.dot-off { background: var(--red); }
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0.5px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.05s ease;
+}
+
+.btn:hover {
+  background: var(--surface-hover);
+}
+
+.btn:active {
+  transform: scale(0.985);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-label {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.btn-sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.btn-open {
+  align-items: center;
+  flex-direction: row;
+  justify-content: center;
+  padding: 9px 11px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.hint {
+  margin-top: 10px;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
