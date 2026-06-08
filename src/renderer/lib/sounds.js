@@ -116,5 +116,25 @@ export function playSaveSound() {
 // Plays a specific sound regardless of settings — for the picker preview.
 export function previewSaveSound(id) { playId(id); }
 
+// ── trash sounds (whoosh-away) ──────────────────────────────────────
+// Share the save sound's enabled toggle + volume. Move-to-trash is a
+// short downward swoosh; empty-trash is a longer sweep into a low thud.
+let lastTrashAt = 0;
+export function playTrashSound() {
+  if (!config.enabled) return;
+  const now = Date.now();
+  if (now - lastTrashAt < THROTTLE_MS) return;
+  lastTrashAt = now;
+  try { noise({ type: 'lowpass', f: 1700, f1: 200, dur: 0.20, a: 0.005, peak: 0.30 }); }
+  catch { /* audio unavailable — skip */ }
+}
+export function playEmptyTrashSound() {
+  if (!config.enabled) return;
+  try {
+    noise({ type: 'lowpass', f: 2300, f1: 130, dur: 0.46, a: 0.02, peak: 0.32 });
+    tone({ type: 'sine', f0: 150, f1: 60, dur: 0.18, t0: at(0.4), peak: 0.34, lp: 400 });
+  } catch { /* audio unavailable — skip */ }
+}
+
 // Back-compat: useLibrary imports playPop; route it to the selected sound.
 export const playPop = playSaveSound;

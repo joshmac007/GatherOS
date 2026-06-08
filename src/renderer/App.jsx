@@ -67,7 +67,7 @@ import { extractDropImageUrls } from './lib/dropUrls.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
 import { seededShuffle } from './lib/shuffle.js';
-import { configureSaveSound, DEFAULT_SAVE_SOUND } from './lib/sounds.js';
+import { configureSaveSound, DEFAULT_SAVE_SOUND, playEmptyTrashSound } from './lib/sounds.js';
 import OnboardingOverlay from './onboarding/OnboardingOverlay.jsx';
 import { useOnboarding, ONBOARDING_DONE_PREF } from './onboarding/OnboardingContext.jsx';
 
@@ -1864,6 +1864,7 @@ export default function App() {
   // Trash means "empty what you see"; an unfiltered view empties all).
   const handleEmptyTrash = useCallback(() => {
     if (saves.length === 0) return;
+    playEmptyTrashSound();
     const ids = saves.map((s) => s.id);
     setSelected(new Set());
     showPermanentDeleteToast(ids);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { playPop } from '../lib/sounds.js';
+import { playPop, playTrashSound } from '../lib/sounds.js';
 
 const SEARCH_DEBOUNCE_MS = 180;
 
@@ -116,6 +116,7 @@ export function useLibrary() {
   []);
 
   const deleteSave = useCallback(async (id) => {
+    playTrashSound(); // whoosh-away; throttled so a batch is one swoosh-ish
     await window.moodmark.saves.delete(id);
     setSaves((prev) => prev.filter((s) => s.id !== id));
   }, []);
