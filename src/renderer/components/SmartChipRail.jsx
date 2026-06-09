@@ -22,8 +22,8 @@ function XGlyph({ size = 17 }) {
 
 const CHIPS = [
   { id: 'all',       label: 'All',       Icon: Images },
-  { id: 'unsorted',  label: 'Unsorted',  Icon: Inbox },
   { id: 'bookmarks', label: 'Bookmarks', Icon: XGlyph },
+  { id: 'unsorted',  label: 'Unsorted',  Icon: Inbox },
   { id: 'trash',     label: 'Trash',     Icon: Trash2 },
 ];
 
