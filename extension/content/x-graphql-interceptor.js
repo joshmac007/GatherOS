@@ -112,9 +112,9 @@
   }
 
   // Pull author / media / caption out of a single tweet result.
-  // Returns null when the tweet has no media we can save (text-only
-  // tweets are skipped — GatherOS is image-anchored, the click-
-  // capture path skips them too).
+  // Returns null only when there's genuinely nothing to save — no
+  // media AND no text. Text-only tweets (caption, no media) are saved:
+  // the desktop renders the tweet card itself to an image.
   function parseTweetForBookmark(result) {
     // Quote-tweet / visibility wrappers nest the real tweet one
     // level deeper.
@@ -179,7 +179,10 @@
       }
     }
 
-    if (imageUrls.length === 0 && !videoUrl) return null;
+    // Allow text-only tweets through (caption but no media) — the
+    // desktop renders the tweet card to an image. Only bail when
+    // there's nothing at all: no media and no text.
+    if (imageUrls.length === 0 && !videoUrl && !(legacy.full_text || '').trim()) return null;
 
     return {
       tweetId,
