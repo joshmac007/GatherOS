@@ -1,17 +1,24 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Frame, Pencil, Trash2, Plus } from 'lucide-react';
+import {
+  Frame, Pencil, Trash2, Plus,
+  GripVertical, Clock, ArrowDownAZ, ArrowDownZA,
+  ArrowDownWideNarrow, ArrowDownNarrowWide,
+} from 'lucide-react';
 import styles from './BoardGrid.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import ContextMenu from './ContextMenu.jsx';
 import Dropdown from './Dropdown.jsx';
 
+// Leading glyphs match the collections + library sort dropdowns: manual
+// order grip, a clock for recency, descending/ascending arrows for
+// newest/oldest by date, and the A→Z / Z→A glyphs for name sorts.
 const BOARD_SORT_OPTIONS = [
-  { value: 'manual',    label: 'Manual order' },
-  { value: 'recent',    label: 'Recently used' },
-  { value: 'newest',    label: 'Newest' },
-  { value: 'oldest',    label: 'Oldest' },
-  { value: 'name_asc',  label: 'Name A→Z' },
-  { value: 'name_desc', label: 'Name Z→A' },
+  { value: 'manual',    label: 'Manual order',  Icon: GripVertical },
+  { value: 'recent',    label: 'Recently used', Icon: Clock },
+  { value: 'newest',    label: 'Newest',        Icon: ArrowDownWideNarrow },
+  { value: 'oldest',    label: 'Oldest',        Icon: ArrowDownNarrowWide },
+  { value: 'name_asc',  label: 'Name A→Z',      Icon: ArrowDownAZ },
+  { value: 'name_desc', label: 'Name Z→A',      Icon: ArrowDownZA },
 ];
 
 const BOARD_SORT_STORAGE_KEY = 'moodmark.boards.sort';
