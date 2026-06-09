@@ -1,15 +1,26 @@
 import React from 'react';
 import {
-  ChevronLeft, Grid2x2, Square, Images, Inbox, Trash2, Bookmark,
+  ChevronLeft, Grid2x2, Square, Images, Inbox, Trash2,
   Clock, History, ArrowDownAZ, ArrowDownZA,
 } from 'lucide-react';
 import styles from './SmartChipRail.module.css';
 import Dropdown from './Dropdown.jsx';
 
+// X logomark, drawn as a filled glyph that matches the lucide icon API
+// (takes a `size`) so it can slot into the chip list. Bookmarks come
+// from X, so the tab uses the X mark rather than a generic bookmark.
+function XGlyph({ size = 17 }) {
+  return (
+    <svg viewBox="0 0 1200 1227" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M714 519L1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z" />
+    </svg>
+  );
+}
+
 const CHIPS = [
   { id: 'all',       label: 'All',       Icon: Images },
   { id: 'unsorted',  label: 'Unsorted',  Icon: Inbox },
-  { id: 'bookmarks', label: 'Bookmarks', Icon: Bookmark },
+  { id: 'bookmarks', label: 'Bookmarks', Icon: XGlyph },
   { id: 'trash',     label: 'Trash',     Icon: Trash2 },
 ];
 
