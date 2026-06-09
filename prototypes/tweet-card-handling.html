@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tweet saves — text vs text+image handling</title>
+<style>
+  :root{
+    --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --bg:#fafaf9; --surface:#fff; --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.14);
+    --ink:#16161a; --ink-2:rgba(0,0,0,0.55); --ink-3:rgba(0,0,0,0.4);
+    --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.05);
+    --stage:#0c0c0e; --d-border:rgba(255,255,255,.1); --d-border-strong:rgba(255,255,255,.16);
+    --d-ink:rgba(255,255,255,.92); --d-ink-2:rgba(255,255,255,.6); --d-ink-3:rgba(255,255,255,.4);
+    --d-surface:rgba(255,255,255,.05); --x-blue:#1d9bf0;
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--ui);-webkit-font-smoothing:antialiased}
+
+  header{padding:30px 32px 0;max-width:1140px;margin:0 auto}
+  header h1{font-size:22px;letter-spacing:-.02em;margin:0 0 8px}
+  header p{font-size:14px;color:var(--ink-2);line-height:1.55;max-width:760px;margin:0}
+  .rule{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 4px}
+  .rule .chip{font-size:12.5px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:7px 13px;color:var(--ink-2)}
+  .rule .chip b{color:var(--ink);font-weight:600}
+
+  section{max-width:1140px;margin:0 auto;padding:26px 32px}
+  .lab{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0 0 16px}
+  .stage-wrap .lab{color:var(--d-ink-3)}
+
+  /* grid */
+  .masonry{column-count:4;column-gap:16px}
+  @media(max-width:980px){.masonry{column-count:3}}
+  @media(max-width:660px){.masonry{column-count:2}}
+  .masonry>*{break-inside:avoid;margin-bottom:16px;width:100%;display:block}
+  .ph{border-radius:var(--radius);box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+  .g1{height:210px;background:linear-gradient(150deg,#c7d6e6,#8fa9c9)}
+  .g2{height:150px;background:linear-gradient(150deg,#e8d6c7,#c9a98f)}
+  .g3{height:260px;background:linear-gradient(150deg,#d3c7e6,#a98fc9)}
+  .g4{height:180px;background:linear-gradient(150deg,#c7e6d6,#8fc9a9)}
+  .g5{height:230px;background:linear-gradient(150deg,#e6c7d8,#c98fb0)}
+
+  /* annotation tag on a tweet item */
+  .wrap{position:relative}
+  .tag{position:absolute;top:-9px;left:10px;z-index:3;font-size:10.5px;font-weight:600;letter-spacing:.02em;
+    background:var(--ink);color:#fff;border-radius:6px;padding:3px 7px;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+
+  /* atoms */
+  .x-logo{width:1em;height:1em;fill:currentColor;display:inline-block;vertical-align:-.12em}
+  .verified{width:15px;height:15px;flex:none}.verified .seal{fill:var(--x-blue)} .verified.mono .seal{fill:var(--d-ink-3)} .verified .tick{fill:#fff}
+  .avatar{flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;letter-spacing:-.02em}
+  .av-pg{background:linear-gradient(140deg,#52647f,#2b3a52)}.av-nv{background:linear-gradient(140deg,#6f5683,#392a4f)}.av-dh{background:linear-gradient(140deg,#7f5a52,#52302b)}
+  .eng{display:inline-flex;align-items:center;gap:5px}
+  .eng svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .eng b{font-weight:600}
+
+  /* text-only tweet card (the new render path) */
+  .tc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px 14px 12px;cursor:pointer;transition:.15s}
+  .tc:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,0,0,.1)}
+  .tc-h{display:flex;align-items:center;gap:9px}
+  .tc-h .avatar{width:36px;height:36px;font-size:13px}
+  .tc-name{display:flex;align-items:center;gap:3px;font-weight:700;font-size:14px;line-height:1.15}
+  .tc-handle{color:var(--ink-3);font-size:13px}
+  .tc-x{margin-left:auto;color:var(--ink-3);font-size:17px}
+  .tc-text{font-size:14.5px;line-height:1.42;margin:10px 0 11px;letter-spacing:-.003em}
+  .tc-foot{display:flex;gap:16px;color:var(--ink-3);font-size:12px}
+
+  /* image+text tweet in grid = image tile + X badge (+count) */
+  .imgtile{position:relative;border-radius:var(--radius);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.06);cursor:pointer;transition:.15s}
+  .imgtile:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.12)}
+  .imgtile .pic{display:block;width:100%}
+  .badge{position:absolute;bottom:8px;left:8px;width:24px;height:24px;border-radius:50%;
+    background:rgba(255,255,255,.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:.5px solid rgba(255,255,255,.45);display:flex;align-items:center;justify-content:center;color:#111;font-size:13px;
+    box-shadow:0 1px 2px rgba(0,0,0,.18)}
+  .count{position:absolute;top:8px;right:8px;height:22px;padding:0 8px;border-radius:999px;display:flex;align-items:center;gap:4px;
+    background:rgba(0,0,0,.55);backdrop-filter:blur(10px);color:#fff;font-size:11px;font-family:var(--mono)}
+
+  /* ── focused stage ── */
+  .stage-wrap{background:var(--stage)}
+  .seg{display:inline-flex;background:var(--d-surface);border:.5px solid var(--d-border);border-radius:999px;padding:4px;gap:2px;margin-bottom:22px}
+  .seg button{padding:7px 15px;border-radius:999px;border:none;background:transparent;color:var(--d-ink-2);font:inherit;font-size:12.5px;cursor:pointer;transition:.15s}
+  .seg button:hover{color:#fff}
+  .seg button.on{background:rgba(255,255,255,.12);color:#fff}
+
+  .stage{min-height:430px;display:flex;align-items:flex-start;justify-content:center}
+  /* layout with main + rail */
+  .fv{display:grid;grid-template-columns:1fr 320px;gap:0;width:100%;max-width:1040px;
+    background:rgba(255,255,255,.02);border:.5px solid var(--d-border);border-radius:16px;overflow:hidden}
+  .fv-main{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px;gap:14px;
+    background:radial-gradient(120% 80% at 50% 0%,#15151b,#0c0c0e)}
+  .fv-rail{background:rgba(20,20,22,.6);border-left:.5px solid var(--d-border);padding:20px 18px;color:var(--d-ink)}
+
+  /* big tweet card (text-only focused) */
+  .big{width:100%;max-width:520px;background:#fff;color:#16161a;border-radius:16px;padding:22px 24px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+  .big-h{display:flex;align-items:center;gap:11px}.big .avatar{width:46px;height:46px;font-size:16px}
+  .big-name{font-weight:700;font-size:16px;display:flex;align-items:center;gap:4px}.big-handle{color:var(--ink-3);font-size:14px}
+  .big-x{margin-left:auto;font-size:21px}.big-text{font-size:20px;line-height:1.38;margin:15px 0 13px;letter-spacing:-.01em}
+  .big-time{color:var(--ink-3);font-size:13px;padding-bottom:13px;border-bottom:1px solid var(--border)}
+  .big-foot{display:flex;gap:24px;padding-top:12px;color:var(--ink-2);font-size:13.5px}
+
+  /* stage image */
+  .stage-pic{width:100%;max-width:560px;border-radius:12px;box-shadow:0 30px 80px rgba(0,0,0,.5);display:block}
+  .thumbs{display:flex;gap:8px}
+  .thumbs .t{width:54px;height:42px;border-radius:7px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);cursor:pointer;opacity:.55;transition:.15s}
+  .thumbs .t.on{opacity:1;box-shadow:inset 0 0 0 1.5px #fff}
+  .pager{color:var(--d-ink-3);font-size:12px;font-family:var(--mono)}
+
+  /* rail tweet card (for media tweets — text lives here) */
+  .rail-h4{margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--d-ink-3)}
+  .rail-tweet{border:.5px solid var(--d-border);border-radius:12px;padding:14px;background:rgba(255,255,255,.03)}
+  .rt-h{display:flex;align-items:center;gap:9px}.rail-tweet .avatar{width:32px;height:32px;font-size:12px}
+  .rt-name{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:3px;color:var(--d-ink)}
+  .rt-handle{color:var(--d-ink-3);font-size:12.5px}.rt-x{margin-left:auto;color:var(--d-ink-2);font-size:15px}
+  .rt-text{font-size:14px;line-height:1.45;margin:11px 0 12px;color:var(--d-ink)}
+  .rt-foot{display:flex;gap:16px;color:var(--d-ink-3);font-size:12px;padding-top:11px;border-top:.5px solid var(--d-border)}
+  .rail-open{width:100%;margin-top:14px;padding:9px;border-radius:8px;border:none;background:#fff;color:#000;font:inherit;font-weight:600;font-size:12.5px;cursor:pointer}
+  .rail-meta .row{display:flex;justify-content:space-between;font-size:12.5px;padding:9px 0;border-bottom:.5px solid var(--d-border)}
+  .rail-meta .row span:first-child{color:var(--d-ink-3)}
+  .note{text-align:center;color:var(--d-ink-3);font-size:12px;margin-top:20px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Tweet saves — handling text vs text + image</h1>
+  <p>Using the tweet-card direction. The rule: a tweet with media shows the media (image-forward, like every other save); a text-only tweet shows the tweet card. The text on a media tweet isn't lost — it lives in the focused-view detail rail.</p>
+  <div class="rule">
+    <span class="chip"><b>Text only</b> → tweet card (grid + focused)</span>
+    <span class="chip"><b>Text + image</b> → image tile, X badge (grid) · image on stage + text in rail (focused)</span>
+    <span class="chip"><b>Text + N images</b> → first image + count chip · pager in focused</span>
+  </div>
+</header>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M17.53 3h2.97l-6.49 7.41L21.75 21h-5.97l-4.68-6.12L5.74 21H2.77l6.94-7.93L2.25 3h6.12l4.23 5.59L17.53 3Zm-1.04 16.2h1.64L7.6 4.71H5.83L16.49 19.2Z"/></symbol>
+  <symbol id="seal" viewBox="0 0 22 22"><path class="seal" d="M11 1.6l2.1 1.5 2.6-.2 1 2.4 2.4 1-.2 2.6 1.5 2.1-1.5 2.1.2 2.6-2.4 1-1 2.4-2.6-.2L11 20.4l-2.1-1.5-2.6.2-1-2.4-2.4-1 .2-2.6L1.6 11l1.5-2.1-.2-2.6 2.4-1 1-2.4 2.6.2L11 1.6Z"/><path class="tick" d="M9.6 14.2l-2.7-2.7 1.2-1.2 1.5 1.5 3.8-3.8 1.2 1.2-5 5Z"/></symbol>
+  <linearGradient id="pa" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9bb4d6"/><stop offset="1" stop-color="#5d7aa6"/></linearGradient>
+  <linearGradient id="pb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c98fb0"/><stop offset="1" stop-color="#7a4d66"/></linearGradient>
+</defs></svg>
+
+<!-- ===================== GRID ===================== -->
+<section>
+  <p class="lab">In the grid</p>
+  <div class="masonry">
+    <div class="ph g1"></div>
+
+    <!-- text only -->
+    <div class="wrap">
+      <span class="tag">text only</span>
+      <div class="tc">
+        <div class="tc-h">
+          <span class="avatar av-pg">PG</span>
+          <span><div class="tc-name">Paul Graham <svg class="verified"><use href="#seal"/></svg></div><div class="tc-handle">@paulg</div></span>
+          <span class="tc-x"><svg class="x-logo"><use href="#x"/></svg></span>
+        </div>
+        <p class="tc-text">The most successful founders I know are relentlessly resourceful. They find a way through whatever's in front of them.</p>
+        <div class="tc-foot"><span class="eng">312</span><span class="eng">1.2K</span><span class="eng">8.4K</span></div>
+      </div>
+    </div>
+
+    <!-- text + image -->
+    <div class="wrap">
+      <span class="tag">text + image</span>
+      <div class="imgtile">
+        <svg class="pic" viewBox="0 0 4 3"><rect width="4" height="3" fill="url(#pa)"/></svg>
+        <span class="badge"><svg class="x-logo"><use href="#x"/></svg></span>
+      </div>
+    </div>
+
+    <div class="ph g4"></div>
+
+    <!-- text + N images -->
+    <div class="wrap">
+      <span class="tag">text + 4 images</span>
+      <div class="imgtile">
+        <svg class="pic" viewBox="0 0 4 5"><rect width="4" height="5" fill="url(#pb)"/></svg>
+        <span class="badge"><svg class="x-logo"><use href="#x"/></svg></span>
+        <span class="count">▦ 1/4</span>
+      </div>
+    </div>
+
+    <div class="ph g3"></div>
+
+    <!-- another text only, short -->
+    <div class="wrap">
+      <span class="tag">text only</span>
+      <div class="tc">
+        <div class="tc-h">
+          <span class="avatar av-nv">N</span>
+          <span><div class="tc-name">Naval <svg class="verified"><use href="#seal"/></svg></div><div class="tc-handle">@naval</div></span>
+          <span class="tc-x"><svg class="x-logo"><use href="#x"/></svg></span>
+        </div>
+        <p class="tc-text">Play long-term games with long-term people.</p>
+        <div class="tc-foot"><span class="eng">540</span><span class="eng">22K</span></div>
+      </div>
+    </div>
+
+    <div class="ph g2"></div>
+    <div class="ph g5"></div>
+  </div>
+  <p style="font-size:12.5px;color:var(--ink-2);margin-top:18px">Media tweets are indistinguishable from normal image saves except for the small <svg class="x-logo" style="font-size:13px;color:var(--ink-2)"><use href="#x"/></svg> badge — keeps the grid clean and image-forward. The text reveals on focus.</p>
+</section>
+
+<!-- ===================== FOCUSED ===================== -->
+<section class="stage-wrap">
+  <p class="lab">On focused view</p>
+  <div class="seg" id="seg">
+    <button class="on" data-m="text">Text only</button>
+    <button data-m="image">Text + image</button>
+    <button data-m="multi">Text + 4 images</button>
+  </div>
+
+  <div class="stage" id="stage"></div>
+  <p class="note" id="note"></p>
+</section>
+
+<script>
+  const seal = '<svg class="verified"><use href="#seal"/></svg>';
+  const sealM = '<svg class="verified mono"><use href="#seal"/></svg>';
+  const x = '<svg class="x-logo"><use href="#x"/></svg>';
+  const engReply = '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.3 8.4 8.4 0 0 1-3.8-.9L3 21l2.1-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg>';
+  const engRt = '<svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+  const engLike = '<svg viewBox="0 0 24 24"><path d="M20.8 5.6a5.4 5.4 0 0 0-7.7 0L12 6.7l-1.1-1.1A5.4 5.4 0 1 0 3.2 13l8.8 8.4 8.8-8.4a5.4 5.4 0 0 0 0-7.4Z"/></svg>';
+
+  const railMeta = `
+    <button class="rail-open">Open on X ↗</button>
+    <div class="rail-meta" style="margin-top:16px">
+      <div class="row"><span>Posted</span><span>Jun 4, 2026</span></div>
+      <div class="row"><span>Saved</span><span>2 days ago</span></div>
+      <div class="row"><span>Collection</span><span>Startup wisdom</span></div>
+    </div>`;
+
+  const railTweet = (text, withMeta) => `
+    <p class="rail-h4">Saved tweet</p>
+    <div class="rail-tweet">
+      <div class="rt-h">
+        <span class="avatar av-pg">PG</span>
+        <span><div class="rt-name">Paul Graham ${sealM}</div><div class="rt-handle">@paulg</div></span>
+        <span class="rt-x">${x}</span>
+      </div>
+      <p class="rt-text">${text}</p>
+      <div class="rt-foot"><span class="eng">${engReply} 312</span><span class="eng">${engRt} 1.2K</span><span class="eng">${engLike} 8.4K</span></div>
+    </div>
+    ${withMeta ? railMeta : ''}`;
+
+  const MEDIA_TEXT = "Resourcefulness beats everything. Here's a look at what we shipped this week ↓";
+
+  const VIEWS = {
+    text: {
+      html: `
+        <div class="fv">
+          <div class="fv-main">
+            <div class="big">
+              <div class="big-h">
+                <span class="avatar av-pg">PG</span>
+                <span><div class="big-name">Paul Graham ${seal}</div><div class="big-handle">@paulg</div></span>
+                <span class="big-x">${x}</span>
+              </div>
+              <p class="big-text">The most successful founders I know are relentlessly resourceful. They don't wait for permission or perfect conditions — they find a way through whatever's in front of them.</p>
+              <div class="big-time">2:14 PM · Jun 4, 2026 · 482K views</div>
+              <div class="big-foot"><span class="eng">${engReply} <b>312</b></span><span class="eng">${engRt} <b>1.2K</b></span><span class="eng">${engLike} <b>8.4K</b></span></div>
+            </div>
+          </div>
+          <div class="fv-rail"><p class="rail-h4">Details</p>${railMeta}</div>
+        </div>`,
+      note: "Text-only → the tweet card is the artwork, blown up on the stage. The rail just carries metadata + open-on-X."
+    },
+    image: {
+      html: `
+        <div class="fv">
+          <div class="fv-main">
+            <svg class="stage-pic" viewBox="0 0 4 3"><rect width="4" height="3" fill="url(#pa)"/></svg>
+          </div>
+          <div class="fv-rail">${railTweet(MEDIA_TEXT, true)}</div>
+        </div>`,
+      note: "Text + image → the image fills the stage like any save; the tweet's text + engagement ride in the detail rail so nothing is lost."
+    },
+    multi: {
+      html: `
+        <div class="fv">
+          <div class="fv-main">
+            <svg class="stage-pic" viewBox="0 0 4 3"><rect width="4" height="3" fill="url(#pa)"/></svg>
+            <div class="thumbs">
+              <svg class="t on" viewBox="0 0 4 3"><rect width="4" height="3" fill="url(#pa)"/></svg>
+              <svg class="t" viewBox="0 0 4 3"><rect width="4" height="3" fill="url(#pb)"/></svg>
+              <svg class="t" viewBox="0 0 4 3"><rect width="4" height="3" fill="url(#pa)"/></svg>
+              <svg class="t" viewBox="0 0 4 3"><rect width="4" height="3" fill="url(#pb)"/></svg>
+            </div>
+            <span class="pager">1 / 4</span>
+          </div>
+          <div class="fv-rail">${railTweet(MEDIA_TEXT, true)}</div>
+        </div>`,
+      note: "Text + multiple images → page through the tweet's images (thumb strip + counter), text in the rail. Reuses the existing multi-image X-bookmark stage."
+    }
+  };
+
+  const stage = document.getElementById('stage');
+  const note = document.getElementById('note');
+  const seg = document.getElementById('seg');
+  function show(m){
+    seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
+    stage.innerHTML = VIEWS[m].html;
+    note.textContent = VIEWS[m].note;
+  }
+  seg.addEventListener('click', e=>{ const b=e.target.closest('button'); if(b) show(b.dataset.m); });
+  show('text');
+</script>
+</body>
+</html>
