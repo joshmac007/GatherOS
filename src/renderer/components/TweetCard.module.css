@@ -164,9 +164,11 @@
 }
 
 /* Quoted tweet — the embedded tweet inside a quote tweet. Bordered
-   sub-card so it reads as a distinct, nested object. */
+   sub-card so it reads as a distinct, nested object. The card already
+   applies a flex gap between children, so pull the quote up to sit
+   closer to the caption above it. */
 .quoted {
-  margin-top: 12px;
+  margin-top: -2px;
   border: 1px solid rgba(127, 127, 127, 0.28);
   border-radius: 12px;
 }

@@ -776,9 +776,11 @@
   cursor: text;
 }
 
-/* Quoted tweet inside the detail card. */
+/* Quoted tweet inside the detail card. The card already applies a 14px
+   flex gap between children; pull the quote up so it sits closer to the
+   caption it belongs with. */
 .tweetQuoted {
-  margin-top: 10px;
+  margin-top: -5px;
   padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 10px;
