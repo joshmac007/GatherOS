@@ -219,6 +219,17 @@
 .grid .quotedText { font-size: 13px; line-height: 1.4; }
 .focus .quotedText { font-size: 16px; line-height: 1.42; }
 
+.quotedImg {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(127, 127, 127, 0.12);
+}
+.grid .quotedImg { max-height: 150px; }
+.focus .quotedImg { max-height: 320px; }
+
 /* Multi-part thread — each self-reply stacked, hairline-separated so the
    sequence reads as one thread. */
 .thread {

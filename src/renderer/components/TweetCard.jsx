@@ -104,6 +104,15 @@ export default function TweetCard({ meta, variant = 'grid', onOpenX = null }) {
               {meta.quoted.caption}
             </div>
           )}
+          {Array.isArray(meta.quoted.imageUrls) && meta.quoted.imageUrls.length > 0 && (
+            <img
+              className={styles.quotedImg}
+              src={meta.quoted.imageUrls[0]}
+              alt=""
+              draggable={false}
+              loading="lazy"
+            />
+          )}
         </div>
       )}
     </div>

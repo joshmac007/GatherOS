@@ -823,6 +823,16 @@
   -webkit-user-select: text;
 }
 
+.tweetQuotedImg {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  margin-top: 8px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
 /* Auto-fit grid so the strip wraps gracefully whether the tweet
    has 2, 3, or 4 images. Square aspect ratio per tile keeps the
    strip readable regardless of source aspect. */

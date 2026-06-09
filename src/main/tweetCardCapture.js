@@ -61,10 +61,13 @@ function buildHtml(meta) {
     : (caption ? `<div class="text">${caption}</div>` : '');
   // Quoted tweet (quote-tweet) → nested bordered sub-card.
   const q = (meta.quoted && (meta.quoted.caption || meta.quoted.authorName)) ? meta.quoted : null;
+  const qImg = (q && Array.isArray(q.imageUrls) && q.imageUrls.length
+    && /^https?:\/\//i.test(q.imageUrls[0])) ? escapeHtml(q.imageUrls[0]) : '';
   const quotedHtml = q
     ? `<div class="quoted">
         <div class="qhead"><span class="qname">${escapeHtml(q.authorName || '')}</span> <span class="qhandle">${escapeHtml(q.authorHandle || '')}</span></div>
         ${q.caption ? `<div class="qtext">${escapeHtml(q.caption).replace(/\n/g, '<br>')}</div>` : ''}
+        ${qImg ? `<img class="qimg" src="${qImg}" />` : ''}
       </div>`
     : '';
   // Official X logomark, inked dark to sit on the white card.
@@ -93,6 +96,7 @@ function buildHtml(meta) {
     .qname{font-weight:700}
     .qhandle{color:#536471}
     .qtext{margin-top:4px;font-size:16px;line-height:1.42;letter-spacing:-.003em;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
+    .qimg{display:block;width:100%;max-height:320px;object-fit:cover;border-radius:10px;margin-top:8px}
   </style></head><body>
     <div class="card" id="card">
       <div class="head">

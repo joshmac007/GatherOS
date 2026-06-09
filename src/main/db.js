@@ -671,17 +671,23 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
     // signage, body copy) so a literal match there is high-signal.
     // Tweet saves also match on their text + author. tweet_meta is
     // valid JSON or NULL, so json_extract returns NULL (no match)
-    // rather than throwing on the non-tweet rows.
+    // rather than throwing on the non-tweet rows. Covers the tweet
+    // itself, its thread follow-ups, and any quoted tweet.
     conditions.push(`(title LIKE ? OR ocr_text LIKE ?
       OR json_extract(tweet_meta, '$.caption') LIKE ?
       OR json_extract(tweet_meta, '$.authorName') LIKE ?
       OR json_extract(tweet_meta, '$.authorHandle') LIKE ?
+      OR json_extract(tweet_meta, '$.thread') LIKE ?
+      OR json_extract(tweet_meta, '$.quoted.caption') LIKE ?
+      OR json_extract(tweet_meta, '$.quoted.authorName') LIKE ?
+      OR json_extract(tweet_meta, '$.quoted.authorHandle') LIKE ?
       OR id IN (
         SELECT save_id FROM save_tags
         JOIN tags ON save_tags.tag_id = tags.id
         WHERE tags.name LIKE ?
       ))`);
-    params.push(`%${text}%`, `%${text}%`, `%${text}%`, `%${text}%`, `%${text}%`, `%${text}%`);
+    const like = `%${text}%`;
+    params.push(like, like, like, like, like, like, like, like, like, like);
   }
 
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';

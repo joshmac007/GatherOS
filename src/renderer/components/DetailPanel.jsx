@@ -882,6 +882,15 @@ export default function DetailPanel({
                 {tweetMeta.quoted.caption && (
                   <div className={styles.tweetQuotedText}>{tweetMeta.quoted.caption}</div>
                 )}
+                {Array.isArray(tweetMeta.quoted.imageUrls) && tweetMeta.quoted.imageUrls.length > 0 && (
+                  <img
+                    className={styles.tweetQuotedImg}
+                    src={tweetMeta.quoted.imageUrls[0]}
+                    alt=""
+                    draggable={false}
+                    loading="lazy"
+                  />
+                )}
               </div>
             )}
 
