@@ -253,17 +253,26 @@ function handleClickBookmark(msg, sendResponse) {
 // a new bookmark from another device (iOS, web, etc.) and imported.
 const STORAGE_SEEN_KEY = 'gatherosBookmarksSeen';
 const STORAGE_BASELINE_KEY = 'gatherosBookmarksBaselineEstablished';
+const STORAGE_VERSION_KEY = 'gatherosBookmarksCaptureVersion';
+// Bump whenever the set of importable tweets widens. Text-only tweets
+// became importable here; without a re-baseline, every previously-
+// bookmarked text tweet (which the old code never recorded as "seen")
+// would suddenly count as new and flood the library. On a version
+// mismatch we re-seed the baseline silently instead.
+const CAPTURE_VERSION = 2;
 
 async function readSeenSet() {
-  const data = await chrome.storage.local.get([STORAGE_SEEN_KEY, STORAGE_BASELINE_KEY]);
+  const data = await chrome.storage.local.get([STORAGE_SEEN_KEY, STORAGE_BASELINE_KEY, STORAGE_VERSION_KEY]);
   const seen = new Set(Array.isArray(data[STORAGE_SEEN_KEY]) ? data[STORAGE_SEEN_KEY] : []);
   const baseline = !!data[STORAGE_BASELINE_KEY];
-  return { seen, baseline };
+  const version = Number(data[STORAGE_VERSION_KEY]) || 0;
+  return { seen, baseline, version };
 }
 
-async function writeSeenSet(seen, { baseline } = {}) {
+async function writeSeenSet(seen, { baseline, version } = {}) {
   const update = { [STORAGE_SEEN_KEY]: Array.from(seen) };
   if (baseline !== undefined) update[STORAGE_BASELINE_KEY] = !!baseline;
+  if (version !== undefined) update[STORAGE_VERSION_KEY] = version;
   await chrome.storage.local.set(update);
 }
 
@@ -282,15 +291,18 @@ async function markBookmarksSeen(ids) {
 
 async function handleBookmarkBatch(bookmarks) {
   if (!Array.isArray(bookmarks) || bookmarks.length === 0) return;
-  const { seen, baseline } = await readSeenSet();
+  const { seen, baseline, version } = await readSeenSet();
 
-  if (!baseline) {
-    // First batch — this is the user's existing archive at install
-    // time. Record everything silently; no imports.
+  if (!baseline || version !== CAPTURE_VERSION) {
+    // First batch ever (existing archive at install time) OR the first
+    // batch after the importable set widened (e.g. text-only tweets).
+    // Record everything currently visible silently so the backlog
+    // doesn't flood the library; only tweets bookmarked from here on
+    // count as new.
     for (const b of bookmarks) {
       if (b && b.tweetId) seen.add(b.tweetId);
     }
-    await writeSeenSet(seen, { baseline: true });
+    await writeSeenSet(seen, { baseline: true, version: CAPTURE_VERSION });
     return;
   }
 
