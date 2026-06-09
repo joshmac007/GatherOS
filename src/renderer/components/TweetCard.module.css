@@ -163,6 +163,48 @@
   color: var(--tw-sub);
 }
 
+/* Quoted tweet — the embedded tweet inside a quote tweet. Bordered
+   sub-card so it reads as a distinct, nested object. */
+.quoted {
+  margin-top: 12px;
+  border: 1px solid rgba(127, 127, 127, 0.28);
+  border-radius: 12px;
+}
+.grid .quoted { padding: 10px 11px; }
+.focus .quoted { padding: 13px 15px; }
+.quotedHead {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.quotedName {
+  font-weight: 700;
+  color: inherit;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.quotedHandle {
+  color: var(--tw-sub);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.grid .quotedName, .grid .quotedHandle { font-size: 12.5px; }
+.focus .quotedName, .focus .quotedHandle { font-size: 14px; }
+.quotedText {
+  margin-top: 4px;
+  color: inherit;
+  letter-spacing: -0.003em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.grid .quotedText { font-size: 13px; line-height: 1.4; }
+.focus .quotedText { font-size: 16px; line-height: 1.42; }
+
 /* Multi-part thread — each self-reply stacked, hairline-separated so the
    sequence reads as one thread. */
 .thread {

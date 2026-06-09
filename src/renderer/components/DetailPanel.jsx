@@ -862,6 +862,22 @@ export default function DetailPanel({
               <div className={styles.tweetCaption}>{tweetMeta.caption}</div>
             )}
 
+            {tweetMeta.quoted && (tweetMeta.quoted.caption || tweetMeta.quoted.authorName) && (
+              <div className={styles.tweetQuoted}>
+                <div className={styles.tweetQuotedHead}>
+                  {tweetMeta.quoted.authorName && (
+                    <span className={styles.tweetQuotedName}>{tweetMeta.quoted.authorName}</span>
+                  )}
+                  {tweetMeta.quoted.authorHandle && (
+                    <span className={styles.tweetQuotedHandle}>{tweetMeta.quoted.authorHandle}</span>
+                  )}
+                </div>
+                {tweetMeta.quoted.caption && (
+                  <div className={styles.tweetQuotedText}>{tweetMeta.quoted.caption}</div>
+                )}
+              </div>
+            )}
+
             {Array.isArray(tweetMeta.imageUrls) && tweetMeta.imageUrls.length > 1 && (
               <div className={styles.tweetThumbs}>
                 {tweetMeta.imageUrls.map((url, i) => {

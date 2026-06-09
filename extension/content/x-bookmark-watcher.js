@@ -25,6 +25,9 @@ const tweetVideoCache = new Map();
 // the interceptor has seen. Lets a bookmark of the root tweet be saved
 // as a multi-part thread.
 const tweetThreadCache = new Map();
+// tweetId -> { authorName, authorHandle, authorAvatarUrl, caption, imageUrls }
+// for the tweet embedded inside a quote tweet.
+const tweetQuotedCache = new Map();
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
   const data = event.data;
@@ -39,6 +42,11 @@ window.addEventListener('message', (event) => {
       if (rootId && Array.isArray(parts) && parts.length > 1) {
         tweetThreadCache.set(rootId, parts);
       }
+    }
+  }
+  if (data.type === 'quoted-cache' && Array.isArray(data.quoted)) {
+    for (const [id, quoted] of data.quoted) {
+      if (id && quoted) tweetQuotedCache.set(id, quoted);
     }
   }
   // Cross-device bookmark sync. The interceptor extracts every
@@ -515,6 +523,12 @@ document.addEventListener('click', async (e) => {
   const threadParts = tweetThreadCache.get(tweetIdFromUrl(tweetUrl));
   if (Array.isArray(threadParts) && threadParts.length > 1) {
     payload.tweetMeta.thread = threadParts;
+  }
+  // If this tweet quotes another, attach the quoted tweet so the desktop
+  // can render it as a nested card.
+  const quoted = tweetQuotedCache.get(tweetIdFromUrl(tweetUrl));
+  if (quoted) {
+    payload.tweetMeta.quoted = quoted;
   }
   if (tweetVideo && tweetVideo.videoUrl) {
     // Real playable MP4 — route through the video branch on the

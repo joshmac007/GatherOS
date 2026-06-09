@@ -111,6 +111,44 @@
     return out;
   }
 
+  // Minimal author + caption + photo extraction from a tweet result.
+  // Used for the quoted tweet inside a quote tweet (and reusable for any
+  // nested tweet). Returns null when the result isn't a usable tweet.
+  function extractTweetCore(result) {
+    if (!result || typeof result !== 'object') return null;
+    const t = result.tweet || result;
+    const legacy = t.legacy;
+    if (!legacy || !legacy.id_str) return null;
+    const userResult = t.core && t.core.user_results && t.core.user_results.result;
+    const userCore = (userResult && userResult.core) || {};
+    const userLegacy = (userResult && userResult.legacy) || {};
+    const screenName = userCore.screen_name || userLegacy.screen_name || '';
+    const displayName = userCore.name || userLegacy.name || '';
+    const avatarUrl = (userResult && userResult.avatar && userResult.avatar.image_url)
+      || userLegacy.profile_image_url_https || '';
+    const mediaList = (legacy.extended_entities && legacy.extended_entities.media)
+      || (legacy.entities && legacy.entities.media) || [];
+    const imageUrls = [];
+    for (const m of mediaList) {
+      if (m && m.type === 'photo' && m.media_url_https) {
+        imageUrls.push(`${m.media_url_https}?format=jpg&name=large`);
+      }
+    }
+    return {
+      authorName: displayName,
+      authorHandle: screenName ? `@${screenName}` : '',
+      authorAvatarUrl: avatarUrl,
+      caption: legacy.full_text || '',
+      imageUrls,
+    };
+  }
+
+  // The quoted tweet embedded in a quote tweet, or null.
+  function quotedFromTweet(t) {
+    const qr = t && t.quoted_status_result && t.quoted_status_result.result;
+    return extractTweetCore(qr);
+  }
+
   // Pull author / media / caption out of a single tweet result.
   // Returns null only when there's genuinely nothing to save — no
   // media AND no text. Text-only tweets (caption, no media) are saved:
@@ -194,6 +232,7 @@
       imageUrls,
       videoUrl,
       posterUrl,
+      quoted: quotedFromTweet(t),
     };
   }
 
@@ -267,6 +306,36 @@
     if (!entries || entries.length === 0) return;
     window.postMessage(
       { source: 'gatheros-interceptor', type: 'thread-cache', threads: entries },
+      window.location.origin,
+    );
+  }
+
+  // Map every tweet that quotes another → its quoted tweet, so a manual
+  // bookmark click (which reads the DOM, not GraphQL) can still attach
+  // the quoted card by tweet id.
+  function extractQuotedMap(json) {
+    const out = new Map();
+    function walk(node) {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) { for (const child of node) walk(child); return; }
+      const legacy = node.legacy;
+      if (legacy && legacy.id_str && node.quoted_status_result && node.quoted_status_result.result) {
+        const q = quotedFromTweet(node);
+        if (q && !out.has(legacy.id_str)) out.set(legacy.id_str, q);
+      }
+      for (const key of Object.keys(node)) {
+        if (key === '__typename') continue;
+        walk(node[key]);
+      }
+    }
+    walk(json);
+    return out;
+  }
+
+  function postQuoted(map) {
+    if (map.size === 0) return;
+    window.postMessage(
+      { source: 'gatheros-interceptor', type: 'quoted-cache', quoted: Array.from(map.entries()) },
       window.location.origin,
     );
   }
@@ -363,6 +432,7 @@
         extractTweetVideos(json, videoMap);
         postVideos(videoMap);
         postThreads(extractThreads(json));
+        postQuoted(extractQuotedMap(json));
         // Only the TOP-of-list bookmarks request drives imports. New
         // bookmarks always land at the top of the feed, so paginated
         // (deep-scroll) pages only ever surface old bookmarks —
@@ -411,6 +481,7 @@
         extractTweetVideos(json, videoMap);
         postVideos(videoMap);
         postThreads(extractThreads(json));
+        postQuoted(extractQuotedMap(json));
         // Only top-of-list bookmarks requests drive imports — see the
         // fetch path above.
         if (isBookmarksEndpoint(this.__gatherUrl) && isTopOfBookmarksRequest(this.__gatherUrl)) {

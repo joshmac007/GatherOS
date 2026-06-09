@@ -59,6 +59,14 @@ function buildHtml(meta) {
         .map((p) => `<div class="part">${escapeHtml(p.text).replace(/\n/g, '<br>')}</div>`)
         .join('')}</div>`
     : (caption ? `<div class="text">${caption}</div>` : '');
+  // Quoted tweet (quote-tweet) → nested bordered sub-card.
+  const q = (meta.quoted && (meta.quoted.caption || meta.quoted.authorName)) ? meta.quoted : null;
+  const quotedHtml = q
+    ? `<div class="quoted">
+        <div class="qhead"><span class="qname">${escapeHtml(q.authorName || '')}</span> <span class="qhandle">${escapeHtml(q.authorHandle || '')}</span></div>
+        ${q.caption ? `<div class="qtext">${escapeHtml(q.caption).replace(/\n/g, '<br>')}</div>` : ''}
+      </div>`
+    : '';
   // Official X logomark, inked dark to sit on the white card.
   const xLogo = '<svg viewBox="0 0 24 24" width="21" height="21"><path fill="#0f1419" d="M17.53 3h2.97l-6.49 7.41L21.75 21h-5.97l-4.68-6.12L5.74 21H2.77l6.94-7.93L2.25 3h6.12l4.23 5.59L17.53 3Zm-1.04 16.2h1.64L7.6 4.71H5.83L16.49 19.2Z"/></svg>';
 
@@ -80,6 +88,11 @@ function buildHtml(meta) {
     .thread{margin-top:14px}
     .part{font-size:18px;line-height:1.42;letter-spacing:-.003em;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
     .part + .part{margin-top:11px;padding-top:11px;border-top:1px solid rgba(0,0,0,0.1)}
+    .quoted{margin-top:14px;border:1px solid rgba(0,0,0,0.18);border-radius:13px;padding:13px 15px}
+    .qhead{font-size:14px}
+    .qname{font-weight:700}
+    .qhandle{color:#536471}
+    .qtext{margin-top:4px;font-size:16px;line-height:1.42;letter-spacing:-.003em;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
   </style></head><body>
     <div class="card" id="card">
       <div class="head">
@@ -88,6 +101,7 @@ function buildHtml(meta) {
         <span class="x">${xLogo}</span>
       </div>
       ${bodyHtml}
+      ${quotedHtml}
     </div>
   </body></html>`;
 }

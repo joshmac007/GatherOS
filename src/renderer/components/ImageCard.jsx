@@ -361,28 +361,32 @@ export default function ImageCard({
             >
               {selected && <CheckIcon />}
             </span>
-            <span
-              className={styles.peekBtn}
-              title="Peek"
-              aria-label="Peek"
-              onClick={(e) => e.stopPropagation()}
-              onMouseEnter={() => {
-                cancelClose();
-                // If the lightbox is already open (cursor came back from
-                // the image edge), keep it open instead of waiting again.
-                if (peeking) return;
-                scheduleOpen();
-              }}
-              onMouseLeave={() => {
-                // Cursor left before the open delay elapsed — abort the
-                // pending open. If it's already open, give the cursor a
-                // grace window to reach the image.
-                cancelOpen();
-                if (peeking) scheduleClose(CLOSE_GRACE);
-              }}
-            >
-              <PeekIcon />
-            </span>
+            {!isTweet && (
+              // Peek (quick-look) only makes sense for media — a text
+              // tweet has no image to enlarge, so skip it there.
+              <span
+                className={styles.peekBtn}
+                title="Peek"
+                aria-label="Peek"
+                onClick={(e) => e.stopPropagation()}
+                onMouseEnter={() => {
+                  cancelClose();
+                  // If the lightbox is already open (cursor came back from
+                  // the image edge), keep it open instead of waiting again.
+                  if (peeking) return;
+                  scheduleOpen();
+                }}
+                onMouseLeave={() => {
+                  // Cursor left before the open delay elapsed — abort the
+                  // pending open. If it's already open, give the cursor a
+                  // grace window to reach the image.
+                  cancelOpen();
+                  if (peeking) scheduleClose(CLOSE_GRACE);
+                }}
+              >
+                <PeekIcon />
+              </span>
+            )}
           </>
         )}
       </div>

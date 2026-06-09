@@ -344,6 +344,7 @@ async function syncBookmarkToGather(b) {
       imageUrls: Array.isArray(b.imageUrls) ? b.imageUrls : [],
       videoUrl: b.videoUrl || null,
       posterUrl: b.posterUrl || '',
+      quoted: b.quoted || null,
     },
   };
   if (b.videoUrl) {
@@ -497,6 +498,38 @@ function pollExtractBookmarkEntries(json) {
   return out;
 }
 
+// Minimal author + caption + photo extraction for a nested tweet (the
+// quoted tweet inside a quote tweet). Mirrors the interceptor's
+// extractTweetCore so cross-device sync captures quotes too.
+function pollExtractTweetCore(result) {
+  if (!result || typeof result !== 'object') return null;
+  const t = result.tweet || result;
+  const legacy = t.legacy;
+  if (!legacy || !legacy.id_str) return null;
+  const userResult = t.core && t.core.user_results && t.core.user_results.result;
+  const userCore = (userResult && userResult.core) || {};
+  const userLegacy = (userResult && userResult.legacy) || {};
+  const screenName = userCore.screen_name || userLegacy.screen_name || '';
+  const displayName = userCore.name || userLegacy.name || '';
+  const avatarUrl = (userResult && userResult.avatar && userResult.avatar.image_url)
+    || userLegacy.profile_image_url_https || '';
+  const mediaList = (legacy.extended_entities && legacy.extended_entities.media)
+    || (legacy.entities && legacy.entities.media) || [];
+  const imageUrls = [];
+  for (const m of mediaList) {
+    if (m && m.type === 'photo' && m.media_url_https) {
+      imageUrls.push(`${m.media_url_https}?format=jpg&name=large`);
+    }
+  }
+  return {
+    authorName: displayName,
+    authorHandle: screenName ? `@${screenName}` : '',
+    authorAvatarUrl: avatarUrl,
+    caption: legacy.full_text || '',
+    imageUrls,
+  };
+}
+
 function pollParseTweetForBookmark(result) {
   const t = result.tweet || result;
   const legacy = t.legacy;
@@ -557,6 +590,7 @@ function pollParseTweetForBookmark(result) {
     imageUrls,
     videoUrl,
     posterUrl,
+    quoted: pollExtractTweetCore(t.quoted_status_result && t.quoted_status_result.result),
   };
 }
 

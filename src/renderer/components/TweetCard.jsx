@@ -86,6 +86,26 @@ export default function TweetCard({ meta, variant = 'grid', onOpenX = null }) {
           </div>
         )
       )}
+      {meta.quoted && (meta.quoted.caption || meta.quoted.authorName) && (
+        <div className={styles.quoted}>
+          <div className={styles.quotedHead}>
+            {meta.quoted.authorName && (
+              <span className={styles.quotedName} data-tweet-selectable>{meta.quoted.authorName}</span>
+            )}
+            {meta.quoted.authorHandle && (
+              <span className={styles.quotedHandle} data-tweet-selectable>{meta.quoted.authorHandle}</span>
+            )}
+          </div>
+          {meta.quoted.caption && (
+            <div
+              className={`${styles.quotedText}${compact ? ` ${styles.clamp}` : ''}`}
+              data-tweet-selectable
+            >
+              {meta.quoted.caption}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

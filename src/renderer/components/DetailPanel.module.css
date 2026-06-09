@@ -744,8 +744,12 @@
   flex-shrink: 0;
 }
 
-/* Clickable variant — opens the original tweet on X. */
+/* Clickable variant — opens the original tweet on X. Larger box than
+   the glyph so the hover circle has breathing room around the mark. */
 .tweetSourceBtn {
+  width: 28px;
+  height: 28px;
+  margin: -3px -4px -3px 0;
   padding: 0;
   border: none;
   background: transparent;
@@ -758,12 +762,55 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+.tweetName, .tweetHandle, .tweetCaption {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .tweetCaption {
   font-size: var(--text-sm);
   line-height: 1.45;
   color: rgba(255, 255, 255, 0.85);
   white-space: pre-wrap;
   word-break: break-word;
+  cursor: text;
+}
+
+/* Quoted tweet inside the detail card. */
+.tweetQuoted {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+}
+.tweetQuotedHead {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+}
+.tweetQuotedName {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.tweetQuotedHandle {
+  color: rgba(255, 255, 255, 0.5);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.tweetQuotedText {
+  margin-top: 4px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Auto-fit grid so the strip wraps gracefully whether the tweet
