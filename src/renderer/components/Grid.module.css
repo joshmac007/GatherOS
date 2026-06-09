@@ -10,6 +10,14 @@
   background: transparent;
 }
 
+/* While a marquee drag-select is in progress, suppress text selection
+   so dragging across selectable tweet text doesn't highlight it. */
+.marqueeActive,
+.marqueeActive * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .column {
   display: flex;
   flex-direction: column;

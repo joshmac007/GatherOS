@@ -131,6 +131,9 @@ export default function Grid({
       if (!moved && !m.additive) {
         onSetSelection([]);
       }
+      // Drop any text selection the drag may have started before the
+      // no-select class kicked in (e.g. over a tweet card's text).
+      if (moved) window.getSelection?.()?.removeAllRanges?.();
     };
 
     document.addEventListener('mousemove', onMove);
@@ -327,7 +330,7 @@ export default function Grid({
 
   return (
     <div
-      className={styles.grid}
+      className={`${styles.grid}${marqueeRect ? ` ${styles.marqueeActive}` : ''}`}
       style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       onMouseDown={startMarquee}
     >
