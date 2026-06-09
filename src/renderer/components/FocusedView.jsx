@@ -12,6 +12,7 @@ import {
 import styles from './FocusedView.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import { useEyedropper } from '../hooks/useEyedropper.js';
+import TweetCard from './TweetCard.jsx';
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
@@ -122,14 +123,19 @@ export default function FocusedView({
   // the focused view. idx 0 always renders the locally saved file
   // (faster, offline-safe) — alt indices render straight from twimg.
   let tweetImageUrls = null;
+  let tweetMeta = null;
   if (record.tweet_meta) {
     try {
       const parsed = JSON.parse(record.tweet_meta);
+      tweetMeta = parsed || null;
       if (Array.isArray(parsed?.imageUrls) && parsed.imageUrls.length > 1) {
         tweetImageUrls = parsed.imageUrls;
       }
     } catch { /* malformed tweet_meta — fall through to single image */ }
   }
+  // Text-tweet save: the stage renders a live tweet card from tweet_meta
+  // instead of the captured PNG.
+  const isTweet = record.kind === 'tweet' && !!tweetMeta;
   // Upscale the captured timeline thumbnail to twimg's 'large'
   // variant for the focused view. The captured URL is whatever size
   // X was rendering in the timeline grid (often 360x360), which is
@@ -223,7 +229,7 @@ export default function FocusedView({
 
           <span className={styles.divider} aria-hidden="true" />
 
-          {record.kind !== 'url' && (
+          {record.kind !== 'url' && !isTweet && (
             <button
               type="button"
               className={[styles.iconBtn, picking && styles.iconBtnActive]
@@ -328,7 +334,13 @@ export default function FocusedView({
           onBack?.();
         }}
       >
-        {record.kind === 'url' && record.source_url ? (
+        {isTweet ? (
+          // Text-tweet save: render a live, theme-aware tweet card from
+          // tweet_meta — real selectable text, not the captured PNG.
+          <div className={styles.tweetStage}>
+            <TweetCard meta={tweetMeta} variant="focus" />
+          </div>
+        ) : record.kind === 'url' && record.source_url ? (
           // URL-kind save: render the live page in a <webview>. The
           // header-strip on the persist:url-view session (set in
           // src/main/index.js) removes X-Frame-Options +

@@ -176,6 +176,11 @@ async function handleSave(req, res) {
         sourceUrl: pageUrl || null,
         title: null,
         tweetMeta,
+        // kind='tweet' lets the renderer draw a live, theme-aware text
+        // card from tweet_meta instead of showing the captured PNG. The
+        // PNG still backs file_path/thumb_path so thumbnails, export,
+        // dedupe and OCR-search keep working.
+        kind: 'tweet',
       });
       attachTags(tweetRecord.id);
       notifySaved(tweetRecord);

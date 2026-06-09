@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './ImageCard.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+import TweetCard from './TweetCard.jsx';
 
 // Official-ish X glyph — used as a source badge in the bottom-left
 // of cards whose save was captured via the X bookmark watcher. Same
@@ -65,6 +66,16 @@ export default function ImageCard({
   const src = fileUrl(record.file_path);
   const aspect =
     record.width && record.height ? record.width / record.height : 4 / 3;
+
+  // Text-tweet saves render a live, theme-aware tweet card from their
+  // tweet_meta instead of the captured PNG. If the JSON is missing or
+  // malformed we fall through to the image (the PNG backs the save).
+  const tweetMeta = (() => {
+    if (record.kind !== 'tweet' || !record.tweet_meta) return null;
+    try { return JSON.parse(record.tweet_meta); }
+    catch { return null; }
+  })();
+  const isTweet = !!tweetMeta;
 
   // Capture `fresh` at mount and keep it. The parent clears the fresh
   // flag ~1.5s after a save lands; if we drove the class off the live
@@ -219,8 +230,10 @@ export default function ImageCard({
         }
       }}
     >
-      <div className={styles.frame} style={{ aspectRatio: aspect }}>
-        {inView && (record.kind === 'video' ? (
+      <div className={styles.frame} style={isTweet ? undefined : { aspectRatio: aspect }}>
+        {inView && (isTweet ? (
+          <TweetCard meta={tweetMeta} variant="grid" />
+        ) : record.kind === 'video' ? (
           // Video saves: render an inline <video> instead of an
           // <img> — the file_path is an MP4 that browsers can't
           // render as a static image. The poster attribute shows
@@ -261,10 +274,10 @@ export default function ImageCard({
             style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
           />
         ))}
-        {inView && record.tweet_meta && (
-          // Bottom-left glass badge — marks saves captured via the
-          // X bookmark watcher. Same XGlyphIcon the DetailPanel
-          // tweet card uses so the surface family stays consistent.
+        {inView && record.tweet_meta && !isTweet && (
+          // Bottom-left glass badge — marks media saves captured via the
+          // X bookmark watcher. Skipped for text tweets: their card
+          // already shows the X glyph in its header.
           <span className={styles.sourceBadge} aria-label="From X">
             <XGlyphIcon />
           </span>
