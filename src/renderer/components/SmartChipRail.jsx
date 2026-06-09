@@ -9,9 +9,12 @@ import Dropdown from './Dropdown.jsx';
 // X logomark, drawn as a filled glyph that matches the lucide icon API
 // (takes a `size`) so it can slot into the chip list. Bookmarks come
 // from X, so the tab uses the X mark rather than a generic bookmark.
+// The mark fills its viewBox edge-to-edge while lucide icons carry
+// internal padding, so render it at ~82% to match their visual height.
 function XGlyph({ size = 17 }) {
+  const s = Math.round(size * 0.82);
   return (
-    <svg viewBox="0 0 1200 1227" width={size} height={size} fill="currentColor" aria-hidden="true">
+    <svg viewBox="0 0 1200 1227" width={s} height={s} fill="currentColor" aria-hidden="true">
       <path d="M714 519L1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z" />
     </svg>
   );
