@@ -222,6 +222,20 @@ export default function ImageCard({
           onContextMenu(record.id, e.clientX, e.clientY);
         }
       }}
+      onMouseDown={isPending ? undefined : (e) => {
+        // Tweet cards carry selectable text. A draggable element wins the
+        // gesture before any selection can start, so when the press lands
+        // on that text we switch the card's native drag OFF for this
+        // gesture — letting the browser select text instead. Toggling the
+        // DOM attribute synchronously here beats React's async re-render,
+        // so it's in effect before the drag threshold fires. Pressing on
+        // anything else re-arms dragging.
+        const el = wrapperRef.current;
+        if (el) {
+          const onText = isTweet && !!e.target.closest('[data-tweet-selectable]');
+          el.draggable = !onText && !!onDragStart;
+        }
+      }}
       onDragStart={(e) => {
         if (!onDragStart) return;
         // On a text-tweet card, a drag that begins on the selectable
