@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rediscover action bar — five layouts</title>
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --frost: rgba(255,255,255,0.06);
+    --frost-hover: rgba(255,255,255,0.1);
+    --hair: rgba(255,255,255,0.1);
+    --hair-strong: rgba(255,255,255,0.16);
+    --ink: rgba(255,255,255,0.88);
+    --ink-dim: rgba(255,255,255,0.55);
+    --ink-faint: rgba(255,255,255,0.38);
+    --kbd-bg: rgba(255,255,255,0.12);
+    --radius-pill: 999px;
+    --radius-md: 7px;
+    --radius-lg: 16px;
+    --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #050506;
+    color: var(--ink);
+    font-family: var(--ui);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Top tab bar ─────────────────────────────────────────── */
+  .tabs {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: flex; align-items: center; gap: 4px;
+    padding: 10px 14px;
+    background: rgba(10,10,11,0.86);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 0.5px solid var(--hair);
+    overflow-x: auto;
+  }
+  .tabs h1 {
+    font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em;
+    color: var(--ink); margin: 0 14px 0 4px; white-space: nowrap;
+  }
+  .tab {
+    flex: none;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: var(--radius-pill);
+    background: transparent; border: 0.5px solid transparent;
+    color: var(--ink-dim); font-family: inherit; font-size: 12.5px;
+    cursor: pointer; transition: all .15s ease; white-space: nowrap;
+  }
+  .tab:hover { background: var(--frost); color: var(--ink); }
+  .tab.active {
+    background: var(--frost); border-color: var(--hair-strong); color: #fff;
+  }
+  .tab .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 5px;
+    background: var(--kbd-bg); font-family: var(--mono); font-size: 11px;
+    color: var(--ink);
+  }
+
+  /* ── Caption strip (name + rationale) ────────────────────── */
+  .meta {
+    position: fixed; top: 53px; left: 0; right: 0; z-index: 40;
+    padding: 12px 18px 13px;
+    background: rgba(10,10,11,0.7);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .meta .name { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .meta .why { font-size: 12.5px; color: var(--ink-dim); margin-top: 3px; max-width: 760px; line-height: 1.45; }
+
+  /* ── Stage: the full-screen rediscover overlay ───────────── */
+  .stage {
+    position: fixed; inset: 0; top: 116px;
+    display: none;
+    overflow: hidden;
+    background:
+      radial-gradient(120% 80% at 50% -10%, #15151a 0%, #0a0a0b 55%, #060607 100%);
+  }
+  .stage.show { display: block; }
+
+  /* Faux saved image at the top, bleeding off-screen like the real card */
+  .photo {
+    position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
+    width: min(680px, 88vw); height: 230px;
+    border-radius: 0 0 14px 14px;
+    background:
+      radial-gradient(60% 90% at 20% 30%, rgba(120,170,90,0.55), transparent 60%),
+      radial-gradient(50% 80% at 70% 20%, rgba(150,120,190,0.5), transparent 60%),
+      radial-gradient(70% 100% at 85% 70%, rgba(70,110,80,0.6), transparent 65%),
+      radial-gradient(40% 70% at 45% 80%, rgba(200,90,120,0.4), transparent 60%),
+      #14160f;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+    filter: saturate(0.92);
+  }
+  .photo::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    background: linear-gradient(to bottom, transparent 40%, rgba(6,6,7,0.85) 100%);
+  }
+
+  .caption {
+    position: absolute; top: 196px; left: 50%; transform: translateX(-50%);
+    z-index: 3;
+    font-size: 14px; font-weight: 500; letter-spacing: -0.005em;
+    color: rgba(255,255,255,0.92);
+    background: rgba(0,0,0,0.45);
+    padding: 6px 16px; border-radius: var(--radius-pill);
+    backdrop-filter: blur(8px); white-space: nowrap;
+  }
+  .progress {
+    position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+    z-index: 3; font-family: var(--mono); font-size: 12px; letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+  .progress .tot { color: var(--ink-faint); }
+
+  /* Shared keycap */
+  .kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 22px; padding: 0 6px;
+    background: var(--kbd-bg); border: 0.5px solid var(--hair-strong);
+    border-radius: var(--radius-md);
+    font-family: var(--mono); font-size: 11.5px; font-weight: 500; color: #fff;
+  }
+  .glyph { display: inline-flex; }
+  .glyph svg { display: block; }
+
+  /* ===========================================================
+     LAYOUT 1 — Spatially mapped to the screen edges
+     =========================================================== */
+  .l1-edge {
+    position: absolute; z-index: 4;
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 9px 14px;
+    background: var(--frost); border: 0.5px solid var(--hair);
+    border-radius: var(--radius-pill);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    color: var(--ink); font-size: 13px; cursor: pointer;
+    transition: background .12s ease, transform .12s ease, color .12s ease;
+  }
+  .l1-edge:hover { background: var(--frost-hover); color: #fff; }
+  .l1-edge.trash { left: 28px; top: 50%; transform: translateY(-50%); }
+  .l1-edge.trash:hover { transform: translateY(-50%) translateX(3px); }
+  .l1-edge.skip  { right: 28px; top: 50%; transform: translateY(-50%); }
+  .l1-edge.skip:hover { transform: translateY(-50%) translateX(-3px); }
+  .l1-edge.coll  { left: 50%; bottom: 34px; transform: translateX(-50%); }
+  .l1-edge.coll:hover { transform: translateX(-50%) translateY(-3px); }
+  .l1-edge.exit {
+    right: 24px; top: 22px; padding: 7px 11px;
+    background: transparent; border-color: transparent; color: var(--ink-faint);
+  }
+  .l1-edge.exit:hover { background: var(--frost); color: var(--ink); }
+  .l1-hint {
+    position: absolute; left: 50%; top: 52%; transform: translateX(-50%);
+    z-index: 3; color: var(--ink-faint); font-size: 12px; letter-spacing: 0.01em;
+    text-align: center;
+  }
+
+  /* ===========================================================
+     LAYOUT 2 — Arrow-key d-pad cluster
+     =========================================================== */
+  .l2-wrap {
+    position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%);
+    z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    grid-template-rows: repeat(2, auto);
+    gap: 8px; align-items: center; justify-items: center;
+    padding: 14px 16px;
+    background: var(--frost); border: 0.5px solid var(--hair);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  }
+  .dpad .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .dpad .up   { grid-column: 2; grid-row: 1; }
+  .dpad .left { grid-column: 1; grid-row: 2; }
+  .dpad .right{ grid-column: 3; grid-row: 2; }
+  .dpad .mid  { grid-column: 2; grid-row: 2; }
+  .pad-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px;
+    background: var(--kbd-bg); border: 0.5px solid var(--hair-strong);
+    border-radius: 10px; color: #fff; cursor: pointer;
+    font-family: var(--mono); font-size: 16px;
+    transition: background .12s ease, transform .08s ease;
+  }
+  .pad-key:hover { background: rgba(255,255,255,0.2); }
+  .pad-key:active { transform: scale(0.92); }
+  .pad-label { font-size: 11.5px; color: var(--ink-dim); letter-spacing: -0.005em; }
+  .dpad .mid .pad-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint);
+  }
+  .l2-exit {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 12px; border-radius: var(--radius-pill);
+    background: transparent; border: 0.5px solid transparent;
+    color: var(--ink-faint); font-size: 12px; cursor: pointer;
+  }
+  .l2-exit:hover { background: var(--frost); color: var(--ink); }
+
+  /* ===========================================================
+     LAYOUT 3 — Segmented console bar
+     =========================================================== */
+  .l3-bar {
+    position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%);
+    z-index: 4; display: inline-flex; align-items: stretch;
+    background: var(--frost); border: 0.5px solid var(--hair);
+    border-radius: 14px; overflow: hidden;
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  }
+  .seg {
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    padding: 13px 24px; min-width: 96px;
+    background: transparent; border: none; cursor: pointer;
+    color: var(--ink); transition: background .12s ease;
+    position: relative;
+  }
+  .seg + .seg { border-left: 0.5px solid var(--hair); }
+  .seg:hover { background: var(--frost-hover); }
+  .seg .seg-glyph { color: var(--ink); }
+  .seg .seg-label { font-size: 12px; letter-spacing: -0.005em; }
+  .seg .seg-key {
+    position: absolute; top: 7px; right: 8px;
+    font-family: var(--mono); font-size: 10px; color: var(--ink-faint);
+  }
+  .seg.exit { color: var(--ink-faint); min-width: 78px; }
+  .seg.exit:hover { color: var(--ink); }
+
+  /* ===========================================================
+     LAYOUT 4 — Minimal keycaps, label on hover
+     =========================================================== */
+  .l4-row {
+    position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%);
+    z-index: 4; display: inline-flex; align-items: center; gap: 14px;
+  }
+  .cap {
+    position: relative; display: inline-flex; flex-direction: column;
+    align-items: center; gap: 0;
+    background: transparent; border: none; cursor: pointer; padding: 0;
+  }
+  .cap .cap-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 46px; height: 46px;
+    background: var(--frost); border: 0.5px solid var(--hair);
+    border-radius: 13px; color: #fff;
+    font-family: var(--mono); font-size: 18px;
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    transition: background .14s ease, transform .1s ease, border-color .14s ease;
+  }
+  .cap:hover .cap-key { background: var(--frost-hover); border-color: var(--hair-strong); transform: translateY(-3px); }
+  .cap:active .cap-key { transform: translateY(-1px) scale(0.96); }
+  .cap .cap-label {
+    position: absolute; top: 54px; left: 50%; transform: translateX(-50%) translateY(-4px);
+    font-size: 11.5px; color: var(--ink-dim); white-space: nowrap;
+    opacity: 0; transition: opacity .14s ease, transform .14s ease; pointer-events: none;
+  }
+  .cap:hover .cap-label { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .cap.exit .cap-key { width: auto; padding: 0 14px; height: 40px; font-size: 12px; color: var(--ink-faint); background: transparent; border-color: transparent; }
+  .cap.exit:hover .cap-key { color: var(--ink); background: var(--frost); }
+
+  /* ===========================================================
+     LAYOUT 5 — Icon-forward vertical dock (right side)
+     =========================================================== */
+  .l5-dock {
+    position: absolute; right: 30px; top: 50%; transform: translateY(-50%);
+    z-index: 4; display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  }
+  .dock-btn {
+    display: inline-flex; align-items: center; gap: 0;
+    background: transparent; border: none; cursor: pointer; padding: 0;
+    flex-direction: row-reverse;
+  }
+  .dock-ico {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 52px; height: 52px; flex: none;
+    background: var(--frost); border: 0.5px solid var(--hair);
+    border-radius: 50%; color: var(--ink);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    position: relative;
+    transition: background .12s ease, color .12s ease, transform .1s ease;
+  }
+  .dock-btn:hover .dock-ico { background: var(--frost-hover); color: #fff; }
+  .dock-btn:active .dock-ico { transform: scale(0.93); }
+  .dock-ico .mini-key {
+    position: absolute; bottom: -3px; right: -3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 4px;
+    background: #1b1b1d; border: 0.5px solid var(--hair-strong);
+    border-radius: 6px; font-family: var(--mono); font-size: 10px; color: #fff;
+  }
+  .dock-text {
+    margin-right: 12px; font-size: 12.5px; color: var(--ink-dim);
+    opacity: 0; transform: translateX(6px);
+    transition: opacity .14s ease, transform .14s ease;
+    white-space: nowrap;
+  }
+  .dock-btn:hover .dock-text { opacity: 1; transform: translateX(0); color: var(--ink); }
+  .dock-btn.exit .dock-ico { width: 40px; height: 40px; background: transparent; border-color: transparent; color: var(--ink-faint); }
+  .dock-btn.exit:hover .dock-ico { background: var(--frost); color: var(--ink); }
+  .dock-btn.exit .dock-ico .mini-key { display: none; }
+  .l5-note {
+    position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%);
+    z-index: 3; color: var(--ink-faint); font-size: 12px;
+  }
+
+  .hintline { position:absolute; left:50%; bottom:8px; transform:translateX(-50%); color:var(--ink-faint); font-size:11px; z-index:5; }
+</style>
+</head>
+<body>
+
+<nav class="tabs">
+  <h1>Rediscover action bar</h1>
+  <button class="tab active" data-i="1"><span class="num">1</span> Edge-mapped</button>
+  <button class="tab" data-i="2"><span class="num">2</span> Arrow d-pad</button>
+  <button class="tab" data-i="3"><span class="num">3</span> Segmented console</button>
+  <button class="tab" data-i="4"><span class="num">4</span> Minimal keycaps</button>
+  <button class="tab" data-i="5"><span class="num">5</span> Vertical dock</button>
+</nav>
+
+<div class="meta" id="meta"></div>
+
+<!-- icons defined once, cloned per layout via JS templates below -->
+<svg width="0" height="0" style="position:absolute"><defs>
+  <g id="ic-trash"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></g>
+  <g id="ic-coll"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></g>
+  <g id="ic-skip"><path d="M5 4l8 8-8 8M13 4l8 8-8 8"/></g>
+  <g id="ic-exit"><path d="M18 6 6 18M6 6l12 12"/></g>
+</defs></svg>
+
+<!-- ============ LAYOUT 1 ============ -->
+<section class="stage show" data-stage="1">
+  <div class="photo"></div>
+  <div class="progress">3 <span class="tot">/ 120</span></div>
+  <div class="caption">Knight among flowers</div>
+
+  <div class="l1-hint">Each action lives where its arrow points</div>
+
+  <button class="l1-edge trash"><span class="kbd">←</span><span>Trash</span></button>
+  <button class="l1-edge skip"><span>Skip</span><span class="kbd">→</span></button>
+  <button class="l1-edge coll"><span class="kbd">↑</span><span>Add to collection</span></button>
+  <button class="l1-edge exit"><span class="kbd">Esc</span><span>Exit</span></button>
+</section>
+
+<!-- ============ LAYOUT 2 ============ -->
+<section class="stage" data-stage="2">
+  <div class="photo"></div>
+  <div class="progress">3 <span class="tot">/ 120</span></div>
+  <div class="caption">Knight among flowers</div>
+
+  <div class="l2-wrap">
+    <div class="dpad">
+      <div class="cell up">
+        <button class="pad-key">↑</button>
+        <span class="pad-label">Collection</span>
+      </div>
+      <div class="cell left">
+        <button class="pad-key">←</button>
+        <span class="pad-label">Trash</span>
+      </div>
+      <div class="cell mid"><span class="pad-dot"></span></div>
+      <div class="cell right">
+        <button class="pad-key">→</button>
+        <span class="pad-label">Skip</span>
+      </div>
+    </div>
+    <button class="l2-exit"><span class="kbd">Esc</span> Exit</button>
+  </div>
+</section>
+
+<!-- ============ LAYOUT 3 ============ -->
+<section class="stage" data-stage="3">
+  <div class="photo"></div>
+  <div class="progress">3 <span class="tot">/ 120</span></div>
+  <div class="caption">Knight among flowers</div>
+
+  <div class="l3-bar">
+    <button class="seg">
+      <span class="seg-key">←</span>
+      <span class="seg-glyph glyph"></span>
+      <span class="seg-label">Trash</span>
+    </button>
+    <button class="seg">
+      <span class="seg-key">↑</span>
+      <span class="seg-glyph glyph"></span>
+      <span class="seg-label">Collection</span>
+    </button>
+    <button class="seg">
+      <span class="seg-key">→</span>
+      <span class="seg-glyph glyph"></span>
+      <span class="seg-label">Skip</span>
+    </button>
+    <button class="seg exit">
+      <span class="seg-key">Esc</span>
+      <span class="seg-glyph glyph"></span>
+      <span class="seg-label">Exit</span>
+    </button>
+  </div>
+</section>
+
+<!-- ============ LAYOUT 4 ============ -->
+<section class="stage" data-stage="4">
+  <div class="photo"></div>
+  <div class="progress">3 <span class="tot">/ 120</span></div>
+  <div class="caption">Knight among flowers</div>
+
+  <div class="l4-row">
+    <button class="cap"><span class="cap-key">←</span><span class="cap-label">Trash</span></button>
+    <button class="cap"><span class="cap-key">↑</span><span class="cap-label">Collection</span></button>
+    <button class="cap"><span class="cap-key">→</span><span class="cap-label">Skip</span></button>
+    <button class="cap exit"><span class="cap-key">Esc</span><span class="cap-label">Exit</span></button>
+  </div>
+</section>
+
+<!-- ============ LAYOUT 5 ============ -->
+<section class="stage" data-stage="5">
+  <div class="photo"></div>
+  <div class="progress">3 <span class="tot">/ 120</span></div>
+  <div class="caption">Knight among flowers</div>
+
+  <div class="l5-dock">
+    <button class="dock-btn">
+      <span class="dock-ico"><span class="glyph" data-ic="trash"></span><span class="mini-key">←</span></span>
+      <span class="dock-text">Trash</span>
+    </button>
+    <button class="dock-btn">
+      <span class="dock-ico"><span class="glyph" data-ic="coll"></span><span class="mini-key">↑</span></span>
+      <span class="dock-text">Add to collection</span>
+    </button>
+    <button class="dock-btn">
+      <span class="dock-ico"><span class="glyph" data-ic="skip"></span><span class="mini-key">→</span></span>
+      <span class="dock-text">Skip</span>
+    </button>
+    <button class="dock-btn exit">
+      <span class="dock-ico"><span class="glyph" data-ic="exit"></span></span>
+      <span class="dock-text">Exit · Esc</span>
+    </button>
+  </div>
+  <div class="l5-note">Center stays clear — actions dock to the right rail</div>
+</section>
+
+<div class="hintline">Press 1–5 or click the tabs to switch layouts · hover the buttons</div>
+
+<script>
+  const META = {
+    1: { name: "1 · Edge-mapped", why: "Splits the four actions to the screen edges so each sits where its arrow physically points — Trash hugs the left, Skip the right, Collection the bottom, Exit tucked top-right. Teaches the arrow muscle-memory by position; trades the tidy single bar for spatial meaning." },
+    2: { name: "2 · Arrow d-pad", why: "Collapses the keys into a literal directional cross that mirrors the arrow cluster on the keyboard, with labels beneath each cap and Esc parked below. Most 'gamepad', fastest to map keys → actions; very compact and centered." },
+    3: { name: "3 · Segmented console", why: "One solid frosted bar divided into equal icon-over-label segments with a small keycap in each corner. Reads as a deliberate desktop control, not floating chips — calmer and more structured, scales cleanly if a fifth action is added." },
+    4: { name: "4 · Minimal keycaps", why: "Just the keycaps as big frosted tiles; labels fade in on hover. Keeps the image the hero and the chrome near-invisible, betting the user already knows ←/↑/→. Cleanest, most confident, least hand-holding." },
+    5: { name: "5 · Vertical dock", why: "An icon-forward toolbar docked to the right rail, labels sliding out on hover, keycaps as small badges. Frees the bottom-center entirely and feels like a persistent tool palette — good if you later add more actions or a scrubber below." },
+  };
+
+  const ARROWS = { trash: "trash", coll: "coll", skip: "skip", exit: "exit" };
+
+  function iconSVG(id, size) {
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-${id}"/></svg>`;
+  }
+
+  // Fill segmented-console glyphs (layout 3) in order trash/coll/skip/exit
+  (function () {
+    const order = ["trash","coll","skip","exit"];
+    document.querySelectorAll('[data-stage="3"] .seg .seg-glyph').forEach((el, i) => {
+      el.innerHTML = iconSVG(order[i], 19);
+    });
+    // Layout 5 dock glyphs
+    document.querySelectorAll('[data-stage="5"] .glyph[data-ic]').forEach((el) => {
+      el.innerHTML = iconSVG(el.getAttribute('data-ic'), 21);
+    });
+  })();
+
+  const tabs = document.querySelectorAll('.tab');
+  const stages = document.querySelectorAll('.stage');
+  const meta = document.getElementById('meta');
+
+  function show(i) {
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.i === String(i)));
+    stages.forEach((s) => s.classList.toggle('show', s.dataset.stage === String(i)));
+    meta.innerHTML = `<div class="name">${META[i].name}</div><div class="why">${META[i].why}</div>`;
+  }
+
+  tabs.forEach((t) => t.addEventListener('click', () => show(Number(t.dataset.i))));
+  window.addEventListener('keydown', (e) => {
+    if (e.key >= '1' && e.key <= '5') show(Number(e.key));
+  });
+
+  show(1);
+</script>
+</body>
+</html>
