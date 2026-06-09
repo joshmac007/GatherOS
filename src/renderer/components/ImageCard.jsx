@@ -89,6 +89,16 @@ export default function ImageCard({
   const isTweet = record.kind === 'tweet' && !!tweetMeta;
   const tweetImageCount = Array.isArray(tweetMeta?.imageUrls) ? tweetMeta.imageUrls.length : 0;
 
+  // True when there's a live (non-collapsed) text selection anchored
+  // inside this card — used to suppress the open-on-click that would
+  // otherwise fire at the end of a highlight drag.
+  const hasSelectionInCard = () => {
+    const sel = typeof window !== 'undefined' ? window.getSelection?.() : null;
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) return false;
+    const node = sel.anchorNode;
+    return !!(node && wrapperRef.current && wrapperRef.current.contains(node));
+  };
+
   // Capture `fresh` at mount and keep it. The parent clears the fresh
   // flag ~1.5s after a save lands; if we drove the class off the live
   // prop, removing `.fresh` would revert the card's animation to the
@@ -212,8 +222,18 @@ export default function ImageCard({
         isPending && styles.cardPending,
       ].filter(Boolean).join(' ')}
       style={staggerMs ? { '--card-stagger': `${staggerMs}ms` } : undefined}
-      onClick={isPending ? undefined : (e) => onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey)}
-      onDoubleClick={isPending ? undefined : () => onOpen(record)}
+      onClick={isPending ? undefined : (e) => {
+        // The click that ends a tweet-text selection drag must not open
+        // the card. If there's a live, non-empty selection inside this
+        // card, swallow the click; a fresh click collapses the selection
+        // on mousedown first, so opening still works normally.
+        if (isTweet && hasSelectionInCard()) return;
+        onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey);
+      }}
+      onDoubleClick={isPending ? undefined : () => {
+        if (isTweet && hasSelectionInCard()) return;
+        onOpen(record);
+      }}
       onMouseEnter={isPending ? undefined : () => onHover?.(record.id)}
       onMouseLeave={isPending ? undefined : () => onHover?.(null, record.id)}
       onContextMenu={isPending ? undefined : (e) => {
