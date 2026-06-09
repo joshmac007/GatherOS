@@ -238,7 +238,7 @@ export default function Grid({
         <button
           type="button"
           className={styles.emptyAction}
-          onClick={() => window.moodmark?.shell?.openUrl?.('https://gatheros.co/extension')}
+          onClick={() => window.moodmark?.shell?.openUrl?.('https://chromewebstore.google.com/detail/gatheros/jflmnonpoapjncoeankehcmenldecojk')}
         >
           <Chrome size={16} strokeWidth={1.8} aria-hidden="true" />
           Get the Chrome extension
