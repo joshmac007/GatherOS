@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Saving text tweets — grid & focused view</title>
+<style>
+  :root {
+    --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+    /* Light app surface (the grid lives here) */
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.14);
+    --ink: #16161a;
+    --ink-2: rgba(0,0,0,0.55);
+    --ink-3: rgba(0,0,0,0.4);
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.05);
+
+    /* Dark stage (focused view lives here) */
+    --stage: #0c0c0e;
+    --d-surface: rgba(255,255,255,0.05);
+    --d-border: rgba(255,255,255,0.1);
+    --d-border-strong: rgba(255,255,255,0.16);
+    --d-ink: rgba(255,255,255,0.92);
+    --d-ink-2: rgba(255,255,255,0.6);
+    --d-ink-3: rgba(255,255,255,0.4);
+
+    --x-blue: #1d9bf0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: #050506; color: var(--ink); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
+
+  /* ── Tabs ───────────────────────────────────────────── */
+  .tabs {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: flex; align-items: center; gap: 4px; padding: 10px 14px;
+    background: rgba(10,10,11,0.9); backdrop-filter: blur(20px);
+    border-bottom: 0.5px solid var(--d-border); overflow-x: auto;
+  }
+  .tabs h1 { font-size: 12.5px; font-weight: 600; color: #fff; margin: 0 14px 0 4px; white-space: nowrap; }
+  .tab { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+    background: transparent; border: 0.5px solid transparent; color: var(--d-ink-2); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; transition: .15s; }
+  .tab:hover { background: var(--d-surface); color: #fff; }
+  .tab.active { background: var(--d-surface); border-color: var(--d-border-strong); color: #fff; }
+  .tab .num { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; background: rgba(255,255,255,0.12); font-family: var(--mono); font-size: 11px; }
+
+  .meta { position: fixed; top: 53px; left: 0; right: 0; z-index: 40; padding: 12px 18px 13px;
+    background: rgba(10,10,11,0.92); backdrop-filter: blur(12px); border-bottom: 0.5px solid var(--d-border); }
+  .meta .name { font-size: 13.5px; font-weight: 600; color: #fff; }
+  .meta .why { font-size: 12.5px; color: var(--d-ink-2); margin-top: 3px; max-width: 880px; line-height: 1.5; }
+
+  .panel { display: none; position: fixed; inset: 0; top: 116px; overflow-y: auto; }
+  .panel.show { display: block; }
+
+  .block-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
+  .dark .block-label { color: var(--d-ink-3); }
+
+  /* Grid block (light) */
+  .grid-block { background: var(--bg); padding: 26px 28px 34px; }
+  .masonry { column-count: 4; column-gap: 16px; max-width: 1100px; }
+  @media (max-width: 900px){ .masonry { column-count: 3; } }
+  @media (max-width: 640px){ .masonry { column-count: 2; } }
+  .masonry > * { break-inside: avoid; margin-bottom: 16px; width: 100%; display: block; }
+
+  .ph { border-radius: var(--radius); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); }
+  .g1 { height: 220px; background: linear-gradient(150deg,#c7d6e6,#8fa9c9); }
+  .g2 { height: 150px; background: linear-gradient(150deg,#e8d6c7,#c9a98f); }
+  .g3 { height: 280px; background: linear-gradient(150deg,#d3c7e6,#a98fc9); }
+  .g4 { height: 180px; background: linear-gradient(150deg,#c7e6d6,#8fc9a9); }
+  .g5 { height: 240px; background: linear-gradient(150deg,#e6c7d8,#c98fb0); }
+  .g6 { height: 160px; background: linear-gradient(150deg,#d9d9dc,#b0b0b6); }
+
+  /* Stage block (dark) */
+  .stage-block { background: var(--stage); padding: 26px 28px 60px; min-height: 520px; }
+
+  /* ── Shared tweet atoms ─────────────────────────────── */
+  .x-logo { width: 1em; height: 1em; fill: currentColor; display: inline-block; vertical-align: -0.12em; }
+  .verified { width: 15px; height: 15px; flex: none; }
+  .verified .seal { fill: var(--x-blue); }
+  .verified.mono .seal { fill: var(--ink-3); }
+  .dark .verified.mono .seal { fill: var(--d-ink-3); }
+  .verified .tick { fill: #fff; }
+
+  .avatar { flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; letter-spacing: -0.02em; }
+  .av-pg { background: linear-gradient(140deg,#52647f,#2b3a52); }
+  .av-nv { background: linear-gradient(140deg,#6f5683,#392a4f); }
+
+  .eng { display: inline-flex; align-items: center; gap: 5px; color: inherit; }
+  .eng svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .eng b { font-weight: 600; }
+
+  /* ============================================================
+     DIRECTION 1 — Faithful tweet card (embed replica)
+     ============================================================ */
+  .t1-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 13px 14px 12px; cursor: pointer; transition: .15s; }
+  .t1-card:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+  .t1-head { display: flex; align-items: center; gap: 9px; }
+  .t1-head .avatar { width: 36px; height: 36px; font-size: 13px; }
+  .t1-id { min-width: 0; line-height: 1.2; }
+  .t1-name { display: flex; align-items: center; gap: 3px; font-weight: 700; font-size: 14px; }
+  .t1-handle { color: var(--ink-3); font-size: 13px; }
+  .t1-x { margin-left: auto; color: var(--ink-3); font-size: 17px; }
+  .t1-text { font-size: 14.5px; line-height: 1.42; margin: 10px 0 11px; letter-spacing: -0.003em; }
+  .t1-foot { display: flex; align-items: center; gap: 16px; color: var(--ink-3); font-size: 12px; }
+  .t1-time { color: var(--ink-3); font-size: 12px; margin: 0 0 10px; }
+
+  /* Focused (dir 1): big tweet card on a dark stage + side rail */
+  .fv { display: grid; grid-template-columns: 1fr 300px; gap: 0; max-width: 1040px; margin: 0 auto;
+    background: rgba(255,255,255,0.02); border: 0.5px solid var(--d-border); border-radius: 16px; overflow: hidden; }
+  .fv-main { display: flex; align-items: center; justify-content: center; padding: 40px; }
+  .fv-rail { background: rgba(20,20,22,0.6); border-left: 0.5px solid var(--d-border); padding: 20px 18px; color: var(--d-ink); }
+  .fv-rail .row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 9px 0; border-bottom: 0.5px solid var(--d-border); }
+  .fv-rail .row span:first-child { color: var(--d-ink-3); }
+  .fv-rail .actions { display: flex; gap: 8px; margin-top: 16px; }
+  .fv-rail .actions button { flex: 1; padding: 8px; border-radius: 8px; border: 0.5px solid var(--d-border-strong);
+    background: var(--d-surface); color: var(--d-ink); font: inherit; font-size: 12px; cursor: pointer; }
+  .fv-rail .actions button:hover { background: rgba(255,255,255,0.1); }
+  .fv-rail h4 { margin: 0 0 4px; font-size: 13px; }
+  .fv-rail .open { width: 100%; margin-top: 10px; padding: 9px; border-radius: 8px; border: none;
+    background: #fff; color: #000; font: inherit; font-weight: 600; font-size: 12.5px; cursor: pointer; }
+
+  .big-tweet { width: 100%; max-width: 540px; background: #fff; color: #16161a; border-radius: 16px; padding: 22px 24px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
+  .big-tweet .bt-head { display: flex; align-items: center; gap: 11px; }
+  .big-tweet .avatar { width: 48px; height: 48px; font-size: 17px; }
+  .big-tweet .bt-name { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 4px; }
+  .big-tweet .bt-handle { color: var(--ink-3); font-size: 14px; }
+  .big-tweet .bt-x { margin-left: auto; font-size: 22px; color: var(--ink); }
+  .big-tweet .bt-text { font-size: 21px; line-height: 1.38; margin: 16px 0 14px; letter-spacing: -0.01em; }
+  .big-tweet .bt-time { color: var(--ink-3); font-size: 13.5px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .big-tweet .bt-foot { display: flex; gap: 26px; padding-top: 13px; color: var(--ink-2); font-size: 13.5px; }
+
+  /* ============================================================
+     DIRECTION 2 — Typographic quote poster
+     ============================================================ */
+  .t2-card { position: relative; border-radius: var(--radius); padding: 20px 18px 16px; color: #fff; cursor: pointer;
+    overflow: hidden; box-shadow: var(--shadow); min-height: 150px; display: flex; flex-direction: column; justify-content: space-between; transition: .15s; }
+  .t2-card:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
+  .t2-a { background: radial-gradient(120% 120% at 80% 0%, #3a4a6b, #14161f); }
+  .t2-b { background: radial-gradient(120% 120% at 0% 100%, #5a3a52, #1a1320); }
+  .t2-quote { font-family: var(--serif); font-size: 18px; line-height: 1.34; letter-spacing: -0.01em; }
+  .t2-card.small .t2-quote { font-size: 20px; }
+  .t2-attr { display: flex; align-items: center; gap: 7px; margin-top: 16px; font-size: 12px; color: rgba(255,255,255,0.72); }
+  .t2-attr .x-logo { font-size: 13px; opacity: 0.8; }
+
+  .fv2-stage { display: flex; align-items: center; justify-content: center; }
+  .poster { position: relative; width: min(720px, 92%); aspect-ratio: 16/9; border-radius: 18px; overflow: hidden;
+    background: radial-gradient(130% 130% at 75% 10%, #3a4a6b, #0f111a);
+    box-shadow: 0 40px 100px rgba(0,0,0,0.6); display: flex; flex-direction: column; justify-content: center; padding: 8% 9%; color: #fff; }
+  .poster .pq { font-family: var(--serif); font-size: clamp(22px, 3.6vw, 38px); line-height: 1.3; letter-spacing: -0.015em; }
+  .poster .pa { display: flex; align-items: center; gap: 10px; margin-top: 28px; font-size: 15px; color: rgba(255,255,255,0.8); }
+  .poster .pa .avatar { width: 34px; height: 34px; font-size: 12px; }
+
+  /* ============================================================
+     DIRECTION 3 — Minimal notecard
+     ============================================================ */
+  .t3-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 15px 13px;
+    cursor: pointer; transition: .15s; }
+  .t3-card:hover { border-color: var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+  .t3-text { font-size: 14px; line-height: 1.5; color: var(--ink); letter-spacing: -0.003em; }
+  .t3-foot { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--ink-3); }
+  .t3-foot .x-logo { font-size: 12px; }
+  .t3-foot .dot { width: 2px; height: 2px; border-radius: 50%; background: var(--ink-3); }
+
+  .fv3-stage { display: flex; align-items: center; justify-content: center; }
+  .notecard { width: min(620px, 92%); background: #fff; color: #16161a; border-radius: 16px; padding: 46px 48px 36px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
+  .notecard .nq { font-size: 24px; line-height: 1.5; letter-spacing: -0.01em; }
+  .notecard .nf { display: flex; align-items: center; gap: 9px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border);
+    font-size: 13.5px; color: var(--ink-2); }
+  .notecard .nf .avatar { width: 28px; height: 28px; font-size: 11px; }
+  .notecard .nf .x-logo { margin-left: auto; font-size: 16px; color: var(--ink-3); }
+
+  /* ============================================================
+     DIRECTION 4 — Screenshot-style (chrome-rich, on tint)
+     ============================================================ */
+  .t4-card { border-radius: var(--radius); padding: 12px; cursor: pointer; transition: .15s;
+    background: linear-gradient(160deg, #eef2f7, #dfe6ef); box-shadow: var(--shadow); }
+  .t4-card.b { background: linear-gradient(160deg, #f3eef7, #e7dfef); }
+  .t4-card:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+  .t4-shot { background: #fff; border-radius: 9px; padding: 13px 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+  .t4-head { display: flex; align-items: center; gap: 9px; }
+  .t4-head .avatar { width: 34px; height: 34px; font-size: 12px; }
+  .t4-name { font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 3px; line-height: 1.15; }
+  .t4-handle { color: var(--ink-3); font-size: 12.5px; }
+  .t4-x { margin-left: auto; font-size: 16px; }
+  .t4-text { font-size: 14px; line-height: 1.4; margin: 9px 0 11px; }
+  .t4-foot { display: flex; gap: 14px; color: var(--ink-3); font-size: 11.5px; padding-top: 9px; border-top: 1px solid var(--border); }
+
+  .fv4-stage { display: flex; align-items: center; justify-content: center; }
+  .shot-lg { width: min(560px, 92%); background: #fff; color: #16161a; border-radius: 18px; padding: 26px 28px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 40px 110px rgba(40,80,160,0.28), 0 30px 80px rgba(0,0,0,0.5); }
+  .shot-lg .sh-head { display: flex; align-items: center; gap: 12px; }
+  .shot-lg .avatar { width: 50px; height: 50px; font-size: 18px; }
+  .shot-lg .sh-name { font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 5px; }
+  .shot-lg .sh-handle { color: var(--ink-3); font-size: 15px; }
+  .shot-lg .sh-x { margin-left: auto; font-size: 24px; }
+  .shot-lg .sh-text { font-size: 20px; line-height: 1.4; margin: 16px 0 16px; letter-spacing: -0.008em; }
+  .shot-lg .sh-time { color: var(--ink-3); font-size: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .shot-lg .sh-foot { display: flex; gap: 30px; padding-top: 14px; color: var(--ink-2); font-size: 14px; }
+
+  /* ============================================================
+     DIRECTION 5 — Hybrid media + text tile
+     ============================================================ */
+  .t5-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    box-shadow: var(--shadow); cursor: pointer; transition: .15s; }
+  .t5-card:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+  .t5-media { height: 150px; background: linear-gradient(150deg,#9bb4d6,#5d7aa6); position: relative; }
+  .t5-media .badge { position: absolute; bottom: 8px; left: 8px; width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(255,255,255,0.55); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; color: #111; font-size: 13px; }
+  .t5-body { padding: 11px 13px 13px; }
+  .t5-attr { display: flex; align-items: center; gap: 7px; }
+  .t5-attr .avatar { width: 22px; height: 22px; font-size: 9px; }
+  .t5-attr .nm { font-weight: 600; font-size: 12.5px; }
+  .t5-attr .hd { color: var(--ink-3); font-size: 11.5px; }
+  .t5-text { font-size: 13.5px; line-height: 1.42; margin-top: 8px; color: var(--ink); }
+  .t5-textonly .t5-media { display: none; }
+
+  .fv5 { display: grid; grid-template-columns: 1fr 320px; gap: 0; max-width: 1080px; margin: 0 auto;
+    background: rgba(255,255,255,0.02); border: 0.5px solid var(--d-border); border-radius: 16px; overflow: hidden; min-height: 440px; }
+  .fv5-main { display: flex; align-items: center; justify-content: center; padding: 30px;
+    background: radial-gradient(120% 80% at 50% 0%, #16161b, #0c0c0e); }
+  .fv5-media { width: 100%; max-width: 560px; aspect-ratio: 4/3; border-radius: 12px; background: linear-gradient(150deg,#9bb4d6,#5d7aa6);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
+  .fv5-rail { background: rgba(20,20,22,0.6); border-left: 0.5px solid var(--d-border); padding: 22px 20px; color: var(--d-ink); }
+  .fv5-tweet { border: 0.5px solid var(--d-border); border-radius: 12px; padding: 14px; background: rgba(255,255,255,0.03); }
+  .fv5-tweet .h { display: flex; align-items: center; gap: 9px; }
+  .fv5-tweet .avatar { width: 32px; height: 32px; font-size: 12px; }
+  .fv5-tweet .nm { font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 3px; }
+  .fv5-tweet .hd { color: var(--d-ink-3); font-size: 12.5px; }
+  .fv5-tweet .x { margin-left: auto; color: var(--d-ink-2); font-size: 15px; }
+  .fv5-tweet .tx { font-size: 14px; line-height: 1.45; margin: 11px 0 12px; color: var(--d-ink); }
+  .fv5-tweet .ft { display: flex; gap: 16px; color: var(--d-ink-3); font-size: 12px; padding-top: 11px; border-top: 0.5px solid var(--d-border); }
+  .fv5-open { width: 100%; margin-top: 16px; padding: 9px; border-radius: 8px; border: none; background: #fff; color: #000;
+    font: inherit; font-weight: 600; font-size: 12.5px; cursor: pointer; }
+
+  .stage-note { text-align: center; color: var(--d-ink-3); font-size: 12px; margin-top: 22px; }
+  .hint { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.4); font-size: 11px; z-index: 60; }
+</style>
+</head>
+<body>
+
+<nav class="tabs">
+  <h1>Saving text tweets</h1>
+  <button class="tab active" data-i="1"><span class="num">1</span> Tweet card</button>
+  <button class="tab" data-i="2"><span class="num">2</span> Quote poster</button>
+  <button class="tab" data-i="3"><span class="num">3</span> Minimal notecard</button>
+  <button class="tab" data-i="4"><span class="num">4</span> Screenshot style</button>
+  <button class="tab" data-i="5"><span class="num">5</span> Hybrid media + text</button>
+</nav>
+<div class="meta" id="meta"></div>
+
+<!-- shared svg defs -->
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M17.53 3h2.97l-6.49 7.41L21.75 21h-5.97l-4.68-6.12L5.74 21H2.77l6.94-7.93L2.25 3h6.12l4.23 5.59L17.53 3Zm-1.04 16.2h1.64L7.6 4.71H5.83L16.49 19.2Z"/></symbol>
+  <symbol id="seal" viewBox="0 0 22 22"><path class="seal" d="M11 1.6l2.1 1.5 2.6-.2 1 2.4 2.4 1-.2 2.6 1.5 2.1-1.5 2.1.2 2.6-2.4 1-1 2.4-2.6-.2L11 20.4l-2.1-1.5-2.6.2-1-2.4-2.4-1 .2-2.6L1.6 11l1.5-2.1-.2-2.6 2.4-1 1-2.4 2.6.2L11 1.6Z"/><path class="tick" d="M9.6 14.2l-2.7-2.7 1.2-1.2 1.5 1.5 3.8-3.8 1.2 1.2-5 5Z"/></symbol>
+</defs></svg>
+
+<!-- ============ DIRECTION 1 ============ -->
+<section class="panel show" data-p="1">
+  <div class="grid-block">
+    <p class="block-label">In the grid</p>
+    <div class="masonry">
+      <div class="ph g1"></div>
+      <div class="t1-card">
+        <div class="t1-head">
+          <span class="avatar av-pg">PG</span>
+          <span class="t1-id">
+            <span class="t1-name">Paul Graham <svg class="verified"><use href="#seal"/></svg></span>
+            <span class="t1-handle">@paulg</span>
+          </span>
+          <span class="t1-x"><svg class="x-logo"><use href="#x"/></svg></span>
+        </div>
+        <p class="t1-text">The most successful founders I know are relentlessly resourceful. They don't wait for permission or perfect conditions — they find a way through whatever's in front of them.</p>
+        <div class="t1-foot">
+          <span class="eng"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.3 8.4 8.4 0 0 1-3.8-.9L3 21l2.1-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg> 312</span>
+          <span class="eng"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg> 1.2K</span>
+          <span class="eng"><svg viewBox="0 0 24 24"><path d="M20.8 5.6a5.4 5.4 0 0 0-7.7 0L12 6.7l-1.1-1.1A5.4 5.4 0 1 0 3.2 13l8.8 8.4 8.8-8.4a5.4 5.4 0 0 0 0-7.4Z"/></svg> 8.4K</span>
+        </div>
+      </div>
+      <div class="ph g4"></div>
+      <div class="ph g6"></div>
+      <div class="t1-card">
+        <div class="t1-head">
+          <span class="avatar av-nv">N</span>
+          <span class="t1-id">
+            <span class="t1-name">Naval <svg class="verified"><use href="#seal"/></svg></span>
+            <span class="t1-handle">@naval</span>
+          </span>
+          <span class="t1-x"><svg class="x-logo"><use href="#x"/></svg></span>
+        </div>
+        <p class="t1-text">Play long-term games with long-term people.</p>
+        <div class="t1-foot">
+          <span class="eng"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.3 8.4 8.4 0 0 1-3.8-.9L3 21l2.1-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg> 540</span>
+          <span class="eng"><svg viewBox="0 0 24 24"><path d="M20.8 5.6a5.4 5.4 0 0 0-7.7 0L12 6.7l-1.1-1.1A5.4 5.4 0 1 0 3.2 13l8.8 8.4 8.8-8.4a5.4 5.4 0 0 0 0-7.4Z"/></svg> 22K</span>
+        </div>
+      </div>
+      <div class="ph g3"></div>
+      <div class="ph g2"></div>
+    </div>
+  </div>
+  <div class="stage-block dark">
+    <p class="block-label">On focused view</p>
+    <div class="fv">
+      <div class="fv-main">
+        <div class="big-tweet">
+          <div class="bt-head">
+            <span class="avatar av-pg">PG</span>
+            <span>
+              <div class="bt-name">Paul Graham <svg class="verified"><use href="#seal"/></svg></div>
+              <div class="bt-handle">@paulg</div>
+            </span>
+            <span class="bt-x"><svg class="x-logo"><use href="#x"/></svg></span>
+          </div>
+          <p class="bt-text">The most successful founders I know are relentlessly resourceful. They don't wait for permission or perfect conditions — they find a way through whatever's in front of them.</p>
+          <div class="bt-time">2:14 PM · Jun 4, 2026 · 482K views</div>
+          <div class="bt-foot">
+            <span class="eng"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.3 8.4 8.4 0 0 1-3.8-.9L3 21l2.1-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg> <b>312</b></span>
+            <span class="eng"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg> <b>1.2K</b></span>
+            <span class="eng"><svg viewBox="0 0 24 24"><path d="M20.8 5.6a5.4 5.4 0 0 0-7.7 0L12 6.7l-1.1-1.1A5.4 5.4 0 1 0 3.2 13l8.8 8.4 8.8-8.4a5.4 5.4 0 0 0 0-7.4Z"/></svg> <b>8.4K</b></span>
+          </div>
+        </div>
+      </div>
+      <div class="fv-rail">
+        <h4>Saved tweet</h4>
+        <div class="row"><span>Author</span><span>@paulg</span></div>
+        <div class="row"><span>Posted</span><span>Jun 4, 2026</span></div>
+        <div class="row"><span>Saved</span><span>2 days ago</span></div>
+        <div class="row"><span>Collection</span><span>Startup wisdom</span></div>
+        <button class="open">Open on X ↗</button>
+        <div class="actions">
+          <button>Copy text</button>
+          <button>Export</button>
+        </div>
+      </div>
+    </div>
+    <p class="stage-note">Renders the tweet faithfully — avatar, verified, engagement — so it reads exactly like the source.</p>
+  </div>
+</section>
+
+<!-- ============ DIRECTION 2 ============ -->
+<section class="panel" data-p="2">
+  <div class="grid-block">
+    <p class="block-label">In the grid</p>
+    <div class="masonry">
+      <div class="ph g2"></div>
+      <div class="t2-card t2-a">
+        <p class="t2-quote">"The most successful founders I know are relentlessly resourceful. They find a way through whatever's in front of them."</p>
+        <div class="t2-attr"><svg class="x-logo"><use href="#x"/></svg> Paul Graham · @paulg</div>
+      </div>
+      <div class="ph g4"></div>
+      <div class="ph g1"></div>
+      <div class="t2-card t2-b small">
+        <p class="t2-quote">"Play long-term games with long-term people."</p>
+        <div class="t2-attr"><svg class="x-logo"><use href="#x"/></svg> Naval · @naval</div>
+      </div>
+      <div class="ph g5"></div>
+      <div class="ph g6"></div>
+    </div>
+  </div>
+  <div class="stage-block dark">
+    <p class="block-label">On focused view</p>
+    <div class="fv2-stage">
+      <div class="poster">
+        <p class="pq">"The most successful founders I know are relentlessly resourceful. They find a way through whatever's in front of them."</p>
+        <div class="pa"><span class="avatar av-pg">PG</span> Paul Graham &nbsp;·&nbsp; @paulg &nbsp;<svg class="x-logo" style="font-size:16px;opacity:.7"><use href="#x"/></svg></div>
+      </div>
+    </div>
+    <p class="stage-note">Treats the words as the artwork — a generated typographic poster, attribution kept quiet. Backgrounds vary per save so the masonry stays lively.</p>
+  </div>
+</section>
+
+<!-- ============ DIRECTION 3 ============ -->
+<section class="panel" data-p="3">
+  <div class="grid-block">
+    <p class="block-label">In the grid</p>
+    <div class="masonry">
+      <div class="ph g1"></div>
+      <div class="t3-card">
+        <p class="t3-text">The most successful founders I know are relentlessly resourceful. They don't wait for permission or perfect conditions — they find a way through whatever's in front of them.</p>
+        <div class="t3-foot"><svg class="x-logo"><use href="#x"/></svg> @paulg <span class="dot"></span> Jun 4</div>
+      </div>
+      <div class="ph g3"></div>
+      <div class="t3-card">
+        <p class="t3-text">Play long-term games with long-term people.</p>
+        <div class="t3-foot"><svg class="x-logo"><use href="#x"/></svg> @naval <span class="dot"></span> May 28</div>
+      </div>
+      <div class="ph g6"></div>
+      <div class="ph g4"></div>
+      <div class="ph g5"></div>
+    </div>
+  </div>
+  <div class="stage-block dark">
+    <p class="block-label">On focused view</p>
+    <div class="fv3-stage">
+      <div class="notecard">
+        <p class="nq">The most successful founders I know are relentlessly resourceful. They don't wait for permission or perfect conditions — they find a way through whatever's in front of them.</p>
+        <div class="nf"><span class="avatar av-pg">PG</span> Paul Graham · @paulg · Jun 4, 2026 <svg class="x-logo"><use href="#x"/></svg></div>
+      </div>
+    </div>
+    <p class="stage-note">Content-first: just the text in the app's own type, source as a quiet caption. Treats tweets like saved highlights you came to re-read.</p>
+  </div>
+</section>
+
+<!-- ============ DIRECTION 4 ============ -->
+<section class="panel" data-p="4">
+  <div class="grid-block">
+    <p class="block-label">In the grid</p>
+    <div class="masonry">
+      <div class="ph g2"></div>
+      <div class="ph g1"></div>
+      <div class="t4-card">
+        <div class="t4-shot">
+          <div class="t4-head">
+            <span class="avatar av-pg">PG</span>
+            <span><div class="t4-name">Paul Graham <svg class="verified"><use href="#seal"/></svg></div><div class="t4-handle">@paulg</div></span>
+            <span class="t4-x"><svg class="x-logo"><use href="#x"/></svg></span>
+          </div>
+          <p class="t4-text">The most successful founders I know are relentlessly resourceful. They find a way through whatever's in front of them.</p>
+          <div class="t4-foot"><span>312</span><span>1.2K</span><span>8.4K</span><span>482K views</span></div>
+        </div>
+      </div>
+      <div class="ph g4"></div>
+      <div class="t4-card b">
+        <div class="t4-shot">
+          <div class="t4-head">
+            <span class="avatar av-nv">N</span>
+            <span><div class="t4-name">Naval <svg class="verified"><use href="#seal"/></svg></div><div class="t4-handle">@naval</div></span>
+            <span class="t4-x"><svg class="x-logo"><use href="#x"/></svg></span>
+          </div>
+          <p class="t4-text">Play long-term games with long-term people.</p>
+          <div class="t4-foot"><span>540</span><span>22K</span></div>
+        </div>
+      </div>
+      <div class="ph g6"></div>
+      <div class="ph g3"></div>
+    </div>
+  </div>
+  <div class="stage-block dark">
+    <p class="block-label">On focused view</p>
+    <div class="fv4-stage">
+      <div class="shot-lg">
+        <div class="sh-head">
+          <span class="avatar av-pg">PG</span>
+          <span><div class="sh-name">Paul Graham <svg class="verified"><use href="#seal"/></svg></div><div class="sh-handle">@paulg</div></span>
+          <span class="sh-x"><svg class="x-logo"><use href="#x"/></svg></span>
+        </div>
+        <p class="sh-text">The most successful founders I know are relentlessly resourceful. They don't wait for permission or perfect conditions — they find a way through whatever's in front of them.</p>
+        <div class="sh-time">2:14 PM · Jun 4, 2026</div>
+        <div class="sh-foot">
+          <span class="eng"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.3 8.4 8.4 0 0 1-3.8-.9L3 21l2.1-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg> <b>312</b></span>
+          <span class="eng"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg> <b>1.2K</b></span>
+          <span class="eng"><svg viewBox="0 0 24 24"><path d="M20.8 5.6a5.4 5.4 0 0 0-7.7 0L12 6.7l-1.1-1.1A5.4 5.4 0 1 0 3.2 13l8.8 8.4 8.8-8.4a5.4 5.4 0 0 0 0-7.4Z"/></svg> <b>8.4K</b></span>
+        </div>
+      </div>
+    </div>
+    <p class="stage-note">The "screenshot people actually share" look — full chrome on a soft tinted halo. High-fidelity and social; sits on its own backdrop rather than bleeding into the stage.</p>
+  </div>
+</section>
+
+<!-- ============ DIRECTION 5 ============ -->
+<section class="panel" data-p="5">
+  <div class="grid-block">
+    <p class="block-label">In the grid</p>
+    <div class="masonry">
+      <div class="ph g1"></div>
+      <div class="t5-card">
+        <div class="t5-media"><span class="badge"><svg class="x-logo"><use href="#x"/></svg></span></div>
+        <div class="t5-body">
+          <div class="t5-attr"><span class="avatar av-pg">PG</span><span class="nm">Paul Graham</span><span class="hd">@paulg</span></div>
+          <p class="t5-text">Resourcefulness beats everything. A demo of what we shipped this week ↓</p>
+        </div>
+      </div>
+      <div class="ph g4"></div>
+      <div class="t5-card t5-textonly">
+        <div class="t5-media"></div>
+        <div class="t5-body">
+          <div class="t5-attr"><span class="avatar av-nv">N</span><span class="nm">Naval</span><span class="hd">@naval</span></div>
+          <p class="t5-text">Play long-term games with long-term people.</p>
+        </div>
+      </div>
+      <div class="ph g6"></div>
+      <div class="ph g3"></div>
+      <div class="ph g2"></div>
+    </div>
+  </div>
+  <div class="stage-block dark">
+    <p class="block-label">On focused view</p>
+    <div class="fv5">
+      <div class="fv5-main"><div class="fv5-media"></div></div>
+      <div class="fv5-rail">
+        <div class="fv5-tweet">
+          <div class="h">
+            <span class="avatar av-pg">PG</span>
+            <span><div class="nm">Paul Graham <svg class="verified mono"><use href="#seal"/></svg></div><div class="hd">@paulg</div></span>
+            <span class="x"><svg class="x-logo"><use href="#x"/></svg></span>
+          </div>
+          <p class="tx">Resourcefulness beats everything. A demo of what we shipped this week ↓</p>
+          <div class="ft"><span>312</span><span>1.2K</span><span>8.4K</span></div>
+        </div>
+        <button class="fv5-open">Open on X ↗</button>
+        <p style="color:var(--d-ink-3);font-size:11.5px;margin-top:14px;line-height:1.5">Media fills the stage like any image save; the tweet's text + meta ride in the existing detail rail. Text-only tweets just drop the media and center the card.</p>
+      </div>
+    </div>
+    <p class="stage-note">The most general — reuses the image-save stage + DetailPanel, degrading to text-only when there's no media.</p>
+  </div>
+</section>
+
+<div class="hint">press 1–5 or click the tabs · each shows the grid (light) and focused view (dark)</div>
+
+<script>
+  const META = {
+    1: { name: "1 · Faithful tweet card", why: "Renders the tweet as a real embed tile — avatar, verified badge, text, engagement counts — so a saved tweet is instantly recognizable as itself. Focused view blows the card up and adds a detail rail with author/posted/collection + open-on-X. Most legible, most 'this is a tweet'." },
+    2: { name: "2 · Quote poster", why: "Treats the words as the artwork: large serif quote on a generated gradient, attribution kept quiet at the bottom. Varying backgrounds keep the masonry visually alive next to image saves. Best when you save tweets for the idea, not the chrome — a moodboard of thoughts." },
+    3: { name: "3 · Minimal notecard", why: "Content-first and monochrome — just the text in the app's own UI font with a quiet @handle + date caption, no avatar. Dense and scannable in the grid; a calm reading card when focused. Treats tweets like saved highlights you return to re-read." },
+    4: { name: "4 · Screenshot style", why: "The look people actually share — full X chrome (verified, counts, timestamp) rendered as a crisp 'screenshot' floating on a soft tinted halo. High-fidelity and social-proof-y; reads as a deliberate capture rather than plain text." },
+    5: { name: "5 · Hybrid media + text", why: "Acknowledges most saved tweets mix an image/video with text. Media leads the card with the text as an excerpt below and an X badge; focused view puts media on the stage and the tweet text + meta in the existing detail rail. Degrades cleanly to text-only. The most general and the least new plumbing." },
+  };
+  const tabs = document.querySelectorAll('.tab');
+  const panels = document.querySelectorAll('.panel');
+  const meta = document.getElementById('meta');
+  function show(i){
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.i === String(i)));
+    panels.forEach(p => p.classList.toggle('show', p.dataset.p === String(i)));
+    meta.innerHTML = `<div class="name">${META[i].name}</div><div class="why">${META[i].why}</div>`;
+    window.scrollTo(0,0);
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(Number(t.dataset.i))));
+  window.addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '5') show(Number(e.key)); });
+  show(1);
+</script>
+</body>
+</html>
