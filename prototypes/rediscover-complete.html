@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rediscover complete — end-of-session screen</title>
+<style>
+  :root {
+    --scrim: rgba(8,8,9,0.72);
+    --glass: rgba(255,255,255,0.06);
+    --glass-2: rgba(255,255,255,0.04);
+    --glass-hi: rgba(255,255,255,0.09);
+    --hair: rgba(255,255,255,0.10);
+    --hair-2: rgba(255,255,255,0.06);
+    --text: #f3f3f4;
+    --text-2: #b9b9bf;
+    --text-3: #7e7e85;
+    --text-4: #5a5a60;
+    --accent: #e9e9ec;
+    --good: #6fd49a;
+    --warn: #e8a06a;
+    --bad: #e87f7f;
+    --kept: #7fb0e8;
+    --radius: 20px;
+    --pill: 999px;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --shadow: 0 30px 80px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.04) inset;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--sans);
+    background: #0c0c0d;
+    color: var(--text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ───────────── top tab bar ───────────── */
+  .tabbar {
+    position: fixed; z-index: 50; top: 0; left: 0; right: 0; height: 52px;
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 14px;
+    background: rgba(18,18,20,0.86);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .tabbar .brand { font-size: 12.5px; color: var(--text-3); font-weight: 600; letter-spacing: 0.02em; margin-right: 8px; white-space: nowrap; }
+  .tab {
+    appearance: none; border: 0.5px solid transparent; background: transparent;
+    color: var(--text-3); font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 7px 13px; border-radius: var(--pill); cursor: pointer; white-space: nowrap;
+    display: flex; align-items: center; gap: 8px; transition: all .15s ease;
+  }
+  .tab .n { font-variant-numeric: tabular-nums; opacity: .55; font-weight: 600; }
+  .tab:hover { color: var(--text); background: var(--glass-2); }
+  .tab.active { color: #0c0c0d; background: var(--accent); border-color: transparent; }
+  .tab.active .n { opacity: .5; }
+  .spacer { flex: 1; }
+  .hint { font-size: 11.5px; color: var(--text-4); white-space: nowrap; }
+
+  /* ───────────── stage ───────────── */
+  .stage { position: fixed; inset: 52px 0 0 0; }
+
+  /* faux blurred app behind the scrim */
+  .appbg {
+    position: absolute; inset: -40px;
+    filter: blur(26px) brightness(0.62) saturate(0.9);
+    opacity: 0.9;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    grid-auto-rows: 120px;
+    gap: 18px; padding: 40px;
+  }
+  .appbg i { border-radius: 14px; display: block; }
+  .scrim { position: absolute; inset: 0; background: radial-gradient(120% 120% at 50% 40%, rgba(8,8,9,0.55), var(--scrim) 70%); }
+
+  /* faux mac titlebar dots + toolbar pills, faint, for context */
+  .chrome { position: absolute; top: 14px; left: 18px; display: flex; gap: 8px; z-index: 2; opacity: .5; }
+  .chrome b { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .chrome b:nth-child(1){ background:#ff5f57; } .chrome b:nth-child(2){ background:#febc2e; } .chrome b:nth-child(3){ background:#28c840; }
+
+  /* caption: iteration name + rationale */
+  .caption {
+    position: absolute; z-index: 3; top: 16px; left: 50%; transform: translateX(-50%);
+    text-align: center; max-width: 640px; pointer-events: none;
+  }
+  .caption h2 { margin: 0; font-size: 13px; font-weight: 650; letter-spacing: 0.01em; color: var(--text); }
+  .caption p { margin: 4px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-3); }
+
+  /* center holder */
+  .center { position: absolute; inset: 0; display: grid; place-items: center; padding: 70px 24px 40px; z-index: 4; }
+  .panel { display: none; width: 100%; }
+  .panel.active { display: block; }
+  .panel-inner { margin: 0 auto; }
+
+  /* close button (shared, top-right of scrim) */
+  .closex {
+    position: absolute; z-index: 5; top: 18px; right: 18px;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--glass); border: 0.5px solid var(--hair);
+    display: grid; place-items: center; color: var(--text-2); cursor: pointer;
+  }
+  .closex:hover { background: var(--glass-hi); color: var(--text); }
+  .closex svg { width: 15px; height: 15px; }
+
+  /* ───────────── shared bits ───────────── */
+  .glyph-ring {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: var(--glass); border: 0.5px solid var(--hair);
+    display: grid; place-items: center; box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset;
+  }
+  .glyph-ring svg { width: 30px; height: 30px; color: var(--text); }
+  .btn {
+    appearance: none; font-family: inherit; cursor: pointer;
+    border-radius: var(--pill); font-size: 14px; font-weight: 550;
+    padding: 11px 22px; border: 0.5px solid var(--hair);
+    background: var(--glass); color: var(--text); transition: all .15s ease;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover { background: var(--glass-hi); }
+  .btn.primary { background: var(--accent); color: #0c0c0d; border-color: transparent; font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--text-3); }
+  .btn.ghost:hover { color: var(--text); background: var(--glass-2); }
+  .btn svg { width: 15px; height: 15px; }
+
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025));
+    border: 0.5px solid var(--hair);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(40px) saturate(160%);
+    -webkit-backdrop-filter: blur(40px) saturate(160%);
+  }
+
+  /* thumbnails (muted, refined gradients) */
+  .thumb { border-radius: 10px; border: 0.5px solid var(--hair-2); background-size: cover; flex: none; }
+  .t1 { background: linear-gradient(135deg,#3a4a5a,#1c242c); }
+  .t2 { background: linear-gradient(135deg,#5a4a3a,#2c241c); }
+  .t3 { background: linear-gradient(135deg,#4a3a5a,#241c2c); }
+  .t4 { background: linear-gradient(135deg,#3a5a4a,#1c2c24); }
+  .t5 { background: linear-gradient(135deg,#5a3a4a,#2c1c24); }
+  .t6 { background: linear-gradient(135deg,#4a4a4a,#222); }
+  .t7 { background: linear-gradient(135deg,#3a4a4a,#1c2424); }
+
+  .eyebrow { font-size: 11.5px; font-weight: 650; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); }
+
+  /* ════════════ 1 · CALM EDITORIAL ════════════ */
+  .calm { text-align: center; max-width: 460px; }
+  .calm .glyph-ring { margin: 0 auto 30px; }
+  .calm h1 { margin: 0; font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  .calm .stat { margin: 26px 0 8px; font-size: 15px; color: var(--text-2); line-height: 1.6; }
+  .calm .stat b { color: var(--text); font-weight: 600; }
+  .calm .meta { font-size: 12.5px; color: var(--text-4); margin-bottom: 34px; }
+  .calm .row { display: flex; gap: 10px; justify-content: center; }
+  .calm .hair { width: 40px; height: 0.5px; background: var(--hair); margin: 26px auto; }
+
+  /* ════════════ 2 · SESSION RECEIPT ════════════ */
+  .receipt { width: 380px; padding: 28px; }
+  .receipt .head { text-align: center; margin-bottom: 22px; }
+  .receipt .head .glyph-ring { width: 52px; height: 52px; margin: 0 auto 14px; }
+  .receipt .head .glyph-ring svg { width: 22px; height: 22px; }
+  .receipt .head h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .receipt .head p { margin: 5px 0 0; font-size: 12.5px; color: var(--text-3); }
+  .bar { display: flex; height: 8px; border-radius: var(--pill); overflow: hidden; margin: 4px 0 18px; gap: 2px; }
+  .bar span { display: block; }
+  .bar .s-filed { background: var(--kept); flex: 3; }
+  .bar .s-kept { background: var(--text-3); flex: 2; }
+  .bar .s-trash { background: var(--bad); flex: 2; }
+  .rows { display: flex; flex-direction: column; }
+  .rrow { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-top: 0.5px solid var(--hair-2); }
+  .rrow:first-child { border-top: none; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .rrow .lbl { font-size: 13.5px; color: var(--text-2); flex: 1; }
+  .rrow .val { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .rrow .ico { width: 26px; height: 26px; border-radius: 7px; background: var(--glass); border: 0.5px solid var(--hair-2); display: grid; place-items: center; }
+  .rrow .ico svg { width: 14px; height: 14px; color: var(--text-2); }
+  .receipt .strip { display: flex; gap: 6px; margin: 18px 0 22px; }
+  .receipt .strip .thumb { width: 100%; aspect-ratio: 1; }
+  .receipt .foot { display: flex; gap: 8px; }
+  .receipt .foot .btn { flex: 1; justify-content: center; }
+  .receipt .time { text-align: center; font-size: 12px; color: var(--text-4); margin-top: 4px; }
+
+  /* ════════════ 3 · MILESTONE ════════════ */
+  .mile { width: 420px; padding: 0; overflow: hidden; }
+  .mile .top {
+    padding: 38px 32px 30px; text-align: center; position: relative;
+    background:
+      radial-gradient(140% 120% at 50% -10%, rgba(255,255,255,0.10), transparent 60%);
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .medal {
+    width: 86px; height: 86px; margin: 0 auto 20px; border-radius: 50%;
+    background: conic-gradient(from 220deg, #2a2a2e, #4a4a52, #2a2a2e, #57575f, #2a2a2e);
+    padding: 2px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .medal .inner { width: 100%; height: 100%; border-radius: 50%; background: #161618; display: grid; place-items: center; border: 0.5px solid var(--hair); }
+  .medal svg { width: 36px; height: 36px; color: #e7e7ea; }
+  .mile h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+  .mile .sub { margin: 7px 0 0; font-size: 13px; color: var(--text-3); }
+  .streak { display: inline-flex; align-items: center; gap: 7px; margin-top: 16px; padding: 6px 13px; border-radius: var(--pill); background: var(--glass); border: 0.5px solid var(--hair); font-size: 12.5px; color: var(--text-2); }
+  .streak svg { width: 13px; height: 13px; color: var(--warn); }
+  .mile .bottom { padding: 22px 32px 28px; }
+  .mile .barlabel { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-3); margin-bottom: 9px; }
+  .mile .barlabel b { color: var(--text); font-weight: 600; }
+  .track { height: 6px; border-radius: var(--pill); background: var(--glass); overflow: hidden; }
+  .track i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg,#9a9aa2,#e7e7ea); border-radius: var(--pill); }
+  .spark { display: flex; align-items: flex-end; gap: 5px; height: 40px; margin: 20px 0 22px; }
+  .spark i { flex: 1; background: var(--glass-hi); border-radius: 3px 3px 0 0; }
+  .spark i.now { background: var(--accent); }
+  .mile .foot { display: flex; gap: 8px; }
+  .mile .foot .btn { flex: 1; justify-content: center; }
+
+  /* ════════════ 4 · WHAT'S NEXT HUB ════════════ */
+  .hub { width: 560px; }
+  .hub .hdr { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; padding: 0 4px; }
+  .hub .hdr .glyph-ring { width: 48px; height: 48px; flex: none; }
+  .hub .hdr .glyph-ring svg { width: 20px; height: 20px; }
+  .hub .hdr h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .hub .hdr p { margin: 3px 0 0; font-size: 12.5px; color: var(--text-3); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .acard {
+    text-align: left; padding: 16px; border-radius: 14px; cursor: pointer;
+    background: var(--glass); border: 0.5px solid var(--hair); transition: all .15s ease;
+    display: flex; flex-direction: column; gap: 10px; min-height: 104px;
+  }
+  .acard:hover { background: var(--glass-hi); transform: translateY(-1px); }
+  .acard .ai { width: 34px; height: 34px; border-radius: 9px; background: var(--glass-2); border: 0.5px solid var(--hair-2); display: grid; place-items: center; }
+  .acard .ai svg { width: 17px; height: 17px; color: var(--text); }
+  .acard h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .acard p { margin: 2px 0 0; font-size: 12px; color: var(--text-3); line-height: 1.4; }
+  .acard.span2 { grid-column: span 2; flex-direction: row; align-items: center; min-height: 0; }
+  .acard.span2 .txt { flex: 1; }
+  .acard .badge { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--text); background: var(--glass-2); border: 0.5px solid var(--hair); padding: 3px 9px; border-radius: var(--pill); }
+  .acard.primary { background: var(--accent); border-color: transparent; }
+  .acard.primary h3, .acard.primary p { color: #0c0c0d; }
+  .acard.primary p { opacity: .7; }
+  .acard.primary .ai { background: rgba(0,0,0,0.08); border-color: rgba(0,0,0,0.12); }
+  .acard.primary .ai svg { color: #0c0c0d; }
+  .hub .footrow { display: flex; justify-content: center; margin-top: 16px; }
+
+  /* ════════════ 5 · CONTACT-SHEET RECAP ════════════ */
+  .recap { width: 620px; padding: 26px 26px 22px; }
+  .recap .rhead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .recap .rhead h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+  .recap .rhead .small { font-size: 12.5px; color: var(--text-3); }
+  .recap > .sub { font-size: 13px; color: var(--text-3); margin: 0 0 20px; }
+  .cols { display: grid; grid-template-columns: 3fr 2fr 2fr; gap: 16px; }
+  .col .ctitle { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
+  .col .ctitle .cd { width: 8px; height: 8px; border-radius: 50%; }
+  .col .ctitle span { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+  .col .ctitle .ct { margin-left: auto; font-size: 12px; color: var(--text-4); font-variant-numeric: tabular-nums; }
+  .sheet { display: grid; gap: 7px; }
+  .sheet.c3 { grid-template-columns: repeat(3, 1fr); }
+  .sheet.c2 { grid-template-columns: repeat(2, 1fr); }
+  .sheet .thumb { aspect-ratio: 1; position: relative; overflow: hidden; cursor: pointer; transition: transform .15s ease; }
+  .sheet .thumb:hover { transform: scale(1.03); }
+  .sheet .thumb.trashed { filter: grayscale(1) brightness(0.6); }
+  .sheet .thumb .x { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,0.7); }
+  .sheet .thumb .x svg { width: 16px; height: 16px; }
+  .chiprow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  .chip { font-size: 11.5px; color: var(--text-2); background: var(--glass); border: 0.5px solid var(--hair-2); padding: 4px 10px; border-radius: var(--pill); }
+  .recap .rfoot { display: flex; align-items: center; gap: 8px; margin-top: 22px; padding-top: 18px; border-top: 0.5px solid var(--hair-2); }
+  .recap .rfoot .grow { flex: 1; font-size: 12px; color: var(--text-4); }
+
+  @media (max-width: 680px) {
+    .hub, .recap { width: 92vw; }
+    .grid { grid-template-columns: 1fr; }
+    .cols { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- top tab bar -->
+  <div class="tabbar">
+    <span class="brand">Rediscover complete</span>
+    <button class="tab active" data-i="1"><span class="n">1</span> Calm</button>
+    <button class="tab" data-i="2"><span class="n">2</span> Receipt</button>
+    <button class="tab" data-i="3"><span class="n">3</span> Milestone</button>
+    <button class="tab" data-i="4"><span class="n">4</span> What's next</button>
+    <button class="tab" data-i="5"><span class="n">5</span> Recap</button>
+    <span class="spacer"></span>
+    <span class="hint">press 1–5 to switch</span>
+  </div>
+
+  <div class="stage">
+    <!-- faux blurred app -->
+    <div class="appbg" id="appbg"></div>
+    <div class="scrim"></div>
+    <div class="chrome"><b></b><b></b><b></b></div>
+
+    <button class="closex" title="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+
+    <!-- caption -->
+    <div class="caption" id="caption"></div>
+
+    <div class="center">
+
+      <!-- ═════════ 1 · CALM EDITORIAL ═════════ -->
+      <section class="panel active" data-i="1">
+        <div class="panel-inner calm">
+          <div class="glyph-ring">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          </div>
+          <h1>You've seen everything</h1>
+          <div class="hair"></div>
+          <p class="stat">You moved through all <b>7 saves</b> in your library.<br>Two went to the trash, three found a home.</p>
+          <p class="meta">Last rediscovered 3 weeks ago</p>
+          <div class="row">
+            <button class="btn ghost">Review again</button>
+            <button class="btn primary">Done</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═════════ 2 · SESSION RECEIPT ═════════ -->
+      <section class="panel" data-i="2">
+        <div class="panel-inner card receipt">
+          <div class="head">
+            <div class="glyph-ring">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <h1>Session complete</h1>
+            <p>7 saves reviewed · just now</p>
+          </div>
+
+          <div class="bar">
+            <span class="s-filed"></span><span class="s-kept"></span><span class="s-trash"></span>
+          </div>
+
+          <div class="rows">
+            <div class="rrow">
+              <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v9a2 2 0 01-2 2H3z"/></svg></div>
+              <span class="lbl">Filed into collections</span>
+              <span class="dot" style="background:var(--kept)"></span>
+              <span class="val">3</span>
+            </div>
+            <div class="rrow">
+              <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+              <span class="lbl">Kept as-is</span>
+              <span class="dot" style="background:var(--text-3)"></span>
+              <span class="val">2</span>
+            </div>
+            <div class="rrow">
+              <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></div>
+              <span class="lbl">Sent to trash</span>
+              <span class="dot" style="background:var(--bad)"></span>
+              <span class="val">2</span>
+            </div>
+          </div>
+
+          <div class="strip">
+            <div class="thumb t1"></div><div class="thumb t2"></div><div class="thumb t3"></div>
+            <div class="thumb t4"></div><div class="thumb t5"></div>
+          </div>
+
+          <div class="foot">
+            <button class="btn">Empty trash (2)</button>
+            <button class="btn primary">Done</button>
+          </div>
+          <p class="time">Took 4 min 12 sec</p>
+        </div>
+      </section>
+
+      <!-- ═════════ 3 · MILESTONE ═════════ -->
+      <section class="panel" data-i="3">
+        <div class="panel-inner card mile">
+          <div class="top">
+            <div class="medal"><div class="inner">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><path d="M9 14l-2 7 5-3 5 3-2-7"/></svg>
+            </div></div>
+            <h1>Library fully rediscovered</h1>
+            <p class="sub">Every save in your library has had a second look.</p>
+            <div class="streak">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c2 4 5 5 5 9a5 5 0 01-10 0c0-1.5.7-2.7 1.5-3.5C9 10 10 8.5 12 3z"/></svg>
+              3rd month in a row
+            </div>
+          </div>
+          <div class="bottom">
+            <div class="barlabel"><span>Rediscovered this month</span><b>100%</b></div>
+            <div class="track"><i></i></div>
+            <div class="spark">
+              <i style="height:30%"></i><i style="height:55%"></i><i style="height:40%"></i>
+              <i style="height:70%"></i><i style="height:60%"></i><i class="now" style="height:100%"></i>
+            </div>
+            <div class="foot">
+              <button class="btn">Remind me monthly</button>
+              <button class="btn primary">Done</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═════════ 4 · WHAT'S NEXT HUB ═════════ -->
+      <section class="panel" data-i="4">
+        <div class="panel-inner hub">
+          <div class="hdr">
+            <div class="glyph-ring">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <div>
+              <h1>Nicely done — what's next?</h1>
+              <p>7 reviewed · 3 filed · 2 trashed · 2 kept</p>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="acard primary">
+              <div class="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></div>
+              <div><h3>Empty trash</h3><p>Permanently remove the 2 you tossed.</p></div>
+            </div>
+            <div class="acard">
+              <div class="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v9a2 2 0 01-2 2H3z"/></svg></div>
+              <div><h3>Rediscover a collection</h3><p>Focus on just one bucket next.</p></div>
+            </div>
+            <div class="acard span2">
+              <div class="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg></div>
+              <div class="txt"><h3>Schedule monthly rediscover</h3><p>We'll nudge you in 4 weeks to do this again.</p></div>
+              <span class="badge">Off</span>
+            </div>
+            <div class="acard">
+              <div class="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg></div>
+              <div><h3>Export what you kept</h3><p>Save the 5 keepers as a zip.</p></div>
+            </div>
+            <div class="acard">
+              <div class="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg></div>
+              <div><h3>Back to library</h3><p>Return to the full grid.</p></div>
+            </div>
+          </div>
+          <div class="footrow"><button class="btn ghost">Done</button></div>
+        </div>
+      </section>
+
+      <!-- ═════════ 5 · CONTACT-SHEET RECAP ═════════ -->
+      <section class="panel" data-i="5">
+        <div class="panel-inner card recap">
+          <div class="rhead">
+            <h1>Here's what you did</h1>
+            <span class="small">7 saves · 4 min</span>
+          </div>
+          <p class="sub">A look back at this rediscover session.</p>
+
+          <div class="cols">
+            <div class="col">
+              <div class="ctitle"><span class="cd" style="background:var(--kept)"></span><span>Filed</span><span class="ct">3</span></div>
+              <div class="sheet c3">
+                <div class="thumb t1"></div><div class="thumb t3"></div><div class="thumb t4"></div>
+              </div>
+              <div class="chiprow">
+                <span class="chip">Type → 2</span><span class="chip">UI refs → 1</span>
+              </div>
+            </div>
+            <div class="col">
+              <div class="ctitle"><span class="cd" style="background:var(--text-3)"></span><span>Kept</span><span class="ct">2</span></div>
+              <div class="sheet c2">
+                <div class="thumb t6"></div><div class="thumb t7"></div>
+              </div>
+            </div>
+            <div class="col">
+              <div class="ctitle"><span class="cd" style="background:var(--bad)"></span><span>Trashed</span><span class="ct">2</span></div>
+              <div class="sheet c2">
+                <div class="thumb t2 trashed"><div class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div></div>
+                <div class="thumb t5 trashed"><div class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rfoot">
+            <span class="grow">Trashed items can be restored until you empty the trash.</span>
+            <button class="btn">Empty trash (2)</button>
+            <button class="btn primary">Done</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+<script>
+  // faux blurred app tiles behind the scrim
+  (function () {
+    var grads = [
+      'linear-gradient(135deg,#3a4a5a,#1c242c)','linear-gradient(135deg,#5a4a3a,#2c241c)',
+      'linear-gradient(135deg,#4a3a5a,#241c2c)','linear-gradient(135deg,#3a5a4a,#1c2c24)',
+      'linear-gradient(135deg,#5a3a4a,#2c1c24)','linear-gradient(135deg,#444,#222)',
+      'linear-gradient(135deg,#3a4a4a,#1c2424)','linear-gradient(135deg,#4a4438,#26221a)'
+    ];
+    var spans = [1,2,1,1,2,1,1,1,2,1,1,1,1,2,1,1,1,1];
+    var bg = document.getElementById('appbg'), html = '';
+    for (var i = 0; i < 26; i++) {
+      var g = grads[i % grads.length];
+      var rs = spans[i % spans.length];
+      html += '<i style="background:' + g + '; grid-row: span ' + rs + ';"></i>';
+    }
+    bg.innerHTML = html;
+  })();
+
+  var captions = {
+    1: ['Calm — editorial close', 'A restrained, confident "well done." One human sentence of summary, generous space. For users who want the moment to feel quiet and premium, not measured.'],
+    2: ['Receipt — session summary', 'A compact receipt of the session: a proportion bar, a filed / kept / trashed breakdown, the items you touched, and time spent. For users who want to see exactly what happened.'],
+    3: ['Milestone — progress over time', 'Frames completion as an achievement with a sense of habit: a streak, this-month progress, and a history sparkline. Tasteful reward, nudges a recurring ritual.'],
+    4: ["What's next — action hub", 'Turns finishing into the start of the next thing: empty trash, rediscover a collection, schedule a monthly session, export the keepers. For users who like momentum.'],
+    5: ['Recap — contact sheet', 'A visual look back: thumbnails grouped by what happened to them — filed, kept, trashed — with the collections you added to. Most concrete and reassuring (trash is recoverable).']
+  };
+
+  function show(i) {
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.i === String(i)); });
+    document.querySelectorAll('.panel').forEach(function (p) { p.classList.toggle('active', p.dataset.i === String(i)); });
+    var c = captions[i];
+    document.getElementById('caption').innerHTML = '<h2>' + c[0] + '</h2><p>' + c[1] + '</p>';
+  }
+  document.querySelectorAll('.tab').forEach(function (t) {
+    t.addEventListener('click', function () { show(t.dataset.i); });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key >= '1' && e.key <= '5') show(e.key);
+  });
+  show(1);
+</script>
+</body>
+</html>
