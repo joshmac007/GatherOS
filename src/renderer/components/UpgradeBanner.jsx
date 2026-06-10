@@ -26,7 +26,7 @@ export default function UpgradeBanner({ entitlement, onUpgrade }) {
 
   if (mode === 'free') {
     return (
-      <div className={`${styles.banner} ${styles.free}`}>
+      <div className={styles.banner}>
         <span className={styles.text}>
           You’re on the free plan — existing saves stay, upgrade to add new ones.
         </span>

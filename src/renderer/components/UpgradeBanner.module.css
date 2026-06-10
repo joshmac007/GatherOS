@@ -23,12 +23,8 @@
   animation: bannerIn var(--dur-medium) var(--ease-pop);
 }
 
-/* Free-tier flavour reads a touch warmer so the standing reminder has a
-   little presence without shouting. */
-.free {
-  background: color-mix(in srgb, var(--accent, #6f6f73) 7%, var(--surface-1));
-  border-color: color-mix(in srgb, var(--accent, #6f6f73) 22%, var(--border));
-}
+/* Both the free-plan and trial banners share the one clean pill style
+   above — no separate tint, so they read as a single consistent toast. */
 
 .icon {
   flex-shrink: 0;
