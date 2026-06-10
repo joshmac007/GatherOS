@@ -183,6 +183,13 @@ async function waitForMainWindowReady() {
 async function drainDockOpenQueue() {
   if (!dockOpenReady || dockOpenQueue.length === 0) return;
   await waitForMainWindowReady();
+  // Free tier: new saves require an upgrade. Drop the queued drops and
+  // surface the prompt rather than silently saving past the gate.
+  if (!require('./entitlement').canCreateSave()) {
+    dockOpenQueue.length = 0;
+    try { notifyNeedsUpgrade({ source: 'save' }); } catch { /* ignore */ }
+    return;
+  }
   const { saveImageFromFile } = require('./storage');
   const { insertSave } = require('./db');
   while (dockOpenQueue.length > 0) {
@@ -282,6 +289,11 @@ app.on('open-url', (event, url) => {
 async function drainDockOpenUrlQueue() {
   if (!dockOpenReady || dockOpenUrlQueue.length === 0) return;
   await waitForMainWindowReady();
+  if (!require('./entitlement').canCreateSave()) {
+    dockOpenUrlQueue.length = 0;
+    try { notifyNeedsUpgrade({ source: 'save' }); } catch { /* ignore */ }
+    return;
+  }
   const { saveImageFromUrl } = require('./storage');
   const { insertSave } = require('./db');
   const { captureUrl } = require('./urlCapture');
@@ -718,6 +730,10 @@ function createTray() {
   });
 
   tray.on('drop-files', async (_e, files) => {
+    if (!require('./entitlement').canCreateSave()) {
+      try { notifyNeedsUpgrade({ source: 'save' }); } catch { /* ignore */ }
+      return;
+    }
     for (const file of files) {
       try {
         const imgData = await saveImageFromFile(file);
