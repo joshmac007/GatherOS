@@ -891,8 +891,10 @@ function stripFramingHeaders(sessionInstance) {
 }
 
 app.whenReady().then(() => {
-  // Start the local no-account trial clock on first launch (idempotent).
-  try { require('./entitlement').ensureTrialStarted(); }
+  // Decide the local no-account trial start on first launch (idempotent;
+  // also done lazily inside getEntitlement, but pin it down early so a
+  // brand-new install's clock starts at first launch, not first save).
+  try { require('./entitlement').ensureTrialDecided(); }
   catch (err) { console.warn('[gatheros] trial init failed:', err?.message || err); }
 
   // Install the header-strip on the partitions the URL features use.

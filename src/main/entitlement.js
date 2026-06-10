@@ -9,31 +9,56 @@
 //             saves and the pro features (AI, X sync, boards, multiple
 //             libraries) prompt to upgrade. No hard wall, no data taken.
 //
-// This module is additive on its own — it computes the mode and exposes
-// gating flags; the actual enforcement is wired in by the callers.
+// SAFETY: this fails OPEN. A user is only ever put in 'free' when we are
+// CONFIDENT the trial is over AND there's no subscription. Any
+// uncertainty (cache unreadable, offline, can't verify) resolves to a
+// permissive mode so a paying user is never wrongly blocked.
 
 const { getPref, setPref } = require('./settings');
 
 const TRIAL_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Lazy require to avoid a require cycle (licensing → ipc → entitlement).
+// Lazy requires to avoid require cycles.
 let _licensing = null;
 function licensing() {
   if (!_licensing) _licensing = require('./licensing');
   return _licensing;
 }
 
-// Stamp the trial start on first launch. Idempotent — only writes once.
-function ensureTrialStarted() {
-  if (!getPref('trialStartedAt', null)) {
-    setPref('trialStartedAt', Date.now());
-  }
+function hasSession() {
+  try { return !!licensing().hasSession(); }
+  catch { return false; }
+}
+
+// True only for a genuinely fresh install: no prior library and no
+// licensing session. On uncertainty we lean toward "new" so a real new
+// user is never denied their trial.
+function isNewInstall() {
+  if (hasSession()) return false;
+  try {
+    const db = require('./db');
+    if (typeof db.getSmartViewCounts === 'function') {
+      const c = db.getSmartViewCounts();
+      const total = (c?.all || 0) + (c?.trash || 0);
+      if (total > 0) return false;
+    }
+  } catch { /* db not ready — treat as new */ }
+  return true;
+}
+
+// Decide the trial start exactly once. New installs get the 14-day clock
+// from now; existing users (updating into this build) get 0 — i.e. the
+// local trial is already spent, so their access is driven purely by their
+// account state and they don't get a free reset.
+function ensureTrialDecided() {
+  if (getPref('trialStartedAt', null) !== null) return;
+  setPref('trialStartedAt', isNewInstall() ? Date.now() : 0);
 }
 
 function localTrial() {
   const startedAt = getPref('trialStartedAt', null);
-  if (!startedAt) return { startedAt: null, endsAt: null, active: false, daysLeft: 0 };
+  if (!startedAt) return { startedAt: startedAt || null, endsAt: null, active: false, daysLeft: 0 };
   const endsAt = startedAt + TRIAL_DAYS * DAY_MS;
   const daysLeft = Math.max(0, Math.ceil((endsAt - Date.now()) / DAY_MS));
   return { startedAt, endsAt, active: Date.now() < endsAt, daysLeft };
@@ -43,34 +68,49 @@ function localTrial() {
 function serverState() {
   try {
     const lic = licensing();
-    return typeof lic.getCachedState === 'function' ? lic.getCachedState() : null;
-  } catch {
-    return null;
-  }
+    if (typeof lic.getCachedState === 'function') return lic.getCachedState();
+  } catch { /* ignore */ }
+  return { state: 'unauth' };
 }
 
-function getEntitlement() {
-  const server = serverState();
-  const sub = server && server.subscription;
-  const paid = !!(server && server.state === 'entitled' && sub && sub.status !== 'trialing');
-  const serverTrialing = !!(server && server.state === 'entitled'
-    && (server.reason === 'trial' || (sub && sub.status === 'trialing')));
-  const trial = localTrial();
-
-  let mode;
-  if (paid) mode = 'paid';
-  else if (serverTrialing || trial.active) mode = 'trial';
-  else mode = 'free';
-
+function build(mode, trial, server) {
   return {
     mode,
-    paid,
-    serverTrialing,
+    paid: mode === 'paid',
     trial,
+    serverTrialing: !!(server && server.state === 'entitled'
+      && (server.reason === 'trial' || (server.subscription && server.subscription.status === 'trialing'))),
     // Gating flags the callers enforce.
     canCreateSave: mode !== 'free',
     proUnlocked: mode !== 'free',
   };
 }
 
-module.exports = { TRIAL_DAYS, ensureTrialStarted, localTrial, getEntitlement };
+function getEntitlement() {
+  ensureTrialDecided();
+  const server = serverState();
+  const trial = localTrial();
+  const sub = server && server.subscription;
+
+  // Active paid subscription → unlocked forever.
+  if (server.state === 'entitled' && sub && sub.status !== 'trialing') {
+    return build('paid', trial, server);
+  }
+  // Any other entitled / offline-grace state (incl. server trial) → allow.
+  if (server.state === 'entitled' || server.state === 'offline') {
+    return build('trial', trial, server);
+  }
+  // Local trial still running → allow.
+  if (trial.active) return build('trial', trial, server);
+  // Couldn't determine the server state → fail open, don't downgrade.
+  if (server.state === 'error') return build('trial', trial, server);
+  // Confirmed: server says expired, or never signed in and the local trial
+  // is spent → free tier.
+  if (server.state === 'expired' || server.state === 'unauth') {
+    return build('free', trial, server);
+  }
+  // Anything unexpected → fail open.
+  return build('trial', trial, server);
+}
+
+module.exports = { TRIAL_DAYS, ensureTrialDecided, localTrial, getEntitlement };
