@@ -8,6 +8,7 @@ import contextMenuStyles from './ContextMenu.module.css';
 import TagSuggestions from './TagSuggestions.jsx';
 import { fuzzyMatch } from '../lib/fuzzy.js';
 import { CollectionIcon } from './Sidebar.jsx';
+import { useEntitlementValue, isLocked, requestUpgrade } from '../context/entitlement.jsx';
 
 const SUGGESTION_LIMIT = 6;
 
@@ -203,6 +204,9 @@ export default function DetailPanel({
     try { return JSON.parse(record.tweet_meta); }
     catch { return null; }
   }, [record?.tweet_meta]);
+  // AI features (auto-tag, prompt generation, "more like this") are pro;
+  // locked in the free tier. Fails open to unlocked.
+  const proLocked = isLocked(useEntitlementValue());
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
   const [copiedColor, setCopiedColor] = useState(null);
@@ -409,7 +413,7 @@ export default function DetailPanel({
   // when AI isn't configured — embeddings won't be there.
   const [similar, setSimilar] = useState([]);
   useEffect(() => {
-    if (!aiConfigured) {
+    if (!aiConfigured || proLocked) {
       setSimilar([]);
       return undefined;
     }
@@ -420,7 +424,7 @@ export default function DetailPanel({
       if (!cancelled) setSimilar([]);
     });
     return () => { cancelled = true; };
-  }, [record.id, aiConfigured]);
+  }, [record.id, aiConfigured, proLocked]);
 
   async function refreshTags() {
     const rows = await window.moodmark.tags.getForSave(record.id);
@@ -429,6 +433,7 @@ export default function DetailPanel({
 
   async function handleAutoTag() {
     if (autoTagging) return;
+    if (proLocked) { requestUpgrade('ai'); return; }
     if (!aiConfigured) {
       onOpenSettings?.();
       return;
@@ -455,6 +460,7 @@ export default function DetailPanel({
 
   async function handleGeneratePrompt() {
     if (promptGenerating) return;
+    if (proLocked) { requestUpgrade('ai'); return; }
     if (!aiConfigured) {
       onOpenSettings?.();
       return;

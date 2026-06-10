@@ -70,7 +70,7 @@ import { seededShuffle } from './lib/shuffle.js';
 import { configureSaveSound, DEFAULT_SAVE_SOUND, playEmptyTrashSound } from './lib/sounds.js';
 import OnboardingOverlay from './onboarding/OnboardingOverlay.jsx';
 import { useOnboarding, ONBOARDING_DONE_PREF } from './onboarding/OnboardingContext.jsx';
-import { EntitlementProvider } from './context/entitlement.jsx';
+import { EntitlementProvider, requestUpgrade } from './context/entitlement.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
 import UpgradeBanner from './components/UpgradeBanner.jsx';
 
@@ -106,6 +106,9 @@ export default function App({ entitlement } = {}) {
     trial: { startedAt: null, endsAt: null, active: true, daysLeft: 14 },
     canCreateSave: true, proUnlocked: true, serverTrialing: false, loading: true,
   };
+  // Pro features (boards, multiple libraries, AI) are locked only in the
+  // free tier. Primitive so handlers can depend on it without churning.
+  const proLocked = ent.mode === 'free';
   // Upgrade modal: opened by any locked action via requestUpgrade(), and
   // by the main process when a fire-and-forget save (hotkey screenshot,
   // extension) is blocked. `upgradeFeature` tailors the modal copy.
@@ -667,8 +670,9 @@ export default function App({ entitlement } = {}) {
   const prevOnboardingActive = useRef(false);
   // True when both the toggle is on AND the user is signed-in to a
   // license session — search will route through embeddings rather
-  // than LIKE.
-  const semanticSearchActive = aiConfigured && !!prefs.semanticSearch;
+  // than LIKE. Locked in the free tier (semantic search is pro); the
+  // app falls back to plain LIKE search, which still works fine.
+  const semanticSearchActive = aiConfigured && !!prefs.semanticSearch && !proLocked;
 
   // Set of save ids the main process is currently AI-indexing. Driven
   // by save:indexing-start / save:indexing-end events. DetailPanel
@@ -765,10 +769,11 @@ export default function App({ entitlement } = {}) {
   }, [onboarding.active, reload, loadCollections, loadBoards]);
 
   const handleCreateBoard = useCallback(async () => {
+    if (proLocked) { requestUpgrade('boards'); return null; }
     const board = await window.moodmark.boards.create({ name: 'Untitled board' });
     await loadBoards();
     return board;
-  }, [loadBoards]);
+  }, [loadBoards, proLocked]);
 
   const handleRenameBoard = useCallback(async ({ id, name }) => {
     await window.moodmark.boards.rename({ id, name });
@@ -932,6 +937,7 @@ export default function App({ entitlement } = {}) {
   const [variantOptions, setVariantOptions] = useState(null);
 
   const handleGenerateVariant = useCallback(async (saveId, opts = {}) => {
+    if (proLocked) { requestUpgrade('ai'); return; }
     const { prompt, aspect, openOnComplete = false } = opts;
     const source = saves.find((s) => s.id === saveId);
     const pendingId = `pending-${saveId}-${Date.now()}`;
@@ -969,11 +975,12 @@ export default function App({ entitlement } = {}) {
         durationMs: 2400,
       });
     }
-  }, [saves, reload, showActionToast]);
+  }, [saves, reload, showActionToast, proLocked]);
 
   const openVariantModal = useCallback((saveId, openOnComplete) => {
+    if (proLocked) { requestUpgrade('ai'); return; }
     setVariantOptions({ saveId, openOnComplete });
-  }, []);
+  }, [proLocked]);
 
   const buildCardMenuItems = useCallback((saveId, memberIds) => {
     // If the right-clicked save is part of an active multi-selection,
@@ -1480,6 +1487,7 @@ export default function App({ entitlement } = {}) {
   }, [activeLibraryId, loadCollections, reload, setColorFilter, setSearch, setView]);
 
   const handleCreateLibrary = useCallback(async (name) => {
+    if (proLocked) { requestUpgrade('libraries'); return; }
     const res = await window.moodmark.libraries.create(name);
     if (res?.ok && res.library) {
       await refreshLibraries();
@@ -1487,7 +1495,7 @@ export default function App({ entitlement } = {}) {
       // in their fresh empty space.
       await handleSwitchLibrary(res.library.id);
     }
-  }, [refreshLibraries, handleSwitchLibrary]);
+  }, [refreshLibraries, handleSwitchLibrary, proLocked]);
 
   const handleRenameLibrary = useCallback(async (id, name) => {
     const res = await window.moodmark.libraries.rename(id, name);
@@ -1637,6 +1645,7 @@ export default function App({ entitlement } = {}) {
   // navigates the user straight into the new canvas.
   const handleOpenCollectionAsSpace = useCallback(async (collectionId) => {
     if (!collectionId) return;
+    if (proLocked) { requestUpgrade('boards'); return; }
     const collection = collections.find((c) => c.id === collectionId);
     if (!collection) return;
     let collectionSaves = [];
@@ -1722,7 +1731,7 @@ export default function App({ entitlement } = {}) {
     });
     loadBoards();
     handleViewChange({ type: 'board', id: board.id });
-  }, [collections, loadBoards, handleViewChange]);
+  }, [collections, loadBoards, handleViewChange, proLocked]);
 
   const handleReorderCollections = useCallback(async (orderedIds) => {
     const previousOrder = collections.map((c) => c.id);
