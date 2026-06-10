@@ -158,6 +158,13 @@ export default function App({ entitlement } = {}) {
     })();
     return () => { cancelled = true; };
   }, [ent.mode, ent.loading]);
+
+  // The moment a subscription lands (mode flips to paid), close the
+  // upgrade modal — otherwise the paywall stays up over the now-unlocked
+  // app after the user comes back from checkout.
+  useEffect(() => {
+    if (ent.mode === 'paid') setUpgradeOpen(false);
+  }, [ent.mode]);
   const {
     saves,
     loading,
