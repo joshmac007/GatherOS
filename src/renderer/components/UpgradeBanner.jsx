@@ -17,6 +17,11 @@ export default function UpgradeBanner({ entitlement, onUpgrade }) {
 
   const mode = entitlement?.mode || 'trial';
   const daysLeft = entitlement?.trial?.daysLeft ?? null;
+  // Only the LOCAL no-account trial gets a countdown. A user whose access
+  // comes from the server (a paid sub still in its Lemon Squeezy trial, or
+  // any server-granted trial) is mode 'trial' but their local clock is
+  // spent — without this guard they'd see a bogus "your trial ends" nag.
+  const localTrialActive = !!entitlement?.trial?.active;
 
   if (mode === 'paid') return null;
 
@@ -34,8 +39,11 @@ export default function UpgradeBanner({ entitlement, onUpgrade }) {
     );
   }
 
-  // trial — only nudge in the final stretch, and let it be dismissed.
+  // trial — only nudge in the final stretch of the live local trial, and
+  // let it be dismissed. Server-backed trials (incl. a paid sub mid LS
+  // trial) never show this countdown.
   if (dismissed) return null;
+  if (!localTrialActive) return null;
   if (daysLeft == null || daysLeft > 5) return null;
 
   const dayWord = daysLeft === 1 ? 'day' : 'days';
