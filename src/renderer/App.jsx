@@ -3168,6 +3168,14 @@ export default function App({ entitlement } = {}) {
             console.error('[rediscover] addSave failed:', err);
           }
         }}
+        onEmptyTrash={async (ids) => {
+          // Permanently remove exactly the items trashed this session —
+          // matches the "Empty trash (N)" count on the recap screen.
+          for (const id of ids || []) {
+            try { await window.moodmark.saves.permanentDelete(id); }
+            catch (err) { console.error('[rediscover] permanentDelete failed:', err); }
+          }
+        }}
         onClose={() => {
           setRediscoverOpen(false);
           // Refresh the grid view since trash + bucket changes

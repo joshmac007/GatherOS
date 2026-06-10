@@ -39,6 +39,7 @@ export default function RediscoverMode({
   collections,
   onTrash,
   onAddToBucket,
+  onEmptyTrash,
   onClose,
 }) {
   const [queue, setQueue] = useState([]);
@@ -47,6 +48,11 @@ export default function RediscoverMode({
   const [pickerFilter, setPickerFilter] = useState('');
   const [pickerActiveIdx, setPickerActiveIdx] = useState(0);
   const [currentCollectionIds, setCurrentCollectionIds] = useState(new Set());
+
+  // Session log driving the recap on the completion screen. Each entry is
+  // { id, outcome: 'filed' | 'kept' | 'trashed', collectionId? }.
+  const [session, setSession] = useState([]);
+  const [trashEmptied, setTrashEmptied] = useState(false);
 
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -73,6 +79,8 @@ export default function RediscoverMode({
     setDrag({ x: 0, y: 0 });
     setDragging(false);
     setHotZone(null);
+    setSession([]);
+    setTrashEmptied(false);
   }, [open]);
 
   const currentId = queue[idx] || null;
@@ -113,10 +121,12 @@ export default function RediscoverMode({
   function handleTrash() {
     if (!currentId) return;
     onTrash?.(currentId);
+    setSession((s) => [...s, { id: currentId, outcome: 'trashed' }]);
     advance('left');
   }
   function handleSkip() {
     if (!currentId) return;
+    setSession((s) => [...s, { id: currentId, outcome: 'kept' }]);
     advance('right');
   }
   function openBucketPicker() {
@@ -128,6 +138,7 @@ export default function RediscoverMode({
   function fileInto(collectionId) {
     if (!currentId || !collectionId) return;
     onAddToBucket?.(currentId, collectionId);
+    setSession((s) => [...s, { id: currentId, outcome: 'filed', collectionId }]);
     setPickerOpen(false);
     advance('up');
   }
@@ -164,8 +175,11 @@ export default function RediscoverMode({
       setDragging(false); setDrag({ x: 0, y: 0 }); setHotZone(null);
       openBucketPicker();
     } else if (dx <= -THRESH) {
-      onTrash?.(currentId); advance('left');
+      onTrash?.(currentId);
+      setSession((sess) => [...sess, { id: currentId, outcome: 'trashed' }]);
+      advance('left');
     } else if (dx >= THRESH) {
+      setSession((sess) => [...sess, { id: currentId, outcome: 'kept' }]);
       advance('right');
     } else {
       setDragging(false); setDrag({ x: 0, y: 0 }); setHotZone(null);
@@ -217,26 +231,103 @@ export default function RediscoverMode({
 
   if (!current) {
     const neverHadAnything = queue.length === 0;
+
+    // Nothing was ever in the deck — keep the plain prompt.
+    if (neverHadAnything) {
+      return (
+        <div className={styles.scrim} onClick={handleScrimClick} role="dialog" aria-modal="true">
+          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
+            <XIcon size={18} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <div className={styles.empty}>
+            <div className={styles.emptyTitle}>Nothing to rediscover yet</div>
+            <div className={styles.emptySub}>
+              Save some inspiration first — drag in a screenshot, image, or URL.
+            </div>
+            <button type="button" className={styles.doneBtn} onClick={onClose}>Done</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Session recap ("sorted into trays") ─────────────────────────
+    const filed = session.filter((o) => o.outcome === 'filed');
+    const kept = session.filter((o) => o.outcome === 'kept');
+    const trashed = session.filter((o) => o.outcome === 'trashed');
+    const reviewed = session.length || queue.length;
+    const trashedIds = trashed.map((o) => o.id);
+
+    const colName = (id) => collections.find((c) => c.id === id)?.name || 'Collection';
+    // Filed breakdown by destination collection, in first-seen order.
+    const filedByCol = [];
+    const seenCol = new Map();
+    for (const o of filed) {
+      if (!seenCol.has(o.collectionId)) {
+        const entry = { name: colName(o.collectionId), count: 0 };
+        seenCol.set(o.collectionId, entry);
+        filedByCol.push(entry);
+      }
+      seenCol.get(o.collectionId).count += 1;
+    }
+    // Up to three thumbnails per pile, newest on top (last in DOM).
+    const thumbsFor = (arr) => arr.slice(-3).map((o) => resolve(o.id)).filter(Boolean);
+
+    const trays = [
+      { key: 'filed', label: 'Filed', dot: styles.dotFiled, items: filed,
+        sub: filedByCol.map((c) => `${c.name} · ${c.count}`).join('   ') },
+      { key: 'kept', label: 'Kept', dot: styles.dotKept, items: kept, sub: '' },
+      { key: 'trashed', label: 'Trashed', dot: styles.dotTrash, items: trashed, trashed: true,
+        sub: trashEmptied ? 'Emptied' : 'Undo anytime before emptying' },
+    ].filter((t) => t.items.length > 0);
+
     return (
       <div className={styles.scrim} onClick={handleScrimClick} role="dialog" aria-modal="true">
         <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
           <XIcon size={18} strokeWidth={1.8} aria-hidden="true" />
         </button>
-        <div className={styles.empty}>
-          {!neverHadAnything && (
-            <div className={styles.emptyCheck} aria-hidden="true">
-              <CheckIcon size={28} strokeWidth={2.2} />
-            </div>
-          )}
-          <div className={styles.emptyTitle}>
-            {neverHadAnything ? 'Nothing to rediscover yet' : "You've seen everything"}
+        <div className={styles.recap}>
+          <div className={styles.recapCheck} aria-hidden="true">
+            <CheckIcon size={26} strokeWidth={2.2} />
           </div>
-          <div className={styles.emptySub}>
-            {neverHadAnything
-              ? 'Save some inspiration first — drag in a screenshot, image, or URL.'
-              : `${queue.length} ${queue.length === 1 ? 'save' : 'saves'} reviewed.`}
+          <div className={styles.recapTitle}>Rediscover complete</div>
+          <div className={styles.recapSub}>
+            Nice — you went through all {reviewed} {reviewed === 1 ? 'save' : 'saves'}.
           </div>
-          <button type="button" className={styles.doneBtn} onClick={onClose}>Done</button>
+
+          <div className={styles.trays}>
+            {trays.map((t) => (
+              <div className={styles.tray} key={t.key}>
+                <div className={styles.pile}>
+                  <span className={styles.pileCount}>{t.items.length}</span>
+                  {thumbsFor(t.items).map((s) => (
+                    <div
+                      key={s.id}
+                      className={`${styles.pileCard} ${t.trashed ? styles.pileCardTrashed : ''}`}
+                      style={{ backgroundImage: `url("${fileUrl(s.thumb_path || s.file_path)}")` }}
+                    />
+                  ))}
+                </div>
+                <div className={styles.trayLabel}>
+                  <span className={`${styles.dot} ${t.dot}`} />
+                  {t.label}
+                </div>
+                <div className={styles.traySub}>{t.sub || ' '}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.recapActions}>
+            {trashedIds.length > 0 && !trashEmptied && (
+              <button
+                type="button"
+                className={styles.emptyBtn}
+                onClick={() => { onEmptyTrash?.(trashedIds); setTrashEmptied(true); }}
+              >
+                Empty trash ({trashedIds.length})
+              </button>
+            )}
+            <button type="button" className={styles.doneBtn} onClick={onClose}>Done</button>
+          </div>
         </div>
       </div>
     );
