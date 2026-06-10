@@ -254,27 +254,13 @@ export default function RediscoverMode({
     const filed = session.filter((o) => o.outcome === 'filed');
     const kept = session.filter((o) => o.outcome === 'kept');
     const trashed = session.filter((o) => o.outcome === 'trashed');
-    const reviewed = session.length || queue.length;
     const trashedIds = trashed.map((o) => o.id);
 
-    const colName = (id) => collections.find((c) => c.id === id)?.name || 'Collection';
-    // Filed breakdown by destination collection, in first-seen order.
-    const filedByCol = [];
-    const seenCol = new Map();
-    for (const o of filed) {
-      if (!seenCol.has(o.collectionId)) {
-        const entry = { name: colName(o.collectionId), count: 0 };
-        seenCol.set(o.collectionId, entry);
-        filedByCol.push(entry);
-      }
-      seenCol.get(o.collectionId).count += 1;
-    }
     // Up to three thumbnails per pile, newest on top (last in DOM).
     const thumbsFor = (arr) => arr.slice(-3).map((o) => resolve(o.id)).filter(Boolean);
 
     const trays = [
-      { key: 'filed', label: 'Filed', Icon: FolderPlus, tone: styles.icFiled, items: filed,
-        sub: filedByCol.map((c) => `${c.name} · ${c.count}`).join('   ') },
+      { key: 'filed', label: 'Filed', Icon: FolderPlus, tone: styles.icFiled, items: filed, sub: '' },
       { key: 'kept', label: 'Skipped', Icon: ArrowRight, tone: styles.icKept, items: kept, sub: '' },
       { key: 'trashed', label: 'Trashed', Icon: Trash2, tone: styles.icTrash, items: trashed, trashed: true,
         sub: trashEmptied ? 'Emptied' : '' },
@@ -288,7 +274,7 @@ export default function RediscoverMode({
         <div className={styles.recap}>
           <div className={styles.recapTitle}>Rediscover complete</div>
           <div className={styles.recapSub}>
-            Nice — you went through all {reviewed} {reviewed === 1 ? 'save' : 'saves'}.
+            Nice — you went through all your saves.
           </div>
 
           <div className={styles.trays}>
