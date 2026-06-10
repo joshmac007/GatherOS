@@ -211,6 +211,9 @@ contextBridge.exposeInMainWorld('moodmark', {
     verify: (opts) => ipcRenderer.invoke('licensing:verify', opts),
     hasSession: () => ipcRenderer.invoke('licensing:has-session'),
     signOut: () => ipcRenderer.invoke('licensing:sign-out'),
+    // Dev/testing: finish sign-in by pasting a magic-link token (the
+    // gatheros:// deep link only works in the packaged app).
+    exchange: (token) => ipcRenderer.invoke('licensing:exchange', token),
     openCustomerPortal: () => ipcRenderer.invoke('licensing:open-customer-portal'),
     openCheckout: (plan) => ipcRenderer.invoke('licensing:open-checkout', plan),
   },

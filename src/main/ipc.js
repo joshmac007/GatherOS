@@ -1260,6 +1260,20 @@ function registerIpcHandlers() {
   ipcMain.handle('licensing:has-session', () => licensing.hasSession());
   ipcMain.handle('licensing:sign-out', () => licensing.signOut());
 
+  // Exchange a magic-link token directly for a session. The gatheros://
+  // deep link only resolves in the packaged app (its Info.plist registers
+  // the scheme), so under `npm run dev` the email link goes nowhere —
+  // paste the token here from DevTools instead:
+  //   await window.moodmark.licensing.exchange("<token-from-the-email-link>")
+  // Persists the session and fires the same auth-result the deep-link
+  // handler does, so the UI signs in. Harmless in production: it still
+  // requires a valid, single-use token only the user's email provides.
+  ipcMain.handle('licensing:exchange', async (e, token) => {
+    const result = await licensing.exchangeMagicToken(token);
+    try { e.sender.send('licensing:auth-result', result); } catch { /* ignore */ }
+    return result;
+  });
+
   // Combined entitlement (local trial + server subscription) the renderer
   // uses to show the trial countdown / free-tier meter and to know when to
   // surface upgrade prompts.
