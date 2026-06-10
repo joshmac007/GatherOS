@@ -30,7 +30,7 @@ function newId(): string {
 
 // Step 1 — request a magic link.
 authRoutes.post('/magic-link', async (c) => {
-  const body = await c.req.json<{ email?: string }>().catch(() => ({}));
+  const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
   const email = (body.email || '').trim().toLowerCase();
   if (!isValidEmail(email)) {
     return c.json({ ok: false, error: 'invalid_email' }, 400);
@@ -110,7 +110,7 @@ authRoutes.get('/verify', async (c) => {
 authRoutes.post('/exchange', async (c) => {
   const body = await c.req
     .json<{ token?: string; deviceLabel?: string }>()
-    .catch(() => ({}));
+    .catch(() => ({} as { token?: string; deviceLabel?: string }));
   const token = (body.token || '').trim();
   const deviceLabel = (body.deviceLabel || '').slice(0, 200) || null;
   if (!token) return c.json({ ok: false, error: 'missing_token' }, 400);

@@ -131,7 +131,7 @@ licenseRoutes.post('/checkout', async (c) => {
   const user = await userFromSession(c.env, token);
   if (!user) return c.json({ ok: false, error: 'unauthenticated' }, 401);
 
-  const body = await c.req.json<{ plan?: 'monthly' | 'yearly' }>().catch(() => ({}));
+  const body = await c.req.json<{ plan?: 'monthly' | 'yearly' }>().catch(() => ({} as { plan?: 'monthly' | 'yearly' }));
   const plan = body.plan;
   const variantId =
     plan === 'yearly'
