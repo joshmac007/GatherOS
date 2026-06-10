@@ -422,8 +422,9 @@
       <section class="panel" data-i="5">
         <div class="panel-inner card piles">
           <div class="pihead">
-            <h1>Sorted into three trays</h1>
-            <p>7 saves reviewed in 4 min · hover a tray to fan it out</p>
+            <div class="glyph-ring" style="width:44px;height:44px;margin:0 auto 14px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+            <h1>Rediscover complete</h1>
+            <p>Nice — you went through all 7.</p>
           </div>
           <div class="trays">
             <div class="tray">
@@ -443,7 +444,7 @@
                 <div class="card-img g6"></div>
               </div>
               <div class="tlabel"><span class="cd" style="background:var(--kept)"></span><span>Kept</span></div>
-              <div class="tsub">Left as-is</div>
+              <div class="tsub">&nbsp;</div>
             </div>
             <div class="tray">
               <div class="pile">
@@ -452,7 +453,7 @@
                 <div class="card-img g2 trashed"></div>
               </div>
               <div class="tlabel"><span class="cd" style="background:var(--trash)"></span><span>Trashed</span></div>
-              <div class="tsub">Recoverable until emptied</div>
+              <div class="tsub">Undo anytime before emptying</div>
             </div>
           </div>
           <div class="rfoot">
@@ -483,7 +484,7 @@
     2: ['Filmstrip — your path', 'Replays the session left→right in the order you reviewed, each frame tagged with its outcome and trashed frames dimmed. Tells the story of the run.'],
     3: ['Hero filed — reward the keepers', 'Leads with big thumbnails of what you SAVED (collection named under each); kept and trashed sit small and secondary. Most positive, productivity-celebrating tone.'],
     4: ['Poster — editorial mosaic', 'One art-directed collage of all 7 at mixed sizes, each with a small corner badge for its outcome and trashed ones crossed out. Most visual, least grid-y.'],
-    5: ['Piles — sorted trays', 'Three physical-feeling stacks that fan out on hover, like trays you sorted into. Playful but restrained; great sense of "I tidied this."']
+    5: ['Piles — sorted trays', 'Three physical-feeling stacks that fan out on hover, like trays you sorted into. Casual "rediscover complete" tone; great sense of "I tidied this."']
   };
   function show(i) {
     document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.i === String(i)); });
