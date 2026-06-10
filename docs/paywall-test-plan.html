@@ -133,12 +133,18 @@
       <li><input type="checkbox" id="s1b"><label for="s1b">Click <b>Upgrade</b> → a modal opens. Monthly/Yearly toggle works, starts on <b>Monthly ($4.99)</b>.</label></li>
       <li><input type="checkbox" id="s1c"><label for="s1c"><kbd>Esc</kbd>, <b>"Not now"</b>, and clicking outside all close the modal.</label></li>
     </ul>
-    <p><span class="where dev">DevTools</span> — when done, return to normal:</p>
+    <p><span class="where dev">DevTools</span> — when done with free, return to normal:</p>
     <div class="code"><pre>localStorage.removeItem('moodmark.dev.gate'); location.reload()</pre><button class="copy">Copy</button></div>
-    <p class="dim">(Other previews — swap <code class="inline">'free'</code> for: <code class="inline">'paid'</code> to see the app exactly as a paying subscriber (nothing locked, no banners — no charge needed), <code class="inline">'signin'</code> for the sign-in screen, or <code class="inline">'app'</code> for the normal app.)</p>
+
+    <h3>Now preview the paid app (no charge)</h3>
+    <p><span class="where dev">DevTools</span> — paste, press Return. Renders the app exactly as a paying subscriber sees it:</p>
+    <div class="code"><pre>localStorage.setItem('moodmark.dev.gate','paid'); location.reload()</pre><button class="copy">Copy</button></div>
     <ul class="check" data-key="s1paid">
-      <li><input type="checkbox" id="s1p"><label for="s1p">With <code class="inline">'paid'</code>: no bottom banner, and saving + boards + libraries + AI all work (nothing prompts to upgrade).</label></li>
+      <li><input type="checkbox" id="s1p1"><label for="s1p1"><b>No</b> bottom banner at all.</label></li>
+      <li><input type="checkbox" id="s1p2"><label for="s1p2">Saving, new board, new library, and the AI buttons all <b>work</b> — nothing pops the upgrade modal.</label></li>
     </ul>
+    <div class="note warn"><strong>Heads-up:</strong> paid mode looks like the normal app on purpose (subscribers see no badge). Judge it by the banner being <b>gone</b> and features <b>working</b> — not by <code class="inline">entitlement.get()</code>, which still reports <code>free</code> here (the preview is renderer-only and doesn't change the real entitlement). When done, clear it with the <code class="inline">removeItem</code> line above.</div>
+    <p class="dim">The full set of previews: <code class="inline">'free'</code>, <code class="inline">'paid'</code>, <code class="inline">'signin'</code> (sign-in screen), <code class="inline">'app'</code> (normal app). Swap the word in the <code class="inline">setItem</code> line. Always finish with the <code class="inline">removeItem</code> line so a leftover override doesn't make a later step look "stuck".</p>
 
     <!-- 2 -->
     <h2 id="s2">2 · Trial countdown, then free tier <span class="tag">no account needed</span></h2>
