@@ -1147,12 +1147,15 @@ export default function SettingsModal({
               )}
               {account?.state === 'unauth' ? (
                 <>
-                  <p className={styles.sectionHint}>
-                    You're signed out. Sign back in to sync your AI
-                    usage and manage your subscription. Your library
-                    stays on this Mac either way.
-                  </p>
-                  <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 14 }}>
+                  <div className={styles.signedOutNote}>
+                    <Info size={15} strokeWidth={1.8} className={styles.signedOutIcon} aria-hidden="true" />
+                    <p className={styles.sectionHint} style={{ margin: 0 }}>
+                      You're signed out. Sign back in to sync your AI
+                      usage and manage your subscription. Your library
+                      stays on this Mac either way.
+                    </p>
+                  </div>
+                  <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 10 }}>
                     <button
                       type="button"
                       className={`${styles.btn} ${styles.btnPrimary}`}

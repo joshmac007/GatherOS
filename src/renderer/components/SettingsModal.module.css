@@ -223,6 +223,20 @@
   margin: 0 0 10px;
 }
 
+/* Signed-out note: info icon + hint, set off from the Plan row above. */
+.signedOutNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.signedOutIcon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+}
+
 .fieldLabelRow {
   display: flex;
   align-items: baseline;
