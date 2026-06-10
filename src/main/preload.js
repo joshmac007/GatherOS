@@ -226,6 +226,7 @@ contextBridge.exposeInMainWorld('moodmark', {
       'save:duplicate',
       'save:updated',
       'save:deleted',
+      'save:needs-upgrade',
       'focus:save',
       'save:indexing-start',
       'save:indexing-end',
