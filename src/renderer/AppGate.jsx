@@ -115,36 +115,11 @@ export default function AppGate() {
     }
   }, [entitlement.mode]);
 
-  // Resume a pending upgrade after "Sign in to upgrade". The moment the
-  // user has an account, pick up exactly where they left off — no second
-  // click. If they still need to pay (server 'expired'), continue
-  // straight to checkout; if signing in already gave them access
-  // (entitled / offline grace), there's nothing to buy, so just clear it.
-  useEffect(() => {
-    let pending = null;
-    try { pending = JSON.parse(localStorage.getItem(PENDING_UPGRADE_KEY) || 'null'); }
-    catch { pending = null; }
-    if (!pending) return;
-    // Not signed in yet (or mid-verify) — wait for the next transition.
-    if (state.status === 'unauth' || state.status === 'loading' || state.status === 'error') return;
-    // We have an account now — consume the intent exactly once.
-    try { localStorage.removeItem(PENDING_UPGRADE_KEY); } catch { /* ignore */ }
-    if (state.status === 'expired') {
-      (async () => {
-        const result = await window.moodmark.licensing.openCheckout(pending.plan || 'monthly');
-        if (result?.ok) {
-          window.dispatchEvent(new CustomEvent('moodmark:checkout-opened'));
-        } else {
-          // Couldn't open checkout — fall back to the upgrade modal so the
-          // user can retry rather than being left with no feedback.
-          console.error('[upgrade] auto-checkout after signin failed:', result?.error);
-          window.dispatchEvent(
-            new CustomEvent('moodmark:request-upgrade', { detail: { feature: pending.feature || null } }),
-          );
-        }
-      })();
-    }
-  }, [state.status]);
+  // NOTE: resuming a pending upgrade after sign-in is handled inside App
+  // (see the PENDING_UPGRADE_KEY effect there). It can't live here: while
+  // the sign-in screen is up, App is unmounted, so an event dispatched
+  // from AppGate at that moment would be lost. App re-mounting after
+  // sign-in is exactly the right point to re-open the upgrade modal.
 
   // ── Gate ────────────────────────────────────────────────────────
   // An explicit sign-in request (from the upgrade modal's "Sign in to

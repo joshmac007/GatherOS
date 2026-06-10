@@ -70,7 +70,7 @@ import { seededShuffle } from './lib/shuffle.js';
 import { configureSaveSound, DEFAULT_SAVE_SOUND, playEmptyTrashSound } from './lib/sounds.js';
 import OnboardingOverlay from './onboarding/OnboardingOverlay.jsx';
 import { useOnboarding, ONBOARDING_DONE_PREF } from './onboarding/OnboardingContext.jsx';
-import { EntitlementProvider, requestUpgrade } from './context/entitlement.jsx';
+import { EntitlementProvider, requestUpgrade, PENDING_UPGRADE_KEY } from './context/entitlement.jsx';
 import UpgradeModal from './components/UpgradeModal.jsx';
 import UpgradeBanner from './components/UpgradeBanner.jsx';
 
@@ -130,6 +130,34 @@ export default function App({ entitlement } = {}) {
       try { off?.(); } catch { /* ignore */ }
     };
   }, []);
+
+  // Resume a pending upgrade after "Sign in to upgrade". The user tapped
+  // upgrade, got bounced to sign-in (which unmounts this component), then
+  // came back via the magic link. The instant we're back AND signed in
+  // AND still on the free tier, re-open the upgrade modal automatically —
+  // no redundant second tap on the toast. Runs here (not in AppGate)
+  // because App is the thing that re-mounts after sign-in, so the modal
+  // it owns is guaranteed to be listening.
+  useEffect(() => {
+    if (ent.loading) return undefined;          // wait for real entitlement
+    let pending = null;
+    try { pending = JSON.parse(localStorage.getItem(PENDING_UPGRADE_KEY) || 'null'); }
+    catch { pending = null; }
+    if (!pending) return undefined;
+    let cancelled = false;
+    (async () => {
+      const signedIn = await window.moodmark?.licensing?.hasSession?.().catch(() => false);
+      if (cancelled || !signedIn) return;       // only after a real sign-in
+      localStorage.removeItem(PENDING_UPGRADE_KEY);
+      if (ent.mode === 'free') {
+        setUpgradeFeature(pending.feature || null);
+        setUpgradeOpen(true);
+      }
+      // entitled trial / paid → signing in already granted access; the
+      // intent is consumed above with nothing more to do.
+    })();
+    return () => { cancelled = true; };
+  }, [ent.mode, ent.loading]);
   const {
     saves,
     loading,
