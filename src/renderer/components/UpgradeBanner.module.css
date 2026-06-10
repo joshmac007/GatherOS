@@ -65,8 +65,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
+  /* Pull the close button in toward the Upgrade button — the uniform
+     10px flex gap left too much air between them. */
+  margin-left: -6px;
   border: none;
   border-radius: 999px;
   background: transparent;
