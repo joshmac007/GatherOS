@@ -47,3 +47,25 @@ export function requestUpgrade(feature) {
 export function isLocked(entitlement) {
   return !!entitlement && entitlement.mode === 'free';
 }
+
+// Hook for gating a pro action. Returns a `guard(feature, run)` helper:
+// in the free tier it opens the upgrade modal (and returns false without
+// running); otherwise it runs `run` and returns true. Fails OPEN — if the
+// mode is anything but 'free' the action proceeds.
+//
+//   const guard = useFeatureGuard();
+//   onClick={() => guard('boards', () => createBoard())}
+//
+// Also exposes `locked` so callers can render a lock affordance.
+export function useFeatureGuard() {
+  const ent = useEntitlementValue();
+  const locked = isLocked(ent);
+  return Object.assign(
+    function guard(feature, run) {
+      if (locked) { requestUpgrade(feature); return false; }
+      run?.();
+      return true;
+    },
+    { locked },
+  );
+}
