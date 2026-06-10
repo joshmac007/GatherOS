@@ -114,7 +114,20 @@ export default function AppGate() {
     }
   }, [entitlement.mode]);
 
-  // ── Dev overrides ───────────────────────────────────────────────
+  // ── Gate ────────────────────────────────────────────────────────
+  // An explicit sign-in request (from the upgrade modal's "Sign in to
+  // upgrade", Settings → Account, etc.) wins over everything — including
+  // the dev gates — so the sign-in screen always shows when asked for.
+  // It's optional now, so it carries a "back to app" escape hatch.
+  if (signinRequested && state.status !== 'entitled' && state.status !== 'offline') {
+    return (
+      <SigninScreen
+        onRequestMagicLink={requestMagicLink}
+        onCancel={() => setSigninRequested(false)}
+      />
+    );
+  }
+
   if (DEV_GATE === 'signin' || DEV_GATE === 'unauth') {
     return <SigninScreen onRequestMagicLink={requestMagicLink} />;
   }
@@ -130,17 +143,6 @@ export default function AppGate() {
     // Brief — usually one tick while the cached license is read. Render
     // nothing to avoid a flash of the signin screen.
     return null;
-  }
-
-  // The only full-screen screen left: the user explicitly asked to sign
-  // in. It's optional now, so it carries a "back to app" escape hatch.
-  if (signinRequested && state.status !== 'entitled' && state.status !== 'offline') {
-    return (
-      <SigninScreen
-        onRequestMagicLink={requestMagicLink}
-        onCancel={() => setSigninRequested(false)}
-      />
-    );
   }
 
   // Everything else runs the app. The entitlement prop carries the
