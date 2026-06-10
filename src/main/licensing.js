@@ -320,6 +320,15 @@ async function signOut() {
   return { ok: true };
 }
 
+// Synchronous read of the cached license state (no network). Returns the
+// same shape verifyLicense resolves to, or { state: 'unauth' } when
+// there's no cache. Used by the entitlement layer to know if the user
+// has a paid subscription without forcing a round-trip.
+function getCachedState() {
+  const cached = readCache();
+  return cached ? cachedToState(cached) : { state: 'unauth' };
+}
+
 module.exports = {
   // Auth
   requestMagicLink,
@@ -327,6 +336,7 @@ module.exports = {
   signOut,
   // Verify
   verifyLicense,
+  getCachedState,
   // Billing
   customerPortal,
   createCheckout,

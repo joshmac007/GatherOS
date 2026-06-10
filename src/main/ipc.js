@@ -1240,6 +1240,11 @@ function registerIpcHandlers() {
   );
   ipcMain.handle('licensing:has-session', () => licensing.hasSession());
   ipcMain.handle('licensing:sign-out', () => licensing.signOut());
+
+  // Combined entitlement (local trial + server subscription) the renderer
+  // uses to show the trial countdown / free-tier meter and to know when to
+  // surface upgrade prompts.
+  ipcMain.handle('entitlement:get', () => require('./entitlement').getEntitlement());
   // Mints a customer-portal URL and opens it in the user's default
   // browser. Renderer doesn't need to handle the URL itself — we open
   // it in main so the user lands on the secure session without us

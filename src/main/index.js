@@ -891,6 +891,10 @@ function stripFramingHeaders(sessionInstance) {
 }
 
 app.whenReady().then(() => {
+  // Start the local no-account trial clock on first launch (idempotent).
+  try { require('./entitlement').ensureTrialStarted(); }
+  catch (err) { console.warn('[gatheros] trial init failed:', err?.message || err); }
+
   // Install the header-strip on the partitions the URL features use.
   // session.fromPartition lazily creates the session if it doesn't
   // exist, so doing this before the first capture / webview mount

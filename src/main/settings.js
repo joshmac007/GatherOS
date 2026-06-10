@@ -38,6 +38,13 @@ const DEFAULT_PREFS = {
   // The renderer reads this in Settings → Capture so the user can
   // copy it into the extension's Options page.
   extensionToken: null,
+
+  // ── Trial / free tier ────────────────────────────────────────
+  // Timestamp (ms) of when the local no-account trial started, set on
+  // first launch. Drives the 14-day reverse trial: full app while the
+  // clock runs, then a soft free tier (existing saves stay usable, new
+  // saves + pro features prompt to upgrade). null until first launch.
+  trialStartedAt: null,
 };
 
 function prefsFilePath() {

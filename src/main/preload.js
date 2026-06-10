@@ -214,6 +214,9 @@ contextBridge.exposeInMainWorld('moodmark', {
     openCustomerPortal: () => ipcRenderer.invoke('licensing:open-customer-portal'),
     openCheckout: (plan) => ipcRenderer.invoke('licensing:open-checkout', plan),
   },
+  entitlement: {
+    get: () => ipcRenderer.invoke('entitlement:get'),
+  },
   on: (channel, listener) => {
     const allowed = new Set([
       'save:created',
