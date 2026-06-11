@@ -259,3 +259,19 @@
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* In the masonry grid, cards are marquee-selectable objects, so a drag to
+   mass-select must not spill into native text selection across every tweet
+   on screen. Suppress the per-element user-select:text opt-ins here; the
+   focused / detail view is where text stays highlightable and copyable. */
+.grid .text,
+.grid .quotedText,
+.grid .threadPart,
+.grid .quotedName,
+.grid .quotedHandle,
+.grid .name,
+.grid .handle {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: inherit;
+}
