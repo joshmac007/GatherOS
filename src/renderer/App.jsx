@@ -885,6 +885,23 @@ export default function App({ entitlement } = {}) {
     }, durationMs);
   }, [runPendingCommit]);
 
+  // X bookmark syncs arrive batched: the main process collects the burst
+  // and fires one summary instead of a per-save toast/sound/animation.
+  // Pull the new rows in with a single grid refresh and show one calm
+  // "Synced N bookmarks" note.
+  useEffect(() => {
+    if (!window.moodmark?.on) return undefined;
+    return window.moodmark.on('bookmarks:synced', ({ count } = {}) => {
+      const n = Number(count) || 0;
+      if (n <= 0) return;
+      reload();
+      showActionToast({
+        message: `Synced ${n} bookmark${n === 1 ? '' : 's'}`,
+        durationMs: 2600,
+      });
+    });
+  }, [reload, showActionToast]);
+
   // Surface updater errors so a wedged install no longer fails
   // silently. Most common cause: the running .app bundle is in a
   // non-/Applications path (dev build, dragged out of a DMG to the

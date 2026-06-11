@@ -148,8 +148,20 @@ async function handleSave(req, res) {
 
   try {
     const { saveImageFromUrl, saveVideoFromUrl } = require('./storage');
-    const { insertSave } = require('./db');
-    const { notifySaved, notifyDuplicate } = require('./notify');
+    const { insertSave, isTweetDismissed, tweetKeyFromUrl } = require('./db');
+    const { notifySaved, notifyDuplicate, notifyBookmarkSaved } = require('./notify');
+
+    // X bookmark syncs (tweetMeta present) get the quiet, batched
+    // notifier so scrolling the list doesn't flood the grid. A bookmark
+    // the user already removed from Gather is skipped entirely — the
+    // tombstone makes deletions stick across re-scrolls.
+    const isBookmark = !!tweetMeta;
+    const tweetKey = tweetKeyFromUrl(pageUrl);
+    if (isBookmark && tweetKey && isTweetDismissed(tweetKey)) {
+      sendJson(res, 200, { ok: true, dismissed: true });
+      return;
+    }
+    const notifyNew = isBookmark ? notifyBookmarkSaved : notifySaved;
 
     // Optional tag list — currently used by the X-bookmark capture to
     // auto-tag every X save with 'x:bookmark' so the user can filter
@@ -195,7 +207,7 @@ async function handleSave(req, res) {
         kind: 'tweet',
       });
       attachTags(tweetRecord.id);
-      notifySaved(tweetRecord);
+      notifyNew(tweetRecord);
       sendJson(res, 200, { ok: true, id: tweetRecord.id });
       return;
     }
@@ -250,7 +262,7 @@ async function handleSave(req, res) {
       tweetMeta,
     });
     attachTags(record.id);
-    notifySaved(record);
+    notifyNew(record);
     sendJson(res, 200, { ok: true, id: record.id });
   } catch (err) {
     console.error('[ext-server] /save failed:', err?.message || err);

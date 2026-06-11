@@ -72,6 +72,14 @@ CREATE TABLE IF NOT EXISTS board_items (
 
 CREATE INDEX IF NOT EXISTS idx_board_items_board_id ON board_items (board_id);
 
+-- Tombstones for X bookmarks the user has removed from Gather. The
+-- bookmark watcher re-captures whatever scrolls into view, so without
+-- this a deleted bookmark would silently come back. Keyed by tweet id.
+CREATE TABLE IF NOT EXISTS dismissed_tweets (
+  tweet_key     TEXT PRIMARY KEY,
+  dismissed_at  INTEGER NOT NULL
+);
+
 `;
 
 let db = null;
@@ -703,6 +711,35 @@ function getSave(id) {
   return getDatabase().prepare('SELECT * FROM saves WHERE id = ?').get(id);
 }
 
+// ── Tweet tombstones ─────────────────────────────────────────────
+// A stable per-tweet key from a status permalink, e.g.
+// https://x.com/foo/status/123 → 'tw:123'. Non-tweet URLs → null, so
+// only X bookmarks ever get tombstoned.
+function tweetKeyFromUrl(url) {
+  if (typeof url !== 'string') return null;
+  const m = url.match(/(?:twitter\.com|x\.com)\/[^/]+\/status\/(\d+)/i);
+  return m ? `tw:${m[1]}` : null;
+}
+
+function isTweetDismissed(key) {
+  if (!key) return false;
+  return !!getDatabase()
+    .prepare('SELECT 1 FROM dismissed_tweets WHERE tweet_key = ?')
+    .get(key);
+}
+
+function dismissTweet(key) {
+  if (!key) return;
+  getDatabase()
+    .prepare('INSERT OR IGNORE INTO dismissed_tweets (tweet_key, dismissed_at) VALUES (?, ?)')
+    .run(key, Date.now());
+}
+
+function undismissTweet(key) {
+  if (!key) return;
+  getDatabase().prepare('DELETE FROM dismissed_tweets WHERE tweet_key = ?').run(key);
+}
+
 // Soft delete: marks the row as trashed and severs every bucket
 // membership in the same transaction. The image and thumbnail files
 // stay on disk until the user permanently deletes from Trash (or
@@ -711,8 +748,11 @@ function getSave(id) {
 // longer part of any collection," not just "hide it temporarily."
 function deleteSave(id) {
   const db = getDatabase();
-  const save = db.prepare('SELECT id FROM saves WHERE id = ?').get(id);
+  const save = db.prepare('SELECT id, source_url FROM saves WHERE id = ?').get(id);
   if (!save) return { ok: false };
+  // Tombstone the tweet so the bookmark watcher doesn't re-capture it
+  // the next time it scrolls into view. No-op for non-tweet saves.
+  dismissTweet(tweetKeyFromUrl(save.source_url));
   const tx = db.transaction(() => {
     db.prepare('UPDATE saves SET deleted_at = ? WHERE id = ?').run(Date.now(), id);
     db.prepare('DELETE FROM collection_items WHERE save_id = ?').run(id);
@@ -731,6 +771,10 @@ function deleteSave(id) {
 
 function restoreSave(id) {
   const db = getDatabase();
+  const save = db.prepare('SELECT source_url FROM saves WHERE id = ?').get(id);
+  // Bringing a bookmark back out of trash lifts its tombstone so it's
+  // allowed to sync again.
+  if (save) undismissTweet(tweetKeyFromUrl(save.source_url));
   db.prepare('UPDATE saves SET deleted_at = NULL WHERE id = ?').run(id);
   return { ok: true };
 }
@@ -739,8 +783,10 @@ function restoreSave(id) {
 // caller (ipc.js) can unlink the underlying files.
 function permanentlyDeleteSave(id) {
   const db = getDatabase();
-  const save = db.prepare('SELECT file_path, thumb_path FROM saves WHERE id = ?').get(id);
+  const save = db.prepare('SELECT file_path, thumb_path, source_url FROM saves WHERE id = ?').get(id);
   if (!save) return { ok: false };
+  // Keep the tombstone for permanently-removed bookmarks.
+  dismissTweet(tweetKeyFromUrl(save.source_url));
   const tx = db.transaction(() => {
     db.prepare(
       `DELETE FROM board_items
@@ -1497,6 +1543,11 @@ module.exports = {
   reopenDatabase,
   getDatabasePath,
   insertSave,
+  // Tweet tombstones (X bookmark dismiss/dedup)
+  tweetKeyFromUrl,
+  isTweetDismissed,
+  dismissTweet,
+  undismissTweet,
   findSaveByHash,
   backfillContentHashes,
   findSimilarByPalette,

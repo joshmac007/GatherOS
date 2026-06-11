@@ -122,7 +122,7 @@ const {
 } = require('./capture');
 const extensionServer = require('./extension-server');
 const { showToast, destroyToastWindow } = require('./toast-window');
-const { setSaveNotifier, setDuplicateNotifier, setNeedsUpgradeNotifier, setTrayRefresher } = require('./notify');
+const { setSaveNotifier, setDuplicateNotifier, setNeedsUpgradeNotifier, setBookmarkNotifier, setTrayRefresher } = require('./notify');
 const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
 const libraryRegistry = require('./library-registry');
@@ -427,6 +427,46 @@ function notifySaved(record) {
   catch (err) { console.error('[gatheros] rebuildTrayMenu failed:', err); }
   try { maybeAIIndexInBackground(record); }
   catch (err) { console.error('[gatheros] AI index failed:', err); }
+}
+
+// Quiet, batched save path for X bookmark syncs. Scrolling the
+// bookmarks list fires a save per tweet that comes into view; routing
+// each through notifySaved would flood the grid with land-animations,
+// toasts and sounds. Instead we keep the background AI index, swallow
+// the per-item UI, and emit one "Synced N bookmarks" summary plus a
+// single grid refresh after the burst settles.
+let bookmarkBatchCount = 0;
+let bookmarkBatchTimer = null;
+let bookmarkBatchStartedAt = 0;
+function flushBookmarkBatch() {
+  if (bookmarkBatchTimer) { clearTimeout(bookmarkBatchTimer); bookmarkBatchTimer = null; }
+  const count = bookmarkBatchCount;
+  bookmarkBatchCount = 0;
+  bookmarkBatchStartedAt = 0;
+  if (count <= 0) return;
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('bookmarks:synced', { count });
+    }
+  } catch (err) { console.error('[gatheros] bookmarks:synced send failed:', err); }
+  try { rebuildTrayMenu(); }
+  catch (err) { console.error('[gatheros] rebuildTrayMenu failed:', err); }
+}
+function notifyBookmarkSaved(record) {
+  // Keep search working — embeddings still index in the background.
+  try { maybeAIIndexInBackground(record); }
+  catch (err) { console.error('[gatheros] AI index failed:', err); }
+  if (bookmarkBatchCount === 0) bookmarkBatchStartedAt = Date.now();
+  bookmarkBatchCount += 1;
+  // Flush after 1.5s of quiet, OR force one every ~5s during a long
+  // continuous sync so the grid still trickles in instead of waiting
+  // for the entire backlog to finish.
+  if (Date.now() - bookmarkBatchStartedAt >= 5000) {
+    flushBookmarkBatch();
+  } else {
+    if (bookmarkBatchTimer) clearTimeout(bookmarkBatchTimer);
+    bookmarkBatchTimer = setTimeout(flushBookmarkBatch, 1500);
+  }
 }
 
 // Surface a duplicate-on-save event to the renderer so it can show a
@@ -951,6 +991,7 @@ app.whenReady().then(() => {
   setSaveNotifier(notifySaved);
   setDuplicateNotifier(notifyDuplicateInRenderer);
   setNeedsUpgradeNotifier(notifyNeedsUpgrade);
+  setBookmarkNotifier(notifyBookmarkSaved);
   setTrayRefresher(rebuildTrayMenu);
   registerMoodmarkFileProtocol();
   // Bootstrap the library registry first — moves any pre-multi-

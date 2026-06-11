@@ -4,9 +4,21 @@
 let savedNotifier = () => {};
 let duplicateNotifier = () => {};
 let needsUpgradeNotifier = () => {};
+let bookmarkNotifier = () => {};
 
 function setSaveNotifier(fn) {
   savedNotifier = typeof fn === 'function' ? fn : () => {};
+}
+
+// Quiet, batched save path for X bookmark syncs — no per-item toast,
+// sound or grid land-animation; the index.js handler collects them and
+// emits a single "Synced N bookmarks" summary.
+function setBookmarkNotifier(fn) {
+  bookmarkNotifier = typeof fn === 'function' ? fn : () => {};
+}
+
+function notifyBookmarkSaved(record) {
+  bookmarkNotifier(record);
 }
 
 function setDuplicateNotifier(fn) {
@@ -50,9 +62,11 @@ module.exports = {
   setSaveNotifier,
   setDuplicateNotifier,
   setNeedsUpgradeNotifier,
+  setBookmarkNotifier,
   setTrayRefresher,
   notifySaved,
   notifyDuplicate,
   notifyNeedsUpgrade,
+  notifyBookmarkSaved,
   refreshTray,
 };
