@@ -435,7 +435,12 @@ body:has(.selection-bar) .trash-toast {
 }
 
 .update-pill:hover {
-  background: var(--hover-bg-soft);
+  /* Composite the soft hover tint over the opaque surface — applying
+     --hover-bg-soft alone (a translucent tint) would replace the
+     surface fill and make the pill see-through on hover. */
+  background:
+    linear-gradient(var(--hover-bg-soft), var(--hover-bg-soft)),
+    var(--surface-1);
 }
 
 .update-pill-dot {
