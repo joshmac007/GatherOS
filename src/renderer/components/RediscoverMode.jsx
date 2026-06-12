@@ -5,6 +5,17 @@ import {
 import styles from './RediscoverMode.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 import { fuzzyMatch } from '../lib/fuzzy.js';
+import TweetCard from './TweetCard.jsx';
+
+// Text-tweet saves (kind='tweet') render as a live TweetCard rather than
+// the captured PNG — a square cover-crop would slice the text off. Parse
+// the stored meta; returns null for non-tweets or malformed JSON so the
+// caller falls back to the image/video path.
+function tweetMetaFor(save) {
+  if (!save || save.kind !== 'tweet' || !save.tweet_meta) return null;
+  try { return JSON.parse(save.tweet_meta); }
+  catch { return null; }
+}
 
 // Rediscover — a tactile review deck. Every save in the active library
 // is shuffled into a stack of square cards; the user flicks the top card
@@ -396,6 +407,7 @@ export default function RediscoverMode({
           if (!id) return null;
           const save = resolve(id);
           if (!save) return null;
+          const tweetMeta = tweetMetaFor(save);
           const isTop = offset === 0;
           const isDragTop = isTop && dragging;
           const transform = isDragTop
@@ -404,7 +416,7 @@ export default function RediscoverMode({
           return (
             <div
               key={id}
-              className={`${styles.deckCard} ${isTop ? styles.deckTop : ''}`}
+              className={`${styles.deckCard} ${isTop ? styles.deckTop : ''} ${tweetMeta ? styles.deckCardTweet : ''}`}
               style={{
                 transform,
                 opacity: isDragTop ? 1 : offsetOpacity(offset),
@@ -418,12 +430,19 @@ export default function RediscoverMode({
               onPointerUp={isTop ? onCardPointerUp : undefined}
               onPointerCancel={isTop ? onCardPointerUp : undefined}
             >
-              {isTop && (
+              {isTop && !tweetMeta && (
                 <span className={styles.deckGrip} aria-hidden="true">
                   <GripHorizontal size={20} strokeWidth={1.6} />
                 </span>
               )}
-              {save.kind === 'video' ? (
+              {tweetMeta ? (
+                // Live tweet — natural height, capped at the deck's square
+                // by .tweetFrame; the grid variant line-clamps long text
+                // with an ellipsis so nothing gets cut mid-word.
+                <div className={styles.tweetFrame}>
+                  <TweetCard meta={tweetMeta} variant="grid" />
+                </div>
+              ) : save.kind === 'video' ? (
                 <video
                   src={fileUrl(save.file_path)}
                   poster={save.thumb_path ? fileUrl(save.thumb_path) : undefined}

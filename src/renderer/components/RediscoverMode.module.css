@@ -94,6 +94,31 @@
   pointer-events: none;
 }
 
+/* Tweet cards keep their natural aspect rather than cover-cropping to a
+   square (which slices the text). The square deckCard becomes a
+   transparent bounding box that vertically centres the tweet; the tweet
+   itself sizes to its content and is capped at the square via
+   .tweetFrame, so a short tweet floats centred and a long one tops out
+   at 1:1 with its text ellipsised. */
+.deckCardTweet {
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tweetFrame {
+  width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* Drag the card, don't select its text — matches the image cards. */
+  pointer-events: none;
+}
+
 
 .deckGrip {
   position: absolute;
