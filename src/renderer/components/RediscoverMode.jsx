@@ -409,6 +409,10 @@ export default function RediscoverMode({
           const save = resolve(id);
           if (!save) return null;
           const tweetMeta = tweetMetaFor(save);
+          const isVideo = save.kind === 'video';
+          // Tweets and videos keep their natural aspect (capped at the
+          // square); only images cover-crop to fill it.
+          const isFreeAspect = !!tweetMeta || isVideo;
           const isTop = offset === 0;
           const isDragTop = isTop && dragging;
           const transform = isDragTop
@@ -417,7 +421,7 @@ export default function RediscoverMode({
           return (
             <div
               key={id}
-              className={`${styles.deckCard} ${isTop ? styles.deckTop : ''} ${tweetMeta ? styles.deckCardTweet : ''}`}
+              className={`${styles.deckCard} ${isTop ? styles.deckTop : ''} ${isFreeAspect ? styles.deckCardFit : ''}`}
               style={{
                 transform,
                 opacity: isDragTop ? 1 : offsetOpacity(offset),
@@ -431,7 +435,7 @@ export default function RediscoverMode({
               onPointerUp={isTop ? onCardPointerUp : undefined}
               onPointerCancel={isTop ? onCardPointerUp : undefined}
             >
-              {isTop && !tweetMeta && (
+              {isTop && !isFreeAspect && (
                 <span className={styles.deckGrip} aria-hidden="true">
                   <GripHorizontal size={20} strokeWidth={1.6} />
                 </span>
@@ -443,12 +447,14 @@ export default function RediscoverMode({
                 <div className={styles.tweetFrame}>
                   <TweetCard meta={tweetMeta} variant="grid" />
                 </div>
-              ) : save.kind === 'video' ? (
+              ) : isVideo ? (
+                // Natural aspect, fit within the square; every visible
+                // card autoplays (muted loop) so the deck stays alive.
                 <video
                   src={fileUrl(save.file_path)}
                   poster={save.thumb_path ? fileUrl(save.thumb_path) : undefined}
-                  className={styles.deckImg}
-                  autoPlay={isTop}
+                  className={styles.deckVideo}
+                  autoPlay
                   muted
                   loop
                   playsInline

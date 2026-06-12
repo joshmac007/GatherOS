@@ -94,13 +94,13 @@
   pointer-events: none;
 }
 
-/* Tweet cards keep their natural aspect rather than cover-cropping to a
-   square (which slices the text). The square deckCard becomes a
-   transparent bounding box that vertically centres the tweet; the tweet
-   itself sizes to its content and is capped at the square via
-   .tweetFrame, so a short tweet floats centred and a long one tops out
-   at 1:1 with its text ellipsised. */
-.deckCardTweet {
+/* Tweets and videos keep their natural aspect rather than cover-cropping
+   to a square (which slices tweet text and crops video framing). The
+   square deckCard becomes a transparent bounding box that centres its
+   content; the inner element (.tweetFrame / .deckVideo) sizes to its
+   content and is capped at the square, so it floats centred and tops out
+   at 1:1. */
+.deckCardFit {
   background: transparent;
   box-shadow: none;
   overflow: visible;
@@ -116,6 +116,22 @@
   border-radius: 16px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
   /* Drag the card, don't select its text — matches the image cards. */
+  pointer-events: none;
+}
+
+/* Video fit within the square, aspect preserved (landscape letterboxes
+   to a shorter card, portrait tops out at 1:1). Carries its own radius +
+   shadow since the deckCard frame is transparent here. */
+.deckVideo {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+  object-fit: contain;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
   pointer-events: none;
 }
 
