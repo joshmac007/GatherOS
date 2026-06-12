@@ -341,10 +341,11 @@ export default function RediscoverMode({
     return BEHIND_2;
   }
   function offsetOpacity(offset) {
+    // Behind cards stay fully opaque — the offset/rotate/scale + drop
+    // shadow already convey depth, and partial opacity made them look
+    // see-through against the dark stage. Only the leaving card fades.
     if (offset <= -1) return 0;
-    if (offset === 0) return 1;
-    if (offset === 1) return 0.82;
-    return 0.55;
+    return 1;
   }
   function offsetZ(offset) {
     if (offset <= -1) return 40;
@@ -455,7 +456,10 @@ export default function RediscoverMode({
                 />
               ) : (
                 <img
-                  src={fileUrl(isTop ? save.file_path : (save.thumb_path || save.file_path))}
+                  // Full-res for every visible card, not just the top —
+                  // there are only ever 3-4 in view, and the 400×300
+                  // thumb looked blurry upscaled into the deck.
+                  src={fileUrl(save.file_path || save.thumb_path)}
                   alt=""
                   className={styles.deckImg}
                   draggable={false}
