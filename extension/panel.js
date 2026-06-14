@@ -67,7 +67,7 @@
         --font: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
         width: 264px;
         padding: 12px;
-        border-radius: 16px;
+        border-radius: 13px;
         background: var(--content-bg);
         box-shadow: 0 10px 34px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12);
         font-family: var(--font);
@@ -88,12 +88,14 @@
       .logo { width:18px; height:18px; display:block; flex:none; margin-left:-1px; border-radius:4px; -webkit-user-drag:none; user-select:none; }
       .brand { font-size:13px; font-weight:600; letter-spacing:-0.012em; }
       .ver { font-size:10px; color:var(--text-tertiary); font-variant-numeric:tabular-nums; margin-left:1px; }
-      .status { display:inline-flex; align-items:center; gap:6px; margin-left:auto; font-size:11px; color:var(--text-secondary); }
+      /* Status moved out of the header to a centered row under the
+         Open GatherOS button so the header doesn't get squished. */
+      .status { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; font-size:11px; color:var(--text-secondary); }
       .dot { width:7px; height:7px; border-radius:50%; background:#c7c7c7; flex:none; }
       .dot.on { background:#34c759; box-shadow:0 0 0 3px rgba(52,199,89,0.18); }
       .dot.idle { background:#ff9f0a; }
       .dot.off { background:#ff3b30; }
-      .x { display:flex; align-items:center; justify-content:center; width:20px; height:20px; padding:0; border:none; border-radius:6px; background:transparent; color:var(--text-secondary); cursor:pointer; }
+      .x { display:flex; align-items:center; justify-content:center; width:20px; height:20px; margin-left:auto; padding:0; border:none; border-radius:6px; background:transparent; color:var(--text-secondary); cursor:pointer; }
       .x:hover { background:var(--hover-bg); color:var(--text-primary); }
       .actions { display:flex; flex-direction:column; gap:6px; }
       .btn { display:flex; align-items:center; gap:10px; width:100%; padding:8px 11px; border:1px solid var(--border); border-radius:8px; background:var(--surface-1); box-shadow:var(--shadow-control); color:var(--text-primary); font-family:inherit; text-align:left; cursor:pointer; }
@@ -116,11 +118,7 @@
       .import.expanded .btn:hover { background:transparent; }
       .scope { display:flex; flex-direction:column; gap:8px; padding:0 10px 10px; }
       .scope[hidden] { display:none; }
-      .chips { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
-      .chip { padding:9px 6px; border:1px solid var(--border); border-radius:8px; background:var(--content-bg); color:var(--text-primary); font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-0.01em; text-align:center; cursor:pointer; font-variant-numeric:tabular-nums; }
-      .chip:hover { background:var(--hover-bg); }
-      .chip:active { transform:scale(0.985); }
-      .chip.selected { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+      .count { width:100%; padding:9px 11px; border:1px solid var(--border); border-radius:8px; background:var(--content-bg); color:var(--text-primary); font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-0.01em; cursor:pointer; }
       .import-go { width:100%; padding:9px 12px; border:none; border-radius:8px; background:var(--accent); color:var(--on-accent); font-family:inherit; font-size:12.5px; font-weight:550; letter-spacing:-0.01em; cursor:pointer; }
       .import-go:disabled { opacity:0.4; cursor:default; }
       .import-go:not(:disabled):hover { background:var(--accent-hover); }
@@ -132,7 +130,6 @@
         <img class="logo" src="${logoUrl}" alt="" draggable="false" />
         <span class="brand">GatherOS</span>
         <span class="ver" id="ver"></span>
-        <span class="status"><span class="dot" id="dot"></span><span id="statusText">Checking…</span></span>
         <button class="x" id="close" title="Close">${svg(ICONS.close, 14)}</button>
       </div>
       <div class="actions">
@@ -144,19 +141,21 @@
       <div class="import" id="import">
         <button class="btn" id="importBookmarks"><span class="ico">${svg(ICONS.bookmark)}</span><span class="txt"><span class="label">Import bookmarks</span><span class="sub" id="importSub">Backfill your X bookmarks</span></span></button>
         <div class="scope" id="scope" hidden>
-          <div class="chips">
-            <button class="chip" data-limit="0">All</button>
-            <button class="chip" data-limit="25">25</button>
-            <button class="chip" data-limit="50">50</button>
-            <button class="chip" data-limit="100">100</button>
-            <button class="chip" data-limit="200">200</button>
-            <button class="chip" data-limit="500">500</button>
-          </div>
+          <select class="count" id="count">
+            <option value="" disabled selected>Choose how many…</option>
+            <option value="25">Most recent 25</option>
+            <option value="50">Most recent 50</option>
+            <option value="100">Most recent 100</option>
+            <option value="200">Most recent 200</option>
+            <option value="500">Most recent 500</option>
+            <option value="0">All bookmarks</option>
+          </select>
           <button class="import-go" id="importGo" disabled>Import</button>
           <div class="scope-note">Imports your most recent bookmarks. Opens x.com and scrolls — duplicates are skipped.</div>
         </div>
       </div>
       <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherOS</span></button>
+      <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">Checking…</span></div>
     </div>
   `;
 
@@ -200,12 +199,10 @@
       : 'Choose how many, then import';
   });
 
-  scope.querySelectorAll('.chip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      selectedLimit = Number(chip.getAttribute('data-limit')); // 0 = all
-      scope.querySelectorAll('.chip').forEach((c) => c.classList.toggle('selected', c === chip));
-      importGo.disabled = false;
-    });
+  const count = root.getElementById('count');
+  count.addEventListener('change', () => {
+    selectedLimit = count.value === '' ? null : Number(count.value); // 0 = all
+    importGo.disabled = selectedLimit === null;
   });
 
   importGo.addEventListener('click', () => {
