@@ -145,6 +145,11 @@
   display: flex;
   align-items: flex-start;
   gap: 11px;
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-control);
 }
 .bmStepNum {
   flex: none;
@@ -178,22 +183,6 @@
   text-wrap: pretty;
 }
 .bmStepDesc strong { font-weight: 600; color: var(--text-secondary); }
-
-.bmExtLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 18px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-family: var(--font-ui);
-  cursor: pointer;
-  transition: color var(--dur-instant) ease;
-}
-.bmExtLink:hover { color: var(--text-secondary); }
 
 /* ── First-launch hero ──────────────────────────────────────────────
    Brand-aligned empty state for a fresh library. The fan of three

@@ -246,11 +246,11 @@ export default function Grid({
           </ol>
           <button
             type="button"
-            className={styles.bmExtLink}
+            className={styles.emptyAction}
             onClick={() => window.moodmark?.shell?.openUrl?.('https://chromewebstore.google.com/detail/gatheros/jflmnonpoapjncoeankehcmenldecojk')}
           >
-            <Chrome size={14} strokeWidth={1.8} aria-hidden="true" />
-            Don’t have the extension? Get it for Chrome
+            <Chrome size={16} strokeWidth={1.8} aria-hidden="true" />
+            Get the Chrome extension
           </button>
         </div>
       );
