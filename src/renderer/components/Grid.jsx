@@ -211,6 +211,51 @@ export default function Grid({
       );
     }
 
+    // Bookmarks view, genuinely empty (no search / color / type filter):
+    // onboard the two ways to fill it, assuming the extension is set up.
+    if (isBookmarks && !trimmedSearch && !colorFilter
+        && !(tweetTypeFilter && tweetTypeFilter !== 'all')) {
+      return (
+        <div className={styles.state}>
+          <div className={styles.emptyIcon} style={{ color: 'var(--icon-muted)' }}>
+            <Bookmark {...EMPTY_ICON} />
+          </div>
+          <div className={styles.emptyTitle}>No bookmarks yet</div>
+          <div className={styles.emptyHint}>
+            With the GatherOS Chrome extension installed, there are two ways to get your X bookmarks in here:
+          </div>
+          <ol className={styles.bmSteps}>
+            <li className={styles.bmStep}>
+              <span className={styles.bmStepNum}>1</span>
+              <span className={styles.bmStepText}>
+                <span className={styles.bmStepTitle}>Backfill your existing bookmarks</span>
+                <span className={styles.bmStepDesc}>
+                  Open the GatherOS panel on x.com and click <strong>Import bookmarks</strong>.
+                </span>
+              </span>
+            </li>
+            <li className={styles.bmStep}>
+              <span className={styles.bmStepNum}>2</span>
+              <span className={styles.bmStepText}>
+                <span className={styles.bmStepTitle}>Bookmark as you browse</span>
+                <span className={styles.bmStepDesc}>
+                  Bookmark any post on X and it imports here automatically.
+                </span>
+              </span>
+            </li>
+          </ol>
+          <button
+            type="button"
+            className={styles.bmExtLink}
+            onClick={() => window.moodmark?.shell?.openUrl?.('https://chromewebstore.google.com/detail/gatheros/jflmnonpoapjncoeankehcmenldecojk')}
+          >
+            <Chrome size={14} strokeWidth={1.8} aria-hidden="true" />
+            Don’t have the extension? Get it for Chrome
+          </button>
+        </div>
+      );
+    }
+
     let title = 'Nothing saved yet';
     let hint = 'Press ⌘⇧S to screenshot, or drag images into this window';
     let EmptyIcon = null;
@@ -242,21 +287,8 @@ export default function Grid({
       hint = 'No bookmarks of this type. Pick a different type, or switch back to All.';
       EmptyIcon = Bookmark;
       emptyIconColor = 'var(--icon-muted)';
-    } else if (isBookmarks) {
-      title = 'No bookmarks yet';
-      hint = 'Bookmark a tweet on X and it lands here automatically. Add the GatherOS Chrome extension to capture them.';
-      EmptyIcon = Bookmark;
-      emptyIconColor = 'var(--icon-muted)';
-      emptyAction = (
-        <button
-          type="button"
-          className={styles.emptyAction}
-          onClick={() => window.moodmark?.shell?.openUrl?.('https://chromewebstore.google.com/detail/gatheros/jflmnonpoapjncoeankehcmenldecojk')}
-        >
-          <Chrome size={16} strokeWidth={1.8} aria-hidden="true" />
-          Get the Chrome extension
-        </button>
-      );
+      // The genuinely-empty bookmarks view is handled by the two-method
+      // onboarding early-return above.
     } else if (isTrash) {
       title = 'Trash is empty';
       hint = 'Deleted saves land here. Empty Trash to remove for good.';
