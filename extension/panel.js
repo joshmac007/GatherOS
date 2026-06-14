@@ -7,9 +7,18 @@
 // Re-injecting toggles: if the panel is already open, remove it.
 (() => {
   const HOST_ID = 'gatheros-panel-host';
+  const VERSION = chrome.runtime.getManifest().version;
 
   const existing = document.getElementById(HOST_ID);
-  if (existing) { existing.remove(); return; }
+  if (existing) {
+    existing.remove();
+    // Same version → genuine toggle (user is closing the panel), so stop.
+    // Different version → a stale panel left behind by a previous
+    // extension load; fall through and rebuild with the current code, so
+    // an extension reload shows up on the first click with no page
+    // refresh. (Requires bumping the manifest version on each change.)
+    if (existing.dataset.gatherosVersion === VERSION) return;
+  }
 
   const ICONS = {
     page: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M2 8h20"/><path d="M6 4v4"/><path d="M10 4v4"/>',
@@ -31,6 +40,7 @@
 
   const host = document.createElement('div');
   host.id = HOST_ID;
+  host.dataset.gatherosVersion = VERSION;
   // NB: no `all:initial` here — it would reset the positioning below
   // back to static. Page-style isolation is handled by `:host` in the
   // shadow CSS, which inline styles override for position/top/right.
