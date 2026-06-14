@@ -217,10 +217,14 @@ function listLibraries() {
         name: l.name,
         createdAt: l.createdAt,
         save_count: countSavesInLibrary(l.id),
-        // A few recent thumbnails for the switcher's cover preview.
-        covers: getLibraryPreviews(l.id, 3)
-          .map((p) => p.thumb_path || p.file_path)
-          .filter(Boolean),
+        // A few recent thumbnails for the switcher's cover preview. Pull
+        // extra rows and keep only the ones whose file is actually on
+        // disk, so a missing thumb / stale path never renders as a dead
+        // broken image in the fanned cards.
+        covers: getLibraryPreviews(l.id, 8)
+          .map(coverPathFor)
+          .filter(Boolean)
+          .slice(0, 3),
       }))
       .sort((a, b) => a.createdAt - b.createdAt),
   };
@@ -312,6 +316,18 @@ function setActiveLibrary(id) {
   reg.active = id;
   writeRegistry(reg);
   return { ok: true };
+}
+
+// Pick the first cover path that actually exists on disk — prefer the
+// thumbnail, fall back to the full image. Returns null when neither file
+// is present (a missing/ungenerated thumb, a manually-removed file, an
+// un-healed legacy path), so the switcher skips it instead of rendering a
+// dead/broken image.
+function coverPathFor(row) {
+  for (const p of [row && row.thumb_path, row && row.file_path]) {
+    try { if (p && fs.existsSync(p)) return p; } catch { /* ignore */ }
+  }
+  return null;
 }
 
 // Read-only peek at a (possibly inactive) library's most recent

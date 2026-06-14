@@ -25,7 +25,17 @@ function LibraryCover({ covers }) {
   return (
     <span className={styles.cover} aria-hidden="true">
       {imgs.map((p, i) => (
-        <img key={i} className={styles.coverImg} src={fileUrl(p)} alt="" draggable={false} />
+        <img
+          key={i}
+          className={styles.coverImg}
+          src={fileUrl(p)}
+          alt=""
+          draggable={false}
+          // Defense-in-depth: if a cover file vanished between the
+          // preview query and render, hide it rather than show a broken
+          // image glyph in the fan.
+          onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+        />
       ))}
     </span>
   );
