@@ -134,7 +134,11 @@ async function ensureAppRunning() {
       // project root via --args so Electron knows which app to load.
       // In a packaged build the bundle is the app's own .app and
       // --args is just unused (harmless).
-      const args = ['-a', bundle];
+      // -g: launch the app in the BACKGROUND. A save from the browser
+      // extension should never steal focus or pop the app to the
+      // foreground — the user is mid-browse. The save still lands and
+      // surfaces via the in-app toast.
+      const args = ['-g', '-a', bundle];
       const appPath = process.env.GATHEROS_APP_PATH;
       if (appPath) args.push('--args', appPath);
       debug('ensureAppRunning: open', args.join(' '));

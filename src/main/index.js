@@ -145,12 +145,11 @@ let dockOpenReady = false;
 
 app.on('open-file', (event, filePath) => {
   event.preventDefault();
+  // Dock-icon drops save quietly in the background. We intentionally do
+  // NOT show/focus the window — popping the app to the foreground on
+  // every dropped image interrupts whatever the user's doing. The save
+  // still confirms via the standard toast.
   dockOpenQueue.push(filePath);
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  }
   drainDockOpenQueue();
 });
 
