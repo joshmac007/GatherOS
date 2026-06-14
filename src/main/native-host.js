@@ -245,6 +245,10 @@ async function handleMessage(msg) {
         notes: msg.notes || null,
         tweetMeta: msg.tweetMeta || null,
         tags: Array.isArray(msg.tags) ? msg.tags : null,
+        // Explicit "Import bookmarks" backfill flag — must be forwarded
+        // so the server can override a bookmark's tombstone and re-import
+        // something the user previously deleted.
+        forceImport: msg.forceImport === true,
       },
       token,
     );
