@@ -96,12 +96,24 @@
       .open .ico { color:var(--on-accent); }
       .open:hover { background:var(--accent-hover); }
       .open:active { transform:scale(0.985); }
-      .scope { display:flex; flex-direction:column; gap:6px; margin-top:8px; padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-1); box-shadow:var(--shadow-control); }
+      /* Import bookmarks: collapsed it's a normal action button; open it
+         becomes a grouped card with the button as its borderless header
+         and the chooser nested inside. */
+      .import { margin-top:6px; }
+      .import.open { border:1px solid var(--border); border-radius:10px; background:var(--surface-1); box-shadow:var(--shadow-control); }
+      .import.open .btn { border:none; box-shadow:none; background:transparent; }
+      .import.open .btn:hover { background:var(--hover-bg); }
+      .scope { display:flex; flex-direction:column; gap:8px; padding:0 10px 10px; }
       .chips { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
       .chip { padding:9px 6px; border:1px solid var(--border); border-radius:8px; background:var(--content-bg); color:var(--text-primary); font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-0.01em; text-align:center; cursor:pointer; font-variant-numeric:tabular-nums; }
       .chip:hover { background:var(--hover-bg); }
       .chip:active { transform:scale(0.985); }
-      .scope-note { font-size:10.5px; color:var(--text-tertiary); letter-spacing:-0.003em; line-height:1.35; margin:2px 1px 0; }
+      .chip.selected { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+      .import-go { width:100%; padding:9px 12px; border:none; border-radius:8px; background:var(--accent); color:var(--on-accent); font-family:inherit; font-size:12.5px; font-weight:550; letter-spacing:-0.01em; cursor:pointer; }
+      .import-go:disabled { opacity:0.4; cursor:default; }
+      .import-go:not(:disabled):hover { background:var(--accent-hover); }
+      .import-go:not(:disabled):active { transform:scale(0.985); }
+      .scope-note { font-size:10.5px; color:var(--text-tertiary); letter-spacing:-0.003em; line-height:1.35; margin:0 1px; }
     </style>
     <div class="panel" part="panel">
       <div class="head" id="head">
@@ -115,18 +127,21 @@
         <button class="btn" data-action="gatheros:capture-full-page"><span class="ico">${svg(ICONS.full)}</span><span class="txt"><span class="label">Capture full page</span><span class="sub">Entire scrollable page</span></span></button>
         <button class="btn" data-action="gatheros:capture-area"><span class="ico">${svg(ICONS.area)}</span><span class="txt"><span class="label">Capture area</span><span class="sub">Drag to select a region</span></span></button>
         <button class="btn" data-action="gatheros:save-url"><span class="ico">${svg(ICONS.link)}</span><span class="txt"><span class="label">Save URL</span><span class="sub">This page as a link</span></span></button>
-        <button class="btn" id="importBookmarks"><span class="ico">${svg(ICONS.bookmark)}</span><span class="txt"><span class="label">Import bookmarks</span><span class="sub" id="importSub">Backfill your X bookmarks</span></span></button>
       </div>
-      <div class="scope" id="scope" hidden>
-        <div class="chips">
-          <button class="chip" data-limit="0">All</button>
-          <button class="chip" data-limit="25">25</button>
-          <button class="chip" data-limit="50">50</button>
-          <button class="chip" data-limit="100">100</button>
-          <button class="chip" data-limit="200">200</button>
-          <button class="chip" data-limit="500">500</button>
+      <div class="import" id="import">
+        <button class="btn" id="importBookmarks"><span class="ico">${svg(ICONS.bookmark)}</span><span class="txt"><span class="label">Import bookmarks</span><span class="sub" id="importSub">Backfill your X bookmarks</span></span></button>
+        <div class="scope" id="scope" hidden>
+          <div class="chips">
+            <button class="chip" data-limit="0">All</button>
+            <button class="chip" data-limit="25">25</button>
+            <button class="chip" data-limit="50">50</button>
+            <button class="chip" data-limit="100">100</button>
+            <button class="chip" data-limit="200">200</button>
+            <button class="chip" data-limit="500">500</button>
+          </div>
+          <button class="import-go" id="importGo" disabled>Import</button>
+          <div class="scope-note">Imports your most recent bookmarks. Opens x.com and scrolls — duplicates are skipped.</div>
         </div>
-        <div class="scope-note">Imports your most recent bookmarks. Opens x.com and scrolls — duplicates are skipped.</div>
       </div>
       <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherOS</span></button>
     </div>
@@ -151,22 +166,36 @@
     });
   });
 
-  // Import bookmarks: reveal the count chooser; each chip kicks off a
-  // backfill in the background worker (which opens x.com and scrolls).
+  // Import bookmarks — a two-step flow nested inside the button:
+  //   1. click the button → reveal the count chooser
+  //   2. pick a count (highlights, but doesn't start)
+  //   3. hit Import → kick off the backfill in the background worker
+  const importEl = root.getElementById('import');
   const scope = root.getElementById('scope');
   const importSub = root.getElementById('importSub');
+  const importGo = root.getElementById('importGo');
+  let selectedLimit = null; // 0 is a valid value (= all), so track null explicitly
+
   root.getElementById('importBookmarks').addEventListener('click', () => {
     scope.hidden = !scope.hidden;
+    importEl.classList.toggle('open', !scope.hidden);
     importSub.textContent = scope.hidden
       ? 'Backfill your X bookmarks'
-      : 'Choose how many to import';
+      : 'Choose how many, then import';
   });
+
   scope.querySelectorAll('.chip').forEach((chip) => {
     chip.addEventListener('click', () => {
-      const limit = Number(chip.getAttribute('data-limit')) || 0; // 0 = all
-      close();
-      chrome.runtime.sendMessage({ type: 'gatheros:import-bookmarks', limit });
+      selectedLimit = Number(chip.getAttribute('data-limit')); // 0 = all
+      scope.querySelectorAll('.chip').forEach((c) => c.classList.toggle('selected', c === chip));
+      importGo.disabled = false;
     });
+  });
+
+  importGo.addEventListener('click', () => {
+    if (selectedLimit === null) return; // nothing picked yet
+    close();
+    chrome.runtime.sendMessage({ type: 'gatheros:import-bookmarks', limit: selectedLimit });
   });
 
   root.getElementById('open').addEventListener('click', () => {
