@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bookmarks empty state — two ways to sync</title>
+<style>
+  :root {
+    --font: 'Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+    --bar-bg: #0d0d0f;
+    --bar-fg: rgba(255,255,255,0.92);
+    --bar-dim: rgba(255,255,255,0.5);
+    --bar-line: rgba(255,255,255,0.12);
+    --accent-chip: #ff5a1f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--font);
+    background: #18181b;
+    color: #fff;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Top navigation bar ─────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px;
+    background: var(--bar-bg);
+    border-bottom: 1px solid var(--bar-line);
+  }
+  .topbar h1 {
+    font-size: 13px; font-weight: 600; margin: 0;
+    color: var(--bar-fg); white-space: nowrap;
+  }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+  .tab {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 11px; border-radius: 8px;
+    background: transparent; border: 1px solid transparent;
+    color: var(--bar-dim); font-family: inherit; font-size: 12px; font-weight: 500;
+    letter-spacing: -0.01em; cursor: pointer; white-space: nowrap;
+    transition: background .12s ease, color .12s ease;
+  }
+  .tab:hover { background: rgba(255,255,255,0.06); color: var(--bar-fg); }
+  .tab.active { background: rgba(255,255,255,0.12); color: #fff; }
+  .tab .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 5px;
+    background: rgba(255,255,255,0.12); color: var(--bar-fg);
+    font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .tab.active .n { background: var(--accent-chip); color: #fff; }
+  .themebtn {
+    padding: 6px 11px; border-radius: 8px; cursor: pointer;
+    background: rgba(255,255,255,0.08); border: 1px solid var(--bar-line);
+    color: var(--bar-fg); font-family: inherit; font-size: 12px; font-weight: 500;
+  }
+  .themebtn:hover { background: rgba(255,255,255,0.14); }
+
+  .meta { padding: 16px 22px 4px; }
+  .meta .name { font-size: 14px; font-weight: 650; color: #fff; }
+  .meta .rationale { font-size: 12.5px; color: rgba(255,255,255,0.55); margin-top: 3px; max-width: 760px; line-height: 1.45; }
+
+  .panel { display: none; padding: 14px 22px 40px; }
+  .panel.active { display: block; }
+
+  /* ── Faux app content frame (themed) ───────────────────────── */
+  .app {
+    --content-bg: #fafaf9;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.07);
+    --line: rgba(0,0,0,0.05);
+    --text-1: #0a0a0a;
+    --text-2: rgba(0,0,0,0.58);
+    --text-3: rgba(0,0,0,0.40);
+    --accent: #0a0a0a;
+    --on-accent: #ffffff;
+    --hover: #eeeeec;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(16,16,19,0.06);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,0.10);
+    --xbg: #f0f7ff; --xfg: #1d9bf0;
+    --chrome1:#4285F4; --chrome2:#EA4335; --chrome3:#FBBC05; --chrome4:#34A853;
+  }
+  .app[data-theme="dark"] {
+    --content-bg: #1c1c1e;
+    --surface: #242426;
+    --border: rgba(255,255,255,0.09);
+    --line: rgba(255,255,255,0.07);
+    --text-1: #ffffff;
+    --text-2: rgba(255,255,255,0.62);
+    --text-3: rgba(255,255,255,0.42);
+    --accent: #ffffff;
+    --on-accent: #0a0a0a;
+    --hover: rgba(255,255,255,0.08);
+    --shadow: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-lg: 0 14px 40px rgba(0,0,0,0.5);
+    --xbg: rgba(29,155,240,0.12); --xfg: #6fc3ff;
+  }
+  .app {
+    height: 660px; max-width: 1040px; margin: 0 auto;
+    border-radius: 16px; overflow: hidden;
+    background: var(--content-bg);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    display: flex; flex-direction: column;
+    color: var(--text-1);
+  }
+  /* faux toolbar + chip rail for context */
+  .winbar { display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid var(--line); }
+  .dots { display:flex; gap:6px; }
+  .dots i { width:11px; height:11px; border-radius:50%; display:block; }
+  .dots i:nth-child(1){ background:#ff5f57; } .dots i:nth-child(2){ background:#febc2e; } .dots i:nth-child(3){ background:#28c840; }
+  .winmid { flex:1; display:flex; justify-content:center; gap:4px; }
+  .modepill { font-size:12px; font-weight:550; color:var(--text-2); padding:5px 12px; border-radius:999px; }
+  .modepill.on { background: var(--text-1); color: var(--content-bg); }
+  .chiprail { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line); }
+  .chip { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:500; color:var(--text-3); padding:6px 10px; border-radius:8px; }
+  .chip.on { color: var(--text-1); background: var(--hover); }
+  .chip svg { width:15px; height:15px; }
+
+  .canvas { flex:1; display:flex; align-items:center; justify-content:center; padding:32px; overflow:auto; }
+
+  /* shared empty-state atoms */
+  .ic { display:inline-flex; align-items:center; justify-content:center; }
+  .pill {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:10px 18px; border-radius:999px; border:none;
+    background:var(--accent); color:var(--on-accent);
+    font-family:inherit; font-size:13.5px; font-weight:550; letter-spacing:-0.01em; cursor:pointer;
+    transition:opacity .12s ease, transform .1s ease;
+  }
+  .pill:hover { opacity:.9; } .pill:active { transform:scale(.98); }
+  .pill svg { width:16px; height:16px; }
+  .ghost {
+    display:inline-flex; align-items:center; gap:7px; background:none; border:none;
+    color:var(--text-3); font-family:inherit; font-size:12.5px; font-weight:500; cursor:pointer;
+  }
+  .ghost:hover { color:var(--text-2); } .ghost svg { width:14px; height:14px; }
+  .kbd {
+    display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px;
+    border:1px solid var(--border); border-radius:5px; background:var(--surface);
+    font-size:11px; font-weight:600; color:var(--text-2);
+  }
+  .xbadge { display:inline-flex; align-items:center; justify-content:center; border-radius:8px; background:var(--xbg); color:var(--xfg); }
+  .xbadge svg { width:55%; height:55%; }
+
+  /* ===== Iteration 1: side-by-side cards ===== */
+  .i1 { width:100%; max-width:720px; text-align:center; }
+  .i1 .hd-ic { width:48px; height:48px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); color:var(--text-2); margin:0 auto 16px; }
+  .i1 .hd-ic svg { width:22px; height:22px; }
+  .i1 h2 { font-size:21px; font-weight:600; color:var(--text-1); margin:0 0 7px; letter-spacing:-0.02em; }
+  .i1 p.sub { font-size:13.5px; color:var(--text-3); margin:0 auto 26px; max-width:430px; line-height:1.5; }
+  .i1 .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; text-align:left; }
+  .mcard { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px; }
+  .mcard .top { display:flex; align-items:center; gap:10px; }
+  .mcard .mic { width:34px; height:34px; border-radius:9px; flex:none; }
+  .mcard .label { font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-3); }
+  .mcard h3 { font-size:15px; font-weight:600; color:var(--text-1); margin:2px 0 0; letter-spacing:-0.01em; }
+  .mcard p { font-size:12.5px; color:var(--text-2); margin:0; line-height:1.5; flex:1; }
+  .mcard .act { margin-top:4px; }
+  .mtag { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:550; color:var(--text-2); background:var(--hover); padding:6px 11px; border-radius:8px; }
+  .mtag svg{ width:14px; height:14px; }
+  .i1 .foot { margin-top:22px; }
+
+  /* ===== Iteration 2: guided steps (vertical timeline) ===== */
+  .i2 { width:100%; max-width:520px; }
+  .i2 .head { text-align:center; margin-bottom:24px; }
+  .i2 .head .glyph { width:52px; height:52px; border-radius:50%; margin:0 auto 14px; background:var(--xbg); color:var(--xfg); }
+  .i2 .head .glyph svg { width:24px; height:24px; }
+  .i2 h2 { font-size:20px; font-weight:600; margin:0 0 6px; color:var(--text-1); letter-spacing:-0.02em; }
+  .i2 .head p { font-size:13px; color:var(--text-3); margin:0; }
+  .steps { position:relative; display:flex; flex-direction:column; gap:14px; }
+  .steps::before { content:""; position:absolute; left:15px; top:14px; bottom:14px; width:2px; background:var(--border); }
+  .step { position:relative; display:flex; gap:14px; align-items:flex-start; }
+  .step .num { position:relative; z-index:1; flex:none; width:32px; height:32px; border-radius:50%; background:var(--accent); color:var(--on-accent); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+  .step .body { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:13px 15px; box-shadow:var(--shadow); }
+  .step .body h3 { font-size:14.5px; font-weight:600; margin:0 0 3px; color:var(--text-1); }
+  .step .body p { font-size:12.5px; color:var(--text-2); margin:0; line-height:1.5; }
+  .step .body .inline-pill { display:inline-flex; align-items:center; gap:5px; font-weight:600; color:var(--text-1); }
+  .step .body .inline-pill svg { width:13px; height:13px; }
+  .i2 .foot { text-align:center; margin-top:22px; }
+
+  /* ===== Iteration 3: lead with import (primary + secondary) ===== */
+  .i3 { width:100%; max-width:560px; text-align:center; }
+  .i3 .mark { width:60px;height:60px;margin:0 auto 18px; }
+  .i3 h2 { font-size:24px; font-weight:650; margin:0 0 8px; color:var(--text-1); letter-spacing:-0.025em; }
+  .i3 p.lead { font-size:14px; color:var(--text-2); margin:0 auto 22px; max-width:400px; line-height:1.5; }
+  .i3 .primary-row { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .i3 .pill.big { padding:13px 24px; font-size:15px; }
+  .i3 .hintline { font-size:12px; color:var(--text-3); display:flex; align-items:center; gap:8px; }
+  .i3 .divider { display:flex; align-items:center; gap:12px; margin:24px auto; max-width:340px; color:var(--text-3); font-size:11.5px; font-weight:600; letter-spacing:.06em; }
+  .i3 .divider::before, .i3 .divider::after { content:""; height:1px; flex:1; background:var(--border); }
+  .i3 .secondary { display:flex; align-items:center; gap:12px; justify-content:center; text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow); max-width:420px; margin:0 auto; }
+  .i3 .secondary .sic { width:38px;height:38px;border-radius:10px;flex:none; }
+  .i3 .secondary h3 { font-size:14px; font-weight:600; margin:0 0 2px; color:var(--text-1); }
+  .i3 .secondary p { font-size:12.5px; color:var(--text-2); margin:0; line-height:1.45; }
+  .i3 .foot { margin-top:22px; }
+
+  /* ===== Iteration 4: sync map (diagram) ===== */
+  .i4 { width:100%; max-width:680px; text-align:center; }
+  .i4 h2 { font-size:20px; font-weight:600; margin:0 0 4px; color:var(--text-1); letter-spacing:-0.02em; }
+  .i4 p.sub { font-size:13px; color:var(--text-3); margin:0 0 30px; }
+  .map { display:flex; align-items:center; justify-content:center; gap:0; margin-bottom:8px; }
+  .node { display:flex; flex-direction:column; align-items:center; gap:8px; width:120px; }
+  .node .box { width:64px; height:64px; border-radius:18px; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow); }
+  .node .box.x { background:#000; color:#fff; }
+  .node .box.g { background:var(--surface); border:1px solid var(--border); }
+  .node .box svg { width:30px; height:30px; }
+  .node .cap { font-size:12px; font-weight:600; color:var(--text-2); }
+  .routes { flex:1; display:flex; flex-direction:column; gap:14px; padding:0 6px; }
+  .route { position:relative; }
+  .route .track { height:2px; background:var(--border); border-radius:2px; position:relative; }
+  .route .track::after { content:""; position:absolute; right:-1px; top:50%; transform:translateY(-50%); border-left:6px solid var(--text-3); border-top:4px solid transparent; border-bottom:4px solid transparent; }
+  .route .lab { display:inline-flex; align-items:center; gap:7px; background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:6px 12px; box-shadow:var(--shadow); position:relative; top:-2px; }
+  .route .lab svg { width:14px; height:14px; }
+  .route .lab b { font-size:12.5px; font-weight:600; color:var(--text-1); }
+  .route .lab span { font-size:11.5px; color:var(--text-3); }
+  .i4 .legend { display:flex; gap:24px; justify-content:center; margin-top:26px; text-align:left; }
+  .i4 .leg { display:flex; gap:10px; max-width:230px; }
+  .i4 .leg .ln { font-size:13px; font-weight:600; color:var(--text-1); }
+  .i4 .leg p { font-size:12px; color:var(--text-3); margin:2px 0 0; line-height:1.45; }
+  .i4 .leg .d { flex:none; width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center; background:var(--hover); color:var(--text-2); }
+  .i4 .leg .d svg { width:13px; height:13px; }
+  .i4 .foot { margin-top:28px; }
+
+  /* ===== Iteration 5: method toggle (segmented) ===== */
+  .i5 { width:100%; max-width:540px; text-align:center; }
+  .i5 h2 { font-size:20px; font-weight:600; margin:0 0 6px; color:var(--text-1); letter-spacing:-0.02em; }
+  .i5 p.sub { font-size:13px; color:var(--text-3); margin:0 0 20px; }
+  .seg { display:inline-flex; padding:3px; gap:3px; background:var(--hover); border-radius:11px; margin-bottom:20px; }
+  .seg button { display:inline-flex; align-items:center; gap:8px; border:none; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; font-weight:550; color:var(--text-2); padding:8px 16px; border-radius:8px; letter-spacing:-0.01em; transition:background .12s ease,color .12s ease; }
+  .seg button svg { width:15px; height:15px; }
+  .seg button.on { background:var(--surface); color:var(--text-1); box-shadow:var(--shadow); }
+  .segpanel { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:24px; box-shadow:var(--shadow); text-align:center; min-height:188px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
+  .segpanel .pic { width:46px; height:46px; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+  .segpanel h3 { font-size:16px; font-weight:600; margin:0; color:var(--text-1); letter-spacing:-0.01em; }
+  .segpanel p { font-size:13px; color:var(--text-2); margin:0; max-width:360px; line-height:1.5; }
+  .segpanel .demo { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--text-3); margin-top:2px; }
+  .seg-hide { display:none; }
+  .i5 .foot { margin-top:20px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Bookmarks empty state — two ways to sync</h1>
+    <div class="tabs" id="tabs"></div>
+    <button class="themebtn" id="theme">◐ Dark</button>
+  </div>
+
+  <div class="meta">
+    <div class="name" id="metaName"></div>
+    <div class="rationale" id="metaRat"></div>
+  </div>
+
+  <!-- ITER 1 -->
+  <section class="panel" data-i="1">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span>
+        <span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="canvas">
+        <div class="i1">
+          <div class="ic hd-ic" data-ic="bookmark"></div>
+          <h2>No bookmarks yet</h2>
+          <p class="sub">With the GatherOS extension installed, there are two ways to get your X bookmarks in here.</p>
+          <div class="grid">
+            <div class="mcard">
+              <div class="top">
+                <span class="ic mic xbadge" data-ic="x"></span>
+                <div><div class="label">Catch up</div><h3>Backfill what you have</h3></div>
+              </div>
+              <p>Open the GatherOS panel on x.com and choose how many to pull in.</p>
+              <div class="act"><span class="mtag" data-ic="download">Import bookmarks</span></div>
+            </div>
+            <div class="mcard">
+              <div class="top">
+                <span class="ic mic xbadge" data-ic="auto"></span>
+                <div><div class="label">Ongoing</div><h3>Bookmark as you browse</h3></div>
+              </div>
+              <p>Bookmark any post on X and it imports here automatically — nothing to click.</p>
+              <div class="act"><span class="mtag" data-ic="bolt">Always on</span></div>
+            </div>
+          </div>
+          <div class="foot"><button class="ghost" data-ic="chrome">Don’t have the extension? Get it for Chrome</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ITER 2 -->
+  <section class="panel" data-i="2">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span>
+        <span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="canvas">
+        <div class="i2">
+          <div class="head">
+            <div class="ic glyph" data-ic="x"></div>
+            <h2>Let’s fill your bookmarks</h2>
+            <p>Two quick ways, once the GatherOS extension is installed.</p>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <span class="num">1</span>
+              <div class="body">
+                <h3>Backfill your existing bookmarks</h3>
+                <p>Open the GatherOS panel on x.com and click <span class="inline-pill" data-ic="download">Import bookmarks</span> — pick the most recent 25–500, or all of them.</p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="num">2</span>
+              <div class="body">
+                <h3>Bookmark as you browse</h3>
+                <p>From now on, bookmark any post on X and it imports here automatically.</p>
+              </div>
+            </div>
+          </div>
+          <div class="foot"><button class="ghost" data-ic="chrome">Get the Chrome extension</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ITER 3 -->
+  <section class="panel" data-i="3">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span>
+        <span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="canvas">
+        <div class="i3">
+          <div class="ic mark" data-ic="gather"></div>
+          <h2>Bring your X bookmarks in</h2>
+          <p class="lead">Pull in everything you’ve already saved on X — in one go.</p>
+          <div class="primary-row">
+            <button class="pill big" data-ic="download">Import bookmarks</button>
+            <div class="hintline">Opens the GatherOS panel on x.com</div>
+          </div>
+          <div class="divider">AND, AUTOMATICALLY</div>
+          <div class="secondary">
+            <span class="ic sic xbadge" data-ic="auto"></span>
+            <div>
+              <h3>New bookmarks sync themselves</h3>
+              <p>Bookmark any post on X and it lands here — no extra step.</p>
+            </div>
+          </div>
+          <div class="foot"><button class="ghost" data-ic="chrome">Don’t have the extension yet? Get it for Chrome</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ITER 4 -->
+  <section class="panel" data-i="4">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span>
+        <span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="canvas">
+        <div class="i4">
+          <h2>From X to Gather, two ways</h2>
+          <p class="sub">Install the GatherOS extension, then pick your path — or use both.</p>
+          <div class="map">
+            <div class="node"><span class="box x" data-ic="x"></span><span class="cap">Your X bookmarks</span></div>
+            <div class="routes">
+              <div class="route"><div class="track"></div><span class="lab" data-ic="download"><b>Import all at once</b><span>· backfill</span></span></div>
+              <div class="route"><div class="track"></div><span class="lab" data-ic="auto"><b>Auto, as you bookmark</b><span>· live</span></span></div>
+            </div>
+            <div class="node"><span class="box g" data-ic="gather"></span><span class="cap">GatherOS</span></div>
+          </div>
+          <div class="legend">
+            <div class="leg"><span class="ic d" data-ic="download"></span><div><span class="ln">Backfill</span><p>Open the panel on x.com → Import bookmarks.</p></div></div>
+            <div class="leg"><span class="ic d" data-ic="auto"></span><div><span class="ln">Live sync</span><p>Bookmark on X → it appears here automatically.</p></div></div>
+          </div>
+          <div class="foot"><button class="ghost" data-ic="chrome">Get the Chrome extension</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ITER 5 -->
+  <section class="panel" data-i="5">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span>
+        <span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="canvas">
+        <div class="i5">
+          <h2>No bookmarks yet</h2>
+          <p class="sub">Two ways to sync them in — with the GatherOS extension installed.</p>
+          <div class="seg" id="seg5">
+            <button class="on" data-seg="a" data-ic="download">Import existing</button>
+            <button data-seg="b" data-ic="auto">Auto-sync new</button>
+          </div>
+          <div class="segpanel" data-seg-body="a">
+            <span class="ic pic xbadge" data-ic="download"></span>
+            <h3>Backfill your existing bookmarks</h3>
+            <p>Open the GatherOS panel on x.com and click <b>Import bookmarks</b>. Choose the most recent 25–500, or pull in everything.</p>
+            <span class="demo"><span class="kbd">⌘</span> on x.com → Import bookmarks</span>
+          </div>
+          <div class="segpanel seg-hide" data-seg-body="b">
+            <span class="ic pic xbadge" data-ic="auto"></span>
+            <h3>Bookmark as you browse</h3>
+            <p>Already set up. Bookmark any post on X and it imports into Gather automatically — nothing else to do.</p>
+            <span class="demo" data-ic="bolt">Live · runs in the background</span>
+          </div>
+          <div class="foot"><button class="ghost" data-ic="chrome">Don’t have the extension? Get it for Chrome</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<script>
+  // ── icon library (inline SVG, currentColor) ──────────────────
+  const ICONS = {
+    bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+    x: '<svg viewBox="0 0 1200 1227" fill="currentColor"><path d="M714 519 1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
+    auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>',
+    bolt: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg>',
+    chrome: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>',
+    gather: '<svg viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="6" fill="#1c1c1e"/><path d="M9 6.5h6a1 1 0 0 1 1 1V18l-4-2.6L8 18V7.5a1 1 0 0 1 1-1z" fill="#ff5a1f"/></svg>',
+  };
+  document.querySelectorAll('[data-ic]').forEach(el => { el.innerHTML = ICONS[el.getAttribute('data-ic')] || ''; });
+
+  // chip rail (Bookmarks active) injected into each panel for context
+  const chipRail = `
+    <span class="chip">All</span>
+    <span class="chip">Unsorted</span>
+    <span class="chip on">${ICONS.x}Bookmarks</span>
+    <span class="chip">Trash</span>`;
+  document.querySelectorAll('[data-chips]').forEach(el => { el.innerHTML = chipRail; });
+
+  // ── iteration metadata ───────────────────────────────────────
+  const ITER = {
+    1: { name: 'Side-by-side cards', rat: 'Two equal method cards presented at once — “catch up” vs “ongoing.” Best when you want both paths to feel like first-class, parallel choices rather than a sequence.' },
+    2: { name: 'Guided steps', rat: 'A numbered vertical flow that reads as a quick setup: do step 1 (backfill), then step 2 happens forever. Most instructional; reassures a brand-new user there’s an order to follow.' },
+    3: { name: 'Lead with import', rat: 'Backfill is the single hero action (instant payoff = a full library now); auto-sync is framed as the always-on bonus underneath. Best for driving the one click that fills the screen fastest.' },
+    4: { name: 'Sync map', rat: 'An illustrative X → GatherOS diagram with two labelled routes. Most editorial / explanatory — it teaches the mental model that both methods are just two pipes into the same place.' },
+    5: { name: 'Method toggle', rat: 'A segmented control to flip between the two methods, each in its own focused panel. Calmest at rest (one thing at a time) and interactive — good if the copy per method is longer.' },
+  };
+
+  const tabs = document.getElementById('tabs');
+  const panels = [...document.querySelectorAll('.panel')];
+  const metaName = document.getElementById('metaName');
+  const metaRat = document.getElementById('metaRat');
+
+  Object.keys(ITER).forEach(k => {
+    const b = document.createElement('button');
+    b.className = 'tab'; b.dataset.go = k;
+    b.innerHTML = `<span class="n">${k}</span>${ITER[k].name}`;
+    b.addEventListener('click', () => show(k));
+    tabs.appendChild(b);
+  });
+
+  function show(k) {
+    panels.forEach(p => p.classList.toggle('active', p.dataset.i === String(k)));
+    [...tabs.children].forEach(t => t.classList.toggle('active', t.dataset.go === String(k)));
+    metaName.textContent = `${k} · ${ITER[k].name}`;
+    metaRat.textContent = ITER[k].rat;
+  }
+  document.addEventListener('keydown', e => { if (ITER[e.key]) show(e.key); });
+
+  // theme toggle (flips every faux app frame)
+  let dark = false;
+  document.getElementById('theme').addEventListener('click', () => {
+    dark = !dark;
+    document.querySelectorAll('.app').forEach(a => a.setAttribute('data-theme', dark ? 'dark' : 'light'));
+    document.getElementById('theme').textContent = dark ? '◑ Light' : '◐ Dark';
+  });
+
+  // iteration 5 segmented control
+  const seg = document.getElementById('seg5');
+  if (seg) {
+    seg.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+        const which = btn.dataset.seg;
+        document.querySelectorAll('[data-seg-body]').forEach(p => {
+          p.classList.toggle('seg-hide', p.getAttribute('data-seg-body') !== which);
+        });
+      });
+    });
+  }
+
+  show('1');
+</script>
+</body>
+</html>
