@@ -97,10 +97,8 @@
       .open:hover { background:var(--accent-hover); }
       .open:active { transform:scale(0.985); }
       .scope { display:flex; flex-direction:column; gap:6px; margin-top:8px; padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-1); box-shadow:var(--shadow-control); }
-      .scope-label { font-size:11px; font-weight:600; color:var(--text-secondary); letter-spacing:-0.005em; margin:0 1px 1px; }
-      .chips { display:flex; flex-wrap:wrap; gap:6px; }
-      .chip { width:100%; padding:8px 11px; border:1px solid var(--border); border-radius:8px; background:var(--content-bg); color:var(--text-primary); font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-0.01em; text-align:left; cursor:pointer; }
-      .chip.num { flex:1 1 0; min-width:42px; width:auto; padding:8px 4px; text-align:center; font-variant-numeric:tabular-nums; }
+      .chips { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+      .chip { padding:9px 6px; border:1px solid var(--border); border-radius:8px; background:var(--content-bg); color:var(--text-primary); font-family:inherit; font-size:12.5px; font-weight:500; letter-spacing:-0.01em; text-align:center; cursor:pointer; font-variant-numeric:tabular-nums; }
       .chip:hover { background:var(--hover-bg); }
       .chip:active { transform:scale(0.985); }
       .scope-note { font-size:10.5px; color:var(--text-tertiary); letter-spacing:-0.003em; line-height:1.35; margin:2px 1px 0; }
@@ -117,18 +115,17 @@
         <button class="btn" data-action="gatheros:capture-full-page"><span class="ico">${svg(ICONS.full)}</span><span class="txt"><span class="label">Capture full page</span><span class="sub">Entire scrollable page</span></span></button>
         <button class="btn" data-action="gatheros:capture-area"><span class="ico">${svg(ICONS.area)}</span><span class="txt"><span class="label">Capture area</span><span class="sub">Drag to select a region</span></span></button>
         <button class="btn" data-action="gatheros:save-url"><span class="ico">${svg(ICONS.link)}</span><span class="txt"><span class="label">Save URL</span><span class="sub">This page as a link</span></span></button>
-        <button class="btn" id="importBookmarks"><span class="ico">${svg(ICONS.bookmark)}</span><span class="txt"><span class="label">Import bookmarks</span><span class="sub">Backfill your X bookmarks</span></span></button>
+        <button class="btn" id="importBookmarks"><span class="ico">${svg(ICONS.bookmark)}</span><span class="txt"><span class="label">Import bookmarks</span><span class="sub" id="importSub">Backfill your X bookmarks</span></span></button>
       </div>
       <div class="scope" id="scope" hidden>
-        <div class="scope-label">How many to import?</div>
         <div class="chips">
-          <button class="chip num" data-limit="25">25</button>
-          <button class="chip num" data-limit="50">50</button>
-          <button class="chip num" data-limit="100">100</button>
-          <button class="chip num" data-limit="200">200</button>
-          <button class="chip num" data-limit="500">500</button>
+          <button class="chip" data-limit="0">All</button>
+          <button class="chip" data-limit="25">25</button>
+          <button class="chip" data-limit="50">50</button>
+          <button class="chip" data-limit="100">100</button>
+          <button class="chip" data-limit="200">200</button>
+          <button class="chip" data-limit="500">500</button>
         </div>
-        <button class="chip" data-limit="0">All bookmarks</button>
         <div class="scope-note">Imports your most recent bookmarks. Opens x.com and scrolls — duplicates are skipped.</div>
       </div>
       <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherOS</span></button>
@@ -157,8 +154,12 @@
   // Import bookmarks: reveal the count chooser; each chip kicks off a
   // backfill in the background worker (which opens x.com and scrolls).
   const scope = root.getElementById('scope');
+  const importSub = root.getElementById('importSub');
   root.getElementById('importBookmarks').addEventListener('click', () => {
     scope.hidden = !scope.hidden;
+    importSub.textContent = scope.hidden
+      ? 'Backfill your X bookmarks'
+      : 'Choose how many to import';
   });
   scope.querySelectorAll('.chip').forEach((chip) => {
     chip.addEventListener('click', () => {
