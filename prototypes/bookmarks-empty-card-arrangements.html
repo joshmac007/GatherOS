@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bookmarks empty state — card arrangements</title>
+<style>
+  /* ── App design tokens (copied verbatim from variables.css) ── */
+  .app {
+    --content-bg: #FAFAF9;
+    --surface-1: #FAFAF9;
+    --border: rgba(0, 0, 0, 0.07);
+    --border-hairline: rgba(0, 0, 0, 0.06);
+    --text-primary: #000000;
+    --text-secondary: rgba(0, 0, 0, 0.55);
+    --text-tertiary: rgba(0, 0, 0, 0.4);
+    --icon-muted: #c7c7c7;
+    --hover-bg: #EAEAEA;
+    --shadow-control: 0 1px 3px -1px rgba(16, 16, 19, 0.05);
+    --font-ui: 'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+    --text-xs: 11px; --text-sm: 12px; --text-md: 13px; --text-lg: 18px;
+    --radius-sm: 4px; --radius-md: 7px; --radius-lg: 10px; --radius-pill: 999px;
+  }
+  .app[data-theme="dark"] {
+    --content-bg: #1C1C1E;
+    --surface-1: #242426;
+    --border: rgba(255, 255, 255, 0.09);
+    --border-hairline: rgba(255, 255, 255, 0.07);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-tertiary: rgba(255, 255, 255, 0.42);
+    --icon-muted: #4a4a4a;
+    --hover-bg: rgba(255, 255, 255, 0.08);
+    --shadow-control: 0 1px 3px -1px rgba(0, 0, 0, 0.40);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: var(--font-ui); background:#18181b; color:#fff; -webkit-font-smoothing:antialiased; letter-spacing:-0.01em; }
+
+  /* ── prototype chrome ── */
+  .topbar { position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:14px; padding:10px 16px; background:#0d0d0f; border-bottom:1px solid rgba(255,255,255,0.12); }
+  .topbar h1 { font-size:13px; font-weight:600; margin:0; white-space:nowrap; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
+  .tab { display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border-radius:8px; background:transparent; border:none; color:rgba(255,255,255,0.5); font-family:inherit; font-size:12px; font-weight:500; cursor:pointer; white-space:nowrap; }
+  .tab:hover { background:rgba(255,255,255,0.06); color:#fff; }
+  .tab.active { background:rgba(255,255,255,0.12); color:#fff; }
+  .tab .n { display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border-radius:5px; background:rgba(255,255,255,0.12); font-size:10px; font-weight:700; }
+  .tab.active .n { background:#ff5a1f; }
+  .themebtn { padding:6px 11px; border-radius:8px; cursor:pointer; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); color:#fff; font-family:inherit; font-size:12px; font-weight:500; }
+  .meta { padding:16px 22px 4px; }
+  .meta .name { font-size:14px; font-weight:650; }
+  .meta .rationale { font-size:12.5px; color:rgba(255,255,255,0.55); margin-top:3px; max-width:780px; line-height:1.45; }
+  .panel { display:none; padding:14px 22px 40px; }
+  .panel.active { display:block; }
+
+  /* faux app content frame */
+  .app { height:600px; max-width:1000px; margin:0 auto; border-radius:16px; overflow:hidden; background:var(--content-bg); border:1px solid var(--border); box-shadow:0 14px 40px rgba(0,0,0,0.4); display:flex; flex-direction:column; color:var(--text-primary); }
+  .winbar { display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid var(--border-hairline); }
+  .dots { display:flex; gap:6px; } .dots i { width:11px; height:11px; border-radius:50%; display:block; }
+  .dots i:nth-child(1){ background:#ff5f57; } .dots i:nth-child(2){ background:#febc2e; } .dots i:nth-child(3){ background:#28c840; }
+  .winmid { flex:1; display:flex; justify-content:center; gap:4px; }
+  .modepill { font-size:12px; font-weight:550; color:var(--text-secondary); padding:5px 12px; border-radius:999px; }
+  .modepill.on { background:var(--text-primary); color:var(--content-bg); }
+  .chiprail { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--border-hairline); }
+  .chip { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:500; color:var(--text-tertiary); padding:6px 10px; border-radius:8px; }
+  .chip.on { color:var(--text-primary); background:var(--hover-bg); }
+  .chip svg { width:15px; height:15px; }
+
+  /* ── EXACT empty-state classes from Grid.module.css ── */
+  .state { flex:1 1 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:40px; background:var(--content-bg); color:var(--text-tertiary); overflow:auto; }
+  .emptyIcon { display:inline-flex; align-items:center; justify-content:center; color:var(--icon-muted); }
+  .emptyIcon svg { width:30px; height:30px; }
+  .emptyTitle { font-size:var(--text-lg); font-weight:500; color:var(--text-secondary); letter-spacing:-0.01em; }
+  .emptyHint { font-size:var(--text-sm); color:var(--text-tertiary); max-width:340px; text-align:center; text-wrap:pretty; }
+  .emptyAction { display:inline-flex; align-items:center; gap:8px; margin-top:16px; padding:9px 18px; border-radius:var(--radius-pill); border:none; background:var(--text-primary); color:var(--surface-1); font-size:var(--text-md); font-weight:500; letter-spacing:-0.005em; font-family:var(--font-ui); cursor:pointer; }
+  .emptyAction svg { width:16px; height:16px; }
+  .bmSteps { list-style:none; margin:14px 0 0; padding:0; display:flex; flex-direction:column; gap:12px; max-width:360px; text-align:left; }
+  .bmStep { display:flex; align-items:flex-start; gap:11px; padding:13px 15px; border:1px solid var(--border); border-radius:12px; background:var(--surface-1); box-shadow:var(--shadow-control); }
+  .bmStepNum { flex:none; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--text-primary); color:var(--surface-1); font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .bmStepNum svg { width:12px; height:12px; }
+  .bmStepText { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .bmStepTitle { font-size:var(--text-sm); font-weight:550; color:var(--text-secondary); letter-spacing:-0.005em; }
+  .bmStepDesc { font-size:var(--text-sm); color:var(--text-tertiary); text-wrap:pretty; }
+  .bmStepDesc strong { font-weight:600; color:var(--text-secondary); }
+
+  /* ── arrangement-specific layout only (no new visual styling) ── */
+  /* 1: side by side */
+  .row2 { flex-direction:row; max-width:560px; }
+  .row2 .bmStep { flex:1; }
+  /* 4: inline action */
+  .miniAction { align-self:flex-start; margin-top:8px; display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border-radius:var(--radius-pill); border:none; background:var(--text-primary); color:var(--surface-1); font-size:var(--text-sm); font-weight:550; font-family:var(--font-ui); cursor:pointer; }
+  .miniAction svg { width:13px; height:13px; }
+  .miniTag { align-self:flex-start; margin-top:8px; display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:var(--radius-pill); background:var(--hover-bg); color:var(--text-secondary); font-size:var(--text-sm); font-weight:550; }
+  .miniTag svg { width:13px; height:13px; }
+  /* 3: combined single card */
+  .combined { max-width:380px; padding:4px 16px; }
+  .combined .crow { display:flex; align-items:flex-start; gap:11px; padding:14px 0; }
+  .combined .crow + .crow { border-top:1px solid var(--border-hairline); }
+  /* 5: compact rows in one container */
+  .compactWrap { margin-top:14px; max-width:380px; width:100%; border:1px solid var(--border); border-radius:12px; background:var(--surface-1); box-shadow:var(--shadow-control); overflow:hidden; }
+  .compactRow { display:flex; align-items:center; gap:11px; padding:12px 14px; text-align:left; }
+  .compactRow + .compactRow { border-top:1px solid var(--border-hairline); }
+  .compactRow .bmStepText { gap:1px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Bookmarks empty state — card arrangements</h1>
+    <div class="tabs" id="tabs"></div>
+    <button class="themebtn" id="theme">◐ Dark</button>
+  </div>
+  <div class="meta"><div class="name" id="metaName"></div><div class="rationale" id="metaRat"></div></div>
+
+  <!-- 1: side by side -->
+  <section class="panel" data-i="1">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span><span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="state">
+        <span class="emptyIcon" data-ic="bookmark"></span>
+        <div class="emptyTitle">No bookmarks yet</div>
+        <div class="emptyHint">With the GatherOS extension installed, there are two ways to get your X bookmarks in here.</div>
+        <div class="bmSteps row2">
+          <div class="bmStep"><span class="bmStepNum">1</span><span class="bmStepText"><span class="bmStepTitle">Backfill your existing bookmarks</span><span class="bmStepDesc">Open the GatherOS panel on x.com and click <strong>Import bookmarks</strong>.</span></span></div>
+          <div class="bmStep"><span class="bmStepNum">2</span><span class="bmStepText"><span class="bmStepTitle">Bookmark as you browse</span><span class="bmStepDesc">Bookmark any post on X and it imports here automatically.</span></span></div>
+        </div>
+        <button class="emptyAction" data-ic="chrome">Get the Chrome extension</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2: method-led (icon badges, no numbers) -->
+  <section class="panel" data-i="2">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span><span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="state">
+        <span class="emptyIcon" data-ic="bookmark"></span>
+        <div class="emptyTitle">No bookmarks yet</div>
+        <div class="emptyHint">Two ways to sync your X bookmarks, once the GatherOS extension is installed.</div>
+        <div class="bmSteps">
+          <div class="bmStep"><span class="bmStepNum" data-ic="download"></span><span class="bmStepText"><span class="bmStepTitle">Backfill your existing bookmarks</span><span class="bmStepDesc">Open the GatherOS panel on x.com and click <strong>Import bookmarks</strong>.</span></span></div>
+          <div class="bmStep"><span class="bmStepNum" data-ic="auto"></span><span class="bmStepText"><span class="bmStepTitle">Bookmark as you browse</span><span class="bmStepDesc">Bookmark any post on X and it imports here automatically.</span></span></div>
+        </div>
+        <button class="emptyAction" data-ic="chrome">Get the Chrome extension</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3: one combined card -->
+  <section class="panel" data-i="3">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span><span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="state">
+        <span class="emptyIcon" data-ic="bookmark"></span>
+        <div class="emptyTitle">No bookmarks yet</div>
+        <div class="emptyHint">With the GatherOS extension installed, there are two ways to get your X bookmarks in here.</div>
+        <div class="bmStep combined">
+          <span class="crow"><span class="bmStepNum">1</span><span class="bmStepText"><span class="bmStepTitle">Backfill your existing bookmarks</span><span class="bmStepDesc">Open the GatherOS panel on x.com and click <strong>Import bookmarks</strong>.</span></span></span>
+          <span class="crow"><span class="bmStepNum">2</span><span class="bmStepText"><span class="bmStepTitle">Bookmark as you browse</span><span class="bmStepDesc">Bookmark any post on X and it imports here automatically.</span></span></span>
+        </div>
+        <button class="emptyAction" data-ic="chrome">Get the Chrome extension</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4: action inside cards -->
+  <section class="panel" data-i="4">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span><span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="state">
+        <span class="emptyIcon" data-ic="bookmark"></span>
+        <div class="emptyTitle">No bookmarks yet</div>
+        <div class="emptyHint">Two ways to fill this with the GatherOS extension installed.</div>
+        <div class="bmSteps">
+          <div class="bmStep"><span class="bmStepNum">1</span><span class="bmStepText"><span class="bmStepTitle">Backfill your existing bookmarks</span><span class="bmStepDesc">Pull in everything you’ve already saved on X.</span><button class="miniAction" data-ic="download">Import bookmarks</button></span></div>
+          <div class="bmStep"><span class="bmStepNum">2</span><span class="bmStepText"><span class="bmStepTitle">Bookmark as you browse</span><span class="bmStepDesc">New bookmarks import here automatically.</span><span class="miniTag" data-ic="auto">Always on</span></span></div>
+        </div>
+        <button class="emptyAction" data-ic="chrome">Get the Chrome extension</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5: compact rows in one container -->
+  <section class="panel" data-i="5">
+    <div class="app" data-theme="light">
+      <div class="winbar"><span class="dots"><i></i><i></i><i></i></span><span class="winmid"><span class="modepill on">Library</span><span class="modepill">Collections</span><span class="modepill">Spaces</span></span></div>
+      <div class="chiprail" data-chips></div>
+      <div class="state">
+        <span class="emptyIcon" data-ic="bookmark"></span>
+        <div class="emptyTitle">No bookmarks yet</div>
+        <div class="emptyHint">Two ways to sync your X bookmarks, once the extension is installed.</div>
+        <div class="compactWrap">
+          <div class="compactRow"><span class="bmStepNum" data-ic="download"></span><span class="bmStepText"><span class="bmStepTitle">Backfill existing</span><span class="bmStepDesc">Panel on x.com → <strong>Import bookmarks</strong></span></span></div>
+          <div class="compactRow"><span class="bmStepNum" data-ic="auto"></span><span class="bmStepText"><span class="bmStepTitle">Bookmark as you browse</span><span class="bmStepDesc">Imports here automatically</span></span></div>
+        </div>
+        <button class="emptyAction" data-ic="chrome">Get the Chrome extension</button>
+      </div>
+    </div>
+  </section>
+
+<script>
+  const ICONS = {
+    bookmark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+    x:'<svg viewBox="0 0 1200 1227" fill="currentColor"><path d="M714 519 1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z"/></svg>',
+    download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
+    auto:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>',
+    chrome:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>',
+  };
+  document.querySelectorAll('[data-ic]').forEach(el=>{ el.insertAdjacentHTML('afterbegin', ICONS[el.getAttribute('data-ic')]||''); });
+  const chipRail = `<span class="chip">All</span><span class="chip">Unsorted</span><span class="chip on">${ICONS.x}Bookmarks</span><span class="chip">Trash</span>`;
+  document.querySelectorAll('[data-chips]').forEach(el=>{ el.innerHTML = chipRail; });
+
+  const ITER = {
+    1:{name:'Side by side',rat:'The two cards laid horizontally instead of stacked — same card, badge, and text styles. Reads as two equal, parallel methods rather than a top-to-bottom sequence; more compact vertically.'},
+    2:{name:'Method-led (icon badges)',rat:'Drops the 1/2 numbers for method icons in the same badge slot — download (backfill) and live-sync (auto). Frames them as “two ways” rather than “two steps,” so neither implies you must do the other.'},
+    3:{name:'One combined card',rat:'A single card holding both methods, split by a hairline. Lighter footprint and one object to scan; good when you want the two methods to feel like one unified “how to sync” block.'},
+    4:{name:'Action inside cards',rat:'Surfaces the action in card 1 (an inline “Import bookmarks” pill) and an “Always on” tag in card 2, so each card carries its own call-to-action instead of one shared button at the bottom.'},
+    5:{name:'Compact rows',rat:'A denser two-row list in one container with hairline dividers — minimal chrome, shortest copy. Best when you want the empty state to feel quiet and quick to read, not like a setup wizard.'},
+  };
+  const tabs=document.getElementById('tabs'), panels=[...document.querySelectorAll('.panel')];
+  const metaName=document.getElementById('metaName'), metaRat=document.getElementById('metaRat');
+  Object.keys(ITER).forEach(k=>{ const b=document.createElement('button'); b.className='tab'; b.dataset.go=k; b.innerHTML=`<span class="n">${k}</span>${ITER[k].name}`; b.onclick=()=>show(k); tabs.appendChild(b); });
+  function show(k){ panels.forEach(p=>p.classList.toggle('active',p.dataset.i===String(k))); [...tabs.children].forEach(t=>t.classList.toggle('active',t.dataset.go===String(k))); metaName.textContent=`${k} · ${ITER[k].name}`; metaRat.textContent=ITER[k].rat; }
+  document.addEventListener('keydown',e=>{ if(ITER[e.key]) show(e.key); });
+  let dark=false;
+  document.getElementById('theme').onclick=()=>{ dark=!dark; document.querySelectorAll('.app').forEach(a=>a.setAttribute('data-theme',dark?'dark':'light')); document.getElementById('theme').textContent=dark?'◑ Light':'◐ Dark'; };
+  show('1');
+</script>
+</body>
+</html>
