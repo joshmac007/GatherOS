@@ -60,6 +60,17 @@ function PeekIcon() {
   );
 }
 
+function ChevronLeftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+  );
+}
+function ChevronRightIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+  );
+}
+
 export default function ImageCard({
   record,
   selected,
@@ -88,6 +99,33 @@ export default function ImageCard({
   })();
   const isTweet = record.kind === 'tweet' && !!tweetMeta;
   const tweetImageCount = Array.isArray(tweetMeta?.imageUrls) ? tweetMeta.imageUrls.length : 0;
+
+  // Inline image paging on the grid card. The badge's arrows cycle
+  // through a multi-image tweet's photos without opening the focused
+  // view. idx 0 is the locally-saved primary; the rest are the remote
+  // twimg URLs captured at save time.
+  const tweetImages = Array.isArray(tweetMeta?.imageUrls) ? tweetMeta.imageUrls : [];
+  const canPageImages = !isTweet && record.kind !== 'video' && tweetImages.length > 1;
+  const [imgIdx, setImgIdx] = useState(0);
+  useEffect(() => { setImgIdx(0); }, [record.id]);
+  const displaySrc = (canPageImages && imgIdx > 0) ? tweetImages[imgIdx] : src;
+  const pageImage = (delta) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const n = tweetImages.length;
+    if (n > 1) setImgIdx((i) => ((i + delta) % n + n) % n);
+  };
+  // Warm the cache on first hover so the arrows swap instantly.
+  const pagePreloadedRef = useRef(false);
+  const preloadPagedImages = () => {
+    if (pagePreloadedRef.current || !canPageImages) return;
+    pagePreloadedRef.current = true;
+    for (let i = 1; i < tweetImages.length; i += 1) {
+      const im = new Image();
+      im.decoding = 'async';
+      im.src = tweetImages[i];
+    }
+  };
 
   // Pointer-down position, captured to tell a highlight drag (the pointer
   // moves) from a click (it doesn't). On a tweet card we suppress the
@@ -231,7 +269,7 @@ export default function ImageCard({
         onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey);
       }}
       onDoubleClick={isPending ? undefined : () => onOpen(record)}
-      onMouseEnter={isPending ? undefined : () => onHover?.(record.id)}
+      onMouseEnter={isPending ? undefined : () => { onHover?.(record.id); preloadPagedImages(); }}
       onMouseLeave={isPending ? undefined : () => onHover?.(null, record.id)}
       onContextMenu={isPending ? undefined : (e) => {
         if (onContextMenu) {
@@ -319,7 +357,7 @@ export default function ImageCard({
           />
         ) : src && (
           <img
-            src={src}
+            src={displaySrc}
             className={`${styles.image}${record.__pending ? ' ' + styles.imagePending : ''}`}
             alt={record.title || ''}
             loading="lazy"
@@ -337,11 +375,40 @@ export default function ImageCard({
           </span>
         )}
         {inView && tweetImageCount > 1 && (
-          // Top-right count chip — the tweet carried several photos; the
-          // thumbnail shows the first. Paging happens in the focused view.
-          <span className={styles.countBadge} aria-label={`1 of ${tweetImageCount} images`}>
-            <CopiesIcon />
-            1/{tweetImageCount}
+          // Top-right count chip. On hover, arrows page through the
+          // tweet's photos inline on the grid (no need to open the
+          // focused view). At rest it's just the stack icon + count.
+          <span className={styles.countBadge} aria-label={`${imgIdx + 1} of ${tweetImageCount} images`}>
+            {canPageImages && (
+              <button
+                type="button"
+                className={`${styles.countArrow} ${styles.countArrowPrev}`}
+                onClick={pageImage(-1)}
+                onPointerDown={(e) => e.stopPropagation()}
+                draggable={false}
+                tabIndex={-1}
+                aria-label="Previous image"
+              >
+                <ChevronLeftIcon />
+              </button>
+            )}
+            <span className={styles.countMain}>
+              <CopiesIcon />
+              {imgIdx + 1}/{tweetImageCount}
+            </span>
+            {canPageImages && (
+              <button
+                type="button"
+                className={`${styles.countArrow} ${styles.countArrowNext}`}
+                onClick={pageImage(1)}
+                onPointerDown={(e) => e.stopPropagation()}
+                draggable={false}
+                tabIndex={-1}
+                aria-label="Next image"
+              >
+                <ChevronRightIcon />
+              </button>
+            )}
           </span>
         )}
         {record.__pending && (
