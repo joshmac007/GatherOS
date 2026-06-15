@@ -1961,6 +1961,11 @@ export default function App({ entitlement } = {}) {
   // (after a view change, after exiting the focused view, etc.).
   // 720px threshold = ~3-4 rows of cards before the button appears.
   const gridScrollRef = useRef(null);
+  // Preserve grid scroll across the full-screen (focused) view. The grid
+  // unmounts while focused is open, so we remember the last scroll offset
+  // and restore it when the grid remounts on close.
+  const lastGridScrollRef = useRef(0);
+  const pendingGridScrollRef = useRef(null);
   const scrollHandlerRef = useRef(null);
   const [scrolledFar, setScrolledFar] = useState(false);
   // Separate near-top tracker for the toolbar's mode pill, which
@@ -1987,6 +1992,7 @@ export default function App({ entitlement } = {}) {
       ticking = true;
       requestAnimationFrame(() => {
         const t = node.scrollTop;
+        lastGridScrollRef.current = t;
         setScrolledFar(t > 720);
         setScrolledOff(t > 8);
         ticking = false;
@@ -1994,13 +2000,39 @@ export default function App({ entitlement } = {}) {
     };
     scrollHandlerRef.current = { node, fn };
     node.addEventListener('scroll', fn, { passive: true });
+    // Returning from the focused view: restore where the user was. Done
+    // after layout (rAF) so the masonry is tall enough to scroll into.
+    if (pendingGridScrollRef.current != null) {
+      const target = pendingGridScrollRef.current;
+      pendingGridScrollRef.current = null;
+      lastGridScrollRef.current = target;
+      node.scrollTop = target;
+      requestAnimationFrame(() => {
+        if (gridScrollRef.current === node) node.scrollTop = target;
+      });
+    }
     const t0 = node.scrollTop;
+    lastGridScrollRef.current = t0;
     setScrolledFar(t0 > 720);
     setScrolledOff(t0 > 8);
   }, []);
   const scrollGridToTop = useCallback(() => {
     gridScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+
+  // When the focused view opens, stash the grid's current scroll so the
+  // remount on close can restore it (instead of jumping to the top).
+  const prevFocusedIdRef = useRef(focusedId);
+  useEffect(() => {
+    const wasOpen = prevFocusedIdRef.current != null;
+    prevFocusedIdRef.current = focusedId;
+    if (!wasOpen && focusedId != null) {
+      pendingGridScrollRef.current = lastGridScrollRef.current;
+    }
+  }, [focusedId]);
+  // A genuine view change should land at the top, not restore a stale
+  // offset left over from a focused-view session in another view.
+  useEffect(() => { pendingGridScrollRef.current = null; }, [view]);
 
   const focusedSortAssign = useCallback(async (saveId, collectionId) => {
     await window.moodmark.collections.addSave({ collectionId, saveId });
