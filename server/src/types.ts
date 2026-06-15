@@ -28,6 +28,9 @@ export type Env = {
   // Optional admin token. When set, gates /license/admin-sync so a
   // missed webhook can be replayed manually from a laptop.
   ADMIN_TOKEN?: string;
+  // Optional GitHub token for /download — lifts the GitHub API rate
+  // limit. Not required (the endpoint edge-caches the response).
+  GITHUB_TOKEN?: string;
 };
 
 // Row shapes — keep in sync with migrations/0001_initial.sql + later.

@@ -16,6 +16,7 @@ import { authRoutes } from './auth';
 import { licenseRoutes } from './license';
 import { webhookRoutes } from './lemonsqueezy';
 import { aiRoutes } from './ai';
+import { downloadRoutes } from './download';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -38,6 +39,8 @@ app.route('/auth', authRoutes);
 app.route('/license', licenseRoutes);
 app.route('/webhooks', webhookRoutes);
 app.route('/ai', aiRoutes);
+// Marketing-site download button → 302 to the latest macOS .dmg.
+app.route('/download', downloadRoutes);
 
 // 404 fallback — keep it tight, no body leak.
 app.notFound((c) => c.json({ ok: false, error: 'not_found' }, 404));
