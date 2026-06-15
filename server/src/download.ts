@@ -12,8 +12,10 @@
 //   GET /download?arch=intel   → latest x64 .dmg (Intel)  [also ?arch=x64]
 //
 // On any failure it redirects to the Releases page rather than erroring.
+// Registered as a direct route (app.get('/download', …)) so the bare
+// path matches with no sub-router/trailing-slash ambiguity.
 
-import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env } from './types';
 
 const REPO = 'brettfromdj/gatheros';
@@ -21,9 +23,7 @@ const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
 
 type ReleaseAsset = { name: string; browser_download_url: string };
 
-export const downloadRoutes = new Hono<{ Bindings: Env }>();
-
-downloadRoutes.get('/', async (c) => {
+export async function downloadHandler(c: Context<{ Bindings: Env }>) {
   const arch = (c.req.query('arch') || '').toLowerCase();
   const wantIntel = arch === 'intel' || arch === 'x64' || arch === 'x86_64';
 
@@ -52,4 +52,4 @@ downloadRoutes.get('/', async (c) => {
   } catch {
     return c.redirect(RELEASES_PAGE, 302);
   }
-});
+}
