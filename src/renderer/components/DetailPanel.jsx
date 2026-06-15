@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { Info as InfoIcon, Eclipse as LayersIcon } from 'lucide-react';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+import { tweetMediaItems } from '../lib/tweetMedia.js';
 import ContextMenu from './ContextMenu.jsx';
 import contextMenuStyles from './ContextMenu.module.css';
 import TagSuggestions from './TagSuggestions.jsx';
@@ -900,21 +901,18 @@ export default function DetailPanel({
               </div>
             )}
 
-            {Array.isArray(tweetMeta.imageUrls) && tweetMeta.imageUrls.length > 1 && (
+            {tweetMediaItems(record, tweetMeta).length > 1 && (
               <div className={styles.tweetThumbs}>
-                {tweetMeta.imageUrls.map((url, i) => {
-                  // idx 0 == the locally-saved primary, so render the
-                  // existing thumb_path for an instant, offline-safe
-                  // tile. For the rest, use the URL exactly as the
-                  // content script captured it from img.currentSrc —
-                  // i.e. the URL the browser had already successfully
-                  // loaded on x.com, guaranteed to be a real twimg
-                  // variant. Synthesizing format= / name= here was
-                  // unreliable for tweets stored only as WebP / video
-                  // poster frames.
-                  const thumbSrc = i === 0
+                {tweetMediaItems(record, tweetMeta).map((m, i) => {
+                  // The locally-saved primary (the video, or the first
+                  // image) renders from thumb_path for an instant,
+                  // offline-safe tile. Remote images use the URL exactly
+                  // as the content script captured it from
+                  // img.currentSrc — the variant the browser already
+                  // loaded on x.com, so it's guaranteed to resolve.
+                  const thumbSrc = (m.type === 'video' || m.primary)
                     ? fileUrl(record.thumb_path || record.file_path)
-                    : url;
+                    : m.url;
                   return (
                     <button
                       key={i}

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import styles from './FocusedView.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
+import { tweetMediaItems } from '../lib/tweetMedia.js';
 import { useEyedropper } from '../hooks/useEyedropper.js';
 import TweetCard from './TweetCard.jsx';
 
@@ -90,19 +91,18 @@ export default function FocusedView({
   // has a visible load delay. Preloading the 'large' variants up front
   // makes the swap instant.
   useEffect(() => {
-    let urls = [];
-    try {
-      const parsed = JSON.parse(record.tweet_meta || 'null');
-      if (Array.isArray(parsed?.imageUrls) && parsed.imageUrls.length > 1) {
-        urls = parsed.imageUrls;
-      }
-    } catch { /* malformed meta — nothing to preload */ }
-    if (urls.length < 2) return undefined;
+    let meta = null;
+    try { meta = JSON.parse(record.tweet_meta || 'null'); } catch { /* ignore */ }
+    // Only the remote images need warming — the primary is local.
+    const remote = tweetMediaItems(record, meta)
+      .filter((m) => m.type === 'image' && !m.primary)
+      .map((m) => m.url);
+    if (remote.length === 0) return undefined;
     const large = (u) => {
       try { const x = new URL(u); x.searchParams.set('name', 'large'); return x.toString(); }
       catch { return u; }
     };
-    const imgs = urls.map((u) => {
+    const imgs = remote.map((u) => {
       const im = new Image();
       im.decoding = 'async';
       im.src = large(u);
@@ -149,15 +149,10 @@ export default function FocusedView({
   // tweet's images in the DetailPanel's tweet card to bring it into
   // the focused view. idx 0 always renders the locally saved file
   // (faster, offline-safe) — alt indices render straight from twimg.
-  let tweetImageUrls = null;
   let tweetMeta = null;
   if (record.tweet_meta) {
     try {
-      const parsed = JSON.parse(record.tweet_meta);
-      tweetMeta = parsed || null;
-      if (Array.isArray(parsed?.imageUrls) && parsed.imageUrls.length > 1) {
-        tweetImageUrls = parsed.imageUrls;
-      }
+      tweetMeta = JSON.parse(record.tweet_meta) || null;
     } catch { /* malformed tweet_meta — fall through to single image */ }
   }
   // Text-tweet save: the stage renders a live tweet card from tweet_meta
@@ -176,8 +171,17 @@ export default function FocusedView({
       return u.toString();
     } catch { return url; }
   }
-  const src = (tweetImageUrls && altImageIdx > 0 && altImageIdx < tweetImageUrls.length)
-    ? twimgLarge(tweetImageUrls[altImageIdx])
+  // Unified media list (shared with the detail-panel thumbnail strip).
+  // For video tweets this prepends the video so altImageIdx lines up and
+  // you can switch off the video to its images.
+  const media = tweetMediaItems(record, tweetMeta);
+  const activeMedia = media.length > 0
+    ? media[Math.min(Math.max(altImageIdx, 0), media.length - 1)]
+    : null;
+  // Show the <video> only when the active selection IS the video.
+  const showVideo = record.kind === 'video' && (!activeMedia || activeMedia.type === 'video');
+  const src = (activeMedia && activeMedia.type === 'image')
+    ? (activeMedia.primary ? fileUrl(record.file_path) : twimgLarge(activeMedia.url))
     : fileUrl(record.file_path);
   const zoomFillPct = ((zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN)) * 100;
 
@@ -396,9 +400,11 @@ export default function FocusedView({
               className={styles.webview}
             />
           </div>
-        ) : record.kind === 'video' ? (
-          // Video-kind save (currently only created by the X
-          // bookmark watcher for video-only tweets). HTML5 <video>
+        ) : showVideo ? (
+          // Video-kind save. Shown when the active selection is the
+          // video itself; a video tweet's images fall through to the
+          // <img> branch below so the thumbnail strip can switch to
+          // them. HTML5 <video>
           // — works natively in Electron with no extra deps. We
           // mount with autoPlay loop muted so the focused view
           // feels closer to viewing a GIF on a moodboard than to
@@ -438,6 +444,10 @@ export default function FocusedView({
               src={src}
               className={styles.image}
               alt={record.title || ''}
+              /* Sync decode so switching to a (preloaded, cached) image
+                 paints immediately instead of flashing blank while it
+                 decodes — the swap feels instant. */
+              decoding="sync"
               draggable={!picking}
               /* Required for the eyedropper's getImageData call
                  on the canvas built from this img to succeed —
