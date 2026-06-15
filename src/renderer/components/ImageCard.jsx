@@ -22,17 +22,6 @@ function XGlyphIcon() {
   );
 }
 
-// Two overlapping frames — "multiple images" indicator for the count
-// badge on a tweet saved with more than one photo.
-function CopiesIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="8" y="8" width="13" height="13" rx="2" />
-      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
-    </svg>
-  );
-}
-
 function CheckIcon() {
   return (
     <svg viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">
@@ -115,6 +104,10 @@ export default function ImageCard({
     const n = tweetImages.length;
     if (n > 1) setImgIdx((i) => ((i + delta) % n + n) % n);
   };
+  // Swallow every gesture event on the arrows so they never reach the
+  // card button — otherwise a single click selects and (worse) two
+  // quick clicks register as a double-click and open the preview.
+  const stopArrow = (e) => { e.stopPropagation(); e.preventDefault(); };
   // Warm the cache on first hover so the arrows swap instantly.
   const pagePreloadedRef = useRef(false);
   const preloadPagedImages = () => {
@@ -380,34 +373,31 @@ export default function ImageCard({
           // focused view). At rest it's just the stack icon + count.
           <span className={styles.countBadge} aria-label={`${imgIdx + 1} of ${tweetImageCount} images`}>
             {canPageImages && (
-              <button
-                type="button"
+              <span
                 className={`${styles.countArrow} ${styles.countArrowPrev}`}
-                onClick={pageImage(-1)}
-                onPointerDown={(e) => e.stopPropagation()}
-                draggable={false}
-                tabIndex={-1}
+                role="button"
                 aria-label="Previous image"
+                onClick={pageImage(-1)}
+                onDoubleClick={stopArrow}
+                onMouseDown={stopArrow}
+                onPointerDown={stopArrow}
               >
                 <ChevronLeftIcon />
-              </button>
+              </span>
             )}
-            <span className={styles.countMain}>
-              <CopiesIcon />
-              {imgIdx + 1}/{tweetImageCount}
-            </span>
+            <span className={styles.countMain}>{imgIdx + 1}/{tweetImageCount}</span>
             {canPageImages && (
-              <button
-                type="button"
+              <span
                 className={`${styles.countArrow} ${styles.countArrowNext}`}
-                onClick={pageImage(1)}
-                onPointerDown={(e) => e.stopPropagation()}
-                draggable={false}
-                tabIndex={-1}
+                role="button"
                 aria-label="Next image"
+                onClick={pageImage(1)}
+                onDoubleClick={stopArrow}
+                onMouseDown={stopArrow}
+                onPointerDown={stopArrow}
               >
                 <ChevronRightIcon />
-              </button>
+              </span>
             )}
           </span>
         )}

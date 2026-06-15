@@ -325,7 +325,7 @@
   right: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   height: 22px;
   padding: 0 8px;
   border-radius: var(--radius-pill);
@@ -348,30 +348,37 @@
 .countMain {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
 }
 
-/* Paging arrows — hidden until the card is hovered, then they flank the
-   count and the stack glyph hides to keep the pill tight. The badge is
-   pointer-events:none, so the buttons opt back in. */
+/* Paging arrows — collapsed (zero-width, transparent) at rest so the
+   pill is just the count, then they smoothly expand to flank it on
+   hover. Animating width/opacity/margin (not display) keeps the
+   transition fluid. The badge is pointer-events:none, so they opt in. */
 .countArrow {
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: none;
-  border-radius: 5px;
+  width: 0;
+  height: 18px;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+  border-radius: 50%;
   background: transparent;
   color: #fff;
   cursor: pointer;
-  pointer-events: auto;
+  pointer-events: none;
+  transition: width 0.16s ease, opacity 0.16s ease, margin 0.16s ease, background 0.12s ease;
 }
 .countArrow:hover { background: rgba(255, 255, 255, 0.22); }
 .countArrow:active { transform: scale(0.9); }
-.frame:hover .countArrow { display: inline-flex; }
-.frame:hover .countMain svg { display: none; }
+.frame:hover .countArrow {
+  width: 18px;
+  opacity: 1;
+  pointer-events: auto;
+}
+.frame:hover .countArrowPrev { margin-right: 3px; }
+.frame:hover .countArrowNext { margin-left: 3px; }
 
 .pendingOverlay {
   position: absolute;
