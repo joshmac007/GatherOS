@@ -210,6 +210,10 @@ export default function DetailPanel({
   const proLocked = isLocked(useEntitlementValue());
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
+  // Text-only tweets render as a card (no real image), so the preview
+  // hero — the rendered PNG, its color palette, and "Generate variation"
+  // — is all meaningless. Hide that whole top section for them.
+  const isTextTweet = record?.kind === 'tweet' && !!tweetMeta;
   const [copiedColor, setCopiedColor] = useState(null);
   const imageRef = useRef(null);
   const previewWrapRef = useRef(null);
@@ -712,6 +716,7 @@ export default function DetailPanel({
         document.body,
       )}
 
+      {!isTextTweet && (
       <div
         className={styles.preview}
         onMouseMove={handleTiltMove}
@@ -775,6 +780,7 @@ export default function DetailPanel({
           </button>
         )}
       </div>
+      )}
 
       <div className={styles.metaEditSection}>
         <label className={styles.metaField}>
