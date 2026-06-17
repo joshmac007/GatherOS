@@ -8,6 +8,11 @@ import {
   Pipette,
   Trash2,
   X as LucideX,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize,
 } from 'lucide-react';
 import styles from './FocusedView.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -62,6 +67,38 @@ export default function FocusedView({
   // strip is visible — the two pieces of chrome were stacking on top
   // of each other and reading as one floating slab.
   const [videoHovered, setVideoHovered] = useState(false);
+  // Custom video controls (replaces the native control bar + its blocky
+  // gradient). Driven by <video> events; reset per save.
+  const videoRef = useRef(null);
+  const [vid, setVid] = useState({ playing: true, muted: true, current: 0, duration: 0 });
+  useEffect(() => { setVid({ playing: true, muted: true, current: 0, duration: 0 }); }, [record.id]);
+  const fmtTime = (s) => {
+    const t = Math.max(0, Math.floor(s || 0));
+    return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  };
+  const toggleVideoPlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play().catch(() => {});
+    else v.pause();
+  };
+  const toggleVideoMute = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setVid((s) => ({ ...s, muted: v.muted }));
+  };
+  const seekVideo = (e) => {
+    const v = videoRef.current;
+    if (!v || !v.duration) return;
+    v.currentTime = (Number(e.target.value) / 1000) * v.duration;
+  };
+  const toggleVideoFullscreen = () => {
+    const target = videoRef.current?.parentElement || videoRef.current;
+    if (!target) return;
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else target.requestFullscreen?.();
+  };
   // Capture once on mount: was this focused view opened via a morph
   // transition? If so, the .focused fadeIn keyframe is permanently
   // suppressed for this mount. Toggling it with the live morphSource
@@ -411,28 +448,57 @@ export default function FocusedView({
           // a YouTube player. controls let the user pause / unmute
           // when they actually want to watch with audio.
           <div
-            className={styles.imageWrap}
+            className={`${styles.imageWrap} ${styles.videoStage}`}
             style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
+            onMouseEnter={() => setVideoHovered(true)}
+            onMouseLeave={() => setVideoHovered(false)}
           >
             <video
+              ref={videoRef}
               src={fileUrl(record.file_path)}
               className={styles.image}
-              controls
               autoPlay
               loop
               muted
               playsInline
-              // No picture-in-picture button or right-click "Enter
-              // Picture-in-Picture" — PiP carries the video out of
-              // the app into a floating system overlay, which breaks
-              // the moodboard-style "everything in one window" model.
+              // No native control bar (its gradient scrim reads blocky);
+              // we render our own glass controls below. No PiP — it pulls
+              // the video out into a floating system overlay, breaking the
+              // "everything in one window" model.
               disablePictureInPicture
-              controlsList="nodownload noplaybackrate"
               poster={record.thumb_path ? fileUrl(record.thumb_path) : undefined}
-              onMouseEnter={() => setVideoHovered(true)}
-              onMouseLeave={() => setVideoHovered(false)}
+              onClick={toggleVideoPlay}
+              onPlay={() => setVid((s) => ({ ...s, playing: true }))}
+              onPause={() => setVid((s) => ({ ...s, playing: false }))}
+              onTimeUpdate={() => { const v = videoRef.current; if (v) setVid((s) => ({ ...s, current: v.currentTime })); }}
+              onLoadedMetadata={() => { const v = videoRef.current; if (v) setVid((s) => ({ ...s, duration: v.duration || 0, muted: v.muted })); }}
+              onVolumeChange={() => { const v = videoRef.current; if (v) setVid((s) => ({ ...s, muted: v.muted })); }}
               style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
             />
+            <div className={styles.vControls} data-paused={!vid.playing}>
+              <button type="button" className={styles.vBtn} onClick={toggleVideoPlay} aria-label={vid.playing ? 'Pause' : 'Play'}>
+                {vid.playing ? <Pause size={16} strokeWidth={2} /> : <Play size={16} strokeWidth={2} />}
+              </button>
+              <span className={styles.vTime}>{fmtTime(vid.current)} / {fmtTime(vid.duration)}</span>
+              <input
+                type="range"
+                className={styles.vScrub}
+                min={0}
+                max={1000}
+                value={vid.duration ? Math.round((vid.current / vid.duration) * 1000) : 0}
+                onChange={seekVideo}
+                aria-label="Seek"
+                style={{
+                  background: `linear-gradient(to right, rgba(255,255,255,0.92) ${vid.duration ? (vid.current / vid.duration) * 100 : 0}%, rgba(255,255,255,0.22) ${vid.duration ? (vid.current / vid.duration) * 100 : 0}%)`,
+                }}
+              />
+              <button type="button" className={styles.vBtn} onClick={toggleVideoMute} aria-label={vid.muted ? 'Unmute' : 'Mute'}>
+                {vid.muted ? <VolumeX size={16} strokeWidth={2} /> : <Volume2 size={16} strokeWidth={2} />}
+              </button>
+              <button type="button" className={styles.vBtn} onClick={toggleVideoFullscreen} aria-label="Fullscreen">
+                <Maximize size={15} strokeWidth={2} />
+              </button>
+            </div>
           </div>
         ) : src && (
           <div
