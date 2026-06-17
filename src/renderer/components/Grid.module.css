@@ -131,27 +131,77 @@
 .emptyAction:active { transform: scale(0.98); }
 
 /* Bookmarks onboarding — the two ways to fill the view. */
-/* Bookmarks onboarding — two methods side by side in one split container. */
-.bmSplit {
+/* Bookmarks onboarding — a quiet "How it works" trigger that reveals the
+   two methods in a popover on hover/focus (keeps the resting state clean). */
+.bmDiscloser {
+  position: relative;
+  margin-top: 14px;
   display: flex;
-  margin-top: 22px;
-  width: 100%;
-  max-width: 460px;
+  flex-direction: column;
+  align-items: center;
+}
+.bmTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  cursor: default;
+  outline: none;
+}
+.bmTrigger:hover,
+.bmDiscloser:focus-within .bmTrigger { color: var(--text-secondary); }
+.bmInfo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+}
+.bmReveal {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  transform: translateX(-50%) translateY(-4px);
+  width: 300px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-1);
-  box-shadow: var(--shadow-control);
-  overflow: hidden;
+  box-shadow: var(--shadow-card);
   text-align: left;
-}
-.bmCell {
-  flex: 1;
   display: flex;
-  gap: 10px;
-  padding: 14px 15px;
-  min-width: 0;
+  flex-direction: column;
+  gap: 11px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-instant) ease, transform var(--dur-instant) ease;
+  z-index: 5;
 }
-.bmCell + .bmCell { border-left: 1px solid var(--border-hairline); }
+/* Little upward arrow into the trigger. */
+.bmReveal::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  background: var(--surface-1);
+  transform: translateX(-50%) rotate(45deg);
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+.bmDiscloser:hover .bmReveal,
+.bmDiscloser:focus-within .bmReveal {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+.bmMethod { display: flex; gap: 10px; }
 .bmStepNum {
   flex: none;
   width: 22px;

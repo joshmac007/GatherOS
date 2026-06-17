@@ -232,28 +232,34 @@ export default function Grid({
             <Chrome size={16} strokeWidth={1.8} aria-hidden="true" />
             Get the Chrome extension
           </button>
-          <div className={styles.bmSplit}>
-            <div className={styles.bmCell}>
-              <span className={styles.bmStepNum}>
-                <Download size={12} strokeWidth={2.2} aria-hidden="true" />
-              </span>
-              <span className={styles.bmStepText}>
-                <span className={styles.bmStepTitle}>Backfill existing</span>
-                <span className={styles.bmStepDesc}>
-                  Open the GatherOS panel on x.com and click <strong>Import bookmarks</strong>.
+          <div className={styles.bmDiscloser}>
+            <span className={styles.bmTrigger} tabIndex={0}>
+              <span className={styles.bmInfo} aria-hidden="true">?</span>
+              How it works
+            </span>
+            <div className={styles.bmReveal} role="tooltip">
+              <div className={styles.bmMethod}>
+                <span className={styles.bmStepNum}>
+                  <Download size={12} strokeWidth={2.2} aria-hidden="true" />
                 </span>
-              </span>
-            </div>
-            <div className={styles.bmCell}>
-              <span className={styles.bmStepNum}>
-                <RotateCw size={12} strokeWidth={2.2} aria-hidden="true" />
-              </span>
-              <span className={styles.bmStepText}>
-                <span className={styles.bmStepTitle}>Bookmark as you browse</span>
-                <span className={styles.bmStepDesc}>
-                  Bookmark any post on X and it imports here automatically.
+                <span className={styles.bmStepText}>
+                  <span className={styles.bmStepTitle}>Backfill existing</span>
+                  <span className={styles.bmStepDesc}>
+                    Open the GatherOS panel on x.com and click <strong>Import bookmarks</strong>.
+                  </span>
                 </span>
-              </span>
+              </div>
+              <div className={styles.bmMethod}>
+                <span className={styles.bmStepNum}>
+                  <RotateCw size={12} strokeWidth={2.2} aria-hidden="true" />
+                </span>
+                <span className={styles.bmStepText}>
+                  <span className={styles.bmStepTitle}>Bookmark as you browse</span>
+                  <span className={styles.bmStepDesc}>
+                    Bookmark any post on X and it imports here automatically.
+                  </span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
