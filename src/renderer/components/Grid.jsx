@@ -224,8 +224,16 @@ export default function Grid({
           <div className={styles.emptyHint}>
             Two ways to sync your X bookmarks, once the GatherOS extension is installed.
           </div>
-          <div className={styles.bmWrap}>
-            <div className={styles.bmRow}>
+          <button
+            type="button"
+            className={styles.emptyAction}
+            onClick={() => window.moodmark?.shell?.openUrl?.('https://chromewebstore.google.com/detail/gatheros/jflmnonpoapjncoeankehcmenldecojk')}
+          >
+            <Chrome size={16} strokeWidth={1.8} aria-hidden="true" />
+            Get the Chrome extension
+          </button>
+          <div className={styles.bmSplit}>
+            <div className={styles.bmCell}>
               <span className={styles.bmStepNum}>
                 <Download size={12} strokeWidth={2.2} aria-hidden="true" />
               </span>
@@ -236,7 +244,7 @@ export default function Grid({
                 </span>
               </span>
             </div>
-            <div className={styles.bmRow}>
+            <div className={styles.bmCell}>
               <span className={styles.bmStepNum}>
                 <RotateCw size={12} strokeWidth={2.2} aria-hidden="true" />
               </span>
@@ -248,14 +256,6 @@ export default function Grid({
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            className={styles.emptyAction}
-            onClick={() => window.moodmark?.shell?.openUrl?.('https://chromewebstore.google.com/detail/gatheros/jflmnonpoapjncoeankehcmenldecojk')}
-          >
-            <Chrome size={16} strokeWidth={1.8} aria-hidden="true" />
-            Get the Chrome extension
-          </button>
         </div>
       );
     }
