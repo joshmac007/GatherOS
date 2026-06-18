@@ -114,15 +114,26 @@ export default function ImageCard({
   const [imgIdx, setImgIdx] = useState(0);
   useEffect(() => { setImgIdx(0); }, [record.id]);
   const activeMedia = media.length > 0 ? media[Math.min(imgIdx, media.length - 1)] : null;
-  // Render the inline <video> only when the active item is the video.
-  const showVideo = record.kind === 'video' && (!activeMedia || activeMedia.type === 'video');
+  // Render the inline <video> whenever the active item is a video — the
+  // local primary (kind='video') OR a secondary video streamed from its
+  // remote url (e.g. another reel in an Instagram carousel).
+  const showVideo = activeMedia ? activeMedia.type === 'video' : record.kind === 'video';
+  // A video item is local only when it's the downloaded primary; every
+  // other video plays from its url so it doesn't show as a frozen still.
+  const localVideo = !activeMedia || activeMedia.primaryLocal || !activeMedia.url;
+  const videoSrc = showVideo
+    ? (localVideo ? src : activeMedia.url)
+    : src;
+  const videoPoster = (showVideo && !localVideo && activeMedia.poster)
+    ? activeMedia.poster
+    : (record.thumb_path ? fileUrl(record.thumb_path) : undefined);
   const displaySrc = (activeMedia && activeMedia.type === 'image')
     ? (activeMedia.primary ? src : twimgLarge(activeMedia.url))
     : src;
   // The hover quick-look follows the paged image. When the active item
-  // is the video itself, peek its poster rather than the raw MP4.
+  // is a video, peek its poster rather than the raw MP4.
   const peekSrc = showVideo
-    ? fileUrl(record.thumb_path || record.file_path)
+    ? (!localVideo && activeMedia.poster ? activeMedia.poster : fileUrl(record.thumb_path || record.file_path))
     : displaySrc;
   const pageImage = (delta) => (e) => {
     e.preventDefault();
@@ -358,8 +369,12 @@ export default function ImageCard({
           // video's dimensions — the rest only downloads if the
           // user actually hovers.
           <video
-            src={fileUrl(record.file_path)}
-            poster={record.thumb_path ? fileUrl(record.thumb_path) : undefined}
+            // key on the source so paging between videos remounts the
+            // element and the new clip actually loads + plays (changing
+            // <video src> in place doesn't reliably restart playback).
+            key={videoSrc}
+            src={videoSrc}
+            poster={videoPoster}
             className={`${styles.image}${record.__pending ? ' ' + styles.imagePending : ''}`}
             autoPlay
             muted

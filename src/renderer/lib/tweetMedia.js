@@ -1,19 +1,50 @@
-// Ordered media for a tweet save — shared by the focused view's main
-// stage and the detail panel's thumbnail strip so their indexes always
-// agree (index === altImageIdx).
+// Ordered media for a tweet / saved-post — shared by the focused view's
+// main stage, the detail panel's thumbnail strip, and the grid card so
+// their indexes always agree (index === altImageIdx).
 //
-// Image tweets: the saved primary is imageUrls[0] (stored locally on
-// disk); the rest are remote twimg URLs.
+// Two shapes feed this:
 //
-// Video tweets: the saved primary is the *video* itself
-// (record.file_path, kind='video'); any photos on the tweet follow it.
-// The video is NOT part of imageUrls, so it has to be prepended —
-// otherwise the strip and the stage disagree and clicking a thumbnail
-// can't switch off the video.
+//   • Legacy / X: tweetMeta.imageUrls is a flat list of remote image
+//     URLs; a video tweet stores its single video as the local primary
+//     (record.file_path, kind='video') and any photos follow it.
+//
+//   • Rich (e.g. Instagram carousels): tweetMeta.media is an explicit
+//     ordered list — [{ type:'image'|'video', url, poster }, …] — which
+//     can describe MORE THAN ONE video in a single save. Item 0 is the
+//     locally-downloaded primary (image or video); every other item is
+//     streamed from its url so secondary videos actually play instead of
+//     showing a frozen poster.
+//
+// Render shape returned here:
+//   image: { type:'image', url, primary }
+//   video: { type:'video', url|null, poster, primaryLocal }
+// `primaryLocal` (or a video item with no url) means "use the on-disk
+// record.file_path"; otherwise play/show from `url`.
 export function tweetMediaItems(record, tweetMeta) {
+  const list = Array.isArray(tweetMeta?.media) ? tweetMeta.media : null;
+  if (list && list.length) {
+    return list.map((m, i) => {
+      if (m && m.type === 'video') {
+        // Only one item is backed by the downloaded file — index 0 when
+        // the save itself is a video (kind='video'). Any other video
+        // streams from its remote url.
+        const primaryLocal = i === 0 && record?.kind === 'video';
+        return {
+          type: 'video',
+          url: primaryLocal ? null : (m.url || null),
+          poster: m.poster || null,
+          primaryLocal,
+        };
+      }
+      const primary = i === 0 && record?.kind !== 'video';
+      return { type: 'image', url: (m && m.url) || '', primary };
+    });
+  }
+
+  // Legacy / X path — imageUrls only, single (local) video.
   const urls = Array.isArray(tweetMeta?.imageUrls) ? tweetMeta.imageUrls : [];
   if (record?.kind === 'video') {
-    return [{ type: 'video' }, ...urls.map((url) => ({ type: 'image', url }))];
+    return [{ type: 'video', primaryLocal: true }, ...urls.map((url) => ({ type: 'image', url }))];
   }
   return urls.map((url, i) => ({ type: 'image', url, primary: i === 0 }));
 }

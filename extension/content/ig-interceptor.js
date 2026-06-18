@@ -161,11 +161,25 @@
     };
   }
 
-  // Normalize a single IG media node into the GatherOS save shape. The
-  // imageUrls array mirrors the X model: a flat, ordered list of remote
-  // image URLs the renderer pages through. For a carousel that's every
-  // child's still; for a reel it's the poster frame. Video posts route
-  // through videoUrl/posterUrl (the desktop's saveVideoFromUrl branch).
+  // Normalize one IG media node (image / video / carousel child) into a
+  // single media item: { type, url, poster }. For a video, url is the
+  // playable MP4 and poster is the still frame.
+  function mediaItemOf(node) {
+    if (isVideoNode(node)) {
+      return { type: 'video', url: bestVideoUrl(node) || '', poster: bestImageUrl(node) || '' };
+    }
+    return { type: 'image', url: bestImageUrl(node) || '' };
+  }
+
+  // Normalize a saved post into the GatherOS save shape. `media` is an
+  // explicit ordered list (locked default #1: one save per post, extra
+  // media in metadata) that can hold multiple videos — the renderer
+  // pages through it and streams secondary videos so they play instead
+  // of showing a frozen poster. `imageUrls` is kept (stills only) for
+  // the back-compat consumers (primary image download + count). The
+  // FIRST item decides the downloaded primary: a leading video routes
+  // through videoUrl/posterUrl (saveVideoFromUrl); otherwise the first
+  // still is the primary image.
   function parseSavedMedia(node) {
     const shortcode = node.code || node.shortcode;
     const postId = node.pk || node.id || shortcode;
@@ -174,30 +188,28 @@
     const permalink = `https://www.instagram.com/p/${shortcode || postId}/`;
     const children = carouselChildren(node);
 
-    let imageUrls = [];
-    let videoUrl = null;
-    let posterUrl = '';
-
+    let media = [];
     if (children && children.length) {
-      // Carousel — one save, every child's still in imageUrls (locked
-      // default #1). A video child contributes its poster frame.
-      for (const child of children) {
-        const img = bestImageUrl(child);
-        if (img) imageUrls.push(img);
-      }
-    } else if (isVideoNode(node)) {
-      // Reel / single video — route through the video branch.
-      videoUrl = bestVideoUrl(node) || null;
-      posterUrl = bestImageUrl(node) || '';
-      if (posterUrl) imageUrls.push(posterUrl);
+      media = children.map(mediaItemOf).filter((m) => m.url);
     } else {
-      const img = bestImageUrl(node);
-      if (img) imageUrls.push(img);
+      const item = mediaItemOf(node);
+      if (item.url) media = [item];
     }
 
-    // Nothing usable — no media and no caption — skip.
+    // Stills only — posters stand in for video items so the thumbnail
+    // strip + primary-image fallback still work.
+    const imageUrls = media.map((m) => (m.type === 'video' ? m.poster : m.url)).filter(Boolean);
+
+    // Primary download routing, off the first item.
+    let videoUrl = null;
+    let posterUrl = '';
+    if (media[0] && media[0].type === 'video') {
+      videoUrl = media[0].url || null;
+      posterUrl = media[0].poster || '';
+    }
+
     const caption = captionOf(node);
-    if (imageUrls.length === 0 && !videoUrl && !caption.trim()) return null;
+    if (media.length === 0 && !caption.trim()) return null;
 
     return {
       postId: String(postId),
@@ -207,6 +219,7 @@
       authorHandle: owner.username ? `@${owner.username}` : '',
       authorAvatarUrl: owner.avatarUrl,
       caption,
+      media,
       imageUrls,
       videoUrl,
       posterUrl,

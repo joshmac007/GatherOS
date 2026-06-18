@@ -213,8 +213,16 @@ export default function FocusedView({
   const activeMedia = media.length > 0
     ? media[Math.min(Math.max(altImageIdx, 0), media.length - 1)]
     : null;
-  // Show the <video> only when the active selection IS the video.
-  const showVideo = record.kind === 'video' && (!activeMedia || activeMedia.type === 'video');
+  // Show the <video> whenever the active selection is a video — the
+  // local primary OR a secondary video (e.g. another reel in an
+  // Instagram carousel), which streams from its remote url so it plays
+  // instead of showing a frozen poster.
+  const showVideo = activeMedia ? activeMedia.type === 'video' : record.kind === 'video';
+  const localVideo = !activeMedia || activeMedia.primaryLocal || !activeMedia.url;
+  const videoSrc = localVideo ? fileUrl(record.file_path) : activeMedia.url;
+  const videoPoster = (showVideo && !localVideo && activeMedia.poster)
+    ? activeMedia.poster
+    : (record.thumb_path ? fileUrl(record.thumb_path) : undefined);
   const src = (activeMedia && activeMedia.type === 'image')
     ? (activeMedia.primary ? fileUrl(record.file_path) : twimgLarge(activeMedia.url))
     : fileUrl(record.file_path);
@@ -452,8 +460,12 @@ export default function FocusedView({
             onMouseLeave={() => setVideoHovered(false)}
           >
             <video
+              // Remount on source change so paging between videos loads
+              // and plays the new clip (changing src in place doesn't
+              // reliably restart playback).
+              key={videoSrc}
               ref={videoRef}
-              src={fileUrl(record.file_path)}
+              src={videoSrc}
               className={styles.image}
               autoPlay
               loop
@@ -464,7 +476,7 @@ export default function FocusedView({
               // the video out into a floating system overlay, breaking the
               // "everything in one window" model.
               disablePictureInPicture
-              poster={record.thumb_path ? fileUrl(record.thumb_path) : undefined}
+              poster={videoPoster}
               onClick={toggleVideoPlay}
               onPlay={() => setVid((s) => ({ ...s, playing: true }))}
               onPause={() => setVid((s) => ({ ...s, playing: false }))}

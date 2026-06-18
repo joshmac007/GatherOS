@@ -1047,6 +1047,9 @@ async function syncSavedPostToGather(p, { force = false } = {}) {
       authorHandle: p.authorHandle || '',
       authorAvatarUrl: p.authorAvatarUrl || '',
       caption: p.caption || '',
+      // Ordered media list — lets the renderer page through and play
+      // multiple videos in one save (Instagram carousels).
+      media: Array.isArray(p.media) ? p.media : undefined,
       imageUrls: Array.isArray(p.imageUrls) ? p.imageUrls : [],
       videoUrl: p.videoUrl || null,
       posterUrl: p.posterUrl || '',

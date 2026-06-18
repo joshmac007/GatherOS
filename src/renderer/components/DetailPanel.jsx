@@ -916,9 +916,14 @@ export default function DetailPanel({
                   // as the content script captured it from
                   // img.currentSrc — the variant the browser already
                   // loaded on x.com, so it's guaranteed to resolve.
-                  const thumbSrc = (m.type === 'video' || m.primary)
-                    ? fileUrl(record.thumb_path || record.file_path)
-                    : m.url;
+                  // Primary (the downloaded video or first image) uses the
+                  // local thumbnail. A secondary video shows its own poster;
+                  // secondary images use their captured URL.
+                  const thumbSrc = m.type === 'video'
+                    ? (m.primaryLocal || !m.poster
+                        ? fileUrl(record.thumb_path || record.file_path)
+                        : m.poster)
+                    : (m.primary ? fileUrl(record.thumb_path || record.file_path) : m.url);
                   return (
                     <button
                       key={i}
