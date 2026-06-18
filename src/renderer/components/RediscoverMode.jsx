@@ -445,7 +445,7 @@ export default function RediscoverMode({
                 // by .tweetFrame; the grid variant line-clamps long text
                 // with an ellipsis so nothing gets cut mid-word.
                 <div className={styles.tweetFrame}>
-                  <TweetCard meta={tweetMeta} variant="grid" />
+                  <TweetCard meta={tweetMeta} variant="grid" source={save.source} />
                 </div>
               ) : isVideo ? (
                 // Natural aspect, fit within the square; every visible

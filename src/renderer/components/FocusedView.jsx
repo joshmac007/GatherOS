@@ -423,6 +423,7 @@ export default function FocusedView({
               <TweetCard
                 meta={tweetMeta}
                 variant="focus"
+                source={record.source}
                 onOpenX={record.source_url
                   ? () => window.moodmark?.shell?.openUrl?.(record.source_url)
                   : undefined}

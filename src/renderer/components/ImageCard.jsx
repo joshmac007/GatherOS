@@ -356,7 +356,7 @@ export default function ImageCard({
         style={isTweet ? undefined : { aspectRatio: aspect }}
       >
         {inView && (isTweet ? (
-          <TweetCard meta={tweetMeta} variant="grid" />
+          <TweetCard meta={tweetMeta} variant="grid" source={record.source} />
         ) : showVideo ? (
           // Video saves: render an inline <video> instead of an
           // <img> — the file_path is an MP4 that browsers can't

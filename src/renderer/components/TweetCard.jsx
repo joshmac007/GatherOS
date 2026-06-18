@@ -10,13 +10,30 @@ function XGlyph() {
   );
 }
 
-// Live, theme-aware render of a saved tweet from its tweet_meta. Used
-// at two sizes: 'grid' (compact, inside an ImageCard frame) and 'focus'
-// (standalone card on the focused-view stage). Renders real, selectable
-// text — the captured PNG is only a thumbnail/export fallback.
-export default function TweetCard({ meta, variant = 'grid', onOpenX = null }) {
+// Instagram glyph — drawn stroke-based (sized by CSS like XGlyph) so an
+// Instagram save's card reads as Instagram, not X.
+function InstagramGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="20" height="20" x="2" y="2" rx="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
+// Live, theme-aware render of a saved tweet/post from its tweet_meta.
+// Used at two sizes: 'grid' (compact, inside an ImageCard frame) and
+// 'focus' (standalone card on the focused-view stage). Renders real,
+// selectable text — the captured PNG is only a thumbnail/export fallback.
+// `source` ('x' | 'instagram') picks the corner glyph + open label.
+export default function TweetCard({ meta, variant = 'grid', onOpenX = null, source = 'x' }) {
   const [avatarOk, setAvatarOk] = useState(true);
   if (!meta) return null;
+  const isIg = source === 'instagram';
+  const SourceGlyph = isIg ? InstagramGlyph : XGlyph;
+  const openLabel = isIg ? 'Open on Instagram' : 'Open on X';
 
   const name = (meta.authorName || meta.authorHandle || 'Unknown').trim();
   const handleRaw = (meta.authorHandle || '').trim();
@@ -51,11 +68,11 @@ export default function TweetCard({ meta, variant = 'grid', onOpenX = null }) {
           {handle && <span className={styles.handle} data-tweet-selectable>{handle}</span>}
         </span>
         {onOpenX ? (
-          <button type="button" className={styles.xBtn} title="Open on X" onClick={onOpenX}>
-            <XGlyph />
+          <button type="button" className={styles.xBtn} title={openLabel} onClick={onOpenX}>
+            <SourceGlyph />
           </button>
         ) : (
-          <span className={styles.x} aria-hidden="true"><XGlyph /></span>
+          <span className={styles.x} aria-hidden="true"><SourceGlyph /></span>
         )}
       </div>
       {isThread ? (
