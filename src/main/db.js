@@ -261,6 +261,15 @@ const MIGRATIONS = [
   (database) => {
     addColumnIfMissing(database, 'saves', 'source', "TEXT NOT NULL DEFAULT 'x'");
   },
+  // Backfill source for Instagram saves imported before the source column
+  // (and native-host forwarding) landed — they defaulted to 'x' and so
+  // showed the X badge in the grid instead of the Instagram one. Their
+  // permalink is an instagram.com URL, which distinguishes them. Idempotent.
+  (database) => {
+    database.prepare(
+      "UPDATE saves SET source = 'instagram' WHERE source = 'x' AND source_url LIKE '%instagram.com%'",
+    ).run();
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
