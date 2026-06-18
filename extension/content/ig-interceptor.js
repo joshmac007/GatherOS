@@ -26,9 +26,22 @@
   window.__GATHEROS_IG_INTERCEPTOR__ = true;
 
   // Flip on from the devtools console (window.GATHEROS_IG_DEBUG = true)
-  // to log every saved-feed response. Off by default so normal browsing
+  // to log saved-feed responses. Off by default so normal browsing
   // stays quiet.
   const debugOn = () => !!window.GATHEROS_IG_DEBUG;
+
+  // Discovery aid: when debug is on, log EVERY apiish request the page
+  // makes (not just the ones our matcher recognizes) so the real
+  // saved-feed endpoint can be spotted against a live account even if
+  // shouldIntercept() doesn't match it yet. Noisy by design — only
+  // active while GATHEROS_IG_DEBUG is set.
+  function debugSawRequest(url) {
+    if (!debugOn() || typeof url !== 'string') return;
+    if (/\/api\/|\/graphql|saved|collection/i.test(url)) {
+      // eslint-disable-next-line no-console
+      console.log('[gatheros-ig] request:', url, '| matched=', shouldIntercept(url));
+    }
+  }
 
   // Backfill switch — same contract as the X interceptor. Normal
   // browsing only imports the TOP of the saved feed (newest); the
@@ -268,6 +281,7 @@
   const ORIGINAL_FETCH = window.fetch;
   window.fetch = function gatherIgFetch(...args) {
     const reqUrl = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url) || '';
+    debugSawRequest(reqUrl);
     const p = ORIGINAL_FETCH.apply(this, args);
     if (!shouldIntercept(reqUrl)) return p;
     p.then((res) => {
@@ -286,6 +300,7 @@
     return XHR_OPEN.call(this, method, url, ...rest);
   };
   XMLHttpRequest.prototype.send = function gatherIgXhrSend(...args) {
+    debugSawRequest(this.__gatherIgUrl);
     this.addEventListener('load', () => {
       if (!shouldIntercept(this.__gatherIgUrl)) return;
       try {
