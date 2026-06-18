@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The inside of the Saved view — GatherOS</title>
+<style>
+  :root{
+    --bg:#f4f3f1; --surface:#fff; --surface-2:#fafafa;
+    --border:rgba(0,0,0,0.08); --hair:rgba(0,0,0,0.05);
+    --t1:#191919; --t2:rgba(0,0,0,0.56); --t3:rgba(0,0,0,0.4);
+    --accent:#111; --on-accent:#fff;
+    --shadow:0 1px 2px rgba(16,16,19,.05),0 6px 16px rgba(16,16,19,.05);
+    --radius:13px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Geist",system-ui,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--font);background:#e9e8e6;color:var(--t1);-webkit-font-smoothing:antialiased}
+
+  /* ── top bar ───────────────────────────────────────────── */
+  .topbar{position:fixed;inset:0 0 auto 0;height:52px;z-index:50;display:flex;align-items:center;gap:14px;
+    padding:0 16px;background:rgba(250,250,249,.86);backdrop-filter:blur(18px);border-bottom:1px solid var(--border)}
+  .topbar h1{font-size:13px;font-weight:600;letter-spacing:-.01em;margin:0;white-space:nowrap;color:var(--t1)}
+  .topbar .sub{font-size:11px;color:var(--t3);margin-left:-6px}
+  .tabs{display:flex;gap:4px;margin-left:6px;overflow:auto}
+  .tab{display:flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid transparent;border-radius:9px;
+    background:transparent;color:var(--t2);font:inherit;font-size:12px;font-weight:500;letter-spacing:-.01em;cursor:pointer;white-space:nowrap}
+  .tab .n{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:5px;
+    background:rgba(0,0,0,.06);font-size:10px;font-weight:600;color:var(--t2)}
+  .tab:hover{background:rgba(0,0,0,.04);color:var(--t1)}
+  .tab.on{background:var(--surface);border-color:var(--border);color:var(--t1);box-shadow:var(--shadow)}
+  .tab.on .n{background:var(--accent);color:var(--on-accent)}
+  .empty-switch{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--t2);white-space:nowrap;cursor:pointer;user-select:none}
+  .empty-switch input{appearance:none;width:30px;height:18px;border-radius:99px;background:rgba(0,0,0,.16);position:relative;cursor:pointer;transition:background .15s}
+  .empty-switch input::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .empty-switch input:checked{background:var(--accent)}
+  .empty-switch input:checked::after{transform:translateX(12px)}
+
+  /* ── stage ─────────────────────────────────────────────── */
+  .stage{position:fixed;inset:52px 0 0 0;overflow:auto;padding:22px 26px 60px}
+  .iter{display:none;max-width:1120px;margin:0 auto}
+  .iter.active{display:block}
+  .meta{margin:0 2px 16px}
+  .meta .name{font-size:15px;font-weight:600;letter-spacing:-.015em}
+  .meta .why{font-size:12.5px;color:var(--t2);margin-top:3px;max-width:760px;line-height:1.45}
+
+  /* faux app window */
+  .win{background:var(--bg);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.10);overflow:hidden}
+  .winbar{height:36px;display:flex;align-items:center;gap:7px;padding:0 13px;border-bottom:1px solid var(--hair);background:var(--surface-2)}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+  .wintitle{font-size:11px;color:var(--t3);margin-left:8px}
+  .body{display:flex;min-height:560px}
+
+  /* sidebar (shared) */
+  .side{width:178px;flex:none;border-right:1px solid var(--hair);padding:12px 10px;background:var(--surface-2)}
+  .side .grp{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--t3);margin:8px 8px 6px}
+  .nav{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:8px;font-size:12.5px;color:var(--t2);cursor:pointer}
+  .nav .ico{display:inline-flex;color:var(--t3)}
+  .nav.on{background:rgba(0,0,0,.06);color:var(--t1);font-weight:500}
+  .nav.on .ico{color:var(--t1)}
+  .nav .cnt{margin-left:auto;font-size:11px;color:var(--t3);font-variant-numeric:tabular-nums}
+
+  .content{flex:1;min-width:0;display:flex;flex-direction:column}
+  .toolbar{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--hair)}
+  .count{font-size:13px;font-weight:600;letter-spacing:-.01em}
+  .count small{font-weight:400;color:var(--t3)}
+  .spacer{flex:1}
+  .ctrl{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:12px;color:var(--t2);cursor:pointer;box-shadow:var(--shadow)}
+  .ctrl:hover{color:var(--t1)}
+
+  /* segmented control */
+  .seg{display:inline-flex;background:rgba(0,0,0,.05);border-radius:9px;padding:3px;gap:2px}
+  .seg button{display:inline-flex;align-items:center;gap:6px;border:none;background:transparent;font:inherit;font-size:12px;font-weight:500;color:var(--t2);padding:5px 11px;border-radius:7px;cursor:pointer}
+  .seg button .cnt{font-size:10.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+  .seg button.on{background:var(--surface);color:var(--t1);box-shadow:var(--shadow)}
+  .seg button.on .cnt{color:var(--t2)}
+
+  /* chips */
+  .chip{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border:1px solid var(--border);border-radius:99px;background:var(--surface);font-size:12px;color:var(--t2);cursor:pointer;box-shadow:var(--shadow)}
+  .chip.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+  .chip .x{opacity:.6}
+  .pop{position:absolute;margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.16);padding:7px;width:210px;z-index:20}
+  .pop .row{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:8px;font-size:12.5px;cursor:pointer}
+  .pop .row:hover{background:rgba(0,0,0,.04)}
+  .pop .row .cnt{margin-left:auto;font-size:11px;color:var(--t3)}
+  .check{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--border);display:inline-flex;align-items:center;justify-content:center;color:#fff}
+  .check.on{background:var(--accent);border-color:var(--accent)}
+
+  /* grid / masonry */
+  .scroll{padding:18px;overflow:auto}
+  .masonry{column-count:4;column-gap:12px}
+  @media(max-width:900px){.masonry{column-count:3}}
+  .card{break-inside:avoid;margin:0 0 12px;border-radius:12px;position:relative;overflow:hidden;
+    box-shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px rgba(0,0,0,.05);cursor:pointer;transition:transform .12s,box-shadow .12s}
+  .card:hover{transform:translateY(-2px);box-shadow:0 2px 6px rgba(0,0,0,.08),0 10px 22px rgba(0,0,0,.10)}
+  .card.media{display:flex;align-items:flex-end;justify-content:flex-end}
+  .srcbadge{position:absolute;left:8px;bottom:8px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(20,20,22,.62);color:#fff;backdrop-filter:blur(8px);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;text-shadow:0 1px 6px rgba(0,0,0,.4)}
+  .dur{position:absolute;right:8px;bottom:8px;background:rgba(20,20,22,.65);color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px;backdrop-filter:blur(8px)}
+  .cpill{position:absolute;right:8px;top:8px;background:rgba(20,20,22,.65);color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px;backdrop-filter:blur(8px)}
+  /* tweet card */
+  .card.tweet{background:var(--surface);border:1px solid var(--border);padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 4px 12px rgba(0,0,0,.05)}
+  .twhead{display:flex;align-items:center;gap:8px}
+  .twav{width:30px;height:30px;border-radius:50%;flex:none}
+  .twname{font-size:12.5px;font-weight:600;letter-spacing:-.01em}
+  .twhandle{font-size:11.5px;color:var(--t3)}
+  .twx{margin-left:auto;color:var(--t1)}
+  .twtext{font-size:12.5px;line-height:1.45;color:var(--t1);margin:9px 0 0}
+  .twimg{margin-top:10px;border-radius:9px}
+
+  /* grouped sections */
+  .sec{padding:16px 18px}
+  .sechead{display:flex;align-items:center;gap:9px;margin:0 0 12px}
+  .sechead .lbl{font-size:13px;font-weight:600;letter-spacing:-.01em}
+  .sechead .cnt{font-size:11.5px;color:var(--t3)}
+  .sechead .line{flex:1;height:1px;background:var(--hair)}
+  .sechead .more{font-size:11.5px;color:var(--t2);cursor:pointer}
+  .secrow{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .secrow .card{margin:0}
+
+  /* lanes */
+  .lanes{display:grid;grid-template-columns:repeat(3,1fr);gap:0;flex:1}
+  .lane{border-right:1px solid var(--hair);display:flex;flex-direction:column;min-width:0}
+  .lane:last-child{border-right:none}
+  .lanehead{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--hair);position:sticky;top:0;background:var(--bg);z-index:2}
+  .lanehead .lbl{font-size:12.5px;font-weight:600}
+  .lanehead .cnt{font-size:11px;color:var(--t3);margin-left:auto}
+  .lanebody{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+  .lane .card{margin:0}
+
+  /* empty states */
+  .empty{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 24px;min-height:420px}
+  .empty .fan{position:relative;width:128px;height:92px;margin-bottom:22px}
+  .empty .fan span{position:absolute;top:50%;left:50%;width:74px;height:74px;margin:-37px 0 0 -37px;border-radius:11px;background:var(--surface);border:1px solid var(--border);box-shadow:0 4px 14px rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center;color:var(--t3)}
+  .empty .fan span:nth-child(1){transform:rotate(-9deg) translate(-22px,4px)}
+  .empty .fan span:nth-child(2){transform:translateY(-2px);z-index:1}
+  .empty .fan span:nth-child(3){transform:rotate(9deg) translate(22px,4px)}
+  .empty .et{font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .empty .eh{font-size:13px;color:var(--t2);max-width:360px;line-height:1.5;margin-top:8px;text-wrap:pretty}
+  .epill{margin-top:18px;display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:99px;background:var(--accent);color:var(--on-accent);font-size:12.5px;font-weight:550;border:none;cursor:pointer}
+  .esub{margin-top:11px;font-size:11.5px;color:var(--t3)}
+  .esrc{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid var(--border);border-radius:99px;background:var(--surface);color:var(--t2);font-size:11px}
+  /* inline empty (grouped / lane) */
+  .empty-inline{border:1px dashed var(--border);border-radius:12px;padding:22px;text-align:center;color:var(--t3);font-size:12.5px;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(0,0,0,.012) 8px,rgba(0,0,0,.012) 16px)}
+
+  /* full/empty state visibility driven by body[data-empty] */
+  .when-full{display:flex;flex:1;min-width:0}
+  .when-empty{display:none;flex:1;min-width:0}
+  body[data-empty="true"] .when-full{display:none}
+  body[data-empty="true"] .when-empty{display:flex}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>The inside of the Saved view</h1>
+    <span class="sub">GatherOS</span>
+    <div class="tabs" id="tabs"></div>
+    <label class="empty-switch"><input type="checkbox" id="emptyToggle"> Preview empty state</label>
+  </div>
+
+  <div class="stage" id="stage"></div>
+
+<script>
+/* ── source glyphs ─────────────────────────────────────────── */
+function XG(s){return `<svg viewBox="0 0 1200 1227" width="${s}" height="${s}" fill="currentColor" aria-hidden="true"><path d="M714 519L1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z"/></svg>`;}
+function IGG(s){return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="20" x="2" y="2" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>`;}
+function PG(s){return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.6 19.3c-.1-.8-.1-2 .1-2.9l1.1-4.7s-.3-.6-.3-1.4c0-1.3.8-2.3 1.7-2.3.8 0 1.2.6 1.2 1.3 0 .8-.5 2-.8 3.1-.2.9.5 1.7 1.4 1.7 1.7 0 2.9-2.2 2.9-4.7 0-1.9-1.3-3.4-3.7-3.4-2.7 0-4.4 2-4.4 4.3 0 .8.2 1.3.6 1.8.1.2.2.3.1.5l-.2.8c0 .3-.2.3-.5.2-1.2-.5-1.8-1.9-1.8-3.4 0-2.5 2.1-5.5 6.3-5.5 3.4 0 5.6 2.4 5.6 5.1 0 3.4-1.9 6-4.7 6-1 0-1.9-.5-2.2-1.1l-.6 2.3c-.2.8-.7 1.7-1 2.4A10 10 0 1 0 12 2z"/></svg>`;}
+const GLYPH={x:XG,instagram:IGG,pinterest:PG};
+const SRCNAME={x:'X',instagram:'Instagram',pinterest:'Pinterest'};
+
+/* ── placeholder saves ─────────────────────────────────────── */
+function grad(h){return `linear-gradient(135deg,hsl(${h} 68% 74%),hsl(${(h+45)%360} 60% 58%))`;}
+const S=[
+  {t:'image',s:'x',h:210,hue:18},
+  {t:'tweet',s:'x',hue:210,name:'Rauno',handle:'@raunofreiberg',text:'Tiny detail that makes an interface feel alive: easing the icon, not just the container.',img:false},
+  {t:'image',s:'instagram',h:280,hue:330},
+  {t:'video',s:'instagram',h:300,hue:265},
+  {t:'image',s:'x',h:170,hue:140},
+  {t:'carousel',s:'instagram',h:240,hue:35},
+  {t:'image',s:'instagram',h:200,hue:300},
+  {t:'tweet',s:'x',hue:0,name:'Jordan Singer',handle:'@jsngr',text:'shipping > talking about shipping',img:true,h:120,ihue:190},
+  {t:'image',s:'x',h:250,hue:95},
+  {t:'video',s:'x',h:180,hue:48},
+  {t:'image',s:'instagram',h:230,hue:355},
+  {t:'image',s:'x',h:190,hue:230},
+  {t:'carousel',s:'instagram',h:300,hue:160},
+  {t:'image',s:'x',h:160,hue:280},
+  {t:'image',s:'instagram',h:260,hue:20},
+  {t:'image',s:'x',h:215,hue:200},
+  {t:'video',s:'instagram',h:220,hue:120},
+  {t:'image',s:'x',h:175,hue:310},
+];
+const COUNTS={all:342,x:210,instagram:132,pinterest:0};
+
+function badge(s){return `<span class="srcbadge">${GLYPH[s](s==='x'?12:13)}</span>`;}
+function card(d){
+  if(d.t==='tweet'){
+    return `<article class="card tweet" data-src="${d.s}">
+      <div class="twhead"><span class="twav" style="background:${grad(d.hue)}"></span>
+        <span class="twname">${d.name}</span><span class="twhandle">${d.handle}</span><span class="twx">${XG(14)}</span></div>
+      <p class="twtext">${d.text}</p>
+      ${d.img?`<div class="twimg" style="background:${grad(d.ihue)};height:${d.h}px"></div>`:''}
+    </article>`;
+  }
+  let extra='';
+  if(d.t==='video') extra=`<div class="play">▶</div><span class="dur">0:42</span>`;
+  if(d.t==='carousel') extra=`<span class="cpill">1/4</span>`;
+  return `<article class="card media" data-src="${d.s}" style="background:${grad(d.hue)};height:${d.h}px">${extra}${badge(d.s)}</article>`;
+}
+function masonry(list){return `<div class="masonry">${list.map(card).join('')}</div>`;}
+const bySrc=(src)=>src==='all'?S:S.filter(d=>d.s===src);
+
+/* shared empty hero */
+function hero(title,hint,cta,sub){
+  return `<div class="empty">
+    <div class="fan"><span>${IGG(20)}</span><span>${XG(18)}</span><span>${PG(20)}</span></div>
+    <div class="et">${title}</div>
+    <div class="eh">${hint}</div>
+    ${cta?`<button class="epill">${cta}</button>`:''}
+    ${sub?`<div class="esub">${sub}</div>`:''}
+  </div>`;
+}
+
+/* ── iterations ────────────────────────────────────────────── */
+const ITER=[
+{name:'Segmented toggle',
+ why:'A source switch sits inline with sort — one unified masonry below. Lowest chrome, fastest to scan; for people who mostly want everything together and occasionally narrow to one source.',
+ full:`<div class="content">
+   <div class="toolbar">
+     <span class="count">342 <small>saves</small></span>
+     <span class="spacer"></span>
+     <div class="seg" id="seg1">
+       <button class="on" data-f="all">All saves</button>
+       <button data-f="x">${XG(12)} <span class="cnt">210</span></button>
+       <button data-f="instagram">${IGG(13)} <span class="cnt">132</span></button>
+     </div>
+     <div class="ctrl">Newest ▾</div>
+   </div>
+   <div class="scroll" id="grid1">${masonry(S)}</div>
+ </div>`,
+ empty:hero('No saves yet','Bookmark a post on X or save one on Instagram — they sync into here automatically.','Get the browser extension','Already connected? New saves appear within a minute.')},
+
+{name:'Source rail',
+ why:'A slim secondary rail lists every source with live counts — including ones not yet connected. Makes the multi-source nature explicit and gives future platforms an obvious home.',
+ full:`<div class="side">
+     <div class="grp">Saved</div>
+     <div class="nav on"><span class="ico">${dots()}</span> All saves <span class="cnt">342</span></div>
+     <div class="nav"><span class="ico">${XG(13)}</span> X <span class="cnt">210</span></div>
+     <div class="nav"><span class="ico">${IGG(14)}</span> Instagram <span class="cnt">132</span></div>
+     <div class="grp" style="margin-top:14px">Connect</div>
+     <div class="nav" style="opacity:.6"><span class="ico">${PG(14)}</span> Pinterest <span class="cnt">soon</span></div>
+   </div>
+   <div class="content">
+     <div class="toolbar"><span class="count">All saves · 342 <small>items</small></span><span class="spacer"></span><div class="ctrl">Newest ▾</div></div>
+     <div class="scroll">${masonry(S)}</div>
+   </div>`,
+ empty:`<div class="side">
+     <div class="grp">Saved</div>
+     <div class="nav on"><span class="ico">${dots()}</span> All saves <span class="cnt">0</span></div>
+     <div class="nav"><span class="ico">${XG(13)}</span> X <span class="cnt">0</span></div>
+     <div class="nav"><span class="ico">${IGG(14)}</span> Instagram <span class="cnt">0</span></div>
+     <div class="grp" style="margin-top:14px">Connect</div>
+     <div class="nav" style="opacity:.6"><span class="ico">${PG(14)}</span> Pinterest <span class="cnt">soon</span></div>
+   </div>
+   <div class="content">${hero('Nothing saved here yet','Connect a source and your bookmarks + saves land in this view automatically — no manual exports.','Connect X or Instagram','')}</div>`},
+
+{name:'Grouped by source',
+ why:'Each source gets its own titled section with a peek of recent items and a “see all”. Good when sources feel like different modes of saving and you care about recency per platform.',
+ full:`<div class="content">
+   <div class="toolbar"><span class="count">342 <small>saves across 2 sources</small></span><span class="spacer"></span><div class="ctrl">Group by source ▾</div></div>
+   <div class="scroll">
+     <div class="sec"><div class="sechead">${XG(14)}<span class="lbl">From X</span><span class="cnt">210</span><span class="line"></span><span class="more">See all →</span></div>
+       <div class="secrow">${bySrc('x').slice(0,5).map(card).join('')}</div></div>
+     <div class="sec"><div class="sechead">${IGG(15)}<span class="lbl">From Instagram</span><span class="cnt">132</span><span class="line"></span><span class="more">See all →</span></div>
+       <div class="secrow">${bySrc('instagram').slice(0,5).map(card).join('')}</div></div>
+   </div>
+ </div>`,
+ empty:`<div class="content">
+   <div class="toolbar"><span class="count">0 <small>saves</small></span><span class="spacer"></span><div class="ctrl">Group by source ▾</div></div>
+   <div class="scroll">
+     <div class="sec"><div class="sechead">${XG(14)}<span class="lbl">From X</span><span class="cnt">0</span><span class="line"></span></div>
+       <div class="empty-inline">No bookmarks from X yet — bookmark a tweet and it shows up here.</div></div>
+     <div class="sec"><div class="sechead">${IGG(15)}<span class="lbl">From Instagram</span><span class="cnt">0</span><span class="line"></span></div>
+       <div class="empty-inline">No Instagram saves yet — save a post or run “import saved”.</div></div>
+   </div>
+ </div>`},
+
+{name:'Unified feed + filter',
+ why:'The quietest, most image-forward direction: one clean masonry that leans on the per-card source badges, with a single filter chip opening a popover. Chrome gets out of the way of the work.',
+ full:`<div class="content">
+   <div class="toolbar"><span class="count">342 <small>saves</small></span><span class="spacer"></span>
+     <div style="position:relative">
+       <div class="chip" id="filterChip">${funnel()} Filter <span class="x">·</span> all sources</div>
+       <div class="pop" id="filterPop" style="display:none;right:0">
+         <div class="row"><span class="check on">${chk()}</span> ${XG(12)} X <span class="cnt">210</span></div>
+         <div class="row"><span class="check on">${chk()}</span> ${IGG(13)} Instagram <span class="cnt">132</span></div>
+         <div class="row" style="opacity:.55"><span class="check"></span> ${PG(13)} Pinterest <span class="cnt">soon</span></div>
+       </div>
+     </div>
+     <div class="ctrl">Newest ▾</div>
+   </div>
+   <div class="scroll">${masonry(S)}</div>
+ </div>`,
+ empty:hero('Your saved feed is empty','Everything you bookmark on X or save on Instagram flows into one feed here. Save something to get started.','Get the browser extension','')},
+
+{name:'Source lanes',
+ why:'The ambitious one: parallel columns, one per source, each its own scrollable feed. Best for triaging or comparing across platforms at a glance — and it scales by adding a lane.',
+ full:`<div class="content"><div class="toolbar"><span class="count">342 <small>saves</small></span><span class="spacer"></span><div class="seg"><button class="on">Lanes</button><button>Mixed feed</button></div><div class="ctrl">Newest ▾</div></div>
+   <div class="lanes">
+     <div class="lane"><div class="lanehead">${XG(13)}<span class="lbl">X</span><span class="cnt">210</span></div><div class="lanebody">${bySrc('x').slice(0,6).map(card).join('')}</div></div>
+     <div class="lane"><div class="lanehead">${IGG(14)}<span class="lbl">Instagram</span><span class="cnt">132</span></div><div class="lanebody">${bySrc('instagram').slice(0,6).map(card).join('')}</div></div>
+     <div class="lane"><div class="lanehead" style="opacity:.6">${PG(14)}<span class="lbl">Pinterest</span><span class="cnt">soon</span></div><div class="lanebody"><div class="empty-inline" style="margin-top:8px">Connect Pinterest to add a lane.</div></div></div>
+   </div></div>`,
+ empty:`<div class="content"><div class="toolbar"><span class="count">0 <small>saves</small></span><span class="spacer"></span><div class="seg"><button class="on">Lanes</button><button>Mixed feed</button></div></div>
+   <div class="lanes">
+     <div class="lane"><div class="lanehead">${XG(13)}<span class="lbl">X</span><span class="cnt">0</span></div><div class="lanebody"><div class="empty-inline" style="margin-top:8px">No X bookmarks yet.</div></div></div>
+     <div class="lane"><div class="lanehead">${IGG(14)}<span class="lbl">Instagram</span><span class="cnt">0</span></div><div class="lanebody"><div class="empty-inline" style="margin-top:8px">No Instagram saves yet.</div></div></div>
+     <div class="lane"><div class="lanehead" style="opacity:.6">${PG(14)}<span class="lbl">Pinterest</span><span class="cnt">soon</span></div><div class="lanebody"><div class="empty-inline" style="margin-top:8px">Connect Pinterest to add a lane.</div></div></div>
+   </div></div>`},
+];
+
+function dots(){return `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="6" cy="6" r="2.4"/><circle cx="13" cy="6" r="2.4"/><circle cx="6" cy="13" r="2.4"/><circle cx="13" cy="13" r="2.4"/></svg>`;}
+function funnel(){return `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>`;}
+function chk(){return `<svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5 6 10.5 11 4"/></svg>`;}
+
+/* ── build ─────────────────────────────────────────────────── */
+const stage=document.getElementById('stage');
+const tabsEl=document.getElementById('tabs');
+ITER.forEach((it,i)=>{
+  const n=i+1;
+  const tab=document.createElement('button');
+  tab.className='tab'; tab.dataset.i=n;
+  tab.innerHTML=`<span class="n">${n}</span>${it.name}`;
+  tab.onclick=()=>show(n); tabsEl.appendChild(tab);
+
+  const sec=document.createElement('section');
+  sec.className='iter'; sec.dataset.i=n;
+  sec.innerHTML=`<div class="meta"><div class="name">${n}. ${it.name}</div><div class="why">${it.why}</div></div>
+    <div class="win"><div class="winbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="wintitle">GatherOS — Saved</span></div>
+      <div class="body"><div class="when-full">${it.full}</div><div class="when-empty">${it.empty}</div></div></div>`;
+  stage.appendChild(sec);
+});
+
+function show(n){
+  document.querySelectorAll('.iter').forEach(s=>s.classList.toggle('active',s.dataset.i==n));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.i==n));
+  stage.scrollTop=0;
+}
+document.addEventListener('keydown',e=>{ if(e.key>='1'&&e.key<='5')show(e.key); });
+document.getElementById('emptyToggle').addEventListener('change',e=>{
+  document.body.setAttribute('data-empty', e.target.checked?'true':'false');
+});
+
+/* segmented filter (iter 1) */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('#seg1 button'); if(b){
+    document.querySelectorAll('#seg1 button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    document.getElementById('grid1').innerHTML=masonry(bySrc(b.dataset.f));
+  }
+  const fc=e.target.closest('#filterChip'); const pop=document.getElementById('filterPop');
+  if(fc){ pop.style.display = pop.style.display==='none'?'block':'none'; }
+  else if(pop && !e.target.closest('#filterPop')){ pop.style.display='none'; }
+});
+
+show(1);
+</script>
+</body>
+</html>
