@@ -155,6 +155,17 @@ function XGlyphIcon() {
   );
 }
 
+function InstagramGlyphIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="20" height="20" x="2" y="2" rx="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
 // Twitter rewrites image URLs to include &name=<variant>. The
 // content script stores them with no variant set; the renderer
 // picks one at display time. CRITICAL: twimg's /media/ endpoint
@@ -205,6 +216,8 @@ export default function DetailPanel({
     try { return JSON.parse(record.tweet_meta); }
     catch { return null; }
   }, [record?.tweet_meta]);
+  // Picks the source glyph + open label on the card (Instagram vs X).
+  const igSource = record?.source === 'instagram';
   // AI features (auto-tag, prompt generation, "more like this") are pro;
   // locked in the free tier. Fails open to unlocked.
   const proLocked = isLocked(useEntitlementValue());
@@ -865,15 +878,15 @@ export default function DetailPanel({
                 <button
                   type="button"
                   className={`${styles.tweetSourceIcon} ${styles.tweetSourceBtn}`}
-                  title="Open on X"
-                  aria-label="Open on X"
+                  title={igSource ? 'Open on Instagram' : 'Open on X'}
+                  aria-label={igSource ? 'Open on Instagram' : 'Open on X'}
                   onClick={() => window.moodmark?.shell?.openUrl?.(record.source_url)}
                 >
-                  <XGlyphIcon />
+                  {igSource ? <InstagramGlyphIcon /> : <XGlyphIcon />}
                 </button>
               ) : (
-                <span className={styles.tweetSourceIcon} title="From X" aria-label="From X">
-                  <XGlyphIcon />
+                <span className={styles.tweetSourceIcon} title={igSource ? 'From Instagram' : 'From X'} aria-label={igSource ? 'From Instagram' : 'From X'}>
+                  {igSource ? <InstagramGlyphIcon /> : <XGlyphIcon />}
                 </span>
               )}
             </div>
