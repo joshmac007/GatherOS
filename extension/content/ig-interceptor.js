@@ -56,23 +56,21 @@
   });
 
   // ── Saved-feed endpoint detection ──────────────────────────────────
-  // REST: /api/v1/feed/saved/posts/, /api/v1/feed/saved/, and
-  //       /api/v1/feed/collection/<id>/posts/ (a named saved collection).
-  // GraphQL: /graphql/query or /api/graphql carrying a saved-media query.
-  // The GraphQL body doesn't reveal "saved-ness" from the URL, so for
-  // those we rely on the response actually containing saved-feed
-  // connection keys (checked in extractSavedPosts via the walk).
+  // ONLY the saved-feed REST endpoints:
+  //   /api/v1/feed/saved/posts/, /api/v1/feed/saved/, and
+  //   /api/v1/feed/collection/<id>/posts/ (a named saved collection).
+  // We deliberately do NOT touch GraphQL: Instagram serves profile, home,
+  // and explore feeds over /graphql too, and parsing those would scoop a
+  // whole profile's posts into the saved-import pipeline (it did — that
+  // was the "visiting a profile imported all their posts" bug). The saved
+  // feed is REST, so matching the saved path is both sufficient and safe.
   function isSavedRestEndpoint(url) {
     if (typeof url !== 'string') return false;
     return /\/api\/v1\/feed\/saved\//.test(url)
       || /\/api\/v1\/feed\/collection\/[^/]+\/(posts|all_media)\//.test(url);
   }
-  function isGraphqlEndpoint(url) {
-    return typeof url === 'string'
-      && (/\/graphql\/query/.test(url) || /\/api\/graphql/.test(url));
-  }
   function shouldIntercept(url) {
-    return isSavedRestEndpoint(url) || isGraphqlEndpoint(url);
+    return isSavedRestEndpoint(url);
   }
 
   // Top-of-feed vs paginated. REST uses ?max_id=<cursor>; GraphQL puts
