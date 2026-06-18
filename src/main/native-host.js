@@ -249,6 +249,9 @@ async function handleMessage(msg) {
         notes: msg.notes || null,
         tweetMeta: msg.tweetMeta || null,
         tags: Array.isArray(msg.tags) ? msg.tags : null,
+        // Capture origin ('x' | 'instagram'). Forwarded so the server
+        // can tag + badge the save and key the right tombstone.
+        source: msg.source || null,
         // Explicit "Import bookmarks" backfill flag — must be forwarded
         // so the server can override a bookmark's tombstone and re-import
         // something the user previously deleted.

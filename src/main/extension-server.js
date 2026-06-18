@@ -126,6 +126,11 @@ async function handleSave(req, res) {
   const tweetMeta = (body && typeof body.tweetMeta === 'object' && body.tweetMeta !== null)
     ? body.tweetMeta
     : null;
+  // Capture origin — 'x' (default) or 'instagram'. Stored on the save
+  // so the grid can badge it and the combined "Saved" view can filter
+  // by tag. Anything unrecognised falls back to 'x' so a malformed
+  // value can't orphan a row out of the existing views.
+  const source = body?.source === 'instagram' ? 'instagram' : 'x';
   // Need at least one of: an image, a video, or a page URL. The X-
   // bookmark capture sends videoUrl for video-only tweets; right-click
   // sends an http(s) imageUrl; the extension's "capture page / area"
@@ -148,15 +153,16 @@ async function handleSave(req, res) {
 
   try {
     const { saveImageFromUrl, saveVideoFromUrl } = require('./storage');
-    const { insertSave, isTweetDismissed, tweetKeyFromUrl } = require('./db');
+    const { insertSave, isTweetDismissed, sourceKeyFromUrl } = require('./db');
     const { notifySaved, notifyDuplicate, notifyBookmarkSaved } = require('./notify');
 
-    // X bookmark syncs (tweetMeta present) get the quiet, batched
-    // notifier so scrolling the list doesn't flood the grid. A bookmark
-    // the user already removed from Gather is skipped entirely — the
-    // tombstone makes deletions stick across re-scrolls.
+    // X bookmark / IG saved-post syncs (tweetMeta present) get the
+    // quiet, batched notifier so scrolling the list doesn't flood the
+    // grid. A post the user already removed from Gather is skipped
+    // entirely — the tombstone makes deletions stick across re-scrolls.
+    // sourceKeyFromUrl resolves either an X status or an IG permalink.
     const isBookmark = !!tweetMeta;
-    const tweetKey = tweetKeyFromUrl(pageUrl);
+    const tweetKey = sourceKeyFromUrl(pageUrl);
     // Explicit "Import bookmarks" backfill sends forceImport: the user is
     // deliberately pulling their X bookmarks, so honor it even for ones
     // they previously removed — lift the tombstone and save. Passive sync
@@ -211,6 +217,7 @@ async function handleSave(req, res) {
         sourceUrl: pageUrl || null,
         title: null,
         tweetMeta,
+        source,
         // kind='tweet' lets the renderer draw a live, theme-aware text
         // card from tweet_meta instead of showing the captured PNG. The
         // PNG still backs file_path/thumb_path so thumbnails, export,
@@ -271,6 +278,7 @@ async function handleSave(req, res) {
       title: pageTitle || mediaData.title || null,
       notes: notes || null,
       tweetMeta,
+      source,
     });
     attachTags(record.id);
     notifyNew(record);

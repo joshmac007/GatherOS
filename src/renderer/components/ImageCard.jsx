@@ -23,6 +23,21 @@ function XGlyphIcon() {
   );
 }
 
+// Instagram glyph — the source badge for saves captured from Instagram
+// saved posts. Stroke-based (matches lucide's instagram mark) so it
+// reads at the same weight as the rest of the app's iconography.
+function InstagramGlyphIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+      stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="20" height="20" x="2" y="2" rx="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">
@@ -373,12 +388,19 @@ export default function ImageCard({
           />
         ))}
         {inView && record.tweet_meta && !isTweet && (
-          // Bottom-left glass badge — marks media saves captured via the
-          // X bookmark watcher. Skipped for text tweets: their card
-          // already shows the X glyph in its header.
-          <span className={styles.sourceBadge} aria-label="From X">
-            <XGlyphIcon />
-          </span>
+          // Bottom-left glass badge — marks media saves captured from a
+          // social source. Instagram saves show the IG glyph; everything
+          // else (X bookmarks) shows the X mark. Skipped for text tweets:
+          // their card already shows the source glyph in its header.
+          record.source === 'instagram' ? (
+            <span className={styles.sourceBadge} aria-label="From Instagram">
+              <InstagramGlyphIcon />
+            </span>
+          ) : (
+            <span className={styles.sourceBadge} aria-label="From X">
+              <XGlyphIcon />
+            </span>
+          )
         )}
         {inView && canPageImages && (
           // Top-right count chip. On hover, arrows page through the

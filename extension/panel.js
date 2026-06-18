@@ -27,6 +27,7 @@
     link: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/>',
     open: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
     close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    instagram: '<rect width="20" height="20" x="2" y="2" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>',
   };
   const svg = (paths, w = 17) =>
     `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -157,6 +158,21 @@
           <div class="scope-note">Imports your most recent bookmarks. Opens x.com and scrolls — duplicates are skipped.</div>
         </div>
       </div>
+      <div class="import" id="igImport">
+        <button class="btn" id="importSaved"><span class="ico">${svg(ICONS.instagram, 15)}</span><span class="txt"><span class="label">Import saved</span><span class="sub" id="igSub">Backfill your Instagram saves</span></span></button>
+        <div class="scope" id="igScope" hidden>
+          <select class="count" id="igCount">
+            <option value="25" selected>Most recent 25</option>
+            <option value="50">Most recent 50</option>
+            <option value="100">Most recent 100</option>
+            <option value="200">Most recent 200</option>
+            <option value="500">Most recent 500</option>
+            <option value="0">All saved posts</option>
+          </select>
+          <button class="import-go" id="igGo" disabled>Import</button>
+          <div class="scope-note">Imports your most recent saved posts. Opens Instagram and scrolls — duplicates are skipped.</div>
+        </div>
+      </div>
       <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherOS</span></button>
       <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">Checking…</span></div>
     </div>
@@ -214,6 +230,35 @@
     if (selectedLimit === null) return; // nothing picked yet
     close();
     chrome.runtime.sendMessage({ type: 'gatheros:import-bookmarks', limit: selectedLimit });
+  });
+
+  // Import saved (Instagram) — same two-step flow as Import bookmarks.
+  const igImportEl = root.getElementById('igImport');
+  const igScope = root.getElementById('igScope');
+  const igSub = root.getElementById('igSub');
+  const igGo = root.getElementById('igGo');
+  const igCount = root.getElementById('igCount');
+  let igSelectedLimit = null;
+
+  root.getElementById('importSaved').addEventListener('click', () => {
+    igScope.hidden = !igScope.hidden;
+    igImportEl.classList.toggle('expanded', !igScope.hidden);
+    igSub.textContent = igScope.hidden
+      ? 'Backfill your Instagram saves'
+      : 'Choose how many, then import';
+  });
+
+  const syncIgCount = () => {
+    igSelectedLimit = igCount.value === '' ? null : Number(igCount.value); // 0 = all
+    igGo.disabled = igSelectedLimit === null;
+  };
+  igCount.addEventListener('change', syncIgCount);
+  syncIgCount();
+
+  igGo.addEventListener('click', () => {
+    if (igSelectedLimit === null) return;
+    close();
+    chrome.runtime.sendMessage({ type: 'gatheros:import-saved', limit: igSelectedLimit });
   });
 
   root.getElementById('open').addEventListener('click', () => {

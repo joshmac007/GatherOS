@@ -135,6 +135,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleImportBookmarks(msg).then(sendResponse);
     return true;
   }
+  // Instagram saved-post sync. The interceptor (content/ig-interceptor.js)
+  // extracts saved posts from Instagram's saved-feed responses; the
+  // watcher relays the batch here. Mirrors the X bookmark flow with its
+  // own "seen" baseline.
+  if (msg.type === 'gatheros:ig-saved-batch') {
+    handleIgSavedBatch(msg.posts);
+    return false;
+  }
+  // Panel-triggered Instagram backfill.
+  if (msg.type === 'gatheros:import-saved') {
+    handleImportSaved(msg).then(sendResponse);
+    return true;
+  }
   // Panel-driven actions. The in-page panel (panel.js) doesn't know
   // its window/tab ids, so we fill them from the message sender. Each
   // capture runs async and reports its result through notify().
@@ -785,6 +798,247 @@ function pollParseTweetForBookmark(result) {
     posterUrl,
     quoted: pollExtractTweetCore(t.quoted_status_result && t.quoted_status_result.result),
   };
+}
+
+// ── Instagram saved-post sync ──────────────────────────────────────
+//
+// The Instagram analogue of the X bookmark flow. Two paths:
+//   • Passive: while the user browses instagram.com, the interceptor
+//     surfaces the top of their saved feed; new posts (past a silent
+//     baseline) sync to the desktop tagged 'instagram:save'.
+//   • Backfill: "Import saved" from the panel opens Instagram, scrolls
+//     the saved page, and imports up to a chosen count.
+//
+// Deliberately NO background poll (unlike X): automated/background
+// requests to Instagram endpoints are exactly what trips Meta's abuse
+// detection, so all capture happens only while the user is actively on
+// instagram.com. Dedup + tombstones live desktop-side (content_hash +
+// the source tombstone table), same as X.
+
+const IG_STORAGE_SEEN_KEY = 'gatherosIgSavedSeen';
+const IG_STORAGE_BASELINE_KEY = 'gatherosIgSavedBaselineEstablished';
+const IG_STORAGE_VERSION_KEY = 'gatherosIgSavedCaptureVersion';
+const IG_CAPTURE_VERSION = 1;
+const IG_STORAGE_IMPORT_DISABLED_KEY = 'gatherosIgImportDisabled';
+// Storage flag the watcher reads on each instagram.com page load to
+// self-start its scroll after navigating to the saved page (the start
+// can't be a one-off message because resolving + navigating to the
+// saved tab reloads the content scripts).
+const IG_STORAGE_IMPORT_ACTIVE_KEY = 'gatherosIgImportActive';
+const IG_IMPORT_STAGNANT_BATCHES_LIMIT = 4;
+const IG_IMPORT_WATCHDOG_MS = 6 * 60 * 1000;
+
+let igImportState = null;
+
+async function readIgSeenSet() {
+  const data = await chrome.storage.local.get([
+    IG_STORAGE_SEEN_KEY, IG_STORAGE_BASELINE_KEY, IG_STORAGE_VERSION_KEY,
+  ]);
+  const seen = new Set(Array.isArray(data[IG_STORAGE_SEEN_KEY]) ? data[IG_STORAGE_SEEN_KEY] : []);
+  const baseline = !!data[IG_STORAGE_BASELINE_KEY];
+  const version = Number(data[IG_STORAGE_VERSION_KEY]) || 0;
+  return { seen, baseline, version };
+}
+
+async function writeIgSeenSet(seen, { baseline, version } = {}) {
+  const update = { [IG_STORAGE_SEEN_KEY]: Array.from(seen) };
+  if (baseline !== undefined) update[IG_STORAGE_BASELINE_KEY] = !!baseline;
+  if (version !== undefined) update[IG_STORAGE_VERSION_KEY] = version;
+  await chrome.storage.local.set(update);
+}
+
+async function markIgSeen(ids) {
+  if (!ids || !ids.length) return;
+  const { seen } = await readIgSeenSet();
+  let changed = false;
+  for (const id of ids) {
+    if (id && !seen.has(id)) { seen.add(id); changed = true; }
+  }
+  if (changed) await writeIgSeenSet(seen);
+}
+
+async function handleIgSavedBatch(posts) {
+  if (!Array.isArray(posts) || posts.length === 0) return;
+
+  // A backfill owns the saved tab — route pages through the import path.
+  if (igImportState) {
+    if (igImportState.active) await handleIgImportBatch(posts);
+    return;
+  }
+
+  const { seen, baseline, version } = await readIgSeenSet();
+
+  if (!baseline || version !== IG_CAPTURE_VERSION) {
+    // First batch ever (existing archive) — record silently so the
+    // backlog doesn't flood the library; only posts saved from here on
+    // count as new.
+    for (const p of posts) { if (p && p.postId) seen.add(p.postId); }
+    await writeIgSeenSet(seen, { baseline: true, version: IG_CAPTURE_VERSION });
+    return;
+  }
+
+  const toImport = posts.filter((p) => p && p.postId && !seen.has(p.postId));
+  for (const p of toImport) {
+    try {
+      await syncSavedPostToGather(p);
+      seen.add(p.postId);
+    } catch (err) {
+      console.warn('[gatheros] instagram saved sync failed:', err?.message || err);
+      seen.add(p.postId);
+    }
+  }
+  await writeIgSeenSet(seen);
+}
+
+async function handleImportSaved(msg) {
+  const { [IG_STORAGE_IMPORT_DISABLED_KEY]: disabled } =
+    await chrome.storage.local.get(IG_STORAGE_IMPORT_DISABLED_KEY);
+  if (disabled) {
+    notify('Saved-post import is temporarily unavailable.');
+    return { ok: false, disabled: true };
+  }
+  if (igImportState && igImportState.active) {
+    notify('A saved-post import is already running.');
+    return { ok: false, busy: true };
+  }
+
+  const status = await pingApp();
+  if (!status || status.hostMissing || !status.appRunning) {
+    notify('Open GatherOS first, then run Import saved.');
+    return { ok: false, appClosed: true };
+  }
+
+  const n = Number(msg && msg.limit);
+  const limit = Number.isFinite(n) && n > 0 ? n : Infinity;
+
+  let tab;
+  try {
+    // Open Instagram; the watcher resolves + navigates to the saved tab
+    // (it owns the username, which the worker can't see) and self-starts
+    // the scroll via the IG_STORAGE_IMPORT_ACTIVE_KEY flag.
+    tab = await chrome.tabs.create({ url: 'https://www.instagram.com/', active: true });
+  } catch (err) {
+    notify("Couldn't open Instagram.");
+    return { ok: false, error: String(err && err.message || err) };
+  }
+
+  await chrome.storage.local.set({ [IG_STORAGE_IMPORT_ACTIVE_KEY]: true });
+  igImportState = {
+    active: true,
+    tabId: tab.id,
+    limit,
+    processed: new Set(),
+    imported: 0,
+    stagnant: 0,
+    watchdog: setTimeout(() => { endIgImport('timeout'); }, IG_IMPORT_WATCHDOG_MS),
+  };
+  return { ok: true };
+}
+
+async function handleIgImportBatch(posts) {
+  let foundNew = false;
+  let reachedLimit = false;
+  for (const p of posts) {
+    if (!p || !p.postId) continue;
+    if (igImportState.processed.has(p.postId)) continue;
+    igImportState.processed.add(p.postId);
+    foundNew = true;
+    try {
+      const resp = await syncSavedPostToGather(p, { force: true });
+      if (resp && resp.ok && !resp.duplicate && !resp.dismissed) igImportState.imported += 1;
+    } catch (err) {
+      console.warn('[gatheros] instagram backfill failed:', err?.message || err);
+    }
+    if (igImportState.processed.size >= igImportState.limit) { reachedLimit = true; break; }
+  }
+  await markIgSeen(posts.map((p) => p && p.postId).filter(Boolean));
+
+  if (igImportState.tabId != null) {
+    chrome.tabs.sendMessage(igImportState.tabId, {
+      type: 'gatheros:ig-import-progress',
+      imported: igImportState.imported,
+      processed: igImportState.processed.size,
+    }, () => { void chrome.runtime.lastError; });
+  }
+
+  if (foundNew) igImportState.stagnant = 0;
+  else igImportState.stagnant += 1;
+
+  if (reachedLimit || igImportState.stagnant >= IG_IMPORT_STAGNANT_BATCHES_LIMIT) {
+    await endIgImport(reachedLimit ? 'limit' : 'bottom');
+  }
+}
+
+async function endIgImport(_reason) {
+  if (!igImportState || !igImportState.active) return;
+  igImportState.active = false;
+  const { tabId, imported, watchdog } = igImportState;
+  if (watchdog) clearTimeout(watchdog);
+  await chrome.storage.local.set({ [IG_STORAGE_IMPORT_ACTIVE_KEY]: false });
+
+  // The backfill establishes the baseline so passive capture resumes
+  // importing only genuinely-new saved posts.
+  try {
+    const { seen } = await readIgSeenSet();
+    await writeIgSeenSet(seen, { baseline: true, version: IG_CAPTURE_VERSION });
+  } catch (err) {
+    console.warn('[gatheros] could not set IG baseline after import:', err?.message || err);
+  }
+
+  const summary = { imported };
+  if (tabId != null) {
+    chrome.tabs.sendMessage(tabId, { type: 'gatheros:ig-stop-import', summary }, () => {
+      void chrome.runtime.lastError;
+    });
+  }
+  notify(imported > 0
+    ? `Imported ${imported} saved post${imported === 1 ? '' : 's'} from Instagram.`
+    : 'No new saved posts to import.');
+
+  setTimeout(() => { if (igImportState && !igImportState.active) igImportState = null; }, 8000);
+}
+
+// Stop cleanly if the user closes the saved tab mid-import.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (igImportState && igImportState.active && igImportState.tabId === tabId) {
+    if (igImportState.watchdog) clearTimeout(igImportState.watchdog);
+    const imported = igImportState.imported;
+    igImportState = null;
+    chrome.storage.local.set({ [IG_STORAGE_IMPORT_ACTIVE_KEY]: false });
+    if (imported > 0) notify(`Saved-post import stopped — imported ${imported} so far.`);
+  }
+});
+
+// Send a single saved post down the same /save pipeline as X, tagged
+// 'instagram:save' and carrying source:'instagram'. Carousels arrive as
+// one post with every still in imageUrls (paged in the UI by the same
+// tweetMediaItems helper); reels route through the video branch.
+async function syncSavedPostToGather(p, { force = false } = {}) {
+  const payload = {
+    type: 'save',
+    source: 'instagram',
+    pageUrl: p.tweetUrl, // IG permalink — shares the X field name through the relay
+    tags: ['instagram:save'],
+    ...(force ? { forceImport: true } : {}),
+    tweetMeta: {
+      authorName: p.authorName || '',
+      authorHandle: p.authorHandle || '',
+      authorAvatarUrl: p.authorAvatarUrl || '',
+      caption: p.caption || '',
+      imageUrls: Array.isArray(p.imageUrls) ? p.imageUrls : [],
+      videoUrl: p.videoUrl || null,
+      posterUrl: p.posterUrl || '',
+    },
+  };
+  if (p.videoUrl) {
+    payload.videoUrl = p.videoUrl;
+    payload.posterUrl = p.posterUrl;
+  } else if (Array.isArray(p.imageUrls) && p.imageUrls.length > 0) {
+    payload.imageUrl = p.imageUrls[0];
+  } else if (!(p.caption || '').trim()) {
+    return; // nothing to save
+  }
+  return chrome.runtime.sendNativeMessage(HOST_NAME, payload);
 }
 
 function notify(message) {

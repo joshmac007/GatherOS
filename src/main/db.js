@@ -249,6 +249,18 @@ const MIGRATIONS = [
   (database) => {
     addColumnIfMissing(database, 'saves', 'tweet_meta', 'TEXT');
   },
+  // Multi-source capture: a `source` column tags each save with its
+  // origin — 'x' (X bookmarks, the original capture surface) or
+  // 'instagram' (Instagram saved posts). Defaults to 'x' so every
+  // existing row reads as an X/native save with no data touch. The
+  // per-source structured payload keeps living in the existing
+  // tweet_meta JSON column, which was always intended to be source-
+  // agnostic (see the migration above) — so we generalize by adding a
+  // discriminator rather than renaming the column, leaving the working
+  // X read/write path untouched.
+  (database) => {
+    addColumnIfMissing(database, 'saves', 'source', "TEXT NOT NULL DEFAULT 'x'");
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -363,6 +375,9 @@ function insertSave({
   palette,
   contentHash,
   kind,
+  // Capture origin — 'x' (default) or 'instagram'. Drives the per-card
+  // source badge and the combined "Saved" view filter.
+  source,
 } = {}) {
   const db = getDatabase();
   const paletteArr = Array.isArray(palette) && palette.length ? palette : null;
@@ -389,13 +404,14 @@ function insertSave({
     content_hash: contentHash || null,
     kind: kind || 'image',
     tweet_meta: tweetMeta ? JSON.stringify(tweetMeta) : null,
+    source: source || 'x',
     created_at: Date.now(),
   };
   db.prepare(`
     INSERT INTO saves
-      (id, file_path, thumb_path, title, notes, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, created_at)
+      (id, file_path, thumb_path, title, notes, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, source, created_at)
     VALUES
-      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @created_at)
+      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @source, @created_at)
   `).run(record);
   return record;
 }
@@ -610,11 +626,14 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
     if (view === 'unsorted') {
       conditions.push('id NOT IN (SELECT save_id FROM collection_items)');
     } else if (view === 'bookmarks') {
-      // Saves captured from X carry the 'x:bookmark' tag.
+      // The combined "Saved" view — saves captured from X (tagged
+      // 'x:bookmark') or Instagram (tagged 'instagram:save'). The view
+      // key stays 'bookmarks' for back-compat; the chip label reads
+      // "Saved".
       conditions.push(`id IN (
         SELECT save_id FROM save_tags
         JOIN tags ON save_tags.tag_id = tags.id
-        WHERE tags.name = 'x:bookmark'
+        WHERE tags.name IN ('x:bookmark', 'instagram:save')
       )`);
     } else if (view === 'onThisDay') {
       // Same calendar month + day as today, in any prior year. Local
@@ -721,6 +740,25 @@ function tweetKeyFromUrl(url) {
   return m ? `tw:${m[1]}` : null;
 }
 
+// An Instagram permalink → a stable per-post key, e.g.
+// https://www.instagram.com/p/Cabc123/ → 'ig:Cabc123'. Covers posts
+// (/p/), reels (/reel/), and IGTV (/tv/). Non-IG URLs → null. The
+// dismissed_tweets table is source-agnostic (keyed by an opaque
+// string) so Instagram saves tombstone through the same machinery as
+// X bookmarks — a deleted IG save won't come back on the next sync.
+function igKeyFromUrl(url) {
+  if (typeof url !== 'string') return null;
+  const m = url.match(/instagram\.com\/(?:p|reel|tv)\/([^/?#]+)/i);
+  return m ? `ig:${m[1]}` : null;
+}
+
+// Source-agnostic tombstone key — resolves an X status OR an Instagram
+// post permalink to its key. Used by delete/restore so deletions stick
+// for either source.
+function sourceKeyFromUrl(url) {
+  return tweetKeyFromUrl(url) || igKeyFromUrl(url);
+}
+
 function isTweetDismissed(key) {
   if (!key) return false;
   return !!getDatabase()
@@ -750,9 +788,10 @@ function deleteSave(id) {
   const db = getDatabase();
   const save = db.prepare('SELECT id, source_url FROM saves WHERE id = ?').get(id);
   if (!save) return { ok: false };
-  // Tombstone the tweet so the bookmark watcher doesn't re-capture it
-  // the next time it scrolls into view. No-op for non-tweet saves.
-  dismissTweet(tweetKeyFromUrl(save.source_url));
+  // Tombstone the source post so the watcher doesn't re-capture it the
+  // next time it scrolls into view. No-op for saves with no X/IG
+  // permalink.
+  dismissTweet(sourceKeyFromUrl(save.source_url));
   const tx = db.transaction(() => {
     db.prepare('UPDATE saves SET deleted_at = ? WHERE id = ?').run(Date.now(), id);
     db.prepare('DELETE FROM collection_items WHERE save_id = ?').run(id);
@@ -772,9 +811,9 @@ function deleteSave(id) {
 function restoreSave(id) {
   const db = getDatabase();
   const save = db.prepare('SELECT source_url FROM saves WHERE id = ?').get(id);
-  // Bringing a bookmark back out of trash lifts its tombstone so it's
+  // Bringing a save back out of trash lifts its tombstone so it's
   // allowed to sync again.
-  if (save) undismissTweet(tweetKeyFromUrl(save.source_url));
+  if (save) undismissTweet(sourceKeyFromUrl(save.source_url));
   db.prepare('UPDATE saves SET deleted_at = NULL WHERE id = ?').run(id);
   return { ok: true };
 }
@@ -785,8 +824,8 @@ function permanentlyDeleteSave(id) {
   const db = getDatabase();
   const save = db.prepare('SELECT file_path, thumb_path, source_url FROM saves WHERE id = ?').get(id);
   if (!save) return { ok: false };
-  // Keep the tombstone for permanently-removed bookmarks.
-  dismissTweet(tweetKeyFromUrl(save.source_url));
+  // Keep the tombstone for permanently-removed saves.
+  dismissTweet(sourceKeyFromUrl(save.source_url));
   const tx = db.transaction(() => {
     db.prepare(
       `DELETE FROM board_items
@@ -929,7 +968,7 @@ function getSmartViewCounts() {
       AND id IN (
         SELECT save_id FROM save_tags
         JOIN tags ON save_tags.tag_id = tags.id
-        WHERE tags.name = 'x:bookmark'
+        WHERE tags.name IN ('x:bookmark', 'instagram:save')
       )
   `).get();
   // Saves whose calendar date matches today in some prior year — same
@@ -1543,8 +1582,10 @@ module.exports = {
   reopenDatabase,
   getDatabasePath,
   insertSave,
-  // Tweet tombstones (X bookmark dismiss/dedup)
+  // Source tombstones (X bookmark / IG saved-post dismiss/dedup)
   tweetKeyFromUrl,
+  igKeyFromUrl,
+  sourceKeyFromUrl,
   isTweetDismissed,
   dismissTweet,
   undismissTweet,

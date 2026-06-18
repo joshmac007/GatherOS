@@ -2,7 +2,7 @@ import React from 'react';
 import {
   ChevronLeft, Grid2x2, Square, Images, Inbox, Trash2,
   Clock, History, ArrowDownAZ, ArrowDownZA,
-  Type, Image as ImageIcon, Film,
+  Type, Image as ImageIcon, Film, Bookmark,
 } from 'lucide-react';
 import styles from './SmartChipRail.module.css';
 import Dropdown from './Dropdown.jsx';
@@ -22,10 +22,14 @@ function XGlyph({ size = 17 }) {
 }
 
 const CHIPS = [
-  { id: 'all',       label: 'All',       Icon: Images },
-  { id: 'bookmarks', label: 'Bookmarks', Icon: XGlyph },
-  { id: 'unsorted',  label: 'Unsorted',  Icon: Inbox },
-  { id: 'trash',     label: 'Trash',     Icon: Trash2 },
+  { id: 'all',       label: 'All',     Icon: Images },
+  // The combined "Saved" view: X bookmarks + Instagram saves. Uses a
+  // neutral bookmark glyph now that it spans more than one source (the
+  // per-card source badge tells X and Instagram apart). The view key
+  // stays 'bookmarks' for back-compat.
+  { id: 'bookmarks', label: 'Saved',   Icon: Bookmark },
+  { id: 'unsorted',  label: 'Unsorted', Icon: Inbox },
+  { id: 'trash',     label: 'Trash',   Icon: Trash2 },
 ];
 
 export const SORT_OPTIONS = [
