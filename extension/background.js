@@ -1132,12 +1132,20 @@ async function runIgApiImport(limit) {
   const baseUrl = (template && template.url)
     || 'https://www.instagram.com/api/v1/feed/saved/posts/?count=12';
 
+  // Signed-in check. Instagram sets `csrftoken` even for logged-out
+  // visitors, so it's not proof of a session — the `sessionid` cookie is
+  // the real auth cookie. Check it up front so a signed-out user gets a
+  // clear "sign in" message instead of a misleading "couldn't read your
+  // feed" after a doomed request (and we don't flip the sync baseline).
   let csrf = null;
+  let signedIn = false;
   try {
+    const sid = await chrome.cookies.get({ url: 'https://www.instagram.com/', name: 'sessionid' });
+    signedIn = !!(sid && sid.value);
     const c = await chrome.cookies.get({ url: 'https://www.instagram.com/', name: 'csrftoken' });
     if (c && c.value) csrf = c.value;
   } catch { /* ignore */ }
-  if (!csrf) {
+  if (!signedIn || !csrf) {
     notify('Sign in to Instagram in this browser, then run Import saved.');
     return;
   }
@@ -1366,14 +1374,20 @@ async function pollIgSavedRefresh() {
   if (!template || !template.url) return; // user hasn't visited Saved since install
 
   let csrf = null;
+  let signedIn = false;
   try {
+    // sessionid is the real auth cookie (csrftoken is set even when
+    // logged out) — skip the poll entirely when signed out so we don't
+    // fire doomed 401 requests at Instagram on every alarm/focus.
+    const sid = await chrome.cookies.get({ url: 'https://www.instagram.com/', name: 'sessionid' });
+    signedIn = !!(sid && sid.value);
     const cookie = await chrome.cookies.get({ url: 'https://www.instagram.com/', name: 'csrftoken' });
     if (cookie && cookie.value) csrf = cookie.value;
   } catch (err) {
-    console.warn('[gatheros] reading IG csrftoken failed:', err?.message || err);
+    console.warn('[gatheros] reading IG cookies failed:', err?.message || err);
     return;
   }
-  if (!csrf) return; // not signed in to instagram.com in this Chrome profile
+  if (!signedIn || !csrf) return; // not signed in to instagram.com in this Chrome profile
 
   const headers = { ...(template.headers || {}), 'x-csrftoken': csrf, accept: '*/*' };
   if (!headers['x-ig-app-id']) headers['x-ig-app-id'] = IG_WEB_APP_ID;
