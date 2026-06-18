@@ -125,63 +125,9 @@ function stopImportScroll(summary) {
   }
 }
 
-// ── Self-start after navigating to the saved tab ───────────────────
-// The backfill opens instagram.com, but the saved feed lives at
-// /<username>/saved/ — a URL only the page knows (the worker can't see
-// the viewer's username). So on every instagram.com load we check a
-// storage flag the worker sets; if a backfill is pending we either
-// start scrolling (already on a saved page) or navigate there. Using a
-// flag rather than a one-off message is what lets the start survive the
-// navigation reload.
-const IG_IMPORT_FLAG = 'gatherosIgImportActive';
-
-function resolveSavedUrl() {
-  // The saved-tab link in the profile menu / nav, e.g. /<user>/saved/.
-  const a = document.querySelector('a[href*="/saved/"]');
-  if (a) {
-    try { return new URL(a.getAttribute('href'), location.origin).href; }
-    catch { /* fall through */ }
-  }
-  return null;
-}
-
-async function checkPendingImport() {
-  let active = false;
-  try {
-    const data = await chrome.storage.local.get(IG_IMPORT_FLAG);
-    active = !!data[IG_IMPORT_FLAG];
-  } catch { return; }
-  if (!active) return;
-  if (/\/saved(\/|$)/.test(location.pathname)) {
-    runImportScroll();
-  } else {
-    const url = resolveSavedUrl();
-    if (url && url !== location.href) {
-      location.assign(url); // full reload re-runs this script on the saved page
-    } else {
-      showToast('Open your Saved posts to finish importing', { tone: 'ok', sticky: true });
-    }
-  }
-}
-
-chrome.runtime.onMessage.addListener((msg) => {
-  if (!msg) return undefined;
-  if (msg.type === 'gatheros:ig-start-import') { runImportScroll(); return false; }
-  if (msg.type === 'gatheros:ig-import-progress') {
-    if (importScrollActive) {
-      const saved = typeof msg.imported === 'number' ? msg.imported : 0;
-      const scanned = typeof msg.processed === 'number' ? msg.processed : 0;
-      showToast(
-        saved > 0 ? `Importing… ${saved} saved` : `Scanning saved posts… ${scanned}`,
-        { tone: 'ok', sticky: true },
-      );
-    }
-    return false;
-  }
-  if (msg.type === 'gatheros:ig-stop-import') { stopImportScroll(msg.summary); return false; }
-  return undefined;
-});
-
-// Run once on load — picks up a pending backfill after the navigation
-// to the saved tab.
-checkPendingImport();
+// Imports now run entirely in the background (the worker paginates the
+// saved API directly), so the old tab-scroll self-start — driven by the
+// `gatherosIgImportActive` storage flag — is obsolete. Clear any stale
+// value left by an older version so its "Open your Saved posts to finish
+// importing" toast can't fire on page load.
+chrome.storage.local.remove('gatherosIgImportActive');
