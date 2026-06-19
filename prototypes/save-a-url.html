@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ways to save a URL — GatherOS</title>
+<style>
+  :root{
+    --bg:#0c0c0e;
+    --panel:rgba(30,30,33,0.94);
+    --panel-2:rgba(255,255,255,0.05);
+    --border:rgba(255,255,255,0.10);
+    --border-2:rgba(255,255,255,0.07);
+    --t1:#fff;
+    --t2:rgba(255,255,255,0.62);
+    --t3:rgba(255,255,255,0.42);
+    --input:rgba(255,255,255,0.04);
+    --pill:#ededed;
+    --pill-hover:#fff;
+    --radius:16px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Geist",system-ui,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--font);background:#000;color:var(--t1);-webkit-font-smoothing:antialiased;overflow:hidden}
+
+  /* top bar */
+  .topbar{position:fixed;inset:0 0 auto 0;height:52px;z-index:80;display:flex;align-items:center;gap:14px;
+    padding:0 16px;background:rgba(16,16,18,.82);backdrop-filter:blur(18px);border-bottom:1px solid var(--border-2)}
+  .topbar h1{font-size:13px;font-weight:600;letter-spacing:-.01em;margin:0;white-space:nowrap}
+  .topbar .sub{font-size:11px;color:var(--t3);margin-left:-7px}
+  .tabs{display:flex;gap:4px;margin-left:6px;overflow:auto}
+  .tab{display:flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid transparent;border-radius:9px;
+    background:transparent;color:var(--t2);font:inherit;font-size:12px;font-weight:500;letter-spacing:-.01em;cursor:pointer;white-space:nowrap}
+  .tab .n{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:5px;
+    background:rgba(255,255,255,.1);font-size:10px;font-weight:600}
+  .tab:hover{background:rgba(255,255,255,.05);color:var(--t1)}
+  .tab.on{background:rgba(255,255,255,.08);border-color:var(--border);color:var(--t1)}
+  .tab.on .n{background:#fff;color:#111}
+
+  /* blurred masonry backdrop (shared) */
+  .stage{position:fixed;inset:52px 0 0 0;overflow:hidden}
+  .backdrop{position:absolute;inset:-40px;filter:blur(26px) saturate(1.2);transform:scale(1.06);opacity:.85}
+  .bcol{columns:5;column-gap:14px;padding:14px}
+  .btile{width:100%;margin:0 0 14px;border-radius:14px;break-inside:avoid}
+  .scrim{position:absolute;inset:0;background:rgba(6,6,8,.55)}
+
+  .meta{position:absolute;left:0;right:0;top:14px;text-align:center;z-index:30;pointer-events:none;padding:0 20px}
+  .meta .name{font-size:14px;font-weight:600;letter-spacing:-.015em}
+  .meta .why{font-size:12px;color:var(--t2);margin-top:3px;max-width:640px;margin-left:auto;margin-right:auto;line-height:1.45}
+
+  .iter{position:absolute;inset:0;display:none;z-index:20}
+  .iter.active{display:block}
+  .center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px}
+
+  /* link icon tile */
+  .iconBox{width:44px;height:44px;border-radius:11px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
+  .iconBox.sm{width:34px;height:34px;border-radius:9px}
+
+  /* generic modal */
+  .modal{width:560px;max-width:92vw;background:var(--panel);backdrop-filter:blur(40px) saturate(1.6);
+    border:1px solid var(--border);border-radius:20px;box-shadow:0 30px 80px rgba(0,0,0,.55);padding:24px 26px 22px;position:relative}
+  .close{position:absolute;top:16px;right:16px;width:26px;height:26px;border:none;border-radius:7px;background:transparent;color:var(--t3);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .close:hover{background:rgba(255,255,255,.08);color:var(--t1)}
+  .head{display:flex;align-items:center;gap:13px}
+  .title{font-size:20px;font-weight:600;letter-spacing:-.02em}
+  .hint{font-size:13.5px;color:var(--t2);line-height:1.5;margin:14px 0 0}
+  .input{width:100%;height:46px;margin-top:16px;padding:0 15px;border-radius:12px;background:var(--input);
+    border:1px solid var(--border);color:var(--t1);font:inherit;font-size:14px;outline:none;transition:border-color .12s,box-shadow .12s}
+  .input::placeholder{color:var(--t3)}
+  .input:focus{border-color:rgba(255,255,255,.4);box-shadow:0 0 0 3px rgba(255,255,255,.07)}
+  .row{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:20px}
+  .btnText{background:transparent;border:none;color:var(--t2);font:inherit;font-size:13.5px;font-weight:500;padding:9px 14px;border-radius:99px;cursor:pointer}
+  .btnText:hover{color:var(--t1);background:rgba(255,255,255,.06)}
+  .pill{background:var(--pill);border:none;color:#111;font:inherit;font-size:13.5px;font-weight:600;letter-spacing:-.01em;padding:10px 20px;border-radius:99px;cursor:pointer}
+  .pill:hover{background:var(--pill-hover)}
+  .pill.ghost{background:rgba(255,255,255,.10);color:#fff}
+  .pill.ghost:hover{background:rgba(255,255,255,.16)}
+
+  /* favicon + thumb helpers */
+  .fav{width:20px;height:20px;border-radius:5px;flex:none}
+  .fav.lg{width:26px;height:26px;border-radius:6px}
+  .thumb{border-radius:10px;background-size:cover}
+
+  /* 2: omnibox */
+  .omni{position:absolute;top:0;left:50%;transform:translateX(-50%);width:680px;max-width:94vw;
+    background:var(--panel);backdrop-filter:blur(40px) saturate(1.6);border:1px solid var(--border);border-top:none;
+    border-radius:0 0 18px 18px;box-shadow:0 24px 60px rgba(0,0,0,.5);padding:14px 16px;display:flex;align-items:center;gap:12px}
+  .omni .input{margin:0;height:44px;flex:1}
+  .omni .kbd{display:inline-flex;align-items:center;gap:5px;color:var(--t3);font-size:11.5px;white-space:nowrap}
+  .key{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.1);font-size:11px}
+
+  /* 3: paste prompt toast */
+  .toast{position:absolute;right:26px;bottom:26px;width:340px;background:var(--panel);backdrop-filter:blur(40px) saturate(1.6);
+    border:1px solid var(--border);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.5);padding:14px;overflow:hidden}
+  .toast .ph{font-size:12px;color:var(--t3);display:flex;align-items:center;gap:7px;margin-bottom:11px}
+  .pv{display:flex;gap:11px}
+  .pv .thumb{width:84px;height:64px;flex:none}
+  .pv .meta2{min-width:0;display:flex;flex-direction:column;gap:3px;justify-content:center}
+  .pv .ttl{font-size:13px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pv .url{font-size:11.5px;color:var(--t3);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .toast .row{margin-top:13px}
+
+  /* 4: rich preview */
+  .pre{display:flex;gap:16px;margin-top:18px;padding:12px;border:1px solid var(--border-2);border-radius:14px;background:rgba(255,255,255,.02)}
+  .pre .thumb{width:150px;height:104px;flex:none}
+  .pre .pmeta{min-width:0;display:flex;flex-direction:column;gap:6px}
+  .pre .ttl{font-size:14px;font-weight:600;letter-spacing:-.01em}
+  .pre .url{font-size:12px;color:var(--t3);display:flex;align-items:center;gap:7px}
+  .pre .desc{font-size:12px;color:var(--t2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .fieldRow{display:flex;gap:10px;margin-top:14px}
+  .noteInput{flex:1;height:42px;padding:0 13px;border-radius:11px;background:var(--input);border:1px solid var(--border);color:var(--t1);font:inherit;font-size:13px;outline:none}
+  .noteInput:focus{border-color:rgba(255,255,255,.35)}
+  .select{height:42px;padding:0 12px;border-radius:11px;background:var(--input);border:1px solid var(--border);color:var(--t2);font:inherit;font-size:13px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
+  .select:hover{color:var(--t1)}
+
+  /* 5: queue */
+  .queue{width:600px;max-width:92vw}
+  .qlist{margin-top:16px;display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto}
+  .qitem{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--border-2);border-radius:12px;background:rgba(255,255,255,.02)}
+  .qitem .thumb{width:54px;height:40px;flex:none}
+  .qitem .qmeta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .qitem .ttl{font-size:13px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qitem .url{font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qstatus{font-size:11px;color:var(--t3);display:flex;align-items:center;gap:6px;flex:none}
+  .dotpulse{width:7px;height:7px;border-radius:50%;background:#f5b942;animation:pulse 1s ease-in-out infinite}
+  .dotok{width:7px;height:7px;border-radius:50%;background:#34c759}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+  .qpaste{margin-top:16px;width:100%;min-height:64px;padding:12px 14px;border-radius:12px;background:var(--input);border:1px dashed var(--border);color:var(--t1);font:inherit;font-size:13px;resize:none;outline:none}
+  .qpaste:focus{border-color:rgba(255,255,255,.35);border-style:solid}
+  .spin{width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Ways to save a URL</h1><span class="sub">GatherOS</span>
+    <div class="tabs" id="tabs"></div>
+  </div>
+  <div class="stage">
+    <div class="backdrop"><div class="bcol" id="bcol"></div></div>
+    <div class="scrim"></div>
+    <div id="iters"></div>
+  </div>
+
+<script>
+const LINK = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></svg>`;
+const X = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
+const CHEV = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
+const grad = (h)=>`linear-gradient(135deg,hsl(${h} 70% 60%),hsl(${(h+50)%360} 65% 48%))`;
+const fav = (h,cls='fav')=>`<span class="${cls}" style="background:${grad(h)}"></span>`;
+const thumb = (h)=>`<div class="thumb" style="background:${grad(h)}"></div>`;
+
+// blurred masonry backdrop
+const heights=[150,210,180,260,150,200,230,170,300,160,190,240,150,220,180,200,260,170,150,230,190,210];
+document.getElementById('bcol').innerHTML = heights.map((ht,i)=>
+  `<div class="btile" style="height:${ht}px;background:${grad((i*47)%360)}"></div>`).join('');
+
+const ITER = [
+{name:'Refined modal', why:'The familiar centered modal, tidied: clearer hierarchy, a focused input, and a pill primary. Safe and recognizable — minimal behavior change.',
+ html:`<div class="center"><div class="modal">
+   <button class="close">${X}</button>
+   <div class="head"><span class="iconBox">${LINK}</span><span class="title">Save a URL</span></div>
+   <p class="hint">Paste a link — we'll screenshot the page and store it so you can revisit the live site from inside Gather.</p>
+   <input class="input" placeholder="https://example.com" />
+   <div class="row"><button class="btnText">Cancel</button><button class="pill">Save URL</button></div>
+ </div></div>`},
+
+{name:'Omnibox drop-bar', why:'No modal — a slim bar drops from the top of the window. Paste, press enter, done. Fastest for power users; stays out of the way.',
+ html:`<div class="omni">
+   <span class="iconBox sm">${LINK}</span>
+   <input class="input" placeholder="Paste a link to save…" />
+   <span class="kbd"><span class="key">esc</span> to cancel · <span class="key">↵</span> to save</span>
+   <button class="pill">Save</button>
+ </div>`},
+
+{name:'Paste-aware prompt', why:'Detects a URL on your clipboard and offers a one-tap save from the corner, with a live preview so you know what you\'re saving. Zero typing.',
+ html:`<div class="toast">
+   <div class="ph">${fav(210,'fav')}<span>Link on your clipboard</span></div>
+   <div class="pv">
+     ${thumb(265)}
+     <div class="meta2">
+       <span class="ttl">Linear — Plan and build products</span>
+       <span class="url">${fav(265,'fav')}linear.app</span>
+     </div>
+   </div>
+   <div class="row"><button class="btnText">Dismiss</button><button class="pill">Save this link</button></div>
+ </div>`},
+
+{name:'Rich preview', why:'Fetches the page title, favicon and cover image before saving, with an optional note and a collection picker — turn a link into a well-formed save in one step.',
+ html:`<div class="center"><div class="modal">
+   <button class="close">${X}</button>
+   <div class="head"><span class="iconBox">${LINK}</span><span class="title">Save a URL</span></div>
+   <input class="input" value="https://stripe.com/blog/payments" />
+   <div class="pre">
+     ${thumb(28)}
+     <div class="pmeta">
+       <span class="ttl">The future of online payments</span>
+       <span class="url">${fav(28,'fav')}stripe.com</span>
+       <span class="desc">How we think about latency, reliability, and the design of a payments API that developers actually enjoy using.</span>
+     </div>
+   </div>
+   <div class="fieldRow">
+     <input class="noteInput" placeholder="Add a note (optional)" />
+     <span class="select">📁 Inspiration ${CHEV}</span>
+   </div>
+   <div class="row"><button class="btnText">Cancel</button><button class="pill">Save URL</button></div>
+ </div></div>`},
+
+{name:'Multi-paste queue', why:'Drop a whole stack of links at once — each one screenshots in the background and lands as its own card. Great after a research binge with 12 open tabs.',
+ html:`<div class="center"><div class="modal queue">
+   <button class="close">${X}</button>
+   <div class="head"><span class="iconBox">${LINK}</span><span class="title">Save URLs</span></div>
+   <p class="hint">Paste one or many links — each becomes its own card. We'll screenshot them in the background.</p>
+   <div class="qlist">
+     <div class="qitem">${thumb(210)}<div class="qmeta"><span class="ttl">Are.na / Spatial interfaces</span><span class="url">are.na</span></div><span class="qstatus"><span class="dotok"></span>Saved</span></div>
+     <div class="qitem">${thumb(330)}<div class="qmeta"><span class="ttl">Vitsœ — Good design</span><span class="url">vitsoe.com</span></div><span class="qstatus"><span class="dotok"></span>Saved</span></div>
+     <div class="qitem">${thumb(150)}<div class="qmeta"><span class="ttl">Figma config 2024 recap</span><span class="url">figma.com</span></div><span class="qstatus"><span class="spin"></span>Shooting…</span></div>
+     <div class="qitem">${thumb(120)}<div class="qmeta"><span class="ttl">Frank Chimero — The web's grain</span><span class="url">frankchimero.com</span></div><span class="qstatus"><span class="dotpulse"></span>Queued</span></div>
+   </div>
+   <textarea class="qpaste" placeholder="Paste more links here, one per line…"></textarea>
+   <div class="row"><button class="btnText">Cancel</button><button class="pill">Save 4 URLs</button></div>
+ </div></div>`},
+];
+
+const tabsEl=document.getElementById('tabs'), itersEl=document.getElementById('iters');
+let metaEl;
+ITER.forEach((it,i)=>{
+  const n=i+1;
+  const tab=document.createElement('button');
+  tab.className='tab'; tab.dataset.i=n; tab.innerHTML=`<span class="n">${n}</span>${it.name}`;
+  tab.onclick=()=>show(n); tabsEl.appendChild(tab);
+  const sec=document.createElement('div');
+  sec.className='iter'; sec.dataset.i=n;
+  sec.innerHTML=`<div class="meta"><div class="name">${n}. ${it.name}</div><div class="why">${it.why}</div></div>${it.html}`;
+  itersEl.appendChild(sec);
+});
+function show(n){
+  document.querySelectorAll('.iter').forEach(s=>s.classList.toggle('active',s.dataset.i==n));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.i==n));
+}
+document.addEventListener('keydown',e=>{ if(e.key>='1'&&e.key<='5') show(e.key); });
+show(1);
+</script>
+</body>
+</html>
