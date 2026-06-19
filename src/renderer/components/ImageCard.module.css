@@ -104,11 +104,11 @@
      blur so the button picks up the underlying image colors
      instead of sitting on top as a solid white sticker. Inner
      top-highlight + subtle drop shadow sell the lift. */
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(20, 20, 22, 0.55);
   backdrop-filter: blur(14px) saturate(1.8);
   -webkit-backdrop-filter: blur(14px) saturate(1.8);
-  border: 0.5px solid rgba(255, 255, 255, 0.45);
-  color: rgba(0, 0, 0, 0.85);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.95);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -116,8 +116,8 @@
   opacity: 0;
   padding: 0;
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.18),
-    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.55);
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.12);
   transition:
     opacity var(--dur-instant) ease,
     background var(--dur-instant) ease,
@@ -151,7 +151,7 @@
 }
 
 .checkbox:hover:not(.checkboxOn) {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(20, 20, 22, 0.72);
   transform: scale(1.05);
 }
 
@@ -165,11 +165,11 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-circle);
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(20, 20, 22, 0.55);
   backdrop-filter: blur(14px) saturate(1.8);
   -webkit-backdrop-filter: blur(14px) saturate(1.8);
-  border: 0.5px solid rgba(255, 255, 255, 0.45);
-  color: rgba(0, 0, 0, 0.85);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.95);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -177,8 +177,8 @@
   opacity: 0;
   padding: 0;
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.18),
-    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.55);
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.12);
   transition:
     opacity var(--dur-instant) ease,
     background var(--dur-instant) ease,
@@ -195,7 +195,7 @@
 }
 
 .peekBtn:hover {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(20, 20, 22, 0.72);
   transform: scale(1.06);
 }
 
@@ -299,14 +299,14 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-circle);
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(20, 20, 22, 0.55);
   backdrop-filter: blur(14px) saturate(1.8);
   -webkit-backdrop-filter: blur(14px) saturate(1.8);
-  border: 0.5px solid rgba(255, 255, 255, 0.45);
-  color: rgba(0, 0, 0, 0.85);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.95);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.18),
-    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.55);
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.12);
   pointer-events: none;
   z-index: 2;
 }
@@ -314,6 +314,30 @@
 .sourceBadge {
   bottom: 8px;
   left: 8px;
+}
+
+/* Top-right "this is a video" badge, shown at rest (the clip plays on
+   hover). Same dark glass as the other corner icons. */
+.videoBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-circle);
+  background: rgba(20, 20, 22, 0.55);
+  backdrop-filter: blur(14px) saturate(1.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.8);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* Top-right multi-image count chip ("1/3") for tweets that carried

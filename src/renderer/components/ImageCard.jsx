@@ -5,6 +5,17 @@ import { fileUrl } from '../lib/fileUrl.js';
 import { tweetMediaItems, twimgLarge } from '../lib/tweetMedia.js';
 import TweetCard from './TweetCard.jsx';
 
+// Video icon — shown on grid video cards at rest (they play on hover).
+function VideoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+    </svg>
+  );
+}
+
 // Official-ish X glyph — used as a source badge in the bottom-left
 // of cards whose save was captured via the X bookmark watcher. Same
 // path the DetailPanel tweet card uses; copied here to avoid an
@@ -274,40 +285,23 @@ export default function ImageCard({
     return () => obs.disconnect();
   }, []);
 
-  // Separate "actually on screen" signal (no prefetch buffer) used to
-  // gate video PLAYBACK. Decoding video is the GPU/CPU cost, so we only
-  // play clips genuinely in the viewport — ones mounted in the 1000px
-  // prefetch buffer stay paused on their poster. Without this, a tall
-  // window decodes many videos at once and pins the GPU process.
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el || typeof IntersectionObserver === 'undefined') {
-      setVisible(true);
-      return undefined;
-    }
-    const obs = new IntersectionObserver((entries) => {
-      setVisible(entries[entries.length - 1].isIntersecting);
-    }, { rootMargin: '0px', threshold: 0.01 });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  // Play every grid <video> that's actually in the viewport; pause it
-  // when it scrolls away. (Cards mounted in the 1000px prefetch buffer
-  // stay paused on their poster — only on-screen clips decode.)
+  // Grid videos play on HOVER only — at rest they show their poster + a
+  // video icon. This keeps idle CPU/GPU near an image grid's: only the
+  // one clip you're pointing at decodes. Reset to the first frame on
+  // leave so each hover starts fresh.
+  const [videoHover, setVideoHover] = useState(false);
   const gridVideoRef = useRef(null);
   useEffect(() => {
     const v = gridVideoRef.current;
     if (!v || !showVideo) return undefined;
-    if (visible) {
+    if (videoHover) {
       const p = v.play();
       if (p && typeof p.catch === 'function') p.catch(() => {});
     } else {
-      try { v.pause(); } catch { /* ignore */ }
+      try { v.pause(); v.currentTime = 0; } catch { /* ignore */ }
     }
     return undefined;
-  }, [visible, showVideo, displaySrc]);
+  }, [videoHover, showVideo, videoSrc]);
 
   // bounce the source card so the user feels the snap-back instead
   // of the card silently going un-changed.
@@ -401,6 +395,10 @@ export default function ImageCard({
       <div
         className={`${styles.frame}${isTweet ? ` ${styles.frameTweet}` : ''}`}
         style={isTweet ? undefined : { aspectRatio: aspect }}
+        // Hover plays the video (and only the video you're pointing at);
+        // harmless no-op for image/tweet cards.
+        onPointerEnter={() => { if (showVideo) setVideoHover(true); }}
+        onPointerLeave={() => { if (showVideo) setVideoHover(false); }}
       >
         {inView && (isTweet ? (
           <TweetCard meta={tweetMeta} variant="grid" source={record.source} />
@@ -462,6 +460,14 @@ export default function ImageCard({
               <XGlyphIcon />
             </span>
           )
+        )}
+        {inView && showVideo && !canPageImages && !videoHover && (
+          // Top-right "this is a video" badge, shown at rest. Hidden once
+          // you hover (the clip plays). Suppressed for multi-media cards
+          // where the count chip already occupies the corner.
+          <span className={styles.videoBadge} aria-label="Video">
+            <VideoIcon />
+          </span>
         )}
         {inView && canPageImages && (
           // Top-right count chip. On hover, arrows page through the
