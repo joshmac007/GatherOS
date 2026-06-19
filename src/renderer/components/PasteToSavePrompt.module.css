@@ -5,17 +5,16 @@
   width: 368px;
   max-width: calc(100vw - 44px);
   z-index: 60;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  /* Same frosted-glass surface as the ⌘K command palette. */
+  background: linear-gradient(180deg, var(--glass-from) 0%, var(--glass-to) 100%);
+  backdrop-filter: blur(80px) saturate(2);
+  -webkit-backdrop-filter: blur(80px) saturate(2);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-glass);
   padding: 14px;
   font-family: var(--font-ui);
   animation: promptIn 0.22s var(--ease-out, ease);
-}
-
-:root[data-theme="dark"] .prompt {
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
 }
 
 @keyframes promptIn {
@@ -92,17 +91,8 @@
 
 .input:focus { border-color: var(--accent-ring, rgba(0, 0, 0, 0.4)); }
 
-/* Glassy link box — same surface/hairline/shadow recipe as the toolbar
-   search box, so the auto-pop presents the URL in a lifted glass card. */
-.pv {
-  display: flex;
-  gap: 11px;
-  padding: 10px;
-  border-radius: 12px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-control);
-}
+/* The prompt itself is the glass box, so the link preview sits plainly. */
+.pv { display: flex; gap: 11px; }
 
 .thumb,
 .thumbFallback {

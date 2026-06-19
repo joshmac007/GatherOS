@@ -17,12 +17,13 @@
   width: 440px;
   max-width: 100%;
   padding: 22px 22px 18px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow:
-    0 12px 38px rgba(0, 0, 0, 0.2),
-    0 2px 8px rgba(0, 0, 0, 0.10);
+  /* Same frosted-glass surface as the ⌘K command palette. */
+  background: linear-gradient(180deg, var(--glass-from) 0%, var(--glass-to) 100%);
+  backdrop-filter: blur(80px) saturate(2);
+  -webkit-backdrop-filter: blur(80px) saturate(2);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-glass);
   font-family: var(--font-ui);
   animation: cardIn 180ms var(--ease-out, ease);
 }
@@ -91,13 +92,12 @@
 
 .input {
   width: 100%;
-  padding: 11px 15px;
-  /* Glassy lift — matches the toolbar search box (surface-1 fill +
-     hairline + soft control shadow) instead of a flat inset field. */
-  background: var(--surface-1);
+  padding: 11px 14px;
+  /* A calm inset field sitting on the glass card. */
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill, 999px);
-  box-shadow: var(--shadow-control);
+  border-radius: 10px;
+  box-shadow: none;
   color: var(--text-primary);
   font-family: var(--font-mono, monospace);
   font-size: var(--text-sm);
@@ -112,7 +112,7 @@
 
 .input:focus {
   border-color: var(--border-strong, var(--accent-ring, rgba(0, 0, 0, 0.25)));
-  box-shadow: var(--shadow-control), 0 0 0 3px var(--accent-bg-faint, rgba(0, 0, 0, 0.06));
+  box-shadow: 0 0 0 3px var(--accent-bg-faint, rgba(0, 0, 0, 0.06));
 }
 
 .input:disabled {
