@@ -605,6 +605,9 @@ export default function App({ entitlement } = {}) {
   const [settingsDrawerHint, setSettingsDrawerHint] = useState(null);
   const [aiUnlockedOpen, setAiUnlockedOpen] = useState(false);
   const [saveUrlOpen, setSaveUrlOpen] = useState(false);
+  // True while the paste-aware prompt is showing (so the + FAB hides —
+  // they share the bottom-right corner).
+  const [pastePromptVisible, setPastePromptVisible] = useState(false);
   const [whatsNewNotes, setWhatsNewNotes] = useState(null);
   // Tracks the last version whose release notes the user explicitly
   // clicked through via the sidebar's "What's New" button. Drives the
@@ -3465,6 +3468,7 @@ export default function App({ entitlement } = {}) {
       <PasteToSavePrompt
         // Don't pop the prompt over a modal or the focused view.
         paused={saveUrlOpen || !!focusedId}
+        onVisibleChange={setPastePromptVisible}
         onSaved={async (record) => {
           if (view.type === 'collection' && view.id && record?.id) {
             try {
@@ -3487,6 +3491,9 @@ export default function App({ entitlement } = {}) {
           // is still excluded because there's no destination
           // collection for the new save to land in.
           !focusedId
+          // Hidden while the paste-to-save prompt is up — they share the
+          // bottom-right corner.
+          && !pastePromptVisible
           && (
             (appMode === 'library' && view.type === 'all')
             || view.type === 'collection'
