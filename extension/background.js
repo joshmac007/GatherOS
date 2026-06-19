@@ -203,7 +203,14 @@ function withSenderTab(msg, sender) {
 async function pingApp() {
   try {
     const r = await chrome.runtime.sendNativeMessage(HOST_NAME, { type: 'ping' });
-    return { ok: true, appRunning: !!(r && r.appRunning) };
+    return {
+      ok: true,
+      appRunning: !!(r && r.appRunning),
+      // Sync switches from the app's Settings. Default on if absent
+      // (older app that doesn't report them).
+      syncX: r ? r.syncX !== false : true,
+      syncInstagram: r ? r.syncInstagram !== false : true,
+    };
   } catch (err) {
     return { ok: false, hostMissing: true, error: err?.message || String(err) };
   }
@@ -779,6 +786,11 @@ async function saveRefreshTemplate(url, authorization) {
 
 async function pollBookmarksRefresh() {
   if (importState && importState.active) return; // don't poll mid-import
+  // Don't fetch x.com at all unless the app is open AND X sync is on —
+  // no point pulling from the platform to sync into a closed app, or one
+  // where the user turned X sync off in Settings.
+  const status = await pingApp();
+  if (!status || !status.appRunning || status.syncX === false) return;
   const { [STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(STORAGE_TEMPLATE_KEY);
   if (!template || !template.url || !template.authorization) {
     // No template yet — user hasn't visited /i/bookmarks since the
@@ -1410,6 +1422,11 @@ async function saveIgRefreshTemplate(url, headers) {
 
 async function pollIgSavedRefresh() {
   if (igImportState && igImportState.active) return; // don't poll mid-backfill
+  // Don't touch Instagram unless the app is open AND Instagram sync is on
+  // (Settings). This is the account-safety win: no background requests to
+  // Instagram once the user turns sync off.
+  const status = await pingApp();
+  if (!status || !status.appRunning || status.syncInstagram === false) return;
   const { [IG_STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(IG_STORAGE_TEMPLATE_KEY);
   if (!template || !template.url) return; // user hasn't visited Saved since install
 

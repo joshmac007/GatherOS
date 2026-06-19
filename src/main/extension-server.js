@@ -357,7 +357,15 @@ function start() {
       return;
     }
     if (req.method === 'GET' && req.url === '/ping') {
-      sendJson(res, 200, { ok: true, app: 'GatherOS' });
+      // Report the sync switches so the extension can skip polling a
+      // source the user turned off (it can't otherwise know).
+      const settings = require('./settings');
+      sendJson(res, 200, {
+        ok: true,
+        app: 'GatherOS',
+        syncX: settings.getPref('syncXEnabled', true) !== false,
+        syncInstagram: settings.getPref('syncInstagramEnabled', true) !== false,
+      });
       return;
     }
     if (req.method === 'POST' && req.url === '/save') {

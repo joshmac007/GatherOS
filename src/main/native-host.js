@@ -81,17 +81,26 @@ function writeMessage(payload) {
   process.stdout.write(Buffer.concat([header, json]));
 }
 
+// Resolves the parsed /ping body when the app is up, or null when it's
+// not reachable. Object is truthy / null is falsy, so existing callers
+// that use this as a boolean ("is the app running?") keep working, while
+// the ping handler can read the sync prefs out of the body.
 function ping() {
   return new Promise((resolve) => {
     const req = http.request(
       { host: SERVER_HOST, port: SERVER_PORT, path: '/ping', method: 'GET', timeout: 1000 },
       (res) => {
-        resolve(res.statusCode === 200);
-        res.resume();
+        if (res.statusCode !== 200) { res.resume(); resolve(null); return; }
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+          catch { resolve({ ok: true }); }
+        });
       },
     );
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
     req.end();
   });
 }
@@ -217,7 +226,15 @@ async function handleMessage(msg) {
     return;
   }
   if (msg.type === 'ping') {
-    writeMessage({ ok: true, app: 'GatherOS', appRunning: await ping() });
+    const info = await ping();
+    writeMessage({
+      ok: true,
+      app: 'GatherOS',
+      appRunning: !!info,
+      // Sync switches (default on when the app is down or pre-update).
+      syncX: info ? info.syncX !== false : true,
+      syncInstagram: info ? info.syncInstagram !== false : true,
+    });
     return;
   }
   if (msg.type === 'open') {
