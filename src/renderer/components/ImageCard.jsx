@@ -268,9 +268,39 @@ export default function ImageCard({
     return () => obs.disconnect();
   }, []);
 
-  // Brief "spring-back" pulse when a drag is released without a
-  // successful drop. e.dataTransfer.dropEffect === 'none' on dragend
-  // means the OS-level drop didn't land anywhere accepting; we
+  // Separate "actually on screen" signal (no prefetch buffer) used to
+  // gate video PLAYBACK. Decoding video is the GPU/CPU cost, so we only
+  // play clips genuinely in the viewport — ones mounted in the 1000px
+  // prefetch buffer stay paused on their poster. Without this, a tall
+  // window decodes many videos at once and pins the GPU process.
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return undefined;
+    }
+    const obs = new IntersectionObserver((entries) => {
+      setVisible(entries[entries.length - 1].isIntersecting);
+    }, { rootMargin: '0px', threshold: 0.01 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Play the grid <video> only while it's visible; pause it otherwise.
+  const gridVideoRef = useRef(null);
+  useEffect(() => {
+    const v = gridVideoRef.current;
+    if (!v) return undefined;
+    if (visible) {
+      const p = v.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } else {
+      try { v.pause(); } catch { /* ignore */ }
+    }
+    return undefined;
+  }, [visible, showVideo, displaySrc]);
+
   // bounce the source card so the user feels the snap-back instead
   // of the card silently going un-changed.
   const [springback, setSpringback] = useState(false);
@@ -382,21 +412,20 @@ export default function ImageCard({
             // element and the new clip actually loads + plays (changing
             // <video src> in place doesn't reliably restart playback).
             key={videoSrc}
+            ref={gridVideoRef}
             src={videoSrc}
             poster={videoPoster}
             className={`${styles.image}${record.__pending ? ' ' + styles.imagePending : ''}`}
-            autoPlay
             muted
             loop
             playsInline
-            // Autoplay muted is allowed without user gesture, so
-            // every video card in the grid starts playing as soon
-            // as it scrolls into view. preload="auto" lets the
-            // browser fetch enough of the file to start playback
-            // immediately; visibility-gated by the inView check
-            // already wrapping this element, so off-screen videos
-            // never start loading.
-            preload="auto"
+            // Playback is driven by the `visible` effect above — not
+            // autoPlay — so only videos actually on screen decode. Cards
+            // sitting in the 1000px prefetch buffer stay paused on their
+            // poster, which keeps the GPU process from pinning when a tall
+            // window holds many video cards. preload="metadata" fetches
+            // just enough to know dimensions; the rest streams on play.
+            preload="metadata"
             draggable={false}
             style={morphSource ? { viewTransitionName: 'morph-image' } : undefined}
           />
