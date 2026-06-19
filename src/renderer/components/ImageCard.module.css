@@ -104,7 +104,7 @@
      blur so the button picks up the underlying image colors
      instead of sitting on top as a solid white sticker. Inner
      top-highlight + subtle drop shadow sell the lift. */
-  background: rgba(20, 20, 22, 0.72);
+  background: rgba(20, 20, 22, 0.4);
   backdrop-filter: blur(14px) saturate(1.8);
   -webkit-backdrop-filter: blur(14px) saturate(1.8);
   border: none;
@@ -149,7 +149,7 @@
 }
 
 .checkbox:hover:not(.checkboxOn) {
-  background: rgba(20, 20, 22, 0.86);
+  background: rgba(20, 20, 22, 0.55);
   transform: scale(1.05);
 }
 
@@ -163,7 +163,7 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-circle);
-  background: rgba(20, 20, 22, 0.72);
+  background: rgba(20, 20, 22, 0.4);
   backdrop-filter: blur(14px) saturate(1.8);
   -webkit-backdrop-filter: blur(14px) saturate(1.8);
   border: none;
@@ -191,7 +191,7 @@
 }
 
 .peekBtn:hover {
-  background: rgba(20, 20, 22, 0.86);
+  background: rgba(20, 20, 22, 0.55);
   transform: scale(1.06);
 }
 
@@ -295,7 +295,7 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-circle);
-  background: rgba(20, 20, 22, 0.72);
+  background: rgba(20, 20, 22, 0.4);
   backdrop-filter: blur(14px) saturate(1.8);
   -webkit-backdrop-filter: blur(14px) saturate(1.8);
   border: none;
@@ -322,7 +322,7 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-circle);
-  background: rgba(20, 20, 22, 0.72);
+  background: rgba(20, 20, 22, 0.4);
   backdrop-filter: blur(14px) saturate(1.8);
   -webkit-backdrop-filter: blur(14px) saturate(1.8);
   border: none;
@@ -345,7 +345,7 @@
   height: 24px;
   padding: 0 3px;
   border-radius: var(--radius-pill);
-  background: rgba(20, 20, 22, 0.72);
+  background: rgba(20, 20, 22, 0.4);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: #fff;
