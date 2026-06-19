@@ -91,6 +91,15 @@ export default function ImageCard({
   morphSource = false,
 }) {
   const src = fileUrl(record.file_path);
+  // Grid cards render the small (≈400px) thumbnail, not the full-res
+  // original — full res only loads in the focused view. On a large
+  // library this is the difference between a few hundred MB and several
+  // GB of decoded bitmaps. GIFs are the exception: their thumb is a
+  // static first frame, so animated sources keep the original to play.
+  const isAnimated = /\.gif$/i.test(record.file_path || '');
+  const gridImgSrc = (record.thumb_path && !isAnimated)
+    ? fileUrl(record.thumb_path)
+    : src;
   const aspect =
     record.width && record.height ? record.width / record.height : 4 / 3;
 
@@ -128,8 +137,8 @@ export default function ImageCard({
     ? activeMedia.poster
     : (record.thumb_path ? fileUrl(record.thumb_path) : undefined);
   const displaySrc = (activeMedia && activeMedia.type === 'image')
-    ? (activeMedia.primary ? src : twimgLarge(activeMedia.url))
-    : src;
+    ? (activeMedia.primary ? gridImgSrc : twimgLarge(activeMedia.url))
+    : gridImgSrc;
   // The hover quick-look follows the paged image. When the active item
   // is a video, peek its poster rather than the raw MP4.
   const peekSrc = showVideo
@@ -238,26 +247,26 @@ export default function ImageCard({
   // masonry layout doesn't reflow. Once a card has been seen, it
   // stays mounted — avoids re-mount flicker on scroll-back.
   const wrapperRef = useRef(null);
+  // Mount media only while the card is near the viewport, and UNMOUNT it
+  // again when it scrolls far away — otherwise every card the user ever
+  // scrolled past keeps its full-res image / playing <video> decoded in
+  // memory, and the renderer balloons into the gigabytes on a big
+  // library. The frame keeps its height (aspect-ratio) when media is
+  // gone, so layout stays stable; the 1000px buffer re-mounts media well
+  // before it's visible so scroll-back has no flicker.
   const [inView, setInView] = useState(false);
   useEffect(() => {
-    if (inView) return undefined;
     const el = wrapperRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') {
       setInView(true);
       return undefined;
     }
     const obs = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          setInView(true);
-          obs.disconnect();
-          return;
-        }
-      }
-    }, { rootMargin: '600px 0px' });
+      setInView(entries[entries.length - 1].isIntersecting);
+    }, { rootMargin: '1000px 0px' });
     obs.observe(el);
     return () => obs.disconnect();
-  }, [inView]);
+  }, []);
 
   // Brief "spring-back" pulse when a drag is released without a
   // successful drop. e.dataTransfer.dropEffect === 'none' on dragend
