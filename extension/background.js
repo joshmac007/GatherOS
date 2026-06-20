@@ -1181,8 +1181,7 @@ function igWithMaxId(baseUrl, maxId) {
 
 async function runIgApiImport(limit) {
   const { [IG_STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(IG_STORAGE_TEMPLATE_KEY);
-  const baseUrl = (template && template.url)
-    || 'https://www.instagram.com/api/v1/feed/saved/posts/?count=12';
+  const baseUrl = (template && template.url) || IG_SAVED_FEED_URL;
 
   // Signed-in check. Instagram sets `csrftoken` even for logged-out
   // visitors, so it's not proof of a session — the `sessionid` cookie is
@@ -1394,6 +1393,10 @@ const IG_STORAGE_SAVED_URL_KEY = 'gatherosIgSavedPageUrl';
 // The Instagram web client's app id. Captured from the live request when
 // possible; this constant is the fallback so a replay still authenticates.
 const IG_WEB_APP_ID = '936619743392459';
+// Default saved-feed endpoint. The poll falls back to this when no replay
+// template has been captured yet (no Saved-page visit since install), so
+// mobile saves sync on their own — the manual import uses the same URL.
+const IG_SAVED_FEED_URL = 'https://www.instagram.com/api/v1/feed/saved/posts/?count=12';
 
 function ensureIgPollAlarm() {
   chrome.alarms.create(IG_POLL_ALARM, { periodInMinutes: IG_POLL_PERIOD_MINUTES });
@@ -1427,8 +1430,12 @@ async function pollIgSavedRefresh() {
   // Instagram once the user turns sync off.
   const status = await pingApp();
   if (!status || !status.appRunning || status.syncInstagram === false) return;
+  // A captured replay template (from a Saved-page visit) is preferred — it
+  // carries the exact headers Instagram's web client sent. But it's no
+  // longer required: fall back to the default saved-feed endpoint + app id
+  // so a phone save syncs without ever opening Saved on desktop.
   const { [IG_STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(IG_STORAGE_TEMPLATE_KEY);
-  if (!template || !template.url) return; // user hasn't visited Saved since install
+  const url = (template && template.url) || IG_SAVED_FEED_URL;
 
   let csrf = null;
   let signedIn = false;
@@ -1446,12 +1453,12 @@ async function pollIgSavedRefresh() {
   }
   if (!signedIn || !csrf) return; // not signed in to instagram.com in this Chrome profile
 
-  const headers = { ...(template.headers || {}), 'x-csrftoken': csrf, accept: '*/*' };
+  const headers = { ...((template && template.headers) || {}), 'x-csrftoken': csrf, accept: '*/*' };
   if (!headers['x-ig-app-id']) headers['x-ig-app-id'] = IG_WEB_APP_ID;
 
   let res;
   try {
-    res = await fetch(template.url, { method: 'GET', credentials: 'include', headers });
+    res = await fetch(url, { method: 'GET', credentials: 'include', headers });
   } catch (err) {
     console.warn('[gatheros] IG saved poll fetch failed:', err?.message || err);
     return;
