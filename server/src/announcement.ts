@@ -189,8 +189,8 @@ const ADMIN_HTML = `<!doctype html>
   <h1>Announcements</h1>
   <p class="sub">Push a notice to every running copy of GatherOS — no release needed. Heading optional; body supports longform (line breaks are preserved).</p>
 
-  <label>Admin token</label>
-  <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off" />
+  <label>Password</label>
+  <input id="token" type="password" placeholder="Your publish password" autocomplete="off" />
 
   <label>Heading <span style="text-transform:none;font-weight:400;color:#777">(optional)</span></label>
   <input id="title" type="text" placeholder="e.g. Instagram sync is delayed" />
@@ -268,7 +268,7 @@ const ADMIN_HTML = `<!doctype html>
 
   function post(active) {
     var token = $('token').value.trim();
-    if (!token) { setMsg('Enter the admin token first.', false); return; }
+    if (!token) { setMsg('Enter your password first.', false); return; }
     var expires = $('expires').value ? new Date($('expires').value).getTime() : null;
     var payload = {
       active: active,
@@ -286,7 +286,7 @@ const ADMIN_HTML = `<!doctype html>
       body: JSON.stringify(payload),
     }).then(function (r) { return r.json().then(function (d) { return { status: r.status, d: d }; }); })
       .then(function (res) {
-        if (res.status === 401) { setMsg('Wrong admin token.', false); }
+        if (res.status === 401) { setMsg('Wrong password.', false); }
         else if (!res.d.ok) { setMsg('Failed: ' + (res.d.error || 'unknown'), false); }
         else if (active) { setMsg('Published. It is now live.', true); }
         else { setMsg('Taken down.', true); }
