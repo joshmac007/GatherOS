@@ -116,6 +116,11 @@ can be read-mostly on web (list/view/share) with writes still flowing
 from desktop + extension; writes-from-web come once the adapter's
 mutation methods are wired.
 
+The adapter is **permanent, not transitional** — the web platform and
+the Mac app coexist long term (Brett's call). The desktop stays a
+first-class client for offline use, speed, and native capture; both
+clients sync against the cloud as the shared source of truth.
+
 ### 5. Repoint the extension
 
 Today the extension posts captures to a localhost native-messaging
@@ -218,6 +223,8 @@ browser before adding sharing.
 2. ~~**Thumbnails/palette:**~~ *Resolved: generate client-side and
    upload alongside the original — no Worker image dependency. A
    server-side image service stays a future option.*
-3. **Desktop after cloud:** keep the desktop app as a syncing cache
-   (offline + speed), or eventually fold it into "web is the product"?
-   Doesn't block anything now — just sets the long-term target.
+3. ~~**Desktop after cloud:**~~ *Resolved: the web platform and the Mac
+   app coexist long term. The desktop app is a permanent first-class
+   client (offline + speed + native capture), not a transitional shim —
+   so the platform adapter (§4) is a permanent abstraction, and the
+   cloud is the shared source of truth both clients sync against.*
