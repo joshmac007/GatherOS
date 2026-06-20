@@ -401,6 +401,17 @@ function registerIpcHandlers() {
     }
   });
 
+  // Current in-app announcement (remote, no entitlement gate). Returns
+  // the announcement object or null. Fail-silent — see announcement.js.
+  ipcMain.handle('announcement:get', async () => {
+    try {
+      const { fetchAnnouncement } = require('./announcement');
+      return { ok: true, announcement: await fetchAnnouncement() };
+    } catch {
+      return { ok: true, announcement: null };
+    }
+  });
+
   ipcMain.handle('saves:capture-url', async (_e, url) => {
     if (blockNewSave('save')) return { ok: false, needsUpgrade: true };
     if (typeof url !== 'string' || !url.trim()) {

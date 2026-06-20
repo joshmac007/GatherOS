@@ -16,6 +16,7 @@ import { authRoutes } from './auth';
 import { licenseRoutes } from './license';
 import { webhookRoutes } from './lemonsqueezy';
 import { aiRoutes } from './ai';
+import { announcementRoutes } from './announcement';
 import { downloadHandler } from './download';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -39,6 +40,7 @@ app.route('/auth', authRoutes);
 app.route('/license', licenseRoutes);
 app.route('/webhooks', webhookRoutes);
 app.route('/ai', aiRoutes);
+app.route('/announcement', announcementRoutes);
 // Marketing-site download button → 302 to the latest macOS .dmg.
 // Direct route (not a mounted sub-app) so the bare /download path matches.
 app.get('/download', downloadHandler);

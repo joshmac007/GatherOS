@@ -13,6 +13,7 @@ import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import SaveUrlModal from './components/SaveUrlModal.jsx';
 import PasteToSavePrompt from './components/PasteToSavePrompt.jsx';
+import Announcement from './components/Announcement.jsx';
 import AddFab from './components/AddFab.jsx';
 import WhatsNewModal from './components/WhatsNewModal.jsx';
 import { pickNotesForUpgrade, RELEASE_NOTES } from './data/releaseNotes.js';
@@ -3512,6 +3513,10 @@ export default function App({ entitlement } = {}) {
       />
 
       <OnboardingOverlay />
+
+      {/* Remote in-app notice (incident / heads-up / longform update),
+          pushed from the Worker without an app release. */}
+      <Announcement />
 
       {/* Free-tier upgrade banner (trial countdown / "upgrade to keep
           saving") and the upgrade modal opened from any locked action. */}

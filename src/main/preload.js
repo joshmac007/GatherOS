@@ -92,6 +92,10 @@ contextBridge.exposeInMainWorld('moodmark', {
         ext,
       }),
   },
+  announcement: {
+    // Current in-app notice, or null. Polled by the Announcement widget.
+    get: () => ipcRenderer.invoke('announcement:get'),
+  },
   collections: {
     getAll: () => ipcRenderer.invoke('collections:get-all'),
     getAllWithThumbs: () => ipcRenderer.invoke('collections:get-all-with-thumbs'),
