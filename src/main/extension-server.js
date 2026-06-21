@@ -215,7 +215,14 @@ async function handleSave(req, res) {
     // they previously removed — lift the tombstone and save. Passive sync
     // (no flag) still respects deletions so re-scrolls don't resurrect
     // anything the user trashed.
-    const forceImport = body?.forceImport === true;
+    //
+    // Instagram is deliberately excluded: a removed IG save must stay
+    // removed across every resync — including the "Import saved" backfill —
+    // so emptying the trash sticks. (Restoring from Trash is the only thing
+    // that lifts an IG tombstone; see undismissTweet in db.deleteSave's
+    // restore path.) IG re-saves reuse the same post id, so there's no
+    // honoring an unsave/re-save here without resurrecting trashed posts.
+    const forceImport = body?.forceImport === true && source !== 'instagram';
     if (isBookmark && tweetKey && isTweetDismissed(tweetKey)) {
       if (forceImport) {
         const { undismissTweet } = require('./db');
