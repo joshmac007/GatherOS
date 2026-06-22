@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import styles from './UpgradeModal.module.css';
 import brandIconUrl from '../assets/welcome-icon.svg';
 import { PENDING_UPGRADE_KEY } from '../context/entitlement.jsx';
+import { PRICING } from '../lib/pricing.js';
 
 // Per-feature copy. The `feature` prop is set by whatever action was
 // blocked (a locked save, an AI button, etc.) so the headline speaks to
@@ -66,8 +67,8 @@ export default function UpgradeModal({ open, feature, entitlement, onClose }) {
   if (!open) return null;
 
   const copy = COPY[feature] || COPY.default;
-  const price = interval === 'yearly' ? '$49' : '$4.99';
-  const unit = interval === 'yearly' ? '/yr' : '/mo';
+  const price = PRICING[interval].price;
+  const unit = PRICING[interval].unit;
   const subnote = interval === 'yearly'
     ? 'Billed yearly — save ~18%. Cancel anytime.'
     : 'Billed monthly. Cancel anytime.';

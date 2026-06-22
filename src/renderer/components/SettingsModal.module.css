@@ -196,6 +196,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.priceSave {
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+}
+
 .aboutLink {
   background: none;
   border: none;

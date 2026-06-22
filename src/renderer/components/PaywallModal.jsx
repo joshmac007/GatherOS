@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import styles from './PaywallModal.module.css';
 import brandIconUrl from '../assets/welcome-icon.svg';
+import { PRICING } from '../lib/pricing.js';
 
 // Full-screen paywall shown when the user has no active subscription.
 // Blocks the rest of the app.
@@ -33,8 +34,8 @@ export default function PaywallModal({ onSignOut, onSubscribe }) {
     }
   }
 
-  const price = interval === 'yearly' ? '$49' : '$4.99';
-  const unit = interval === 'yearly' ? '/yr' : '/mo';
+  const price = PRICING[interval].price;
+  const unit = PRICING[interval].unit;
   const subnote = interval === 'yearly'
     ? 'Free for 7 days, then $49/yr — save ~18%'
     : 'Free for 7 days, then $4.99/mo — cancel anytime';

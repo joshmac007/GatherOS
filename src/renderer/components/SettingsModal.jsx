@@ -26,6 +26,7 @@ import {
   SAVE_SOUNDS, DEFAULT_SAVE_SOUND, previewSaveSound, configureSaveSound,
 } from '../lib/sounds.js';
 import { requestUpgrade, useEntitlementValue } from '../context/entitlement.jsx';
+import { priceSummary, YEARLY_SAVINGS } from '../lib/pricing.js';
 
 const SUPPORT_EMAIL = 'hey@gatheros.co';
 
@@ -1142,6 +1143,16 @@ export default function SettingsModal({
                   <span className={styles.aboutLabel}>Trial</span>
                   <span className={styles.aboutValue}>
                     {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'} left
+                  </span>
+                </div>
+              )}
+              {/* Show what upgrading costs to anyone without an active
+                  subscription (free / trial / signed-out). */}
+              {!account?.subscription && (
+                <div className={styles.aboutRow}>
+                  <span className={styles.aboutLabel}>Pro price</span>
+                  <span className={styles.aboutValue}>
+                    {priceSummary()} <span className={styles.priceSave}>(save {YEARLY_SAVINGS} yearly)</span>
                   </span>
                 </div>
               )}
