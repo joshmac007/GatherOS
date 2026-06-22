@@ -66,6 +66,7 @@ export default function Grid({
   saves, selected, onSelect, onSetSelection, onOpen, onContextMenu, onDragStart, onHover, onForceClick,
   columns, loading, view, search, semanticSearchActive, colorFilter,
   freshIds, layout = 'masonry', morphId = null, tweetTypeFilter = 'all', sourceFilter = 'all',
+  highlightId = null,
 }) {
   const marqueeRef = useRef(null);
   const [marqueeRect, setMarqueeRect] = useState(null);
@@ -416,6 +417,7 @@ export default function Grid({
               columns={columns}
               selected={selected.has(s.id)}
               selectionActive={selected.size > 0}
+              highlighted={highlightId === s.id}
               onSelect={onSelect}
               onOpen={onOpen}
               onContextMenu={onContextMenu}

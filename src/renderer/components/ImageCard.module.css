@@ -256,6 +256,18 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* "Reveal" pulse — when we fly to an existing save (e.g. duplicate-save
+   toast → Show), the card glows then settles so the eye lands on it. */
+.highlight .frame {
+  animation: cardReveal 2.2s var(--ease-out) both;
+}
+
+@keyframes cardReveal {
+  0%   { box-shadow: 0 0 0 3px var(--accent, #5b8cff), 0 0 22px 4px rgba(91, 140, 255, 0.55); }
+  15%  { box-shadow: 0 0 0 3px var(--accent, #5b8cff), 0 0 22px 4px rgba(91, 140, 255, 0.55); }
+  100% { box-shadow: 0 0 0 0 rgba(91, 140, 255, 0); }
+}
+
 
 /* ── Generation placeholder ──────────────────────────────────────────
    While an OpenAI variant is in flight, App.jsx prepends a synthetic

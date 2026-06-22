@@ -59,6 +59,7 @@ export default function ImageCard({
   columns = 4,
   selected,
   selectionActive,
+  highlighted = false,
   onSelect,
   onOpen,
   onContextMenu,
@@ -295,6 +296,7 @@ export default function ImageCard({
       className={[
         styles.card,
         selected && styles.selected,
+        highlighted && styles.highlight,
         selectionActive && styles.showSelectables,
         enteredFresh && styles.fresh,
         springback && styles.springback,
@@ -306,7 +308,10 @@ export default function ImageCard({
         // the card — detected by pointer movement, not by selection
         // state, so a leftover highlight never blocks a fresh click.
         if (isTweet && movedSincePress(e)) return;
-        onSelect(record.id, e.metaKey || e.ctrlKey || e.shiftKey);
+        onSelect(record.id, {
+          toggle: e.metaKey || e.ctrlKey,
+          range: e.shiftKey,
+        });
       }}
       onDoubleClick={isPending ? undefined : () => onOpen(record)}
       onMouseEnter={isPending ? undefined : () => { onHover?.(record.id); preloadPagedImages(); }}
@@ -469,7 +474,7 @@ export default function ImageCard({
               className={`${styles.checkbox} ${selected ? styles.checkboxOn : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelect(record.id, true);
+                onSelect(record.id, { toggle: true });
               }}
               title={selected ? 'Deselect' : 'Select'}
             >

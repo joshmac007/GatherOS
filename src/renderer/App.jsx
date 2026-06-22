@@ -99,6 +99,22 @@ const RevealIcon = () => <FolderOpen {...ICON} />;
 const LinkIcon = () => <Link2 {...ICON} />;
 const SparklesIcon = () => <Sparkles {...ICON} />;
 
+// Per-view grid scroll memory — so returning to a view (or relaunching
+// the app) lands exactly where the user left off instead of jumping to
+// the top. Stored as { [viewKey]: scrollTop } in localStorage.
+const VIEW_SCROLL_KEY = 'gatherosViewScroll';
+function viewKeyOf(v) {
+  return v ? `${v.type}:${v.id || ''}` : 'all:';
+}
+function readViewScroll() {
+  try {
+    const v = JSON.parse(localStorage.getItem(VIEW_SCROLL_KEY) || '{}');
+    return v && typeof v === 'object' ? v : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function App({ entitlement } = {}) {
   const onboarding = useOnboarding();
   // The resolved entitlement (mode paid/trial/free) flows in from
@@ -454,6 +470,9 @@ export default function App({ entitlement } = {}) {
   // currently-focused save without opening the full focused view.
   // Holds a save id while the overlay is up, null when dismissed.
   const [peekedSaveId, setPeekedSaveId] = useState(null);
+  // A save we just "flew to" in the grid (e.g. duplicate-save toast →
+  // Show). Drives a brief reveal pulse on its card, then clears itself.
+  const [highlightId, setHighlightId] = useState(null);
   // Tracks the masonry card the cursor is currently over so spacebar
   // can peek the right save. Single-click already opens the focused
   // view here, so there's no "selected but unopened" middle state to
@@ -1677,10 +1696,37 @@ export default function App({ entitlement } = {}) {
     });
   }, [handleViewChange]);
 
+  // Fly to an existing save in the grid: switch to All, scroll its card
+  // into view, and pulse it so the eye lands on it — rather than opening
+  // the focused panel. Used by the duplicate-save "Show" action.
+  const revealSaveInGrid = useCallback((id) => {
+    if (!id) return;
+    setFocusedId(null);
+    // Suppress the per-view scroll-restore for this transition — we want
+    // to land on the card, not the view's last offset.
+    suppressViewRestoreRef.current = true;
+    handleViewChange({ type: 'all' });
+    // The All view reloads async; poll for the card, then scroll + pulse.
+    let tries = 0;
+    const tryReveal = () => {
+      const el = document.querySelector(`[data-save-id="${(window.CSS && CSS.escape) ? CSS.escape(id) : id}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setHighlightId(id);
+        suppressViewRestoreRef.current = false;
+        setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 2300);
+        return;
+      }
+      if (tries++ < 25) { setTimeout(tryReveal, 80); return; }
+      suppressViewRestoreRef.current = false;
+    };
+    setTimeout(tryReveal, 120);
+  }, [handleViewChange]);
+
   // Duplicate-on-save toast. Main fires 'save:duplicate' with the
   // existing row whenever a drop / capture / drop-url tries to add
-  // bytes that already live in the library. We show a brief toast
-  // with a Show button that switches to All and focuses that save.
+  // bytes that already live in the library. We show a brief toast with
+  // a Show button that flies to the existing save in the grid.
   useEffect(() => {
     return window.moodmark.on('save:duplicate', (existing) => {
       if (!existing?.id) return;
@@ -1689,17 +1735,11 @@ export default function App({ entitlement } = {}) {
         durationMs: 4500,
         action: {
           label: 'Show',
-          run: () => {
-            handleViewChange({ type: 'all' });
-            // Let the view-change reload settle before opening the
-            // focused panel; otherwise focusedIndex resolves against
-            // a stale displaySaves and the panel renders empty.
-            setTimeout(() => setFocusedId(existing.id), 80);
-          },
+          run: () => revealSaveInGrid(existing.id),
         },
       });
     });
-  }, [showActionToast, handleViewChange]);
+  }, [showActionToast, revealSaveInGrid]);
 
   const handleDeleteCollection = useCallback(async (id) => {
     await window.moodmark.collections.delete(id);
@@ -1897,6 +1937,12 @@ export default function App({ entitlement } = {}) {
     return [...pendingVariants, ...base];
   }, [pendingVariants, displaySaves, view.type, tweetTypeFilter, sourceFilter]);
 
+  // Mirror of visibleSaves for dependency-free callbacks (shift-click
+  // range selection, ⌘C copy) that need the current ordered list without
+  // being recreated — and re-rendering the grid — on every change.
+  const visibleSavesRef = useRef(visibleSaves);
+  useEffect(() => { visibleSavesRef.current = visibleSaves; }, [visibleSaves]);
+
   // Live per-type counts for the Bookmarks filter pills — a breakdown
   // of whatever's currently loaded in the Bookmarks view (so they
   // honour an active search). null outside the Bookmarks view, where
@@ -1935,8 +1981,43 @@ export default function App({ entitlement } = {}) {
     setFocusedId(null);
   }
 
-  const handleSelect = useCallback((id, additive) => {
-    if (additive) {
+  // The last card the user clicked — the anchor for shift-click range
+  // selection. Kept in a ref so handleSelect can stay dependency-free.
+  const selectionAnchorRef = useRef(null);
+  const handleSelect = useCallback((id, mods) => {
+    // Back-compat: older callers passed a boolean "additive". New callers
+    // pass { toggle, range } so we can tell Cmd-click (toggle one) from
+    // Shift-click (select the range from the anchor).
+    const toggle = mods === true || !!(mods && mods.toggle);
+    const range = !!(mods && mods.range);
+
+    // Shift-click: select every card between the anchor and this one,
+    // in the grid's visible order, and add it to the selection.
+    if (range && selectionAnchorRef.current) {
+      const list = visibleSavesRef.current;
+      const a = list.findIndex((s) => s.id === selectionAnchorRef.current);
+      const b = list.findIndex((s) => s.id === id);
+      if (a !== -1 && b !== -1) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        setSelected((prev) => {
+          const next = new Set(prev);
+          for (let i = lo; i <= hi; i += 1) next.add(list[i].id);
+          return next;
+        });
+        return;
+      }
+    }
+
+    // Shift-click with no anchor yet: just select this card (and make it
+    // the anchor) rather than opening the focused view.
+    if (range) {
+      selectionAnchorRef.current = id;
+      setSelected((prev) => new Set(prev).add(id));
+      return;
+    }
+
+    if (toggle) {
+      selectionAnchorRef.current = id;
       setSelected((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
@@ -1945,6 +2026,8 @@ export default function App({ entitlement } = {}) {
       });
       return;
     }
+
+    selectionAnchorRef.current = id;
     setSelected(new Set());
     morphFocus({
       setMorphId,
@@ -1952,6 +2035,21 @@ export default function App({ entitlement } = {}) {
       id,
     });
   }, []);
+
+  // Copy a save's actual image bytes to the system clipboard (⌘C and the
+  // right-click menu). Reads the local file via main and reports the
+  // result with a brief toast. Returns whether it succeeded.
+  const copyImageById = useCallback(async (id) => {
+    if (!id) return false;
+    const rec = visibleSavesRef.current.find((s) => s.id === id);
+    if (!rec?.file_path) return false;
+    const result = await window.moodmark.image.copyToClipboard(rec.file_path);
+    showActionToast({
+      message: result?.ok ? 'Copied to clipboard' : 'Could not copy image',
+      durationMs: result?.ok ? 1400 : 2400,
+    });
+    return !!result?.ok;
+  }, [showActionToast]);
 
   // Closing the focused view runs the same morph in reverse — the
   // focused image animates back into the masonry card it came from.
@@ -1998,6 +2096,15 @@ export default function App({ entitlement } = {}) {
   const lastGridScrollRef = useRef(0);
   const pendingGridScrollRef = useRef(null);
   const scrollHandlerRef = useRef(null);
+  // Per-view scroll memory (relaunch + view-switch restore). currentViewKeyRef
+  // tracks which view's offset the scroll handler should record; pendingRestoreRef
+  // holds the offset to re-apply once the incoming view's cards have rendered.
+  const viewScrollRef = useRef(readViewScroll());
+  const currentViewKeyRef = useRef(viewKeyOf(view));
+  const pendingRestoreRef = useRef(viewScrollRef.current[viewKeyOf(view)] ?? null);
+  // Set while "reveal in grid" is flying to a card, so the per-view scroll
+  // restore doesn't fight its scrollIntoView during the same transition.
+  const suppressViewRestoreRef = useRef(false);
   const [scrolledFar, setScrolledFar] = useState(false);
   // Separate near-top tracker for the toolbar's mode pill, which
   // shrinks on any non-trivial scroll and pops back at the top.
@@ -2018,12 +2125,22 @@ export default function App({ entitlement } = {}) {
       return;
     }
     let ticking = false;
+    let persistTimer = null;
     const fn = () => {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
         const t = node.scrollTop;
         lastGridScrollRef.current = t;
+        // Remember this view's offset, debounced to localStorage so a
+        // relaunch (or returning to the view) lands back here.
+        viewScrollRef.current[currentViewKeyRef.current] = t;
+        if (persistTimer) clearTimeout(persistTimer);
+        persistTimer = setTimeout(() => {
+          try {
+            localStorage.setItem(VIEW_SCROLL_KEY, JSON.stringify(viewScrollRef.current));
+          } catch { /* quota / private mode — ignore */ }
+        }, 400);
         setScrolledFar(t > 720);
         setScrolledOff(t > 8);
         ticking = false;
@@ -2061,9 +2178,33 @@ export default function App({ entitlement } = {}) {
       pendingGridScrollRef.current = lastGridScrollRef.current;
     }
   }, [focusedId]);
-  // A genuine view change should land at the top, not restore a stale
-  // offset left over from a focused-view session in another view.
-  useEffect(() => { pendingGridScrollRef.current = null; }, [view]);
+  // On a view change (and the initial mount), record which view's scroll
+  // we're tracking and queue that view's last-known offset to restore.
+  // Clears the focused-view remount target so it can't bleed across views.
+  useEffect(() => {
+    currentViewKeyRef.current = viewKeyOf(view);
+    pendingGridScrollRef.current = null;
+    pendingRestoreRef.current = viewScrollRef.current[viewKeyOf(view)] ?? null;
+  }, [view]);
+
+  // Apply the queued scroll once the incoming view's cards have actually
+  // rendered (so the container is tall enough to scroll into). The
+  // .grid-scroll node persists across view changes, so we scroll it
+  // imperatively rather than relying on a remount. Skipped in the focused
+  // view, which has its own restore-on-close path above.
+  useEffect(() => {
+    if (focusedId) return;
+    if (suppressViewRestoreRef.current) { pendingRestoreRef.current = null; return; }
+    if (pendingRestoreRef.current == null) return;
+    if (!visibleSaves.length) return;
+    const target = pendingRestoreRef.current;
+    pendingRestoreRef.current = null;
+    const apply = () => {
+      const n = gridScrollRef.current;
+      if (n) n.scrollTop = target;
+    };
+    requestAnimationFrame(() => { apply(); requestAnimationFrame(apply); });
+  }, [view, visibleSaves.length, focusedId]);
 
   const focusedSortAssign = useCallback(async (saveId, collectionId) => {
     await window.moodmark.collections.addSave({ collectionId, saveId });
@@ -2367,6 +2508,22 @@ export default function App({ entitlement } = {}) {
         return;
       }
 
+      // Cmd+C — copy the image to the clipboard (the mirror of paste-to-
+      // save). Targets the open save, else the single selected one, else
+      // the hovered card. Skipped while typing so ⌘C still copies text.
+      if (cmd && !e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+        if (typing) return;
+        if (window.getSelection?.()?.toString()) return; // real text selection
+        const targetId = focusedId
+          || (selected.size === 1 ? selected.values().next().value : null)
+          || hoveredSaveId
+          || (selected.size > 1 ? selected.values().next().value : null);
+        if (!targetId) return;
+        e.preventDefault();
+        copyImageById(targetId);
+        return;
+      }
+
       // Single-key shortcuts: skip when typing so we don't eat real input.
       if (typing) return;
 
@@ -2413,7 +2570,7 @@ export default function App({ entitlement } = {}) {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [focusedId, selected, handleDeleteSelected, goNext, goPrev, peekedSaveId, hoveredSaveId, handleModeChange, visibleSaves, handleCreateAndOpenCollection]);
+  }, [focusedId, selected, handleDeleteSelected, goNext, goPrev, peekedSaveId, hoveredSaveId, handleModeChange, visibleSaves, handleCreateAndOpenCollection, copyImageById]);
 
   // Menu's "Quick Look" item (no accelerator on the menu side because
   // a menu-bound Space would steal keystrokes from text fields). The
@@ -3037,6 +3194,7 @@ export default function App({ entitlement } = {}) {
                   morphId={morphId}
                   tweetTypeFilter={tweetTypeFilter}
                   sourceFilter={sourceFilter}
+                  highlightId={highlightId}
                 />
               </div>
               )}
