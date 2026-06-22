@@ -67,7 +67,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--icon-muted);
+  color: var(--text-secondary);
 }
 
 .heading {
