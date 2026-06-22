@@ -209,9 +209,14 @@ export default function Grid({
             </span>
           </div>
           {/* Or fill it automatically by syncing X + Instagram. */}
+          <div className={styles.heroOr} aria-hidden="true">
+            <span className={styles.heroOrLine} />
+            <span className={styles.heroOrText}>or</span>
+            <span className={styles.heroOrLine} />
+          </div>
           <div className={styles.heroExtension}>
             <span className={styles.heroExtensionText}>
-              Or sync your X bookmarks &amp; Instagram saves
+              Sync your X bookmarks &amp; Instagram saves with the Chrome extension.
             </span>
             <button
               type="button"

@@ -318,13 +318,36 @@
   gap: 4px;
 }
 
+/* "──── or ────" divider between the manual shortcuts and the
+   extension path. */
+.heroOr {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 280px;
+  max-width: 60vw;
+  margin-top: 24px;
+}
+
+.heroOrLine {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.heroOrText {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: lowercase;
+}
+
 /* Secondary "fill it automatically" path under the hero shortcuts. */
 .heroExtension {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  margin-top: 26px;
+  margin-top: 22px;
 }
 
 .heroExtensionText {
