@@ -104,6 +104,16 @@
 }
 
 /* ── Collections row ──────────────────────────────────────────────────── */
+/* Full content width (not the 760px landing column) so the carousel
+   shows as many cards as fit and the arrows only appear on real
+   overflow, not a few stray pixels. */
+.collSection {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 18px 28px 4px;
+}
+
 .collArrows {
   margin-left: auto;
   display: flex;
