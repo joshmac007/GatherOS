@@ -58,6 +58,17 @@ export default function ThemeToggle({ className }) {
     const colorway = COLORWAYS[colorwayIndex % COLORWAYS.length];
     colorwayIndex += 1;
 
+    // Randomise the six blob centres so the mesh never lands the same way
+    // twice. Each blob is jittered within its own horizontal zone so the
+    // colours stay spread across the width rather than clumping.
+    const zone = 100 / 6;
+    for (let i = 1; i <= 6; i += 1) {
+      const x = (i - 1) * zone + Math.random() * zone;
+      const y = 18 + Math.random() * 64;
+      el.style.setProperty(`--b${i}x`, `${x.toFixed(1)}%`);
+      el.style.setProperty(`--b${i}y`, `${y.toFixed(1)}%`);
+    }
+
     // Sweep the shimmer band left → right across the window by (re)playing
     // the CSS animation. Clear the sweep + any prior colourway and force a
     // reflow first so rapid repeated flips always restart from the left.

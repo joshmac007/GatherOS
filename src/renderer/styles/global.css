@@ -692,17 +692,26 @@ body:has(.selection-bar) .trash-toast {
   --c4: #7b4dff;
   --c5: #e14dd8;
   --c6: #ff9f45;
+  /* Default blob centres — ThemeToggle overwrites these with randomised
+     positions on each flip so the mesh never lands the same way twice. */
+  --b1x: 10%; --b1y: 30%;
+  --b2x: 26%; --b2y: 76%;
+  --b3x: 42%; --b3y: 38%;
+  --b4x: 58%; --b4y: 72%;
+  --b5x: 74%; --b5y: 32%;
+  --b6x: 92%; --b6y: 66%;
   /* Six large blobs scattered across a 2-D mesh (not a tidy row), each
      over-filling the height and overlapping its neighbours heavily so the
      colours melt into one another with soft, organic seams — a liquid
-     gradient that flows through the colourway. A wide blur fuses it all. */
+     gradient that flows through the colourway. Centres come from the --b*
+     vars (randomised per flip); a wide blur fuses it all. */
   background:
-    radial-gradient(34% 70% at 10% 30%, var(--c1), transparent 70%),
-    radial-gradient(32% 78% at 26% 76%, var(--c2), transparent 70%),
-    radial-gradient(34% 72% at 42% 38%, var(--c3), transparent 72%),
-    radial-gradient(32% 80% at 58% 72%, var(--c4), transparent 72%),
-    radial-gradient(34% 74% at 74% 32%, var(--c5), transparent 72%),
-    radial-gradient(36% 80% at 92% 66%, var(--c6), transparent 74%);
+    radial-gradient(34% 70% at var(--b1x) var(--b1y), var(--c1), transparent 70%),
+    radial-gradient(32% 78% at var(--b2x) var(--b2y), var(--c2), transparent 70%),
+    radial-gradient(34% 72% at var(--b3x) var(--b3y), var(--c3), transparent 72%),
+    radial-gradient(32% 80% at var(--b4x) var(--b4y), var(--c4), transparent 72%),
+    radial-gradient(34% 74% at var(--b5x) var(--b5y), var(--c5), transparent 72%),
+    radial-gradient(36% 80% at var(--b6x) var(--b6y), var(--c6), transparent 74%);
   filter: blur(70px) saturate(1.25);
 }
 
