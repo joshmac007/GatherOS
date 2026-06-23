@@ -16,6 +16,7 @@ import PasteToSavePrompt from './components/PasteToSavePrompt.jsx';
 import Announcement from './components/Announcement.jsx';
 import AddFab from './components/AddFab.jsx';
 import WhatsNewModal from './components/WhatsNewModal.jsx';
+import SunBlinds from './components/SunBlinds.jsx';
 import { pickNotesForUpgrade, RELEASE_NOTES } from './data/releaseNotes.js';
 import ShortcutsModal from './components/ShortcutsModal.jsx';
 import ConfirmHost from './components/ConfirmHost.jsx';
@@ -651,6 +652,8 @@ export default function App({ entitlement } = {}) {
   // they share the bottom-right corner).
   const [pastePromptVisible, setPastePromptVisible] = useState(false);
   const [whatsNewNotes, setWhatsNewNotes] = useState(null);
+  // Easter egg — warm "window blinds" sun overlay (⌘⇧B).
+  const [sunBlindsOpen, setSunBlindsOpen] = useState(false);
   // Tracks the last version whose release notes the user explicitly
   // clicked through via the sidebar's "What's New" button. Drives the
   // small dot on that footer item: present whenever there's a notes
@@ -2515,6 +2518,14 @@ export default function App({ entitlement } = {}) {
         return;
       }
 
+      // Easter egg — Cmd/Ctrl+Shift+B casts warm "window blinds" sun
+      // across the whole app for a few seconds.
+      if (cmd && e.shiftKey && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        setSunBlindsOpen(true);
+        return;
+      }
+
       if (cmd && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         setQuickSwitcherOpen((v) => !v);
@@ -3739,6 +3750,8 @@ export default function App({ entitlement } = {}) {
       />
 
       <ConfirmHost />
+
+      <SunBlinds open={sunBlindsOpen} onClose={() => setSunBlindsOpen(false)} />
 
       <WhatsNewModal
         open={!!whatsNewNotes}

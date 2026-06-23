@@ -1,0 +1,106 @@
+/* "Sun through window blinds" easter egg. Sits above everything; the
+   warm wash and slat shadows blend with the app so the whole window
+   reads as struck by low golden light. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
+  animation: sbFade 4.2s ease forwards;
+}
+
+@keyframes sbFade {
+  0%   { opacity: 0; }
+  9%   { opacity: 1; }
+  82%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Directional golden wash — multiply so it tints the app warm rather
+   than just sitting on top as a flat colour. */
+.warmth {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    118deg,
+    rgba(255, 196, 105, 0.52) 0%,
+    rgba(255, 162, 78, 0.30) 45%,
+    rgba(255, 130, 64, 0.08) 78%,
+    rgba(255, 120, 60, 0) 100%
+  );
+  mix-blend-mode: multiply;
+}
+
+/* One broad, soft sun shaft drifting across diagonally. */
+.beam {
+  position: absolute;
+  top: -40%;
+  left: -25%;
+  width: 55%;
+  height: 180%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 238, 184, 0) 0%,
+    rgba(255, 238, 184, 0.55) 50%,
+    rgba(255, 238, 184, 0) 100%
+  );
+  transform: rotate(18deg);
+  filter: blur(26px);
+  mix-blend-mode: screen;
+  animation: sbBeam 4.2s ease forwards;
+}
+
+@keyframes sbBeam {
+  0%   { opacity: 0; transform: rotate(18deg) translateX(-40px); }
+  22%  { opacity: 1; }
+  80%  { opacity: 0.85; }
+  100% { opacity: 0; transform: rotate(18deg) translateX(50px); }
+}
+
+.blinds { position: absolute; inset: -6% 0; }
+
+/* Each slat is a soft horizontal shadow band that drops in with a
+   staggered delay, like blinds settling. */
+.slat {
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  height: 30px;
+  top: calc(var(--i) * 7.1%);
+  background: linear-gradient(
+    180deg,
+    rgba(46, 28, 8, 0) 0%,
+    rgba(46, 28, 8, 0.42) 45%,
+    rgba(46, 28, 8, 0.42) 55%,
+    rgba(46, 28, 8, 0) 100%
+  );
+  mix-blend-mode: multiply;
+  transform: translateY(-46px);
+  opacity: 0;
+  animation: sbSlat 0.62s cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation-delay: calc(var(--i) * 42ms);
+}
+
+/* Warm sunlit lip along the slat's lower edge. */
+.slat::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 7px;
+  height: 2px;
+  background: rgba(255, 226, 152, 0.5);
+  mix-blend-mode: screen;
+}
+
+@keyframes sbSlat {
+  from { transform: translateY(-46px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slat { animation: none; transform: none; opacity: 1; }
+  .beam { animation: sbFade 4.2s ease forwards; }
+}
