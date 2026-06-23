@@ -646,24 +646,17 @@
    accent color — typographic restraint. Big presence: 54px tall,
    140px per segment, --text-lg type, sized to read as a primary
    navigation surface rather than a buried control. */
-/* Groups the standalone Search tab with the segmented mode pill so the
-   pair centers together in the toolbar's middle column. */
-.modeCluster {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  justify-self: center;
-  -webkit-app-region: no-drag;
-}
-
-/* Dedicated Search tab — a circular icon button sitting first in the
-   mode cluster. At rest it's a bare glyph; hover paints a circular
-   background; active fills with ink (matching the pill's active
-   segment) so the two read as one tab system. */
-.searchTab {
+/* Search tab — first child inside the pill, ahead of the labeled
+   segments. Icon-only with a circular hover background; fills with ink
+   when active (matching the segments' active fill). The 6px margin-right
+   creates the gap the sliding thumb is offset past (see .modeThumb). */
+.modeSearch {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
-  width: 54px;
-  height: 54px;
+  width: 46px;
+  height: 46px;
+  margin-right: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -672,31 +665,21 @@
   border-radius: var(--radius-circle);
   color: var(--text-primary);
   cursor: pointer;
-  -webkit-app-region: no-drag;
-  transform-origin: center top;
   transition:
     background var(--dur-instant) ease,
-    color var(--dur-medium) var(--ease-out),
-    transform var(--dur-pronounced) cubic-bezier(0.34, 1.18, 0.40, 1);
+    color var(--dur-medium) var(--ease-out);
 }
 
-.searchTab svg { width: 20px; height: 20px; display: block; }
+.modeSearch svg { width: 18px; height: 18px; display: block; }
 
-.searchTab:not(.searchTabActive):hover {
+.modeSearch:not(.modeSearchActive):hover {
   background: var(--hover-bg);
 }
 
-.searchTabActive,
-.searchTabActive:hover {
+.modeSearchActive,
+.modeSearchActive:hover {
   background: var(--accent);
   color: var(--surface-1);
-}
-
-/* Matches the pill's compact scale so both shrink together on scroll. */
-.searchTabCompact { transform: scale(0.86); }
-
-@media (prefers-reduced-motion: reduce) {
-  .searchTab { transition: background var(--dur-instant) ease; }
 }
 
 .modePill {
@@ -743,7 +726,9 @@
   position: absolute;
   top: 4px;
   bottom: 4px;
-  left: 4px;
+  /* Offset past the leading Search tab (46px icon + 6px gap) so index 0
+     still lands on the first labeled segment. */
+  left: 56px;
   width: 140px;
   background: var(--text-primary);
   border-radius: var(--radius-pill);

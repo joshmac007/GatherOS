@@ -378,7 +378,12 @@ function AddMenu({ compact = false, onUpload, onSaveUrl }) {
 }
 
 function ModePill({ mode, onModeChange, compact = false }) {
-  const activeIndex = Math.max(0, MODE_SEGMENTS.findIndex((s) => s.id === mode));
+  // Search lives as the first tab inside the pill, ahead of the three
+  // labeled segments. It's icon-only with a circular hover / active fill
+  // and sits outside the sliding-thumb track — the thumb only covers the
+  // labeled segments, so it's hidden whenever Search is the active tab.
+  const labeledIndex = MODE_SEGMENTS.findIndex((s) => s.id === mode);
+  const showThumb = labeledIndex >= 0;
   return (
     <div
       className={[styles.modePill, compact && styles.modePillCompact]
@@ -387,11 +392,25 @@ function ModePill({ mode, onModeChange, compact = false }) {
       role="tablist"
       aria-label="App mode"
     >
-      <span
-        className={styles.modeThumb}
-        style={{ '--mode-thumb-index': activeIndex }}
-        aria-hidden="true"
-      />
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'search'}
+        aria-label="Search"
+        title="Search"
+        data-onboarding="mode-search"
+        className={`${styles.modeSearch} ${mode === 'search' ? styles.modeSearchActive : ''}`}
+        onClick={() => onModeChange('search')}
+      >
+        <Search size={18} strokeWidth={2} />
+      </button>
+      {showThumb && (
+        <span
+          className={styles.modeThumb}
+          style={{ '--mode-thumb-index': labeledIndex }}
+          aria-hidden="true"
+        />
+      )}
       {MODE_SEGMENTS.map((seg) => (
         <button
           key={seg.id}
@@ -603,30 +622,7 @@ export default function Toolbar({
         )}
       </div>
 
-      {/* Search is its own tab, first in the cluster — a circular icon
-          that fills with ink when the Search mode is active and shows a
-          circular hover background otherwise. Kept beside (not inside)
-          the segmented pill so the pill's sliding-thumb geometry stays
-          untouched. */}
-      <div className={styles.modeCluster}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'search'}
-          aria-label="Search"
-          title="Search"
-          data-onboarding="mode-search"
-          className={[
-            styles.searchTab,
-            mode === 'search' && styles.searchTabActive,
-            modePillCompact && styles.searchTabCompact,
-          ].filter(Boolean).join(' ')}
-          onClick={() => onModeChange('search')}
-        >
-          <Search size={20} strokeWidth={2} />
-        </button>
-        <ModePill mode={mode} onModeChange={onModeChange} compact={modePillCompact} />
-      </div>
+      <ModePill mode={mode} onModeChange={onModeChange} compact={modePillCompact} />
 
       <div className={styles.right}>
         {/* Search joins the right-hand tools cluster (search + a
