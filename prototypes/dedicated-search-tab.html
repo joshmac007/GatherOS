@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dedicated search tab for GatherOS — five directions</title>
+<style>
+  :root {
+    --content-bg:#FAFAF9; --surface-1:#FAFAF9;
+    --sidebar-bg:rgba(244,244,246,0.92);
+    --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.12); --hairline:rgba(0,0,0,0.06);
+    --text-primary:#000; --text-secondary:rgba(0,0,0,0.55); --text-tertiary:rgba(0,0,0,0.40);
+    --accent:#000; --accent-faint:rgba(0,0,0,0.06); --accent-soft:rgba(0,0,0,0.10); --accent-ring:rgba(0,0,0,0.25);
+    --input-bg:rgba(0,0,0,0.025); --input-focus:#fff; --input-border:rgba(0,0,0,0.10);
+    --hover-bg:#EAEAEA; --active-row:#E8E8E8;
+    --btn-from:#F6F6F3; --btn-to:#F1F1EE; --btn-border:rgba(0,0,0,0.05);
+    --glass-from:rgba(255,255,255,0.85); --glass-to:rgba(255,255,255,0.65); --glass-border:rgba(0,0,0,0.07);
+    --r-sm:4px; --r-md:7px; --r-lg:10px; --r-xl:14px; --r-pill:999px;
+    --xs:11px; --sm:12px; --md:13px; --lg:18px; --xl:22px; --display:32px;
+    --ease-out:cubic-bezier(0.32,0.72,0,1); --ease-pop:cubic-bezier(0.2,0.8,0.2,1);
+    --shadow-card:0 0 0 1px #fff inset, 0 4px 20px rgba(0,0,0,0.05);
+    --shadow-control:0 1px 3px -1px rgba(16,16,19,0.05);
+    --shadow-pop:0 4px 14px rgba(0,0,0,0.08), 0 18px 48px rgba(0,0,0,0.14);
+    --font:'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body {
+    font-family:var(--font); color:var(--text-primary);
+    background:#0e0e10; font-size:var(--md); -webkit-font-smoothing:antialiased;
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+
+  /* ── Prototype chooser chrome (meta, not part of the app) ───────────── */
+  .proto-bar {
+    flex:0 0 auto; display:flex; align-items:center; gap:18px;
+    padding:0 16px; height:48px; background:#161618; color:#fff;
+    border-bottom:1px solid rgba(255,255,255,0.08);
+  }
+  .proto-title { font-size:var(--sm); font-weight:600; letter-spacing:-0.01em; white-space:nowrap; }
+  .proto-tabs { display:flex; gap:4px; flex-wrap:wrap; }
+  .proto-tab {
+    appearance:none; border:1px solid rgba(255,255,255,0.12); background:transparent; color:rgba(255,255,255,0.62);
+    font-family:inherit; font-size:var(--sm); padding:5px 11px; border-radius:var(--r-pill);
+    cursor:pointer; display:flex; align-items:center; gap:7px; transition:all 120ms var(--ease-out);
+  }
+  .proto-tab:hover { background:rgba(255,255,255,0.08); color:#fff; }
+  .proto-tab .n { font-variant-numeric:tabular-nums; opacity:0.6; }
+  .proto-tab.active { background:#fff; color:#000; border-color:#fff; }
+  .proto-tab.active .n { opacity:0.5; }
+  .proto-hint { margin-left:auto; font-size:var(--xs); color:rgba(255,255,255,0.45); white-space:nowrap; }
+
+  .proto-meta {
+    flex:0 0 auto; display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+    padding:11px 20px; background:#1f1f22; color:#fff; border-bottom:1px solid rgba(255,255,255,0.06);
+  }
+  .proto-meta .name { font-size:var(--md); font-weight:600; }
+  .proto-meta .name .num {
+    display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-right:8px;
+    border-radius:var(--r-sm); background:rgba(255,255,255,0.14); font-size:var(--xs); font-variant-numeric:tabular-nums;
+  }
+  .proto-meta .why { font-size:var(--sm); color:rgba(255,255,255,0.6); max-width:760px; line-height:1.45; }
+  .proto-meta .state-toggle { margin-left:auto; display:flex; gap:2px; background:rgba(255,255,255,0.08); padding:2px; border-radius:var(--r-pill); }
+  .proto-meta .state-toggle button {
+    appearance:none; border:0; background:transparent; color:rgba(255,255,255,0.6); font-family:inherit;
+    font-size:var(--xs); padding:4px 12px; border-radius:var(--r-pill); cursor:pointer;
+  }
+  .proto-meta .state-toggle button.on { background:#fff; color:#000; }
+
+  /* ── Stage + GatherOS window frame ──────────────────────────────────── */
+  .stage { flex:1 1 auto; min-height:0; padding:18px; overflow:hidden; display:flex; }
+  .gos {
+    flex:1 1 auto; min-width:0; display:flex; flex-direction:column;
+    background:var(--content-bg); border-radius:var(--r-xl); overflow:hidden;
+    box-shadow:0 18px 60px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.3);
+  }
+
+  /* titlebar */
+  .titlebar {
+    flex:0 0 auto; height:44px; display:flex; align-items:center; gap:14px; padding:0 14px;
+    background:var(--content-bg); border-bottom:1px solid var(--hairline); position:relative;
+  }
+  .lights { display:flex; gap:8px; }
+  .lights i { width:12px; height:12px; border-radius:50%; display:block; }
+  .lights .r { background:#ff5f57; } .lights .y { background:#febc2e; } .lights .g { background:#28c840; }
+  .modepill {
+    position:absolute; left:50%; transform:translateX(-50%);
+    display:flex; gap:2px; background:rgba(0,0,0,0.04); border:1px solid var(--border);
+    padding:3px; border-radius:var(--r-pill); box-shadow:var(--shadow-control);
+  }
+  .modeseg {
+    display:flex; align-items:center; gap:6px; font-size:var(--sm); color:var(--text-secondary);
+    padding:5px 13px; border-radius:var(--r-pill); cursor:pointer; white-space:nowrap; transition:all 120ms var(--ease-out);
+  }
+  .modeseg svg { width:14px; height:14px; }
+  .modeseg:hover { color:var(--text-primary); }
+  .modeseg.active { background:var(--accent); color:#fff; }
+  .tb-right { margin-left:auto; display:flex; gap:6px; }
+  .icon-btn {
+    width:30px; height:30px; border-radius:var(--r-md); border:1px solid var(--border);
+    background:linear-gradient(var(--btn-from),var(--btn-to)); display:flex; align-items:center; justify-content:center;
+    color:var(--text-secondary); cursor:pointer;
+  }
+  .icon-btn svg { width:15px; height:15px; }
+
+  .gos-body { flex:1 1 auto; min-height:0; display:flex; }
+
+  /* generic search field */
+  .field {
+    display:flex; align-items:center; gap:10px; background:var(--input-bg);
+    border:1px solid var(--input-border); border-radius:var(--r-lg); padding:0 14px;
+  }
+  .field:focus-within { background:var(--input-focus); border-color:var(--accent-ring); box-shadow:0 0 0 3px var(--accent-faint); }
+  .field svg { width:16px; height:16px; color:var(--text-tertiary); flex:0 0 auto; }
+  .field input {
+    border:0; background:transparent; outline:0; font-family:inherit; color:var(--text-primary);
+    width:100%; padding:11px 0;
+  }
+  .field input::placeholder { color:var(--text-tertiary); }
+  .kbd {
+    font-size:var(--xs); color:var(--text-tertiary); border:1px solid var(--border);
+    border-radius:var(--r-sm); padding:2px 6px; background:#fff; font-variant-numeric:tabular-nums;
+  }
+  .label { font-size:var(--xs); text-transform:uppercase; letter-spacing:0.06em; color:var(--text-tertiary); font-weight:600; }
+  .count { font-variant-numeric:tabular-nums; }
+
+  /* chips */
+  .chip {
+    display:inline-flex; align-items:center; gap:6px; font-size:var(--sm); color:var(--text-secondary);
+    background:#fff; border:1px solid var(--border); border-radius:var(--r-pill); padding:6px 12px; cursor:pointer;
+    transition:all 100ms var(--ease-out); white-space:nowrap;
+  }
+  .chip:hover { background:var(--hover-bg); color:var(--text-primary); }
+  .chip.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .chip .x { opacity:0.6; font-size:13px; line-height:1; }
+  .chip .c { font-variant-numeric:tabular-nums; color:var(--text-tertiary); }
+  .chip.on .c { color:rgba(255,255,255,0.6); }
+
+  /* masonry */
+  .masonry { column-gap:12px; }
+  .card { break-inside:avoid; margin-bottom:12px; cursor:pointer; }
+  .card .thumb {
+    width:100%; border-radius:var(--r-lg); border:1px solid var(--border);
+    box-shadow:var(--shadow-card); overflow:hidden; position:relative; transition:transform 120ms var(--ease-out);
+  }
+  .card:hover .thumb { transform:translateY(-2px); box-shadow:0 0 0 1px #fff inset, 0 8px 26px rgba(0,0,0,0.10); }
+  .card .badge {
+    position:absolute; top:8px; left:8px; font-size:10px; font-weight:600; letter-spacing:0.03em;
+    background:rgba(20,20,22,0.55); color:#fff; padding:2px 7px; border-radius:var(--r-pill); backdrop-filter:blur(8px);
+  }
+  .card .meta { padding:7px 3px 2px; }
+  .card .t { font-size:var(--sm); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card .s { font-size:var(--xs); color:var(--text-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .scroll { overflow-y:auto; overflow-x:hidden; }
+  .scroll::-webkit-scrollbar { width:11px; }
+  .scroll::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.16); border-radius:99px; border:3px solid var(--content-bg); }
+
+  /* list rows (iter 3) */
+  .row {
+    display:flex; align-items:center; gap:14px; padding:8px 12px; border-radius:var(--r-md); cursor:pointer;
+    border:1px solid transparent;
+  }
+  .row:hover { background:var(--hover-bg); }
+  .row.sel { background:var(--active-row); border-color:var(--border); }
+  .row .rthumb { width:48px; height:48px; flex:0 0 auto; border-radius:var(--r-md); overflow:hidden; border:1px solid var(--border); }
+  .row .rmain { flex:1 1 auto; min-width:0; }
+  .row .rt { font-size:var(--md); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .rs { font-size:var(--xs); color:var(--text-tertiary); }
+  .row .rtags { display:flex; gap:6px; flex:0 0 auto; }
+  .row .tg { font-size:var(--xs); color:var(--text-secondary); background:var(--accent-faint); padding:2px 8px; border-radius:var(--r-pill); }
+  .row .rdate { font-size:var(--xs); color:var(--text-tertiary); flex:0 0 auto; width:64px; text-align:right; font-variant-numeric:tabular-nums; }
+
+  .empty-wrap { flex:1 1 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:40px; }
+  .empty-wrap .big { font-size:var(--lg); font-weight:500; }
+  .empty-wrap .sub { font-size:var(--sm); color:var(--text-tertiary); max-width:380px; line-height:1.5; }
+
+  .seg-sub { display:flex; gap:2px; background:rgba(0,0,0,0.04); border:1px solid var(--border); padding:2px; border-radius:var(--r-pill); }
+  .seg-sub button { appearance:none; border:0; background:transparent; font-family:inherit; font-size:var(--sm); color:var(--text-secondary); padding:5px 12px; border-radius:var(--r-pill); cursor:pointer; }
+  .seg-sub button.on { background:#fff; color:var(--text-primary); box-shadow:var(--shadow-control); }
+
+  .softbtn {
+    font-family:inherit; font-size:var(--md); padding:8px 14px; border-radius:var(--r-lg);
+    border:1px solid var(--btn-border); background:linear-gradient(var(--btn-from),var(--btn-to));
+    color:var(--text-primary); cursor:pointer; display:inline-flex; align-items:center; gap:7px;
+  }
+  .softbtn:hover { background:var(--hover-bg); }
+  .linkbtn { font-family:inherit; font-size:var(--sm); color:var(--text-secondary); background:transparent; border:0; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+</style>
+</head>
+<body>
+  <header class="proto-bar">
+    <div class="proto-title">Dedicated search tab for GatherOS</div>
+    <nav class="proto-tabs" id="tabs"></nav>
+    <div class="proto-hint">press 1–5 to switch</div>
+  </header>
+  <div class="proto-meta" id="meta"></div>
+  <main class="stage"><div class="gos" id="gos"></div></main>
+
+<script>
+/* ─────────────────────────  mock data  ───────────────────────── */
+const HUES = [8,28,42,150,178,200,212,228,260,288,320,340,12,96,55];
+function grad(i){
+  const h = HUES[i % HUES.length];
+  const h2 = (h + 26) % 360;
+  return `linear-gradient(150deg, hsl(${h} 42% 74%), hsl(${h2} 48% 54%))`;
+}
+const HEIGHTS = [150,210,260,180,300,230,170,280,200,330,240,190];
+const TITLES = ["Brutalist poster grid","Risograph zine spread","Acid type experiment","Muted gradient study","Editorial layout — Kinfolk","Swiss grid system","Neo-retro album art","Soft 3D render","Wabi-sabi ceramics","Monospace UI dashboard","Y2K chrome lettering","Botanical illustration","Folded paper texture","Night market photography","Minimal product shot","Anti-design flyer","Vaporwave still life","Letterpress business card","Concrete architecture","Hand-drawn map","Pastel duotone","Bauhaus shapes","Typographic mural","Glassmorphism panel","Ink wash landscape","Sticker sheet set","Retro computing ad","Fashion lookbook","Data viz spread","Album cover mockup","Festival key art","Café menu redesign","Wayfinding signage","Knitwear textures","Cyber sigil set","Travel postcard","Op-art pattern","Cassette j-card","Modular furniture","Annual report cover"];
+const SOURCES = ["dribbble.com","are.na","pinterest.com","instagram.com","x.com","behance.net","cosmos.so","savee.it","tumblr.com","fonts.google.com"];
+const TAGSET = ["typography","poster","editorial","gradient","3d","minimal","retro","photography","brand","ui","texture","print","color","layout"];
+const DATES = ["2d","5d","1w","2w","3w","1mo","2mo","4mo","1y"];
+function save(i){
+  return {
+    i, title:TITLES[i % TITLES.length],
+    src:SOURCES[i % SOURCES.length],
+    tags:[TAGSET[i % TAGSET.length], TAGSET[(i*3+2) % TAGSET.length]],
+    h:HEIGHTS[i % HEIGHTS.length],
+    date:DATES[i % DATES.length],
+    type:(i % 9===0?'video':(i % 7===0?'tweet':'image'))
+  };
+}
+const SAVES = Array.from({length:60}, (_,i)=>save(i));
+
+/* ─────────────────────────  icons  ───────────────────────── */
+const I = {
+  search:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><line x1="10.4" y1="10.4" x2="13.5" y2="13.5"/></svg>',
+  lib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M8 5v14"/><rect x="12" y="4" width="9" height="16" rx="1"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  layers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/></svg>',
+  hash:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="6" x2="13.5" y2="6"/><line x1="2.5" y1="10" x2="13" y2="10"/><line x1="6.5" y1="2.5" x2="5" y2="13.5"/><line x1="11" y1="2.5" x2="9.5" y2="13.5"/></svg>',
+  sliders:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.4" fill="#fff"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.4" fill="#fff"/></svg>',
+  grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>',
+};
+const dot='<span style="display:inline-block;width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.4;margin:0 7px;vertical-align:middle"></span>';
+
+/* ─────────────────────────  shared pieces  ───────────────────────── */
+function modepill(){
+  return `<div class="modepill">
+    <div class="modeseg">${I.lib}<span>Library</span></div>
+    <div class="modeseg">${I.folder}<span>Collections</span></div>
+    <div class="modeseg">${I.layers}<span>Spaces</span></div>
+    <div class="modeseg active">${I.search}<span>Search</span></div>
+  </div>`;
+}
+function titlebar(){
+  return `<div class="titlebar">
+    <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    ${modepill()}
+    <div class="tb-right"><div class="icon-btn">${I.sliders}</div><div class="icon-btn">${I.grid}</div></div>
+  </div>`;
+}
+function shell(body){ return titlebar() + `<div class="gos-body">${body}</div>`; }
+
+function thumb(s, extra=''){
+  const badge = s.type!=='image' ? `<span class="badge">${s.type==='video'?'▶ video':'tweet'}</span>` : '';
+  return `<div class="thumb" style="background:${grad(s.i)};height:${s.h*0.62}px;${extra}">${badge}</div>`;
+}
+function masonryCard(s){
+  return `<div class="card">${thumb(s)}<div class="meta"><div class="t">${s.title}</div><div class="s">${s.src}${dot}${s.date}</div></div></div>`;
+}
+function masonry(list, cols=4){
+  return `<div class="masonry" style="column-count:${cols}">${list.map(masonryCard).join('')}</div>`;
+}
+
+/* ─────────────────────────  iteration 1 — search-first canvas  ──────── */
+function iter1(empty){
+  if(empty){
+    return shell(`<div class="scroll" style="flex:1 1 auto;padding:0 28px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+      <div style="width:100%;max-width:680px;text-align:center;margin-top:-30px">
+        <div style="font-size:var(--display);font-weight:600;letter-spacing:-0.02em;margin-bottom:6px">Search your library</div>
+        <div style="font-size:var(--md);color:var(--text-tertiary);margin-bottom:24px">4,128 saves across 37 collections</div>
+        <div class="field" style="padding:0 18px;border-radius:var(--r-xl);box-shadow:var(--shadow-control)">
+          <span style="width:20px;height:20px">${I.search}</span>
+          <input style="font-size:var(--lg);padding:16px 0" placeholder="Search titles, tags, sources, colors…" />
+          <span class="kbd">⌘K</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:22px;flex-wrap:wrap">
+          <span class="label" style="margin-right:4px">Recent</span>
+          ${['brutalist poster','muted gradient','risograph','swiss grid','album art'].map(t=>`<span class="chip">${t}</span>`).join('')}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+          <span class="label" style="margin-right:4px">Jump to</span>
+          ${['#typography','#3d','#editorial','#retro','#color'].map(t=>`<span class="chip">${I.hash}${t.slice(1)}</span>`).join('')}
+        </div>
+      </div>
+    </div>`);
+  }
+  const list = SAVES.slice(0,40);
+  return shell(`<div style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0">
+    <div style="padding:18px 28px 14px;border-bottom:1px solid var(--hairline)">
+      <div class="field" style="max-width:none;border-radius:var(--r-xl)">
+        <span style="width:18px;height:18px">${I.search}</span>
+        <input style="font-size:var(--lg)" value="brutalist poster" />
+        <span class="kbd">esc</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+        <span class="label"><span class="count">312</span> results</span>
+        <span style="color:var(--text-tertiary);font-size:var(--xs)">${dot}</span>
+        <div style="display:flex;gap:6px">${['typography','poster','print'].map(t=>`<span class="chip">${t}</span>`).join('')}</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <span class="label">Sort</span>
+          <div class="seg-sub"><button class="on">Relevance</button><button>Recent</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="scroll" style="flex:1 1 auto;padding:18px 28px 30px">${masonry(list,4)}</div>
+  </div>`);
+}
+
+/* ─────────────────────────  iteration 2 — faceted finder  ──────────── */
+function facetGroup(title, items){
+  return `<div style="margin-bottom:20px">
+    <div class="label" style="margin-bottom:9px">${title}</div>
+    <div style="display:flex;flex-direction:column;gap:2px">${items}</div>
+  </div>`;
+}
+function facetRow(name, count, on=false){
+  return `<label style="display:flex;align-items:center;gap:9px;padding:5px 7px;border-radius:var(--r-md);cursor:pointer;font-size:var(--sm);color:var(--text-secondary)" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='transparent'">
+    <span style="width:15px;height:15px;border-radius:var(--r-sm);border:1.5px solid ${on?'var(--accent)':'var(--border-strong)'};background:${on?'var(--accent)':'#fff'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px">${on?'✓':''}</span>
+    <span style="flex:1 1 auto;color:${on?'var(--text-primary)':'inherit'}">${name}</span>
+    <span class="count" style="font-size:var(--xs);color:var(--text-tertiary)">${count}</span>
+  </label>`;
+}
+function colorDots(){
+  const cols=['#111','#c1322a','#ff9500','#ffcc00','#34c759','#007aff','#af52de','#ff2d55','#8e8e93','#fff'];
+  return `<div style="display:flex;gap:7px;flex-wrap:wrap;padding:2px 7px">${cols.map((c,k)=>`<span style="width:18px;height:18px;border-radius:50%;background:${c};border:1.5px solid ${k===5?'var(--accent)':'var(--border)'};box-shadow:${k===5?'0 0 0 2px var(--accent-faint)':'none'};cursor:pointer"></span>`).join('')}</div>`;
+}
+function iter2(empty){
+  const rail = `<aside style="flex:0 0 248px;border-right:1px solid var(--border);background:var(--sidebar-bg);backdrop-filter:blur(20px);padding:18px 14px;overflow-y:auto" class="scroll">
+    ${facetGroup('Type', facetRow('Images',3811,true)+facetRow('Videos',214)+facetRow('Tweets',103))}
+    ${facetGroup('Collection', facetRow('Type studies',420,true)+facetRow('Posters',388)+facetRow('Brand refs',254)+facetRow('3D & render',191)+facetRow('Photography',640))}
+    ${facetGroup('Tag', facetRow('typography',512)+facetRow('gradient',288)+facetRow('minimal',377)+facetRow('retro',201))}
+    ${facetGroup('Source', facetRow('are.na',1204)+facetRow('dribbble.com',880)+facetRow('x.com',455)+facetRow('instagram.com',390))}
+    <div style="margin-bottom:8px"><div class="label" style="margin-bottom:9px">Dominant color</div>${colorDots()}</div>
+    ${facetGroup('Saved', facetRow('Past week',92)+facetRow('Past month',418)+facetRow('Past year',2940))}
+  </aside>`;
+
+  const main = empty
+    ? `<div class="empty-wrap"><div style="font-size:32px">${'<svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="rgba(0,0,0,0.18)" stroke-width="1.4" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.6"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.6"/></svg>'}</div>
+        <div class="big">Narrow it down</div>
+        <div class="sub">Pick a type, collection, tag, color or source on the left — or start typing — and matching saves fill this grid.</div></div>`
+    : `<div style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0">
+        <div style="padding:14px 22px;border-bottom:1px solid var(--hairline)">
+          <div class="field"><span>${I.search}</span><input value="poster" /><span class="kbd">esc</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+            <span class="label" style="margin-right:2px"><span class="count">2,108</span> results</span>
+            <span class="chip on">Images <span class="x">×</span></span>
+            <span class="chip on">Type studies <span class="x">×</span></span>
+            <span class="chip on" style="gap:8px"><span style="width:11px;height:11px;border-radius:50%;background:#007aff;display:inline-block"></span>Blue <span class="x">×</span></span>
+            <button class="linkbtn" style="margin-left:4px">Clear filters</button>
+          </div>
+        </div>
+        <div class="scroll" style="flex:1 1 auto;padding:16px 22px 28px">${masonry(SAVES.slice(2,37),3)}</div>
+      </div>`;
+  return `<div style="display:flex;flex:1 1 auto;min-height:0">${rail}${main}</div>`;
+}
+
+/* ─────────────────────────  iteration 3 — triage list  ─────────────── */
+function listRow(s, sel=false){
+  return `<div class="row ${sel?'sel':''}">
+    <div class="rthumb" style="background:${grad(s.i)}"></div>
+    <div class="rmain"><div class="rt">${s.title}</div><div class="rs">${s.src}${s.type!=='image'?dot+s.type:''}</div></div>
+    <div class="rtags">${s.tags.map(t=>`<span class="tg">${t}</span>`).join('')}</div>
+    <div class="rdate">${s.date}</div>
+  </div>`;
+}
+function iter3(empty){
+  if(empty){
+    return shell(`<div style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--hairline)"><div class="field"><span>${I.search}</span><input placeholder="Search 4,128 saves — title, tag, source…" /><span class="kbd">⌘K</span></div></div>
+      <div class="empty-wrap"><div class="big">Type to start scanning</div><div class="sub">Results land as a dense, keyboard-driven list. Use ↑ ↓ to move, ⏎ to open, ⌘⏎ to open in a new peek.</div></div></div>`);
+  }
+  const rows = SAVES.slice(0,26).map((s,k)=>listRow(s,k===2)).join('');
+  return shell(`<div style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--hairline)">
+      <div class="field"><span>${I.search}</span><input value="editorial layout" /><span class="kbd">esc</span></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:11px">
+        <span class="label"><span class="count">486</span> results</span>
+        <span style="font-size:var(--xs);color:var(--text-tertiary)">↑↓ navigate ${dot} ⏎ open ${dot} ⌘⏎ peek</span>
+        <div style="margin-left:auto;display:flex;gap:6px"><span class="chip">title</span><span class="chip">tag</span><span class="chip">source</span></div>
+      </div>
+    </div>
+    <div class="scroll" style="flex:1 1 auto;padding:8px 12px">${rows}</div>
+  </div>`);
+}
+
+/* ─────────────────────────  iteration 4 — split inspector  ─────────── */
+function iter4(empty){
+  if(empty){
+    return shell(`<div class="empty-wrap"><div class="big">Find, then verify</div><div class="sub">A compact result list on the left, a large live preview on the right — confirm the exact save without leaving search.</div></div>`);
+  }
+  const sel = SAVES[4];
+  const rows = SAVES.slice(0,16).map((s,k)=>`
+    <div class="row ${k===4?'sel':''}" style="padding:7px 10px">
+      <div class="rthumb" style="width:40px;height:40px;background:${grad(s.i)}"></div>
+      <div class="rmain"><div class="rt" style="font-size:var(--sm)">${s.title}</div><div class="rs">${s.src}</div></div>
+    </div>`).join('');
+  const left = `<div style="flex:0 0 360px;border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0">
+    <div style="padding:14px;border-bottom:1px solid var(--hairline)"><div class="field"><span>${I.search}</span><input value="risograph" /></div>
+      <div style="margin-top:9px"><span class="label"><span class="count">128</span> results</span></div></div>
+    <div class="scroll" style="flex:1 1 auto;padding:6px 8px">${rows}</div>
+  </div>`;
+  const right = `<div style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0;background:repeating-conic-gradient(rgba(0,0,0,0.015) 0% 25%, transparent 0% 50%) 0/22px 22px">
+    <div class="scroll" style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;padding:30px">
+      <div style="width:min(440px,80%);">
+        <div style="width:100%;height:300px;border-radius:var(--r-xl);background:${grad(sel.i)};box-shadow:var(--shadow-pop)"></div>
+      </div>
+    </div>
+    <div style="flex:0 0 auto;border-top:1px solid var(--border);background:var(--surface-1);padding:16px 22px">
+      <div style="font-size:var(--lg);font-weight:600;letter-spacing:-0.01em">${sel.title}</div>
+      <div style="font-size:var(--sm);color:var(--text-tertiary);margin:4px 0 12px">${sel.src}${dot}saved ${sel.date} ago${dot}1240 × 1600</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">${sel.tags.concat(['print','color']).map(t=>`<span class="chip">${I.hash}${t}</span>`).join('')}</div>
+      <div style="display:flex;gap:8px"><button class="softbtn">Open</button><button class="softbtn">Add to collection</button><button class="softbtn" style="margin-left:auto">Find similar</button></div>
+    </div>
+  </div>`;
+  return shell(`<div style="display:flex;flex:1 1 auto;min-height:0">${left}${right}</div>`);
+}
+
+/* ─────────────────────────  iteration 5 — grouped results  ─────────── */
+function groupHeader(title, count){
+  return `<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 12px"><span class="label">${title}</span><span class="count" style="font-size:var(--xs);color:var(--text-tertiary)">${count}</span><button class="linkbtn" style="margin-left:auto">See all</button></div>`;
+}
+function iter5(empty){
+  if(empty){
+    return shell(`<div class="scroll" style="flex:1 1 auto;padding:0 28px">
+      <div style="max-width:760px;margin:46px auto 0">
+        <div class="field" style="border-radius:var(--r-xl);box-shadow:var(--shadow-control)"><span style="width:18px;height:18px">${I.search}</span><input style="font-size:var(--lg)" placeholder="Search collections, tags and saves…" /><span class="kbd">⌘K</span></div>
+        <div style="margin-top:26px">${groupHeader('Popular collections','37')}
+          <div style="display:flex;gap:10px;flex-wrap:wrap">${['Type studies','Posters','3D & render','Photography','Brand refs'].map((n,k)=>`<div class="chip" style="padding:9px 14px"><span style="color:var(--text-tertiary)">${I.folder}</span> ${n} <span class="c">${[420,388,191,640,254][k]}</span></div>`).join('')}</div>
+        </div>
+        <div style="margin-top:22px">${groupHeader('Top tags','214')}
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${TAGSET.slice(0,10).map((t,k)=>`<span class="chip">${I.hash}${t} <span class="c">${512-k*37}</span></span>`).join('')}</div>
+        </div>
+      </div></div>`);
+  }
+  const folders = ['Type studies','Poster archive','Brand references']
+    .map((n,k)=>`<div class="row" style="border:1px solid var(--border);background:#fff;margin-bottom:8px"><span style="color:var(--text-tertiary)">${I.folder}</span><div class="rmain"><div class="rt">${n}</div><div class="rs"><span class="count">${[420,388,254][k]}</span> saves</div></div></div>`).join('');
+  const tags = TAGSET.slice(0,8).map((t,k)=>`<span class="chip">${I.hash}${t} <span class="c">${288-k*21}</span></span>`).join('');
+  return shell(`<div style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0">
+    <div style="padding:16px 28px;border-bottom:1px solid var(--hairline)"><div class="field" style="max-width:none"><span>${I.search}</span><input value="type" /><span class="kbd">esc</span></div></div>
+    <div class="scroll" style="flex:1 1 auto;padding:18px 28px 30px">
+      ${groupHeader('Collections','3 matches')}
+      <div style="max-width:520px;margin-bottom:26px">${folders}</div>
+      ${groupHeader('Tags','8 matches')}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:28px">${tags}</div>
+      ${groupHeader('Saves','1,944 matches')}
+      ${masonry(SAVES.slice(0,28),4)}
+    </div>
+  </div>`);
+}
+
+/* ─────────────────────────  wiring  ───────────────────────── */
+const ITERS = [
+  {n:1, name:'Search-first canvas', why:'A single oversized query field owns the page; results stream in as a scrollable masonry below. For people who think “type, then browse.”', fn:iter1, hasEmpty:true},
+  {n:2, name:'Faceted finder', why:'A persistent left rail of filters — type, collection, tag, source, color, date — narrows a huge library without retyping. For power users who refine.', fn:iter2, hasEmpty:true},
+  {n:3, name:'Triage list', why:'Dense, keyboard-driven rows built to scan thousands of hits at a glance. For fast finders who live on the arrow keys.', fn:iter3, hasEmpty:true},
+  {n:4, name:'Split inspector', why:'Compact results list on the left, a big live preview on the right — confirm the exact save without opening it. For careful pickers.', fn:iter4, hasEmpty:true},
+  {n:5, name:'Grouped results', why:'One query, answers bucketed into Collections / Tags / Saves with “see all”. For when you’re not yet sure what you’re after.', fn:iter5, hasEmpty:true},
+];
+let cur=1, empty=false;
+
+function paint(){
+  const it = ITERS[cur-1];
+  document.getElementById('gos').innerHTML = it.fn(empty);
+  document.getElementById('meta').innerHTML =
+    `<div class="name"><span class="num">${it.n}</span>${it.name}</div>
+     <div class="why">${it.why}</div>
+     ${it.hasEmpty ? `<div class="state-toggle">
+        <button class="${!empty?'on':''}" data-st="results">Results</button>
+        <button class="${empty?'on':''}" data-st="empty">Empty state</button></div>` : ''}`;
+  document.querySelectorAll('.proto-tab').forEach(t=>t.classList.toggle('active', +t.dataset.n===cur));
+  document.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>{ empty = b.dataset.st==='empty'; paint(); });
+}
+const tabsEl=document.getElementById('tabs');
+tabsEl.innerHTML = ITERS.map(it=>`<button class="proto-tab" data-n="${it.n}"><span class="n">${it.n}</span>${it.name}</button>`).join('');
+tabsEl.querySelectorAll('.proto-tab').forEach(t=>t.onclick=()=>{ cur=+t.dataset.n; empty=false; paint(); });
+window.addEventListener('keydown', e=>{ if(e.key>='1'&&e.key<='5'){ cur=+e.key; empty=false; paint(); } });
+paint();
+</script>
+</body>
+</html>
