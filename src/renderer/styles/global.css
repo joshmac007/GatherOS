@@ -655,22 +655,46 @@ body:has(.selection-bar) .trash-toast {
   animation-duration: var(--dur-medium);
 }
 
-/* Rainbow theme-switch sweep — a full-screen gradient that wipes across
-   to cover the window, the theme swaps underneath at the cover point,
-   then it wipes away to reveal the new theme. Driven by ThemeToggle via
-   the Web Animations API (clip-path inset wipe). */
-.theme-sweep {
+/* Rainbow theme-switch — a soft gradient BAND sweeps across while the
+   new theme is revealed behind it (glimm-style). The band is a real
+   element given a view-transition-name only while armed, so it rides in
+   the transition's top layer and tweens left→right between snapshots;
+   the old root is clip-wiped away underneath it (see ThemeToggle). */
+.glimm-band {
   position: fixed;
-  inset: 0;
-  z-index: 99998;
+  top: 0;
+  bottom: 0;
+  left: -60vw;
+  width: 50vw;
+  opacity: 0;
   pointer-events: none;
-  clip-path: inset(0 100% 0 0);
+  z-index: 99998;
   background: linear-gradient(
     115deg,
     #ff3b30, #ff9500, #ffcc00, #34c759, #32ade6, #007aff, #5e5ce6, #af52de, #ff2d55
   );
+  filter: blur(8px);
 }
-@media (prefers-reduced-motion: reduce) { .theme-sweep { display: none; } }
+.glimm-band--armed { opacity: 1; view-transition-name: glimmband; }
+.glimm-band--swept { left: 130vw; }
+
+::view-transition-group(glimmband) {
+  animation-duration: 0.7s;
+  animation-timing-function: cubic-bezier(0.5, 0, 0.2, 1);
+}
+
+/* Theme sweep root behaviour, scoped so the focused-view morph's root
+   cross-fade is untouched. Old snapshot on top, clip-wiped away to
+   reveal the new theme underneath as the band passes. */
+:root.theme-sweeping::view-transition-old(root),
+:root.theme-sweeping::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+:root.theme-sweeping::view-transition-old(root) { z-index: 2; }
+:root.theme-sweeping::view-transition-new(root) { z-index: 1; }
+
+@media (prefers-reduced-motion: reduce) { .glimm-band { display: none; } }
 
 /* Stage-1 placeholder for Folders / Boards modes. Removed in
    subsequent stages when each mode lands its real tile grid. */
