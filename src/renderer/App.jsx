@@ -488,6 +488,10 @@ export default function App({ entitlement } = {}) {
     }
     setHoveredSaveId((curr) => (curr === leftId ? null : curr));
   }, []);
+  // Stable so memoized ImageCards don't re-render when this prop is
+  // recreated — an inline arrow here would defeat React.memo on every
+  // card.
+  const handleCardForceClick = useCallback((id) => setPeekedSaveId(id), []);
   // Tracks which save is currently morphing between grid and focused
   // view. Used to attach the matching view-transition-name on both
   // source (masonry image) and target (focused image) so the browser
@@ -3182,7 +3186,7 @@ export default function App({ entitlement } = {}) {
                   onContextMenu={handleCardContextMenu}
                   onDragStart={handleCardDragStart}
                   onHover={handleCardHover}
-                  onForceClick={(id) => setPeekedSaveId(id)}
+                  onForceClick={handleCardForceClick}
                   columns={gridColumns}
                   loading={loading}
                   view={view}

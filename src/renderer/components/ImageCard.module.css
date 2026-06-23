@@ -11,6 +11,15 @@
   font: inherit;
   animation: cardIn var(--dur-medium) var(--ease-out) both;
   animation-delay: var(--card-stagger, 0ms);
+  /* Let the browser skip layout + paint for cards scrolled out of
+     view. With thousands of saves the masonry holds thousands of live
+     nodes; without this every scroll frame re-paints the whole tree.
+     The `auto` keyword remembers each card's real rendered size once
+     it's been seen, so the scrollbar stays stable; 280px is just the
+     first-paint estimate for not-yet-rendered cards. Card width comes
+     from the flex column stretch, so only the height estimate matters. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
 }
 
 @keyframes cardIn {

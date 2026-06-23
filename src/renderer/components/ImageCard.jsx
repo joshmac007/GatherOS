@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './ImageCard.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
@@ -54,7 +54,13 @@ function ChevronRightIcon() {
   );
 }
 
-export default function ImageCard({
+// Wrapped in memo (see the default export below) so hovering or
+// selecting one card doesn't re-render every other card in the grid.
+// At thousands of saves an unmemoized card meant every cursor move
+// (hoveredSaveId updates on each enter/leave) re-rendered the whole
+// grid — the main cause of scroll jank. All callback props from App
+// are stable (useCallback), so the shallow compare holds.
+function ImageCard({
   record,
   columns = 4,
   selected,
@@ -552,3 +558,5 @@ export default function ImageCard({
     </button>
   );
 }
+
+export default memo(ImageCard);
