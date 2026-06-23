@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Libraries settings pane — five directions</title>
+<style>
+  :root{
+    --bg:#FAFAF9; --surface:#FAFAF9;
+    --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.12); --hair:rgba(0,0,0,0.06);
+    --t1:#000; --t2:rgba(0,0,0,0.55); --t3:rgba(0,0,0,0.40);
+    --ink:#000; --ink-faint:rgba(0,0,0,0.06); --ink-soft:rgba(0,0,0,0.10); --ring:rgba(0,0,0,0.25);
+    --hover:#EAEAEA; --activebg:#E8E8E8;
+    --btn-from:#F6F6F3; --btn-to:#F1F1EE; --btn-border:rgba(0,0,0,0.05);
+    --r-sm:4px; --r-md:7px; --r-lg:10px; --r-xl:14px; --r-pill:999px;
+    --ease:cubic-bezier(0.32,0.72,0,1);
+    --sh-card:0 0 0 1px #fff inset, 0 4px 20px rgba(0,0,0,0.05);
+    --sh-ctrl:0 1px 3px -1px rgba(16,16,19,0.05);
+    --sh-pop:0 4px 14px rgba(0,0,0,0.08), 0 18px 48px rgba(0,0,0,0.14);
+    --font:'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+    --red:#c1322a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{font-family:var(--font);color:var(--t1);background:#0e0e10;font-size:13px;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+
+  /* chooser chrome */
+  .pbar{flex:0 0 auto;display:flex;align-items:center;gap:18px;height:48px;padding:0 16px;background:#161618;color:#fff;border-bottom:1px solid rgba(255,255,255,0.08);}
+  .ptitle{font-size:12px;font-weight:600;white-space:nowrap;}
+  .ptabs{display:flex;gap:4px;flex-wrap:wrap;}
+  .ptab{appearance:none;border:1px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.62);font-family:inherit;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all 120ms var(--ease);}
+  .ptab:hover{background:rgba(255,255,255,0.08);color:#fff;}
+  .ptab .n{font-variant-numeric:tabular-nums;opacity:.55;}
+  .ptab.on{background:#fff;color:#000;border-color:#fff;}
+  .phint{margin-left:auto;font-size:11px;color:rgba(255,255,255,0.45);white-space:nowrap;}
+  .pmeta{flex:0 0 auto;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:11px 20px;background:#1f1f22;color:#fff;border-bottom:1px solid rgba(255,255,255,0.06);}
+  .pmeta .nm{font-size:13px;font-weight:600;}
+  .pmeta .nm .num{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:8px;border-radius:4px;background:rgba(255,255,255,0.14);font-size:11px;font-variant-numeric:tabular-nums;}
+  .pmeta .why{font-size:12px;color:rgba(255,255,255,0.6);max-width:780px;line-height:1.45;}
+
+  /* stage + modal */
+  .stage{flex:1 1 auto;min-height:0;overflow:auto;padding:34px;display:flex;justify-content:center;align-items:flex-start;}
+  .modal{width:100%;max-width:760px;background:var(--surface);border-radius:var(--r-xl);box-shadow:0 18px 60px rgba(0,0,0,0.45);padding:40px 44px 44px;}
+  .pane{display:none;}
+  .pane.on{display:block;}
+  .h1{font-size:32px;font-weight:600;letter-spacing:-0.02em;margin:0 0 8px;}
+  .desc{font-size:13px;color:var(--t2);line-height:1.5;margin:0 0 26px;max-width:540px;}
+
+  .glyph{display:inline-flex;color:var(--t2);}
+  .count{font-variant-numeric:tabular-nums;}
+  .ink-pill{display:inline-flex;align-items:center;gap:5px;background:var(--ink);color:#fff;font-size:11px;font-weight:500;padding:3px 9px;border-radius:999px;letter-spacing:.01em;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--ink);display:inline-block;}
+
+  .btn{appearance:none;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;border-radius:var(--r-lg);padding:9px 15px;display:inline-flex;align-items:center;gap:8px;transition:all 120ms var(--ease);}
+  .btn-primary{background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:var(--r-pill);}
+  .btn-primary:hover{background:#1f1f1f;}
+  .btn-soft{background:linear-gradient(var(--btn-from),var(--btn-to));border:1px solid var(--btn-border);color:var(--t1);box-shadow:var(--sh-ctrl);}
+  .btn-soft:hover{background:var(--hover);}
+
+  .iconbtn{appearance:none;border:none;background:transparent;color:var(--t3);width:28px;height:28px;border-radius:var(--r-md);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all 100ms var(--ease);}
+  .iconbtn:hover{background:var(--hover);color:var(--t1);}
+
+  /* overflow menu */
+  .menuwrap{position:relative;}
+  .menu{position:absolute;right:0;top:32px;min-width:188px;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh-pop);padding:5px;z-index:20;display:none;}
+  .menu.open{display:block;}
+  .menu button{appearance:none;width:100%;text-align:left;border:none;background:transparent;font-family:inherit;font-size:13px;color:var(--t1);padding:8px 10px;border-radius:var(--r-md);cursor:pointer;display:flex;align-items:center;gap:9px;}
+  .menu button:hover{background:var(--hover);}
+  .menu .sep{height:1px;background:var(--hair);margin:5px 2px;}
+  .menu .del{color:var(--red);}
+  .menu .del:hover{background:rgba(193,50,42,0.08);}
+
+  /* thumb stack helper */
+  .stack{position:relative;flex:0 0 auto;}
+  .stack i{position:absolute;border-radius:var(--r-md);box-shadow:0 1px 2px rgba(0,0,0,.12), 0 0 0 1px rgba(255,255,255,.7) inset;}
+
+  /* ───────── iter 1: refined list ───────── */
+  .l1{display:flex;flex-direction:column;gap:8px;}
+  .l1 .row{display:flex;align-items:center;gap:14px;padding:13px 14px;border:1px solid var(--border);border-radius:var(--r-lg);background:#fff;transition:all 120ms var(--ease);}
+  .l1 .row:hover{background:#fff;border-color:var(--border-strong);box-shadow:var(--sh-ctrl);}
+  .l1 .row.active{background:rgba(0,0,0,0.035);border-color:transparent;box-shadow:0 0 0 1.5px var(--ink) inset;}
+  .l1 .tile{width:38px;height:38px;border-radius:var(--r-md);background:rgba(0,0,0,0.05);display:flex;align-items:center;justify-content:center;color:var(--t2);flex:0 0 auto;}
+  .l1 .row.active .tile{background:var(--ink);color:#fff;}
+  .l1 .main{flex:1 1 auto;min-width:0;}
+  .l1 .nm{font-size:14px;font-weight:500;display:flex;align-items:center;gap:9px;}
+  .l1 .meta{font-size:12px;color:var(--t3);margin-top:2px;}
+  .l1 .right{display:flex;align-items:center;gap:6px;flex:0 0 auto;}
+  .l1 .switch{opacity:0;font-size:12px;color:var(--t2);background:transparent;border:none;cursor:pointer;padding:5px 8px;border-radius:var(--r-md);font-family:inherit;}
+  .l1 .row:hover .switch{opacity:1;}
+  .l1 .switch:hover{background:var(--hover);color:var(--t1);}
+  .l1 .renameinput{font-family:inherit;font-size:14px;font-weight:500;color:#000;background:#fff;border:1px solid rgba(0,0,0,0.10);border-radius:var(--r-md);padding:5px 9px;width:200px;outline:none;box-shadow:0 0 0 3px rgba(0,0,0,0.06);}
+  .footrow{margin-top:22px;display:flex;align-items:center;gap:12px;}
+  .foothint{font-size:12px;color:var(--t3);}
+
+  /* ───────── iter 2: card grid ───────── */
+  .l2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .l2 .card{position:relative;border:1px solid var(--border);border-radius:var(--r-xl);background:#fff;padding:16px;box-shadow:var(--sh-card);transition:all 140ms var(--ease);cursor:pointer;}
+  .l2 .card:hover{transform:translateY(-2px);box-shadow:0 0 0 1px #fff inset,0 10px 28px rgba(0,0,0,0.09);}
+  .l2 .card.active{box-shadow:0 0 0 1.5px var(--ink), 0 4px 20px rgba(0,0,0,0.06);}
+  .l2 .covers{height:74px;position:relative;margin-bottom:14px;}
+  .l2 .badge{position:absolute;top:14px;right:14px;}
+  .l2 .nm{font-size:15px;font-weight:600;letter-spacing:-0.01em;}
+  .l2 .meta{font-size:12px;color:var(--t3);margin-top:3px;}
+  .l2 .ovf{position:absolute;bottom:12px;right:10px;opacity:0;}
+  .l2 .card:hover .ovf{opacity:1;}
+  .l2 .add{border:1.5px dashed var(--border-strong);background:transparent;border-radius:var(--r-xl);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--t2);cursor:pointer;min-height:150px;transition:all 120ms var(--ease);}
+  .l2 .add:hover{background:rgba(0,0,0,0.02);color:var(--t1);border-color:var(--t3);}
+
+  /* ───────── iter 3: shelf / spines ───────── */
+  .l3wrap{padding:18px 6px 0;}
+  .l3{display:flex;align-items:flex-end;gap:14px;padding-bottom:18px;position:relative;}
+  .l3:after{content:"";position:absolute;left:-6px;right:-6px;bottom:10px;height:14px;border-radius:6px;background:linear-gradient(rgba(0,0,0,0.06),rgba(0,0,0,0));}
+  .spine{position:relative;width:62px;height:186px;border-radius:8px 8px 4px 4px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:14px 0 12px;cursor:pointer;box-shadow:var(--sh-ctrl), 0 0 0 1px rgba(0,0,0,0.05) inset;transition:all 160ms var(--ease);color:#1a1a1a;}
+  .spine:hover{transform:translateY(-6px);}
+  .spine.active{height:208px;box-shadow:0 0 0 2px var(--ink), 0 10px 26px rgba(0,0,0,0.16);transform:translateY(-6px);}
+  .spine .sname{writing-mode:vertical-rl;text-orientation:mixed;font-size:14px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap;}
+  .spine .scount{font-size:10px;font-variant-numeric:tabular-nums;color:rgba(0,0,0,0.5);}
+  .spine .sdot{position:absolute;top:9px;width:7px;height:7px;border-radius:50%;background:var(--ink);opacity:0;}
+  .spine.active .sdot{opacity:1;}
+  .spine.add{background:transparent;border:1.5px dashed var(--border-strong);box-shadow:none;color:var(--t3);justify-content:center;}
+  .spine.add:hover{background:rgba(0,0,0,0.02);color:var(--t1);transform:translateY(-2px);}
+  .l3foot{margin-top:6px;display:flex;align-items:center;gap:12px;}
+
+  /* ───────── iter 4: active hero + switcher ───────── */
+  .hero{border:1px solid var(--border);border-radius:var(--r-xl);background:#fff;box-shadow:var(--sh-card);padding:20px;display:flex;gap:18px;align-items:center;}
+  .hero .covers{width:128px;height:84px;position:relative;flex:0 0 auto;}
+  .hero .hmain{flex:1 1 auto;min-width:0;}
+  .hero .hname{font-size:22px;font-weight:600;letter-spacing:-0.015em;display:flex;align-items:center;gap:10px;}
+  .hero .hstats{font-size:13px;color:var(--t2);margin-top:6px;}
+  .hero .hacts{display:flex;gap:8px;margin-top:14px;}
+  .switchhdr{font-size:11px;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;color:var(--t3);margin:26px 0 10px;}
+  .l4list{display:flex;flex-direction:column;gap:2px;}
+  .l4row{display:flex;align-items:center;gap:12px;padding:10px 10px;border-radius:var(--r-md);cursor:pointer;transition:background 100ms var(--ease);}
+  .l4row:hover{background:var(--hover);}
+  .l4row .tile{width:30px;height:30px;border-radius:var(--r-sm);background:rgba(0,0,0,0.05);display:flex;align-items:center;justify-content:center;color:var(--t2);flex:0 0 auto;}
+  .l4row .nm{font-size:13px;font-weight:500;flex:1 1 auto;}
+  .l4row .ct{font-size:12px;color:var(--t3);}
+  .l4row .go{opacity:0;color:var(--t3);}
+  .l4row:hover .go{opacity:1;}
+
+  /* ───────── iter 5: dense table ───────── */
+  .l5{border:1px solid var(--border);border-radius:var(--r-lg);overflow:visible;background:#fff;box-shadow:var(--sh-ctrl);}
+  .l5 .thead,.l5 .trow{display:grid;grid-template-columns:1fr 88px 96px 36px;align-items:center;gap:8px;padding:0 14px;}
+  .l5 .thead{height:36px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.015);font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--t3);font-weight:600;}
+  .l5 .thead .r,.l5 .trow .r{text-align:right;}
+  .l5 .trow{height:48px;border-bottom:1px solid var(--hair);font-size:13px;transition:background 100ms var(--ease);}
+  .l5 .trow:last-child{border-bottom:none;}
+  .l5 .trow:hover{background:rgba(0,0,0,0.025);}
+  .l5 .trow.active{background:rgba(0,0,0,0.04);}
+  .l5 .ncell{display:flex;align-items:center;gap:10px;min-width:0;}
+  .l5 .ncell .g{color:var(--t3);display:inline-flex;}
+  .l5 .nm{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .l5 .num{font-variant-numeric:tabular-nums;color:var(--t2);}
+  .l5 .upd{color:var(--t3);font-size:12px;}
+  .l5foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+</style>
+</head>
+<body>
+  <header class="pbar">
+    <div class="ptitle">Libraries settings pane</div>
+    <nav class="ptabs" id="tabs"></nav>
+    <div class="phint">press 1–5</div>
+  </header>
+  <div class="pmeta" id="meta"></div>
+  <main class="stage"><div class="modal" id="modal"></div></main>
+
+<script>
+const I = {
+  lib:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M8 5v14"/><rect x="12" y="4" width="9" height="16" rx="1"/></svg>',
+  dots:'<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  arrow:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  switch:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+  pencil:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>',
+};
+const HUES=[210,28,150,275,52,330];
+function grad(i){const h=HUES[i%HUES.length];return `linear-gradient(150deg,hsl(${h} 46% 76%),hsl(${(h+26)%360} 50% 58%))`;}
+const LIBS=[
+  {name:'Library',count:29,active:true,updated:'just now'},
+  {name:'Inspiration',count:412,updated:'2d ago'},
+  {name:'Client work',count:88,updated:'5d ago'},
+  {name:'Archive',count:1204,updated:'3w ago'},
+  {name:'New',count:0,updated:'1mo ago'},
+];
+const fmt=n=>n.toLocaleString();
+function menu(){return `<div class="menuwrap"><button class="iconbtn" data-menu-trigger>${I.dots}</button>
+  <div class="menu" data-menu>
+    <button>${I.switch} Switch to this library</button>
+    <button>${I.pencil} Rename</button>
+    <div class="sep"></div>
+    <button class="del">${I.trash} Delete</button>
+  </div></div>`;}
+function covers(i,w,h){
+  const base=`width:${w}px;height:${h}px`;
+  return `<div class="stack" style="${base}">
+    <i style="${base};left:0;top:0;transform:rotate(-7deg) translateX(-6px);background:${grad(i+2)};opacity:.8"></i>
+    <i style="${base};left:0;top:0;transform:rotate(5deg) translateX(7px);background:${grad(i+1)};opacity:.9"></i>
+    <i style="${base};left:0;top:0;background:${grad(i)}"></i>
+  </div>`;
+}
+const header=`<h1 class="h1">Libraries</h1><p class="desc">Each library is its own set of saves, collections, and spaces. Switch between them from the toolbar; rename or delete any of them here.</p>`;
+
+/* iter 1 — refined list */
+function iter1(){
+  const rows=LIBS.map((l,i)=>{
+    if(i===2){ // show inline rename on one row
+      return `<div class="row"><span class="tile">${I.lib}</span>
+        <div class="main"><input class="renameinput" value="Client work"/></div>
+        <div class="right"><button class="switch">Switch</button>${menu()}</div></div>`;
+    }
+    return `<div class="row ${l.active?'active':''}">
+      <span class="tile">${I.lib}</span>
+      <div class="main"><div class="nm">${l.name}${l.active?'<span class="ink-pill">Active</span>':''}</div>
+      <div class="meta"><span class="count">${fmt(l.count)}</span> saves</div></div>
+      <div class="right">${l.active?'':'<button class="switch">Switch</button>'}${menu()}</div>
+    </div>`;
+  }).join('');
+  return header+`<div class="l1">${rows}</div>
+    <div class="footrow"><button class="btn btn-primary">${I.plus} New library</button>
+      <span class="foothint">5 libraries · 1,733 saves total</span></div>`;
+}
+
+/* iter 2 — card grid */
+function iter2(){
+  const cards=LIBS.map((l,i)=>`<div class="card ${l.active?'active':''}">
+    <div class="covers">${covers(i,96,74)}</div>
+    ${l.active?'<span class="badge ink-pill">Active</span>':''}
+    <div class="nm">${l.name}</div>
+    <div class="meta"><span class="count">${fmt(l.count)}</span> saves</div>
+    <div class="ovf">${menu()}</div>
+  </div>`).join('');
+  return header+`<div class="l2">${cards}
+    <button class="add">${I.plus}<span style="font-size:13px;font-weight:500">New library</span></button>
+  </div>`;
+}
+
+/* iter 3 — shelf / spines */
+function iter3(){
+  const spines=LIBS.map((l,i)=>`<div class="spine ${l.active?'active':''}" style="background:${grad(i)}">
+    <span class="sdot"></span>
+    <span class="sname">${l.name}</span>
+    <span class="scount">${fmt(l.count)}</span>
+  </div>`).join('');
+  return header+`<div class="l3wrap"><div class="l3">${spines}
+    <div class="spine add">${I.plus}</div>
+  </div></div>
+  <div class="l3foot"><button class="btn btn-primary">${I.plus} New library</button>
+    <span class="foothint">Click a spine to switch · ⋯ on hover to manage</span></div>`;
+}
+
+/* iter 4 — active hero + switcher */
+function iter4(){
+  const active=LIBS.find(l=>l.active);
+  const others=LIBS.filter(l=>!l.active);
+  const rows=others.map((l,i)=>`<div class="l4row">
+    <span class="tile">${I.lib}</span>
+    <span class="nm">${l.name}</span>
+    <span class="ct"><span class="count">${fmt(l.count)}</span> saves</span>
+    <span class="go">${I.arrow}</span>
+    ${menu()}
+  </div>`).join('');
+  return header+`<div class="hero">
+      <div class="covers">${covers(0,128,84)}</div>
+      <div class="hmain">
+        <div class="hname">${active.name}<span class="ink-pill">Active</span></div>
+        <div class="hstats"><span class="count">29</span> saves · 6 collections · 2 spaces</div>
+        <div class="hacts"><button class="btn btn-soft">${I.pencil} Rename</button><button class="btn btn-soft">${I.trash} Delete</button></div>
+      </div>
+    </div>
+    <div class="switchhdr">Switch to</div>
+    <div class="l4list">${rows}</div>
+    <div class="footrow"><button class="btn btn-primary">${I.plus} New library</button></div>`;
+}
+
+/* iter 5 — dense table */
+function iter5(){
+  const rows=LIBS.map((l,i)=>`<div class="trow ${l.active?'active':''}">
+    <div class="ncell"><span class="g">${I.lib}</span><span class="nm">${l.name}</span>${l.active?'<span class="dot" title="Active"></span>':''}</div>
+    <div class="r num">${fmt(l.count)}</div>
+    <div class="r upd">${l.updated}</div>
+    <div class="r">${menu()}</div>
+  </div>`).join('');
+  return header+`<div class="l5">
+    <div class="thead"><div>Name</div><div class="r">Saves</div><div class="r">Updated</div><div></div></div>
+    ${rows}
+  </div>
+  <div class="l5foot"><span class="foothint">5 libraries · 1,733 saves total</span>
+    <button class="btn btn-primary">${I.plus} New library</button></div>`;
+}
+
+const ITERS=[
+  {n:1,name:'Refined list',why:'A polished take on what’s there: roomier rows, an ink “Active” pill + inset ring, a hover-revealed “Switch”, and inline rename. Lowest-risk, most familiar.',fn:iter1},
+  {n:2,name:'Cover cards',why:'Each library becomes a card with a little fanned stack of its saves, so you recognize them by their contents. The most visual, browse-y feel.',fn:iter2},
+  {n:3,name:'Shelf of spines',why:'Libraries as book spines on a shelf — the active one pulled forward. Playful and on-brand for a “collections” tool; trades density for character.',fn:iter3},
+  {n:4,name:'Active hero + switcher',why:'One big panel for the library you’re in (with stats + actions), the rest a compact switch list. Best when people mostly live in one library.',fn:iter4},
+  {n:5,name:'Dense manager',why:'A quiet table — name · saves · updated · ⋯ — for power users with many libraries who want to scan and manage fast.',fn:iter5},
+];
+let cur=1;
+function paint(){
+  const it=ITERS[cur-1];
+  document.getElementById('modal').innerHTML=`<div class="pane on">${it.fn()}</div>`;
+  document.getElementById('meta').innerHTML=`<div class="nm"><span class="num">${it.n}</span>${it.name}</div><div class="why">${it.why}</div>`;
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.toggle('on',+t.dataset.n===cur));
+}
+const tabsEl=document.getElementById('tabs');
+tabsEl.innerHTML=ITERS.map(it=>`<button class="ptab" data-n="${it.n}"><span class="n">${it.n}</span>${it.name}</button>`).join('');
+tabsEl.querySelectorAll('.ptab').forEach(t=>t.onclick=()=>{cur=+t.dataset.n;paint();});
+window.addEventListener('keydown',e=>{if(e.key>='1'&&e.key<='5'){cur=+e.key;paint();}});
+// overflow menu toggle (one open at a time)
+document.addEventListener('click',e=>{
+  const trig=e.target.closest('[data-menu-trigger]');
+  document.querySelectorAll('.menu.open').forEach(m=>{ if(!trig || m!==trig.parentElement.querySelector('[data-menu]')) m.classList.remove('open'); });
+  if(trig){const m=trig.parentElement.querySelector('[data-menu]'); if(m) m.classList.toggle('open'); e.stopPropagation();}
+});
+paint();
+</script>
+</body>
+</html>
