@@ -664,13 +664,12 @@ body:has(.selection-bar) .trash-toast {
    berry, …) that ThemeToggle rotates through on each flip. */
 .glimm-band {
   position: fixed;
-  /* A horizontal-ish ribbon, not a full-height bar: keep its vertical
-     reach modest so there's clear empty space above and below for the
-     wave contour to read. */
-  top: -8vh;
-  bottom: -8vh;
+  /* Bleed well past the top and bottom of the window so the colour
+     always fills the full height — no hard top/bottom edge ever shows. */
+  top: -25vh;
+  bottom: -25vh;
   left: 0;
-  width: 42vw;
+  width: 44vw;
   pointer-events: none;
   /* Above every overlay (focused view, onboarding, board) so a flip from
      anywhere shows the sweep. */
@@ -689,18 +688,18 @@ body:has(.selection-bar) .trash-toast {
   --c4: #7b4dff;
   --c5: #e14dd8;
   --c6: #ff9f45;
-  /* Six soft blobs marching across the width at strongly alternating
-     vertical centres — the offset gives the ribbon its wave; each fades
-     to transparent so there are no blocks, then a blur fuses them into
-     one continuous flowing smear that filters through the colourway. */
+  /* Six tall blobs marching across the width at alternating vertical
+     centres — each over-fills the height so the band is full-bleed, while
+     the offset centres make the colour flow diagonally (the "wave") as it
+     filters through the colourway. A blur fuses them into one smear. */
   background:
-    radial-gradient(34% 40% at 6%  38%, var(--c1), transparent 68%),
-    radial-gradient(32% 44% at 24% 62%, var(--c2), transparent 68%),
-    radial-gradient(32% 42% at 42% 36%, var(--c3), transparent 68%),
-    radial-gradient(32% 44% at 60% 64%, var(--c4), transparent 68%),
-    radial-gradient(34% 42% at 78% 38%, var(--c5), transparent 68%),
-    radial-gradient(36% 46% at 96% 60%, var(--c6), transparent 70%);
-  filter: blur(48px) saturate(1.3);
+    radial-gradient(40% 80% at 6%  36%, var(--c1), transparent 70%),
+    radial-gradient(38% 82% at 24% 64%, var(--c2), transparent 70%),
+    radial-gradient(38% 80% at 42% 34%, var(--c3), transparent 70%),
+    radial-gradient(38% 82% at 60% 66%, var(--c4), transparent 70%),
+    radial-gradient(40% 80% at 78% 36%, var(--c5), transparent 70%),
+    radial-gradient(42% 84% at 96% 62%, var(--c6), transparent 72%);
+  filter: blur(52px) saturate(1.3);
 }
 
 /* Colourways — each maps the six blob slots to a palette from the

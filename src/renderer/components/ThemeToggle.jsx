@@ -8,6 +8,10 @@ import { Sun, Moon } from 'lucide-react';
 const COLORWAYS = ['prism', 'berry', 'lagoon', 'citrus', 'azure', 'ember'];
 let colorwayIndex = 0;
 
+// Sweep duration — keep in sync with .glimm-band--sweep in global.css.
+// The theme swap fires at the halfway point.
+const SWEEP_MS = 1100;
+
 // Local-state theme toggle. Reads the current value off the data-theme
 // attribute set on <html> at boot, flips it, mirrors the new value to
 // localStorage via setPref AND to the main process via setTheme so the
@@ -36,16 +40,19 @@ export default function ThemeToggle({ className }) {
 
   function flip() {
     const next = theme === 'dark' ? 'light' : 'dark';
-
-    // Switch the theme straight away — no transition on the swap itself.
-    setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
-    persist(next);
+    const applyTheme = () => {
+      setTheme(next);
+      document.documentElement.setAttribute('data-theme', next);
+      persist(next);
+    };
 
     const reduced = typeof window !== 'undefined'
       && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const el = bandRef.current;
-    if (reduced || !el) return;
+    if (reduced || !el) {
+      applyTheme();
+      return;
+    }
 
     // Pick the next colourway in the rotation.
     const colorway = COLORWAYS[colorwayIndex % COLORWAYS.length];
@@ -60,6 +67,11 @@ export default function ThemeToggle({ className }) {
     el.classList.add(`glimm-band--${colorway}`, 'glimm-band--sweep');
     const done = () => el.classList.remove('glimm-band--sweep');
     el.addEventListener('animationend', done, { once: true });
+
+    // Flip the theme as the gradient crosses the middle of the screen, so
+    // the band visually "carries" the change rather than it snapping up
+    // front. SWEEP_MS mirrors the CSS animation duration.
+    window.setTimeout(applyTheme, SWEEP_MS / 2);
   }
 
   const isDark = theme === 'dark';
