@@ -104,16 +104,6 @@
 }
 
 /* ── Collections row ──────────────────────────────────────────────────── */
-/* Full content width (not the 760px landing column) so the carousel
-   shows as many cards as fit and the arrows only appear on real
-   overflow, not a few stray pixels. */
-.collSection {
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  padding: 18px 28px 4px;
-}
-
 .collArrows {
   margin-left: auto;
   display: flex;
@@ -139,7 +129,7 @@
 
 .collRow {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding: 2px 2px 6px;
@@ -148,7 +138,7 @@
 .collRow::-webkit-scrollbar { display: none; }
 
 .collCard {
-  flex: 0 0 132px;
+  flex: 0 0 124px;
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;

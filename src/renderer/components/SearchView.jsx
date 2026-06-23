@@ -204,9 +204,9 @@ export default function SearchView({
           highlightId={highlightId}
         />
       ) : (
-        <>
+        <div className={styles.landing}>
           {collections.length > 0 && (
-            <section className={styles.collSection}>
+            <section className={styles.section}>
               <div className={styles.sectionHead}>
                 <span className={styles.label}>Your collections</span>
                 {(collArrows.left || collArrows.right) && (
@@ -264,7 +264,6 @@ export default function SearchView({
             </section>
           )}
 
-          <div className={styles.landing}>
           {recents.length > 0 && (
             <section className={styles.section}>
               <div className={styles.sectionHead}>
@@ -312,8 +311,7 @@ export default function SearchView({
           {recents.length === 0 && suggestedTags.length === 0 && collections.length === 0 && (
             <div className={styles.blank}>Start typing to search your whole library.</div>
           )}
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
