@@ -93,18 +93,34 @@ add-on line items. So cloud is baked into the plan variants and enabled
 via a subscription **variant change** (LS "Update Subscription", with
 proration):
 
-- `GatherOS` — $5/mo (base, no cloud)
-- `GatherOS + Cloud 50GB` — $X/mo
-- `GatherOS + Cloud 200GB` — $Y/mo
-- `GatherOS + Cloud 1TB` — $Z/mo
+- `GatherOS` — **$5/mo · $49/yr** (base, no cloud)
+- `GatherOS + 50 GB` — **$9/mo · $89/yr**
+- `GatherOS + 200 GB` — **$13/mo · $129/yr**
+- `GatherOS + 1 TB` — on request (thin margin on R2 at full fill; defer)
 
-Since the base is a single plan, that's ~4 variants — manageable.
+Each variant is the **all-in price with the $5 base baked in** — one
+charge, one LS fee, not a base charge plus a cloud charge. Launch with
+50 GB and 200 GB; 1 TB stays on request until usage justifies it. Since
+the base is a single plan, that's a handful of variants — manageable.
+
+**Margins** (cloud storage COGS at R2 $0.018/GB effective incl. ~20%
+ops/CDN buffer; LS fee = 5% + $0.50 on the single combined charge; AI is
+billed separately and excluded here):
+
+| Variant   | Total $/mo | Cloud COGS @ full fill | LS fee | Net @ full fill | Net @ ~30% used |
+| --------- | ---------- | ---------------------- | ------ | --------------- | --------------- |
+| + 50 GB   | $9         | $0.90                  | $0.95  | **~$7.15**      | ~$7.80          |
+| + 200 GB  | $13        | $3.60                  | $1.15  | **~$8.25**      | ~$10.80         |
+
+Profitable on **every** user even at full fill — the tier caps storage,
+so it caps your liability. Annual is the same math with the flat $0.50
+amortized across the year, so **push annual**.
 
 **In-app upgrade UX:**
 
 > Settings → Storage → toggle "Cloud library" → confirm modal
-> ("Add 50 GB for $X/mo, prorated today") → backend swaps the LS variant
-> → entitlement refreshes → background upload begins.
+> ("Add 50 GB — your plan becomes $9/mo, prorated today") → backend swaps
+> the LS variant → entitlement refreshes → background upload begins.
 
 One subscription, one invoice, card already on file, no checkout overlay.
 The webhook reads the **active variant** to populate `cloud.enabled` +
@@ -174,7 +190,9 @@ verify response, and the data-eviction-on-downgrade flow. Everything else
   metered in `ai_usage_monthly`; still need to set + enforce the monthly
   quotas (e.g. 500 auto-tag ops + 200 semantic-search queries) and a
   "buy more" upsell.
-- Cloud storage tiers + prices (50 GB / 200 GB / 1 TB at what $/mo?).
+- Cloud tiers set: **+50 GB → $9/mo all-in**, **+200 GB → $13/mo all-in**
+  (annual $89 / $129); 1 TB deferred to on-request. Revisit if we ever
+  leave R2 — the margins assume zero egress.
 - Cloud data retention on cancel: grace length before eviction.
 - Refund policy: standard 14-day no-questions-asked is the kindest
   starting point.
