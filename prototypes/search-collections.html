@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Collections on the search page — five directions</title>
+<style>
+  :root{
+    --bg:#FAFAF9;
+    --border:rgba(0,0,0,0.07); --border-strong:rgba(0,0,0,0.12); --hair:rgba(0,0,0,0.06);
+    --t1:#000; --t2:rgba(0,0,0,0.55); --t3:rgba(0,0,0,0.40);
+    --ink:#000; --ink-faint:rgba(0,0,0,0.06); --ink-soft:rgba(0,0,0,0.10);
+    --hover:#EAEAEA;
+    --r-sm:4px; --r-md:7px; --r-lg:10px; --r-xl:14px; --r-pill:999px;
+    --ease:cubic-bezier(0.32,0.72,0,1);
+    --sh-card:0 0 0 1px #fff inset, 0 4px 20px rgba(0,0,0,0.05);
+    --sh-ctrl:0 1px 3px -1px rgba(16,16,19,0.05);
+    --font:'Geist Variable','Geist','SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{font-family:var(--font);color:var(--t1);background:#0e0e10;font-size:13px;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+
+  /* chooser chrome */
+  .pbar{flex:0 0 auto;display:flex;align-items:center;gap:18px;height:48px;padding:0 16px;background:#161618;color:#fff;border-bottom:1px solid rgba(255,255,255,0.08);}
+  .ptitle{font-size:12px;font-weight:600;white-space:nowrap;}
+  .ptabs{display:flex;gap:4px;flex-wrap:wrap;}
+  .ptab{appearance:none;border:1px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.62);font-family:inherit;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all 120ms var(--ease);}
+  .ptab:hover{background:rgba(255,255,255,0.08);color:#fff;}
+  .ptab .n{font-variant-numeric:tabular-nums;opacity:.55;}
+  .ptab.on{background:#fff;color:#000;border-color:#fff;}
+  .phint{margin-left:auto;font-size:11px;color:rgba(255,255,255,0.45);white-space:nowrap;}
+  .pmeta{flex:0 0 auto;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:11px 20px;background:#1f1f22;color:#fff;border-bottom:1px solid rgba(255,255,255,0.06);}
+  .pmeta .nm{font-size:13px;font-weight:600;}
+  .pmeta .nm .num{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:8px;border-radius:4px;background:rgba(255,255,255,0.14);font-size:11px;font-variant-numeric:tabular-nums;}
+  .pmeta .why{font-size:12px;color:rgba(255,255,255,0.6);max-width:740px;line-height:1.45;}
+  .pmeta .toggle{margin-left:auto;display:flex;gap:2px;background:rgba(255,255,255,0.08);padding:2px;border-radius:999px;}
+  .pmeta .toggle button{appearance:none;border:0;background:transparent;color:rgba(255,255,255,0.6);font-family:inherit;font-size:11px;padding:4px 12px;border-radius:999px;cursor:pointer;}
+  .pmeta .toggle button.on{background:#fff;color:#000;}
+
+  /* stage = app content area */
+  .stage{flex:1 1 auto;min-height:0;background:var(--bg);overflow:hidden;display:flex;flex-direction:column;}
+  .scroll{flex:1 1 auto;min-height:0;overflow-y:auto;}
+  .scroll::-webkit-scrollbar{width:11px;}
+  .scroll::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.16);border-radius:99px;border:3px solid var(--bg);}
+
+  /* hero search field */
+  .heroWrap{max-width:760px;margin:0 auto;width:100%;padding:26px 28px 14px;}
+  .field{display:flex;align-items:center;gap:12px;padding:0 18px;background:rgba(0,0,0,0.025);border:1px solid rgba(0,0,0,0.10);border-radius:var(--r-xl);box-shadow:var(--sh-ctrl);}
+  .field.focus{background:#fff;border-color:rgba(0,0,0,0.25);box-shadow:0 0 0 3px rgba(0,0,0,0.06);}
+  .field svg{width:19px;height:19px;color:var(--t3);flex:0 0 auto;}
+  .field input{flex:1 1 auto;min-width:0;border:0;background:transparent;outline:none;font-family:inherit;font-size:18px;letter-spacing:-0.01em;color:var(--t1);padding:16px 0;}
+  .field input::placeholder{color:var(--t3);}
+  .kbd{font-size:11px;color:var(--t3);border:1px solid var(--border);border-radius:var(--r-sm);padding:2px 6px;background:#fff;}
+  .meta{margin-top:12px;font-size:12px;color:var(--t3);}
+  .meta .c{color:var(--t2);font-weight:500;font-variant-numeric:tabular-nums;}
+
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;color:var(--t3);}
+  .seeall{margin-left:auto;border:0;background:transparent;font-family:inherit;font-size:12px;color:var(--t2);cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
+  .seeall:hover{color:var(--t1);}
+
+  .chip{display:inline-flex;align-items:center;gap:7px;font-family:inherit;font-size:12px;color:var(--t2);background:#fff;border:1px solid var(--border);border-radius:var(--r-pill);padding:7px 13px;cursor:pointer;transition:all 100ms var(--ease);white-space:nowrap;}
+  .chip:hover{background:var(--hover);color:var(--t1);}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .chip .cc{font-variant-numeric:tabular-nums;color:var(--t3);}
+  .chip.on .cc{color:rgba(255,255,255,0.6);}
+  .chip .x{opacity:.6;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+
+  .section{max-width:760px;margin:0 auto;width:100%;padding:0 28px;}
+  .section + .section{margin-top:24px;}
+  .sectionHead{display:flex;align-items:baseline;gap:12px;margin-bottom:11px;}
+
+  /* collection cover-card with fanned thumbnails */
+  .ccard{cursor:pointer;}
+  .cfan{position:relative;height:96px;display:flex;align-items:center;justify-content:center;perspective:600px;margin-bottom:12px;}
+  .cthumb{position:absolute;width:78px;height:78px;border-radius:var(--r-md);box-shadow:0 2px 6px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.6) inset;transition:transform var(--ease) 240ms;}
+  .cthumb:nth-child(1){transform:rotate(-7deg) translate(-9px,3px);z-index:1;}
+  .cthumb:nth-child(2){transform:rotate(-2deg) translate(-3px,0);z-index:2;}
+  .cthumb:nth-child(3){transform:rotate(3deg) translate(4px,0);z-index:3;}
+  .cthumb:nth-child(4){transform:rotate(8deg) translate(11px,3px);z-index:4;}
+  .ccard:hover .cthumb:nth-child(1){transform:rotate(-15deg) translate(-26px,6px);}
+  .ccard:hover .cthumb:nth-child(2){transform:rotate(-5deg) translate(-10px,-2px);}
+  .ccard:hover .cthumb:nth-child(3){transform:rotate(6deg) translate(12px,-2px);}
+  .ccard:hover .cthumb:nth-child(4){transform:rotate(16deg) translate(28px,6px);}
+  .cname{font-size:13px;font-weight:600;letter-spacing:-0.01em;}
+  .cmeta{font-size:11px;color:var(--t3);margin-top:2px;font-variant-numeric:tabular-nums;}
+
+  /* masonry results */
+  .masonry{column-gap:12px;}
+  .tile{break-inside:avoid;margin-bottom:12px;border-radius:var(--r-lg);border:1px solid var(--border);box-shadow:var(--sh-card);}
+  .tcap{padding:7px 3px 2px;}
+  .tt{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ts{font-size:11px;color:var(--t3);}
+
+  /* iter 1 — horizontal shelf */
+  .shelf{display:flex;gap:18px;overflow-x:auto;padding:2px 28px 8px;scroll-snap-type:x proximity;}
+  .shelf .ccard{flex:0 0 132px;scroll-snap-align:start;}
+  .shelf::-webkit-scrollbar{height:8px;}
+  .shelf::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.14);border-radius:99px;}
+
+  /* iter 2 — scope chips row */
+  .scoperow{max-width:760px;margin:14px auto 0;width:100%;padding:0 28px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+
+  /* iter 3 — two pane */
+  .twopane{flex:1 1 auto;min-height:0;display:flex;}
+  .rail{flex:0 0 232px;border-right:1px solid var(--border);overflow-y:auto;padding:16px 12px;}
+  .railHead{font-size:11px;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;color:var(--t3);padding:0 8px 8px;}
+  .railRow{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:var(--r-md);cursor:pointer;}
+  .railRow:hover{background:var(--hover);}
+  .railRow.on{background:var(--ink);color:#fff;}
+  .railRow .rg{flex:0 0 auto;color:var(--t3);display:inline-flex;}
+  .railRow.on .rg{color:rgba(255,255,255,0.7);}
+  .railRow .rn{flex:1 1 auto;font-size:13px;font-weight:500;}
+  .railRow .rc{font-size:11px;color:var(--t3);font-variant-numeric:tabular-nums;}
+  .railRow.on .rc{color:rgba(255,255,255,0.55);}
+  .railNew{display:flex;align-items:center;gap:8px;padding:9px 8px;color:var(--t2);font-size:13px;cursor:pointer;border-radius:var(--r-md);}
+  .railNew:hover{background:var(--hover);color:var(--t1);}
+  .paneMain{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;}
+  .paneHead{display:flex;align-items:center;gap:10px;padding:18px 28px 0;}
+  .paneTitle{font-size:18px;font-weight:600;letter-spacing:-0.01em;}
+  .paneCount{font-size:12px;color:var(--t3);font-variant-numeric:tabular-nums;}
+
+  /* iter 4 — sectioned: collection result rows */
+  .crow{display:flex;align-items:center;gap:14px;padding:10px;border:1px solid var(--border);background:#fff;border-radius:var(--r-lg);cursor:pointer;box-shadow:var(--sh-ctrl);}
+  .crow:hover{background:#fff;border-color:var(--border-strong);}
+  .crow .miniFan{position:relative;width:64px;height:48px;flex:0 0 auto;}
+  .crow .miniFan i{position:absolute;width:44px;height:44px;border-radius:var(--r-sm);box-shadow:0 1px 3px rgba(0,0,0,.14),0 0 0 1px rgba(255,255,255,.6) inset;top:2px;}
+  .crow .miniFan i:nth-child(1){left:0;transform:rotate(-8deg);}
+  .crow .miniFan i:nth-child(2){left:10px;transform:rotate(0deg);}
+  .crow .miniFan i:nth-child(3){left:20px;transform:rotate(8deg);}
+  .crowMain{flex:1 1 auto;}
+  .crowName{font-size:14px;font-weight:600;letter-spacing:-0.01em;}
+  .crowMeta{font-size:12px;color:var(--t3);margin-top:2px;font-variant-numeric:tabular-nums;}
+
+  /* iter 5 — browse grid */
+  .browseGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px 16px;max-width:760px;margin:0 auto;width:100%;padding:0 28px;}
+  .gcard{border:1px solid var(--border);border-radius:var(--r-xl);background:#fff;box-shadow:var(--sh-card);padding:14px;cursor:pointer;transition:transform 140ms var(--ease),box-shadow 140ms var(--ease);}
+  .gcard:hover{transform:translateY(-2px);box-shadow:0 0 0 1px #fff inset,0 10px 28px rgba(0,0,0,0.09);}
+  .gadd{border:1.5px dashed var(--border-strong);background:transparent;border-radius:var(--r-xl);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--t2);min-height:148px;cursor:pointer;}
+  .gadd:hover{background:rgba(0,0,0,0.02);color:var(--t1);}
+
+  .pad{height:30px;}
+</style>
+</head>
+<body>
+  <header class="pbar">
+    <div class="ptitle">Collections on the search page</div>
+    <nav class="ptabs" id="tabs"></nav>
+    <div class="phint">press 1–5</div>
+  </header>
+  <div class="pmeta" id="meta"></div>
+  <main class="stage" id="stage"></main>
+
+<script>
+const I={
+  search:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><line x1="10.4" y1="10.4" x2="13.5" y2="13.5"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  hash:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="6" x2="13.5" y2="6"/><line x1="2.5" y1="10" x2="13" y2="10"/><line x1="6.5" y1="2.5" x2="5" y2="13.5"/><line x1="11" y1="2.5" x2="9.5" y2="13.5"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+};
+const HUES=[210,28,150,275,52,330,12,190,96];
+const grad=i=>`linear-gradient(150deg,hsl(${HUES[i%HUES.length]} 46% 76%),hsl(${(HUES[i%HUES.length]+26)%360} 50% 58%))`;
+const COLLS=[
+  {name:'Posters',count:388},
+  {name:'Type studies',count:420},
+  {name:'3D & render',count:191},
+  {name:'Photography',count:640},
+  {name:'Brand refs',count:254},
+  {name:'Client work',count:88},
+];
+const TITLES=['Brutalist poster','Risograph zine','Acid type','Muted gradient','Editorial spread','Swiss grid','Album art','Soft 3D render','Wabi-sabi','Mono UI','Y2K chrome','Botanical','Folded paper','Night market','Product shot','Anti-design','Vaporwave','Letterpress','Concrete','Hand-drawn map'];
+const SRC=['are.na','dribbble.com','x.com','instagram.com','cosmos.so','savee.it'];
+const H=[150,210,260,180,300,230,170,280,200,330,240,190];
+const fmt=n=>n.toLocaleString();
+
+function field(state){
+  const typed = state==='results';
+  return `<div class="heroWrap">
+    <div class="field ${typed?'focus':''}">
+      <span>${I.search}</span>
+      <input value="${typed?'minimal poster':''}" placeholder="Search titles, tags and sources…"/>
+      <span class="kbd">${typed?'esc':'⌘K'}</span>
+    </div>
+    ${typed?'<div class="meta"><span class="c">312</span> results</div>':'<div class="meta"><span class="c">4,128</span> saves · 37 collections</div>'}
+  </div>`;
+}
+function fan(i){
+  return `<div class="cfan">
+    ${[0,1,2,3].map(k=>`<span class="cthumb" style="background:${grad(i+k)}"></span>`).join('')}
+  </div>`;
+}
+function collCard(c,i){
+  return `<div class="ccard">${fan(i)}<div class="cname">${c.name}</div><div class="cmeta">${fmt(c.count)} saves</div></div>`;
+}
+function masonry(n,cols,start){
+  start=start||0;
+  let out='';
+  for(let i=0;i<n;i++){const k=i+start;out+=`<div class="tile" style="height:${H[k%H.length]*0.62}px;background:${grad(k)}"></div>`;}
+  return `<div class="masonry" style="column-count:${cols}">${out}</div>`;
+}
+function masonryCaptioned(n,cols,start){
+  start=start||0;let out='';
+  for(let i=0;i<n;i++){const k=i+start;
+    out+=`<div class="tile" style="break-inside:avoid;margin-bottom:12px;border:none;box-shadow:none"><div style="height:${H[k%H.length]*0.62}px;background:${grad(k)};border-radius:10px;border:1px solid var(--border);box-shadow:var(--sh-card)"></div><div class="tcap"><div class="tt">${TITLES[k%TITLES.length]}</div><div class="ts">${SRC[k%SRC.length]}</div></div></div>`;}
+  return `<div class="masonry" style="column-count:${cols}">${out}</div>`;
+}
+const chips=(arr,fn)=>`<div class="chips">${arr.map(fn).join('')}</div>`;
+
+/* iter 1 — collections shelf in landing */
+function iter1(){
+  return `<div class="scroll">${field('landing')}
+    <div class="section"><div class="sectionHead"><span class="label">Recent</span></div>
+      ${chips(['brutalist poster','muted gradient','risograph','swiss grid'],t=>`<span class="chip">${t}</span>`)}
+    </div>
+    <div class="section"><div class="sectionHead"><span class="label">Jump to a tag</span></div>
+      ${chips(['typography','gradient','3d','editorial','retro','color'],t=>`<span class="chip">${I.hash}${t}</span>`)}
+    </div>
+    <div class="section" style="max-width:none;padding:0"><div class="sectionHead" style="max-width:760px;margin:24px auto 11px;padding:0 28px"><span class="label">Your collections</span><button class="seeall">See all</button></div>
+      <div class="shelf">${COLLS.map((c,i)=>collCard(c,i)).join('')}</div>
+    </div>
+    <div class="pad"></div></div>`;
+}
+
+/* iter 2 — scope chips */
+function iter2(state){
+  const scope=`<div class="scoperow">
+    <span class="label" style="margin-right:2px">In</span>
+    <span class="chip ${state==='results'?'on':''}">${I.folder}Posters ${state==='results'?'<span class="x">×</span>':'<span class="cc">388</span>'}</span>
+    ${['Type studies','3D & render','Photography','Brand refs'].map((n,i)=>`<span class="chip">${I.folder}${n} <span class="cc">${[420,191,640,254][i]}</span></span>`).join('')}
+  </div>`;
+  if(state==='results'){
+    return `<div class="scroll">${field('results')}${scope}
+      <div class="section" style="margin-top:16px"><div class="sectionHead"><span class="label">Searching “minimal poster” in Posters · <span style="text-transform:none;letter-spacing:0">142 results</span></span></div>
+        ${masonryCaptioned(24,4)}
+      </div><div class="pad"></div></div>`;
+  }
+  return `<div class="scroll">${field('landing')}${scope}
+    <div class="section" style="margin-top:18px"><div class="sectionHead"><span class="label">Recent</span></div>
+      ${chips(['brutalist poster','muted gradient','risograph'],t=>`<span class="chip">${t}</span>`)}</div>
+    <div class="pad"></div></div>`;
+}
+
+/* iter 3 — two pane */
+function iter3(){
+  const rail=`<aside class="rail">
+    <div class="railHead">Collections</div>
+    ${COLLS.map((c,i)=>`<div class="railRow ${i===0?'on':''}"><span class="rg">${I.folder}</span><span class="rn">${c.name}</span><span class="rc">${fmt(c.count)}</span></div>`).join('')}
+    <div class="railNew">${I.plus} New collection</div>
+  </aside>`;
+  const main=`<div class="paneMain">
+    <div class="heroWrap" style="max-width:none;padding:18px 28px 12px"><div class="field"><span>${I.search}</span><input placeholder="Search in Posters…"/></div></div>
+    <div class="paneHead" style="padding:4px 28px 0"><span class="paneTitle">Posters</span><span class="paneCount">388 saves</span></div>
+    <div class="scroll" style="padding:14px 28px 28px;margin-top:8px">${masonry(30,3)}</div>
+  </div>`;
+  return `<div class="twopane">${rail}${main}</div>`;
+}
+
+/* iter 4 — sectioned results */
+function iter4(state){
+  if(state==='landing'){
+    return `<div class="scroll">${field('landing')}
+      <div class="section"><div class="sectionHead"><span class="label">Recent</span></div>
+        ${chips(['type','poster','gradient'],t=>`<span class="chip">${t}</span>`)}</div>
+      <div class="section"><div class="sectionHead"><span class="label">Jump to a tag</span></div>
+        ${chips(['typography','editorial','retro','color'],t=>`<span class="chip">${I.hash}${t}</span>`)}</div>
+      <div class="pad"></div></div>`;
+  }
+  const cmatch=[['Type studies',420,1],['Brand refs',254,4]];
+  return `<div class="scroll">${field('results')}
+    <div class="section"><div class="sectionHead"><span class="label">Collections</span><span style="font-size:11px;color:var(--t3)">2 matches</span></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${cmatch.map(([n,ct,h])=>`<div class="crow"><div class="miniFan"><i style="background:${grad(h)}"></i><i style="background:${grad(h+1)}"></i><i style="background:${grad(h+2)}"></i></div><div class="crowMain"><div class="crowName">${n}</div><div class="crowMeta">${fmt(ct)} saves</div></div></div>`).join('')}
+      </div>
+    </div>
+    <div class="section" style="margin-top:24px"><div class="sectionHead"><span class="label">Saves</span><span style="font-size:11px;color:var(--t3)">312 matches</span></div>
+      ${masonryCaptioned(24,4)}
+    </div><div class="pad"></div></div>`;
+}
+
+/* iter 5 — browse grid */
+function iter5(state){
+  if(state==='results'){
+    return `<div class="scroll">${field('results')}
+      <div class="section" style="margin-top:4px"><div class="sectionHead"><span class="label"><span style="text-transform:none;letter-spacing:0"><span class="c" style="color:var(--t2);font-weight:600">312</span> results</span></span></div>
+        ${masonryCaptioned(28,4)}</div><div class="pad"></div></div>`;
+  }
+  return `<div class="scroll">${field('landing')}
+    <div class="section" style="max-width:760px"><div class="sectionHead"><span class="label">Browse collections</span><button class="seeall">All saves</button></div></div>
+    <div class="browseGrid">
+      ${COLLS.map((c,i)=>`<div class="gcard">${fan(i)}<div class="cname">${c.name}</div><div class="cmeta">${fmt(c.count)} saves</div></div>`).join('')}
+      <div class="gadd">${I.plus}<span style="font-size:13px;font-weight:500">New collection</span></div>
+    </div><div class="pad"></div></div>`;
+}
+
+const ITERS=[
+  {n:1,name:'Collections shelf',why:'In the empty state, a horizontal “Your collections” shelf of fanned cover-cards sits beneath Recent + tags. Calmest option — collections are an optional jumping-off point, search stays the star.',fn:()=>iter1()},
+  {n:2,name:'Scope chips',why:'A row of collection chips under the bar that scope the query — “searching in Posters”. For people who know roughly where a thing lives and want to narrow before they type.',states:['landing','results'],fn:iter2},
+  {n:3,name:'Two-pane browse',why:'A slim collections rail beside the results; pick one to browse it, type to filter within. Turns Search into a browse-and-filter home for collection-heavy users.',fn:()=>iter3()},
+  {n:4,name:'Sectioned results',why:'One query, results split into a “Collections” section (matching groups) above the “Saves” masonry — so search spans both without any extra controls.',states:['landing','results'],fn:iter4},
+  {n:5,name:'Browse grid home',why:'Empty query fills the area with a full grid of collection cover-cards — a browse home — that swaps to save results the moment you type. Most collection-forward.',states:['landing','results'],fn:iter5},
+];
+let cur=1, state='landing';
+function paint(){
+  const it=ITERS[cur-1];
+  document.getElementById('stage').innerHTML=it.fn(state);
+  const tog = it.states ? `<div class="toggle">
+    <button class="${state==='landing'?'on':''}" data-s="landing">Empty</button>
+    <button class="${state==='results'?'on':''}" data-s="results">Searching</button></div>` : '';
+  document.getElementById('meta').innerHTML=`<div class="nm"><span class="num">${it.n}</span>${it.name}</div><div class="why">${it.why}</div>${tog}`;
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.toggle('on',+t.dataset.n===cur));
+  document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{state=b.dataset.s;paint();});
+}
+const tabsEl=document.getElementById('tabs');
+tabsEl.innerHTML=ITERS.map(it=>`<button class="ptab" data-n="${it.n}"><span class="n">${it.n}</span>${it.name}</button>`).join('');
+tabsEl.querySelectorAll('.ptab').forEach(t=>t.onclick=()=>{cur=+t.dataset.n;state='landing';paint();});
+window.addEventListener('keydown',e=>{if(e.key>='1'&&e.key<='5'){cur=+e.key;state='landing';paint();}});
+paint();
+</script>
+</body>
+</html>
