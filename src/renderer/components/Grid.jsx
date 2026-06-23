@@ -296,7 +296,7 @@ export default function Grid({
     if (trimmedSearch) {
       title = `No matches for "${trimmedSearch}"`;
       hint = semanticSearchActive
-        ? 'Try a different description, or turn off Visual search to fall back to keyword matching.'
+        ? 'Try a different description.'
         : 'Try a different keyword.';
     } else if (colorFilter) {
       title = 'No saves match that color';
