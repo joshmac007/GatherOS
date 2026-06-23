@@ -263,6 +263,9 @@ export default function App({ entitlement } = {}) {
   const handleModeChange = useCallback((nextMode) => {
     setAppMode(nextMode);
     setView({ type: 'all' });
+    // Switching tabs is a fresh start — drop any active query so e.g.
+    // leaving Search for Library shows all saves, not the last results.
+    setSearch('');
     // Entering (or re-clicking) the Search tab drops focus straight into
     // its hero field so the user can start typing immediately.
     if (nextMode === 'search') {
@@ -271,7 +274,7 @@ export default function App({ entitlement } = {}) {
         searchInputRef.current?.select?.();
       });
     }
-  }, [setView]);
+  }, [setView, setSearch]);
 
   // Per-view shuffle seeds. Persisted to localStorage so a shuffle
   // sticks across navigation, search, sort, and full app restarts —
