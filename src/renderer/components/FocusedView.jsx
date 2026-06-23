@@ -505,6 +505,12 @@ export default function FocusedView({
               className={styles.image}
               autoPlay
               loop
+              // Mount muted so Chromium's autoplay policy lets the clip
+              // start — onLoadedMetadata + toggleVideoMute then apply the
+              // saved mute preference (unmuting while it's already playing
+              // needs no user gesture). Without this the video never
+              // autoplays and shows a blank frame.
+              muted
               playsInline
               // No native control bar (its gradient scrim reads blocky);
               // we render our own glass controls below. No PiP — it pulls
