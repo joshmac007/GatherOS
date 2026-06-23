@@ -126,6 +126,13 @@ export default function FocusedView({
     justCopied,
   } = useEyedropper(imageRef, record.id);
 
+  // If the active media becomes a video (e.g. paging a media tweet from
+  // a photo to its clip) while the eyedropper is armed, disarm it —
+  // there's no image to sample and the button is hidden.
+  useEffect(() => {
+    if (showVideo && picking) togglePicking();
+  }, [showVideo, picking, togglePicking]);
+
   // Reset zoom whenever the user moves to a different image.
   useEffect(() => {
     setZoom(1);
@@ -321,7 +328,10 @@ export default function FocusedView({
 
           <span className={styles.divider} aria-hidden="true" />
 
-          {record.kind !== 'url' && !isTweet && (
+          {/* No eyedropper on videos — there's no <img> to sample, and the
+              focused view shows a <video> instead. Image frames of a media
+              tweet (showVideo false) still get it. */}
+          {record.kind !== 'url' && !isTweet && !showVideo && (
             <button
               type="button"
               className={[styles.iconBtn, picking && styles.iconBtnActive]
