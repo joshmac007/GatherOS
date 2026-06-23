@@ -1681,6 +1681,13 @@ export default function App({ entitlement } = {}) {
     setSimilarTo(null);
   }, [setView, setSimilarTo]);
 
+  // Opening a collection card from the Search tab leaves search and
+  // lands on that collection in Collections mode.
+  const handleOpenCollectionFromSearch = useCallback((id) => {
+    setAppMode('folders');
+    handleViewChange({ type: 'collection', id });
+  }, [handleViewChange]);
+
   // Single entry point for every "new collection" affordance (the two
   // grid tiles, the empty-state CTA, ⌘N, the menu). Creates the
   // collection, opens it, and nudges the title into rename mode so the
@@ -3129,6 +3136,8 @@ export default function App({ entitlement } = {}) {
                   onClearRecentSearches={recentSearches.clearAll}
                   recentSearches={recentSearches.items}
                   suggestedTags={suggestedTags}
+                  collections={collections}
+                  onOpenCollection={handleOpenCollectionFromSearch}
                   searchInputRef={searchInputRef}
                   scrollRef={setGridScrollNode}
                   saves={visibleSaves}
