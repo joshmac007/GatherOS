@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import { confirm } from '../lib/confirm.js';
+import { fileUrl } from '../lib/fileUrl.js';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
 import PrivacyModal from './PrivacyModal.jsx';
 import {
@@ -209,166 +210,195 @@ function LibrariesPage({
     await onCreate?.(next);
   }
 
+  const active = libraries.find((l) => l.id === activeId) || libraries[0] || null;
+  const others = libraries.filter((l) => l.id !== active?.id);
+
+  // Fanned stack of recent thumbnails (hero) or a single cover (row),
+  // falling back to the library glyph when a library has nothing on disk.
+  const coverStack = (lib, variant) => {
+    const all = Array.isArray(lib.covers) ? lib.covers : [];
+    const max = variant === 'libCoversHero' ? 3 : 1;
+    const covers = all.slice(0, max);
+    if (covers.length === 0) {
+      return (
+        <span className={`${styles.libCovers} ${styles[variant]} ${styles.libCoversEmpty}`} aria-hidden="true">
+          <Library size={variant === 'libCoversHero' ? 22 : 16} strokeWidth={1.6} />
+        </span>
+      );
+    }
+    // Reverse so the most recent save ends up painted on top (and flat).
+    return (
+      <span className={`${styles.libCovers} ${styles[variant]}`} aria-hidden="true">
+        {covers.slice().reverse().map((src, i) => (
+          <span key={i} className={styles.libCover} style={{ backgroundImage: `url("${fileUrl(src)}")` }} />
+        ))}
+      </span>
+    );
+  };
+
+  const renameInput = (lib) => (
+    <input
+      autoFocus
+      className={styles.libraryRenameInput}
+      value={renameDraft}
+      onChange={(e) => setRenameDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+        else if (e.key === 'Escape') { setRenamingId(null); setRenameDraft(''); }
+      }}
+      onBlur={commitRename}
+    />
+  );
+
+  const askDelete = async (lib) => {
+    const ok = await confirm({
+      title: `Delete "${lib.name}"?`,
+      message: "This permanently removes the library and all of its saves. This can't be undone.",
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (ok) onDelete?.(lib.id);
+  };
+
+  const overflowMenu = (lib) => (
+    <div className={styles.libraryRowMenuWrap}>
+      <button
+        type="button"
+        className={styles.libraryRowMenuTrigger}
+        onClick={() => setOpenMenuId((id) => (id === lib.id ? null : lib.id))}
+        aria-haspopup="menu"
+        aria-expanded={openMenuId === lib.id}
+        aria-label={`Actions for ${lib.name}`}
+      >
+        <MoreHorizontal size={16} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+      {openMenuId === lib.id && (
+        <div className={styles.libraryRowMenu} role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.libraryRowMenuItem}
+            onClick={() => { setOpenMenuId(null); onSwitch?.(lib.id); }}
+          >
+            <RefreshCw size={14} strokeWidth={1.7} aria-hidden="true" />
+            Switch to this library
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.libraryRowMenuItem}
+            onClick={() => { setOpenMenuId(null); startRename(lib); }}
+          >
+            <Pencil size={14} strokeWidth={1.7} aria-hidden="true" />
+            Rename
+          </button>
+          {libraries.length > 1 && (
+            <button
+              type="button"
+              role="menuitem"
+              className={`${styles.libraryRowMenuItem} ${styles.libraryRowMenuItemDanger}`}
+              onClick={() => { setOpenMenuId(null); askDelete(lib); }}
+            >
+              <Trash2 size={14} strokeWidth={1.7} aria-hidden="true" />
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
-      <div className={styles.libraryList}>
-        {libraries.map((lib) => {
-          const isActive = lib.id === activeId;
-          const isRenaming = renamingId === lib.id;
-          return (
-            <div
-              key={lib.id}
-              className={`${styles.libraryRow} ${isActive ? styles.libraryRowActive : ''}`}
-            >
-              <span className={styles.libraryRowGlyph} aria-hidden="true">
-                <Library size={16} strokeWidth={1.6} />
-              </span>
-              <div className={styles.libraryRowMain}>
-                {isRenaming ? (
-                  <input
-                    autoFocus
-                    className={styles.libraryRenameInput}
-                    value={renameDraft}
-                    onChange={(e) => setRenameDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        commitRename();
-                      } else if (e.key === 'Escape') {
-                        setRenamingId(null);
-                        setRenameDraft('');
-                      }
-                    }}
-                    onBlur={commitRename}
-                  />
-                ) : (
-                  <span className={styles.libraryRowName}>
-                    {lib.name}
-                    {isActive && (
-                      <span className={styles.libraryRowActiveTag}>Active</span>
-                    )}
-                  </span>
-                )}
-                <span className={styles.libraryRowMeta}>
-                  {lib.save_count != null ? `${lib.save_count} saves` : ''}
-                </span>
+      {active && (
+        <div className={styles.libHero}>
+          {coverStack(active, 'libCoversHero')}
+          <div className={styles.libHeroMain}>
+            {renamingId === active.id ? renameInput(active) : (
+              <div className={styles.libHeroName}>
+                {active.name}
+                <span className={styles.libHeroActive}>Active</span>
               </div>
-              <div className={styles.libraryRowActions}>
-                {!isRenaming && (
-                  <div className={styles.libraryRowMenuWrap}>
-                    <button
-                      type="button"
-                      className={styles.libraryRowMenuTrigger}
-                      onClick={() =>
-                        setOpenMenuId((id) => (id === lib.id ? null : lib.id))
-                      }
-                      aria-haspopup="menu"
-                      aria-expanded={openMenuId === lib.id}
-                      aria-label={`Actions for ${lib.name}`}
-                    >
-                      <MoreHorizontal size={16} strokeWidth={1.8} aria-hidden="true" />
-                    </button>
-                    {openMenuId === lib.id && (
-                      <div className={styles.libraryRowMenu} role="menu">
-                        {!isActive && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className={styles.libraryRowMenuItem}
-                            onClick={() => {
-                              setOpenMenuId(null);
-                              onSwitch?.(lib.id);
-                            }}
-                          >
-                            <RefreshCw size={14} strokeWidth={1.7} aria-hidden="true" />
-                            Switch
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className={styles.libraryRowMenuItem}
-                          onClick={() => {
-                            setOpenMenuId(null);
-                            startRename(lib);
-                          }}
-                        >
-                          <Pencil size={14} strokeWidth={1.7} aria-hidden="true" />
-                          Rename
-                        </button>
-                        {libraries.length > 1 && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className={`${styles.libraryRowMenuItem} ${styles.libraryRowMenuItemDanger}`}
-                            onClick={async () => {
-                              setOpenMenuId(null);
-                              const ok = await confirm({
-                                title: `Delete "${lib.name}"?`,
-                                message: "This permanently removes the library and all of its saves. This can't be undone.",
-                                confirmLabel: 'Delete',
-                                destructive: true,
-                              });
-                              if (ok) onDelete?.(lib.id);
-                            }}
-                          >
-                            <Trash2 size={14} strokeWidth={1.7} aria-hidden="true" />
-                            Delete
-                          </button>
-                        )}
-                      </div>
+            )}
+            <div className={styles.libHeroStats}>
+              {(active.save_count ?? 0).toLocaleString()} {active.save_count === 1 ? 'save' : 'saves'}
+            </div>
+            <div className={styles.libHeroActions}>
+              <button type="button" className={styles.btn} onClick={() => startRename(active)}>
+                <Pencil size={14} strokeWidth={1.7} aria-hidden="true" />
+                Rename
+              </button>
+              {libraries.length > 1 && (
+                <button type="button" className={styles.btn} onClick={() => askDelete(active)}>
+                  <Trash2 size={14} strokeWidth={1.7} aria-hidden="true" />
+                  Delete
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {others.length > 0 && (
+        <>
+          <div className={styles.libSwitchHdr}>Switch to</div>
+          <div className={styles.libSwitchList}>
+            {others.map((lib) => {
+              const isRenaming = renamingId === lib.id;
+              return (
+                <div
+                  key={lib.id}
+                  className={styles.libSwitchRow}
+                  onClick={isRenaming ? undefined : () => onSwitch?.(lib.id)}
+                >
+                  {coverStack(lib, 'libCoversRow')}
+                  <div className={styles.libSwitchMain}>
+                    {isRenaming ? renameInput(lib) : (
+                      <span className={styles.libSwitchName}>{lib.name}</span>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+                  <span className={styles.libSwitchCount}>
+                    {(lib.save_count ?? 0).toLocaleString()} saves
+                  </span>
+                  <div className={styles.libSwitchActions} onClick={(e) => e.stopPropagation()}>
+                    {overflowMenu(lib)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <div className={styles.libFoot}>
         {creating ? (
-          <div className={styles.libraryCreateRow}>
-            <div className={styles.libraryRow}>
-              <span className={styles.libraryRowGlyph} aria-hidden="true">
-                <Library size={16} strokeWidth={1.6} />
-              </span>
-              <div className={styles.libraryRowMain}>
-                <input
-                  autoFocus
-                  className={styles.libraryRenameInput}
-                  placeholder="New library name"
-                  value={creatingDraft}
-                  onChange={(e) => setCreatingDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commitCreate();
-                    } else if (e.key === 'Escape') {
-                      setCreating(false);
-                      setCreatingDraft('');
-                    }
-                  }}
-                />
-              </div>
-            </div>
-            <div className={styles.libraryCreateActions}>
-              <button
-                type="button"
-                className={styles.btn}
-                onClick={() => {
-                  setCreating(false);
-                  setCreatingDraft('');
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                onClick={commitCreate}
-                disabled={!creatingDraft.trim()}
-              >
-                Create
-              </button>
-            </div>
+          <div className={styles.libCreate}>
+            <input
+              autoFocus
+              className={styles.libraryRenameInput}
+              placeholder="New library name"
+              value={creatingDraft}
+              onChange={(e) => setCreatingDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitCreate(); }
+                else if (e.key === 'Escape') { setCreating(false); setCreatingDraft(''); }
+              }}
+            />
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={() => { setCreating(false); setCreatingDraft(''); }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={commitCreate}
+              disabled={!creatingDraft.trim()}
+            >
+              Create
+            </button>
           </div>
         ) : (
           <button
