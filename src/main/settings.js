@@ -12,6 +12,10 @@ const PREFS_FILE = 'prefs.json';
 const DEFAULT_PREFS = {
   autoNameOnSave: true,
   semanticSearch: true,
+  // Storage. When false (default) new images are optimized on import
+  // (longest edge capped + re-encoded to WebP) to keep libraries small.
+  // True stores the full-resolution original instead.
+  keepOriginals: false,
   // Theme: 'light' | 'dark' | 'system'. 'system' tracks the OS
   // preference via the renderer's matchMedia hook.
   theme: 'system',

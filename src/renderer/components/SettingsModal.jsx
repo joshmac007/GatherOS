@@ -5,6 +5,7 @@ import {
   Palette as PaletteIcon,
   Camera as CameraIcon,
   Download as DownloadIcon,
+  HardDrive as HardDriveIcon,
   Monitor as MonitorIcon,
   Sun as SunIcon,
   Moon as MoonIcon,
@@ -44,6 +45,7 @@ const NAV_ITEMS = [
   { id: 'capture',    label: 'Capture',    Icon: CameraIcon },
   { id: 'sound',      label: 'Sound',      Icon: SoundIcon },
   { id: 'updates',    label: 'Updates',    Icon: DownloadIcon },
+  { id: 'storage',    label: 'Storage',    Icon: HardDriveIcon },
   { id: 'data',       label: 'Data',       Icon: Database },
   { id: 'about',      label: 'About',      Icon: Info },
 ];
@@ -1579,6 +1581,34 @@ export default function SettingsModal({
                   )}
                 </>
               )}
+            </div>
+          )}
+
+          {activePage === 'storage' && (
+            <div className={styles.page}>
+              <p className={styles.sectionHint}>
+                Control how much disk your library uses. New images are
+                optimized as they're saved; your collections, tags, and
+                search are never affected.
+              </p>
+
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>Image quality</label>
+                <div className={styles.toggleRow}>
+                  <span className={styles.toggleLabel}>Keep full-resolution originals</span>
+                  <ToggleSwitch
+                    on={prefs.keepOriginals === true}
+                    onChange={(v) => updatePref('keepOriginals', v)}
+                  />
+                </div>
+                <span className={styles.fieldHint}>
+                  Off (recommended) optimizes new images on import — caps the
+                  longest edge and re-encodes to WebP — to keep your library
+                  small. Turn it on to store the full-size file instead; your
+                  library will be larger. Either way, saves already in your
+                  library are left untouched.
+                </span>
+              </div>
             </div>
           )}
 

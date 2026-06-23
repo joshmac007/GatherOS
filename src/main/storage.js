@@ -120,12 +120,48 @@ async function _writeImageFiles(buffer, ext, sharp) {
   }
 
   const id = crypto.randomUUID();
-  const filePath = path.join(getImagesDir(), `${id}.${ext}`);
   const thumbPath = path.join(getThumbsDir(), `${id}.jpg`);
 
-  fs.writeFileSync(filePath, buffer);
-
   const meta = await sharp(buffer).metadata();
+
+  // Store the primary image optimized by default — cap the longest edge
+  // and re-encode to WebP — which is the bulk of the space win for large
+  // uploads and bookmark imports. Opt out with the "keep full-resolution
+  // originals" pref. Animated images (GIF / animated WebP) pass through
+  // untouched so they don't flatten to a still, and any decode/encode
+  // failure falls back to the original bytes — a save must never fail
+  // because optimization did.
+  const { getPref } = require('./settings');
+  const keepOriginals = getPref('keepOriginals', false);
+  const animated = (meta.pages || 1) > 1;
+  let storeBuffer = buffer;
+  let storeExt = ext;
+  if (!keepOriginals && !animated) {
+    try {
+      const optimized = await sharp(buffer)
+        .rotate() // bake EXIF orientation in before metadata is dropped
+        .resize(2560, 2560, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toBuffer();
+      // Only adopt it if it actually saved space — re-encoding an
+      // already-small/efficient image can come out larger.
+      if (optimized.length < buffer.length) {
+        storeBuffer = optimized;
+        storeExt = 'webp';
+      }
+    } catch (err) {
+      console.warn('[gatheros] image optimize failed, storing original:', err.message);
+    }
+  }
+
+  const filePath = path.join(getImagesDir(), `${id}.${storeExt}`);
+  fs.writeFileSync(filePath, storeBuffer);
+
+  // Stored-image dimensions (an optimized resize may have shrunk them);
+  // fall back to the source metadata when we kept the original bytes.
+  const storedMeta = storeBuffer === buffer
+    ? meta
+    : await sharp(storeBuffer).metadata();
   await sharp(buffer)
     .resize(400, 300, { fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 80 })
@@ -142,9 +178,9 @@ async function _writeImageFiles(buffer, ext, sharp) {
     id,
     filePath,
     thumbPath,
-    width: meta.width || null,
-    height: meta.height || null,
-    fileSize: buffer.length,
+    width: storedMeta.width || meta.width || null,
+    height: storedMeta.height || meta.height || null,
+    fileSize: storeBuffer.length,
     palette,
     contentHash,
   };
