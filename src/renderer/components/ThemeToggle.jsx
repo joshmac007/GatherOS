@@ -56,7 +56,11 @@ export default function ThemeToggle({ className }) {
       // themed property tweens from its current value to the new one.
       if (!reduced) {
         root.classList.add('theme-morph');
-        window.setTimeout(() => root.classList.remove('theme-morph'), MORPH_MS + 80);
+        // Leave a generous margin before pulling the class. If it's removed
+        // while a colour is still mid-tween, the transition rule vanishes
+        // and the value snaps the rest of the way (a jarring jump at the
+        // end), so wait well past the transition duration.
+        window.setTimeout(() => root.classList.remove('theme-morph'), MORPH_MS + 500);
       }
       setTheme(next);
       root.setAttribute('data-theme', next);
