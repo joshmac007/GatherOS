@@ -9,8 +9,13 @@ const COLORWAYS = ['prism', 'berry', 'lagoon', 'citrus', 'azure', 'ember'];
 let colorwayIndex = 0;
 
 // Sweep duration — keep in sync with .glimm-band--sweep in global.css.
-// The theme swap fires at the halfway point.
 const SWEEP_MS = 2000;
+// Theme crossfade duration — keep in sync with the html.theme-morph
+// transition in global.css.
+const MORPH_MS = 760;
+// Start the crossfade so its midpoint lands on the gradient's centre pass
+// (≈ SWEEP_MS / 2), letting the rainbow visually carry the change.
+const SWAP_AT = Math.max(0, SWEEP_MS / 2 - MORPH_MS / 2);
 
 // Local-state theme toggle. Reads the current value off the data-theme
 // attribute set on <html> at boot, flips it, mirrors the new value to
@@ -40,14 +45,24 @@ export default function ThemeToggle({ className }) {
 
   function flip() {
     const next = theme === 'dark' ? 'light' : 'dark';
-    const applyTheme = () => {
-      setTheme(next);
-      document.documentElement.setAttribute('data-theme', next);
-      persist(next);
-    };
 
     const reduced = typeof window !== 'undefined'
       && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    const applyTheme = () => {
+      const root = document.documentElement;
+      // Crossfade the UI's colours instead of snapping. Enable the
+      // transitions, then flip data-theme in the same frame so every
+      // themed property tweens from its current value to the new one.
+      if (!reduced) {
+        root.classList.add('theme-morph');
+        window.setTimeout(() => root.classList.remove('theme-morph'), MORPH_MS + 80);
+      }
+      setTheme(next);
+      root.setAttribute('data-theme', next);
+      persist(next);
+    };
+
     const el = bandRef.current;
     if (reduced || !el) {
       applyTheme();
@@ -79,10 +94,10 @@ export default function ThemeToggle({ className }) {
     const done = () => el.classList.remove('glimm-band--sweep');
     el.addEventListener('animationend', done, { once: true });
 
-    // Flip the theme as the gradient crosses the middle of the screen, so
-    // the band visually "carries" the change rather than it snapping up
-    // front. SWEEP_MS mirrors the CSS animation duration.
-    window.setTimeout(applyTheme, SWEEP_MS / 2);
+    // Start the theme crossfade so it peaks as the gradient crosses the
+    // middle of the screen — the band visually "carries" the change rather
+    // than it snapping up front.
+    window.setTimeout(applyTheme, SWAP_AT);
   }
 
   const isDark = theme === 'dark';
