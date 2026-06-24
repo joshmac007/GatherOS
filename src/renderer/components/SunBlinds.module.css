@@ -8,14 +8,23 @@
   overflow: hidden;
   pointer-events: auto;
   cursor: pointer;
-  animation: sbFade 4.2s ease forwards;
+  animation: sbIn 0.5s ease both;
 }
 
-@keyframes sbFade {
-  0%   { opacity: 0; }
-  9%   { opacity: 1; }
-  82%  { opacity: 1; }
-  100% { opacity: 0; }
+/* Stays up so you can look through the blinds; fades out only when
+   dismissed (click anywhere or any key). */
+.closing {
+  animation: sbOut 0.45s ease forwards;
+}
+
+@keyframes sbIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes sbOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 /* Directional golden wash — multiply so it tints the app warm rather
@@ -59,10 +68,20 @@
   100% { opacity: 0; transform: rotate(18deg) translateX(50px); }
 }
 
-.blinds { position: absolute; inset: -6% 0; }
+.blinds {
+  position: absolute;
+  inset: -6% 0;
+  /* 3D space so a hovered slat can tilt open toward the viewer instead
+     of just flattening. */
+  perspective: 1100px;
+  perspective-origin: 50% 42%;
+}
 
 /* Each slat is a soft horizontal shadow band that drops in with a
-   staggered delay, like blinds settling. */
+   staggered delay, like blinds settling. Settled base is transform:none /
+   opacity:1; the entrance uses `backwards` fill so the pre-drop state only
+   shows during the stagger delay and the animation doesn't pin the slat
+   afterwards — that lets :hover drive the tilt-open. */
 .slat {
   position: absolute;
   left: -2%;
@@ -77,10 +96,20 @@
     rgba(46, 28, 8, 0) 100%
   );
   mix-blend-mode: multiply;
-  transform: translateY(-46px);
-  opacity: 0;
-  animation: sbSlat 0.62s cubic-bezier(0.32, 0.72, 0, 1) both;
+  transform-origin: center center;
+  cursor: pointer;
+  animation: sbSlat 0.62s cubic-bezier(0.32, 0.72, 0, 1) backwards;
   animation-delay: calc(var(--i) * 42ms);
+  transition:
+    transform 0.55s cubic-bezier(0.22, 0.61, 0.18, 1),
+    opacity 0.5s ease;
+}
+
+/* Hover a blind → it tilts open like a real venetian slat, its shadow
+   lifting away to reveal the warmly-lit app behind that band. */
+.slat:hover {
+  transform: rotateX(80deg);
+  opacity: 0.2;
 }
 
 /* Warm sunlit lip along the slat's lower edge. */
@@ -101,6 +130,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .slat { animation: none; transform: none; opacity: 1; }
-  .beam { animation: sbFade 4.2s ease forwards; }
+  .slat {
+    animation: none;
+    transform: none;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+  }
+  /* Reveal behind the slat without the 3D tilt. */
+  .slat:hover { transform: none; opacity: 0.18; }
+  .overlay,
+  .beam { animation: sbIn 0.5s ease both; }
 }
