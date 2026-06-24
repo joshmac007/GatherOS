@@ -1,7 +1,8 @@
-/* "Sun through window blinds" easter egg. The blinds tile the whole
-   window with warm, lightly-shadowed slats; each slat carries its own
-   tint so flipping one up reveals the app behind it with NO residual
-   overlay. Sits above everything. */
+/* "Sun through window blinds" easter egg. The blinds tile the window with
+   translucent frosted slats that flip up on hover; a cursor-tracked shaft
+   of cool light spills through the open gap, dust motes drift in it, and
+   on dismiss the whole thing rolls up from the bottom. Sits above
+   everything. */
 .overlay {
   position: fixed;
   inset: 0;
@@ -12,10 +13,10 @@
   animation: sbIn 0.5s ease both;
 }
 
-/* Stays up so you can look through the blinds; fades out only when
-   dismissed (click anywhere or any key). */
+/* Roll-up dismiss: hold opacity while the slats raise bottom-up, then
+   fade out the remainder. */
 .closing {
-  animation: sbOut 0.45s ease forwards;
+  animation: sbOut 0.34s ease 0.58s both;
 }
 
 @keyframes sbIn {
@@ -33,9 +34,7 @@
   inset: 0;
 }
 
-/* Subtle directional neutral wash sitting over everything (including
-   opened bands). pointer-events:none so it never intercepts a slat
-   hover. */
+/* Subtle directional neutral wash over everything so the scene blends. */
 .wash {
   position: absolute;
   inset: 0;
@@ -49,9 +48,63 @@
   mix-blend-mode: multiply;
 }
 
-/* Fixed transparent hit area for one blind — it never moves, so the
-   cursor keeps hovering it even as the face folds away (no flap loop).
-   14 of these tile the full height. */
+/* Cool daylight spilling through the open gap — a soft tall glow that
+   tracks the cursor (vars set by the component) and lifts the slats it
+   falls across. Screen blend so it adds light. */
+.spill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 420px;
+  height: 520px;
+  transform: translate(
+    calc(var(--spill-x, 50vw) - 210px),
+    calc(var(--spill-y, 50vh) - 260px)
+  );
+  background: radial-gradient(
+    ellipse 42% 60% at 50% 50%,
+    rgba(205, 222, 255, 0.45) 0%,
+    rgba(188, 208, 255, 0.16) 40%,
+    rgba(188, 208, 255, 0) 72%
+  );
+  mix-blend-mode: screen;
+  filter: blur(10px);
+  pointer-events: none;
+  opacity: var(--spill-o, 0);
+  transition: opacity 0.35s ease;
+}
+
+/* Dust motes drifting up through the light. */
+.motes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.mote {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(235, 242, 255, 0.9) 0%,
+    rgba(235, 242, 255, 0) 70%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: sbMote var(--dur, 12s) ease-in-out var(--delay, 0s) infinite;
+}
+
+@keyframes sbMote {
+  0%   { opacity: 0; transform: translate(0, 12px) scale(0.8); }
+  18%  { opacity: 0.7; }
+  82%  { opacity: 0.38; }
+  100% { opacity: 0; transform: translate(var(--driftX, 24px), -46px) scale(1); }
+}
+
+/* Fixed transparent hit area for one blind — never moves, so the cursor
+   keeps hovering it even as the face folds away (no flap loop). 14 of
+   these tile the full height. */
 .slat {
   position: absolute;
   left: 0;
@@ -62,10 +115,25 @@
   pointer-events: auto;
 }
 
+/* Soft drop shadow the slat casts onto the content below it — gives the
+   blinds depth (they sit in front of the app, not painted on). Fades as
+   the slat opens. */
+.slatShadow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.28);
+  filter: blur(6px);
+  pointer-events: none;
+  transition: opacity 0.45s ease;
+}
+.slat:hover .slatShadow { opacity: 0; }
+
 /* Frosts the app behind this slat. Kept separate from the flipping face
    (backdrop-filter misbehaves under a 3D transform) and parked flat. On
-   hover the blur clears to 0, so the band the slat covered goes crisp as
-   the face flips up. */
+   hover the blur clears to 0 so the band goes crisp as the face flips up. */
 .slatBlur {
   position: absolute;
   inset: 0;
@@ -76,21 +144,19 @@
     backdrop-filter 0.5s ease,
     -webkit-backdrop-filter 0.5s ease;
 }
-
 .slat:hover .slatBlur {
   backdrop-filter: blur(0px);
   -webkit-backdrop-filter: blur(0px);
 }
 
-/* The visible blind: a warm-lit slat with a shadowed lower edge. Drops
-   in on entrance (translate channel) and flips up on hover (transform
-   channel) — kept on separate channels so they never fight. */
+/* The visible blind: a translucent frosted-dark slat. Drops in on entrance
+   (translate channel) and flips up on hover (transform channel) with a
+   slight overshoot so it settles like it has weight — the two channels
+   never fight. */
 .slatFace {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Translucent "frosted dark" so the blurred app shows through rather
-     than being hidden behind a near-opaque slat. */
   background: linear-gradient(
     180deg,
     rgba(40, 42, 50, 0.34) 0%,
@@ -102,11 +168,7 @@
   mix-blend-mode: multiply;
   transform-origin: top center;
   transform: perspective(1100px) rotateX(0deg);
-  backface-visibility: hidden;
-  transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.18, 1);
-  /* Staggered drop-in. `backwards` fill shows the pre-drop state only
-     during the delay, then reverts to the settled base so the hover
-     transform isn't pinned by the animation. */
+  transition: transform 0.6s cubic-bezier(0.32, 1.25, 0.5, 1);
   animation: sbDrop 0.62s cubic-bezier(0.32, 0.72, 0, 1) backwards;
   animation-delay: calc(var(--i) * 42ms);
 }
@@ -123,8 +185,8 @@
   mix-blend-mode: screen;
 }
 
-/* Hover → flip the slat up on its top hinge until it's edge-on, so the
-   band it covered is fully revealed with no tint left behind. */
+/* Hover → flip the slat up on its top hinge until it's edge-on, fully
+   revealing the band with no tint left behind. */
 .slat:hover .slatFace {
   transform: perspective(1100px) rotateX(-90deg);
 }
@@ -134,6 +196,26 @@
   to   { translate: 0 0; opacity: 1; }
 }
 
+/* Roll-up dismiss — bottom slats lift first (delay falls as --i rises). */
+.closing .slatFace {
+  animation: sbRollUp 0.42s cubic-bezier(0.5, 0, 0.7, 1) forwards;
+  animation-delay: calc((13 - var(--i)) * 28ms);
+}
+@keyframes sbRollUp {
+  to {
+    transform: perspective(1100px) rotateX(-90deg);
+    translate: 0 -22px;
+    opacity: 0;
+  }
+}
+.closing .slatBlur {
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+}
+.closing .slatShadow { opacity: 0; }
+.closing .spill,
+.closing .motes { opacity: 0; transition: opacity 0.3s ease; }
+
 @media (prefers-reduced-motion: reduce) {
   .slatFace {
     animation: none;
@@ -141,7 +223,11 @@
     transform: none;
     transition: opacity 0.3s ease;
   }
-  /* Reveal by lifting the tint without the 3D flip. */
   .slat:hover .slatFace { transform: none; opacity: 0; }
+  .slatShadow { display: none; }
+  .mote { animation: none; opacity: 0; }
+  .spill { display: none; }
+  .closing .slatFace { animation: none; }
   .overlay { animation: sbIn 0.5s ease both; }
+  .closing { animation: sbOut 0.4s ease both; }
 }
