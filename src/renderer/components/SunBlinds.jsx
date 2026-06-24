@@ -3,19 +3,16 @@ import { createPortal } from 'react-dom';
 import styles from './SunBlinds.module.css';
 
 const SLATS = 14;
-const MOTES = 70;
+const MOTES = 130;
 
 // Easter egg: window blinds drawn across the whole app, frosting the
 // content behind them. Hovering a slat clears its blur and flips it up
-// (with a little overshoot, so it has weight) to reveal a crisp band, and
-// a cool shaft of light spills through wherever the cursor is. Dust motes
-// drift in the light. Click anywhere (or any key) to roll the blinds up
-// from the bottom and dismiss.
+// (with a little overshoot, so it has weight) to reveal a crisp band.
+// Dust motes drift through the air the whole time. Click anywhere (or any
+// key) to roll the blinds up from the bottom and dismiss.
 export default function SunBlinds({ open, onClose }) {
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
-  const overlayRef = useRef(null);
-  const rafRef = useRef(0);
 
   const requestClose = useCallback(() => {
     if (closingRef.current) return;
@@ -32,40 +29,18 @@ export default function SunBlinds({ open, onClose }) {
       return undefined;
     }
     window.addEventListener('keydown', requestClose);
-    return () => {
-      window.removeEventListener('keydown', requestClose);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    return () => window.removeEventListener('keydown', requestClose);
   }, [open, requestClose]);
-
-  // Track the cursor for the light spill via CSS vars (no re-render).
-  const handleMove = useCallback((e) => {
-    const x = e.clientX;
-    const y = e.clientY;
-    if (rafRef.current) return;
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = 0;
-      const el = overlayRef.current;
-      if (!el) return;
-      el.style.setProperty('--spill-x', `${x}px`);
-      el.style.setProperty('--spill-y', `${y}px`);
-      el.style.setProperty('--spill-o', '1');
-    });
-  }, []);
-
-  const handleLeave = useCallback(() => {
-    overlayRef.current?.style.setProperty('--spill-o', '0');
-  }, []);
 
   // Stable scatter for the dust motes (per mount).
   const motes = useMemo(
     () => Array.from({ length: MOTES }, () => ({
       left: Math.random() * 100,
       top: Math.random() * 100,
-      size: 1.5 + Math.random() * 3,
-      dur: 9 + Math.random() * 9,
-      delay: -Math.random() * 12,
-      driftX: (Math.random() * 2 - 1) * 36,
+      size: 2 + Math.random() * 5,
+      dur: 7 + Math.random() * 10,
+      delay: -Math.random() * 16,
+      driftX: (Math.random() * 2 - 1) * 48,
     })),
     [],
   );
@@ -74,11 +49,8 @@ export default function SunBlinds({ open, onClose }) {
 
   return createPortal(
     <div
-      ref={overlayRef}
       className={`${styles.overlay} ${closing ? styles.closing : ''}`}
       onClick={requestClose}
-      onPointerMove={handleMove}
-      onPointerLeave={handleLeave}
       aria-hidden="true"
     >
       <div className={styles.blinds}>
@@ -91,7 +63,6 @@ export default function SunBlinds({ open, onClose }) {
         ))}
       </div>
       <div className={styles.wash} />
-      <div className={styles.spill} />
       <div className={styles.motes}>
         {motes.map((m, i) => (
           <span

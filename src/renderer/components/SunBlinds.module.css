@@ -1,8 +1,7 @@
 /* "Sun through window blinds" easter egg. The blinds tile the window with
-   translucent frosted slats that flip up on hover; a cursor-tracked shaft
-   of cool light spills through the open gap, dust motes drift in it, and
-   on dismiss the whole thing rolls up from the bottom. Sits above
-   everything. */
+   translucent frosted slats that flip up on hover; prominent dust motes
+   drift through the air, and on dismiss the whole thing rolls up from the
+   bottom. Sits above everything. */
 .overlay {
   position: fixed;
   inset: 0;
@@ -48,45 +47,8 @@
   mix-blend-mode: multiply;
 }
 
-/* Cool daylight spilling through the open gap — a soft horizontal streak
-   (light comes through a horizontal slat, so it reads as a band, not a
-   blob) that tracks the cursor. Screen blend so it adds light. */
-.spill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 860px;
-  height: 90px;
-  transform: translate(
-    calc(var(--spill-x, 50vw) - 430px),
-    calc(var(--spill-y, 50vh) - 45px)
-  );
-  /* Bright down the centreline, feathered to nothing at both ends and
-     top/bottom — a streak of light rather than an oval. */
-  background:
-    linear-gradient(
-      90deg,
-      rgba(210, 225, 255, 0) 0%,
-      rgba(210, 225, 255, 0.42) 32%,
-      rgba(222, 233, 255, 0.55) 50%,
-      rgba(210, 225, 255, 0.42) 68%,
-      rgba(210, 225, 255, 0) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(210, 225, 255, 0) 0%,
-      rgba(210, 225, 255, 0.6) 50%,
-      rgba(210, 225, 255, 0) 100%
-    );
-  background-blend-mode: multiply;
-  mix-blend-mode: screen;
-  filter: blur(14px);
-  pointer-events: none;
-  opacity: var(--spill-o, 0);
-  transition: opacity 0.35s ease;
-}
-
-/* Dust motes drifting up through the light. */
+/* Dust motes drifting up through the air — prominent: large soft glows,
+   bright, and densely scattered. */
 .motes {
   position: absolute;
   inset: 0;
@@ -99,19 +61,20 @@
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(235, 242, 255, 0.9) 0%,
-    rgba(235, 242, 255, 0) 70%
+    rgba(245, 249, 255, 1) 0%,
+    rgba(238, 245, 255, 0.85) 32%,
+    rgba(235, 242, 255, 0) 72%
   );
-  mix-blend-mode: screen;
+  box-shadow: 0 0 6px rgba(240, 246, 255, 0.7);
   opacity: 0;
   animation: sbMote var(--dur, 12s) ease-in-out var(--delay, 0s) infinite;
 }
 
 @keyframes sbMote {
-  0%   { opacity: 0; transform: translate(0, 12px) scale(0.8); }
-  18%  { opacity: 0.7; }
-  82%  { opacity: 0.38; }
-  100% { opacity: 0; transform: translate(var(--driftX, 24px), -46px) scale(1); }
+  0%   { opacity: 0; transform: translate(0, 16px) scale(0.7); }
+  14%  { opacity: 0.95; }
+  86%  { opacity: 0.8; }
+  100% { opacity: 0; transform: translate(var(--driftX, 24px), -60px) scale(1.05); }
 }
 
 /* Fixed transparent hit area for one blind — never moves, so the cursor
@@ -225,7 +188,6 @@
   -webkit-backdrop-filter: blur(0px);
 }
 .closing .slatShadow { opacity: 0; }
-.closing .spill,
 .closing .motes { opacity: 0; transition: opacity 0.3s ease; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -238,7 +200,6 @@
   .slat:hover .slatFace { transform: none; opacity: 0; }
   .slatShadow { display: none; }
   .mote { animation: none; opacity: 0; }
-  .spill { display: none; }
   .closing .slatFace { animation: none; }
   .overlay { animation: sbIn 0.5s ease both; }
   .closing { animation: sbOut 0.4s ease both; }
