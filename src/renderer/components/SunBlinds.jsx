@@ -44,6 +44,7 @@ export default function SunBlinds({ open, onClose }) {
       <div className={styles.blinds}>
         {Array.from({ length: SLATS }).map((_, i) => (
           <span key={i} className={styles.slat} style={{ '--i': i }}>
+            <span className={styles.slatBlur} />
             <span className={styles.slatFace} />
           </span>
         ))}
