@@ -33,6 +33,21 @@
   inset: 0;
 }
 
+/* Subtle directional warm wash sitting over everything (including opened
+   bands). pointer-events:none so it never intercepts a slat hover. */
+.warmth {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    118deg,
+    rgba(255, 196, 120, 0.16) 0%,
+    rgba(255, 168, 92, 0.10) 48%,
+    rgba(255, 150, 80, 0) 84%
+  );
+  mix-blend-mode: multiply;
+}
+
 /* Fixed transparent hit area for one blind — it never moves, so the
    cursor keeps hovering it even as the face folds away (no flap loop).
    14 of these tile the full height. */
@@ -55,11 +70,11 @@
   pointer-events: none;
   background: linear-gradient(
     180deg,
-    rgba(255, 214, 150, 0.50) 0%,
-    rgba(248, 184, 116, 0.60) 30%,
-    rgba(176, 110, 56, 0.72) 72%,
-    rgba(104, 62, 28, 0.86) 96%,
-    rgba(70, 42, 18, 0.92) 100%
+    rgba(255, 214, 150, 0.28) 0%,
+    rgba(248, 184, 116, 0.36) 30%,
+    rgba(176, 110, 56, 0.46) 72%,
+    rgba(104, 62, 28, 0.58) 96%,
+    rgba(70, 42, 18, 0.64) 100%
   );
   mix-blend-mode: multiply;
   transform-origin: top center;

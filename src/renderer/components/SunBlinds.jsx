@@ -48,6 +48,9 @@ export default function SunBlinds({ open, onClose }) {
           </span>
         ))}
       </div>
+      {/* Soft warm wash over everything (incl. opened bands) so the whole
+          scene reads as one sunlit room rather than separate strips. */}
+      <div className={styles.warmth} />
     </div>,
     document.body,
   );
