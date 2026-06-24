@@ -88,6 +88,12 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex: 0 0 auto;
   -webkit-app-region: drag;
+  /* Own stacking context above the DetailPanel (z-index 50) so the action
+     buttons' tooltips (data-tooltip ::after) paint over the panel instead
+     of being clipped behind it. The bar's box only covers the top strip,
+     so this doesn't overlap the panel's controls. */
+  position: relative;
+  z-index: 80;
 }
 
 .actions {
