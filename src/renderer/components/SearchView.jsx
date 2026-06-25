@@ -5,7 +5,7 @@ import { buildSearchPlaceholders } from '../lib/searchPlaceholders.js';
 import styles from './SearchView.module.css';
 
 // How long each rotating placeholder term lingers before the next.
-const PLACEHOLDER_ROTATE_MS = 3600;
+const PLACEHOLDER_ROTATE_MS = 2000;
 
 function SearchGlyph() {
   return (
