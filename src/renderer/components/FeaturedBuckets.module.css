@@ -138,16 +138,16 @@
 .card:hover .stack img:nth-child(3) { transform: rotate(7deg)   translate(14px, -2px); }
 .card:hover .stack img:nth-child(4) { transform: rotate(18deg)  translate(32px, 8px); }
 
-/* Drag-over: fan the cover wider than hover so the stack visibly "opens
-   up" to receive the incoming save — a preview of where it lands. The
+/* Drag-over: open the cover to the exact same fan as the hover state, so
+   the card "comes alive" on drop the same way it does on hover. The
    .card.cardDropTarget selector keeps specificity level with the
    .card:hover rule above so it wins by source order, and because :hover
    doesn't update mid-drag in Chromium this is what actually drives the
    fan while a file is held over the card. */
-.card.cardDropTarget .stack img:nth-child(1) { transform: rotate(-22deg) translate(-42px, 10px); }
-.card.cardDropTarget .stack img:nth-child(2) { transform: rotate(-8deg)  translate(-16px, -4px); }
-.card.cardDropTarget .stack img:nth-child(3) { transform: rotate(9deg)   translate(18px, -4px); }
-.card.cardDropTarget .stack img:nth-child(4) { transform: rotate(24deg)  translate(44px, 10px); }
+.card.cardDropTarget .stack img:nth-child(1) { transform: rotate(-16deg) translate(-30px, 8px); }
+.card.cardDropTarget .stack img:nth-child(2) { transform: rotate(-6deg)  translate(-12px, -2px); }
+.card.cardDropTarget .stack img:nth-child(3) { transform: rotate(7deg)   translate(14px, -2px); }
+.card.cardDropTarget .stack img:nth-child(4) { transform: rotate(18deg)  translate(32px, 8px); }
 
 /* Empty bucket — no preview thumbs yet. Bare bucket icon at low
    opacity, no surrounding tile. Reads as a placeholder, not a card. */
