@@ -162,6 +162,9 @@ function FolderTile({
         <span className={styles.tileCount}>
           <span className={styles.tileCountNum}>{count}</span>
           <span className={styles.tileCountLabel}> {count === 1 ? 'save' : 'saves'}</span>
+          {isDropTarget && (
+            <span className={styles.tileCountAdd} aria-hidden="true">+1</span>
+          )}
         </span>
       </div>
     </div>

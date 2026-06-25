@@ -139,6 +139,15 @@
 .tile:hover .tileStackImg:nth-child(3) { transform: rotate(7deg)   translate(15px, -2px); }
 .tile:hover .tileStackImg:nth-child(4) { transform: rotate(18deg)  translate(34px, 8px);  }
 
+/* Drag-over: fan the cover open wider than hover so the stack visibly
+   "opens up" to receive the incoming file — a preview of where it lands.
+   (.tile.tileDropTarget keeps it level with the :hover rule's specificity
+   so it wins by source order even if both ever match.) */
+.tile.tileDropTarget .tileStackImg:nth-child(1) { transform: rotate(-22deg) translate(-45px, 10px); }
+.tile.tileDropTarget .tileStackImg:nth-child(2) { transform: rotate(-8deg)  translate(-17px, -4px); }
+.tile.tileDropTarget .tileStackImg:nth-child(3) { transform: rotate(9deg)   translate(19px, -4px); }
+.tile.tileDropTarget .tileStackImg:nth-child(4) { transform: rotate(24deg)  translate(46px, 10px); }
+
 /* Empty bucket — bare folder icon, no surrounding tile. Reads as a
    placeholder, not a card. Uses a solid color (not an rgba with
    alpha) so the FolderClosed SVG's overlapping stroke joins don't
@@ -195,6 +204,27 @@
 .tileCountNum,
 .tileCountLabel {
   display: inline;
+}
+
+/* Pre-increment "+1" chip — pops in next to the count while a file is
+   dragged over the folder, previewing the result. */
+.tileCountAdd {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--surface-1);
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: baseline;
+  font-variant-numeric: tabular-nums;
+  animation: tileCountAddPop var(--dur-quick, 160ms) var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+
+@keyframes tileCountAddPop {
+  from { opacity: 0; transform: scale(0.5) translateY(2px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* Empty state — first-launch / brand-new library. */
