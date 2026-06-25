@@ -1447,10 +1447,43 @@ export default function App({ entitlement } = {}) {
     // Wrapped in a div with transparent left padding so the cursor
     // anchors to the LEFT of the visible thumbnail (bucket under the
     // cursor stays visible).
+    // Resolve a drawable source + natural dimensions. Image cards expose
+    // a loaded <img>; video cards render a <video> with no <img>, so the
+    // old code skipped the block entirely and the browser fell back to a
+    // full-size default ghost. For videos we draw the poster instead —
+    // it's the saved first-frame thumb and is already cached (the card
+    // shows it), so a fresh Image is normally decode-complete right away.
+    // Falls back to the <video> element's own frame/dimensions if the
+    // poster isn't ready, so the preview is at least correctly sized.
     const cardImg = e.currentTarget.querySelector?.('img');
+    const cardVideo = e.currentTarget.querySelector?.('video');
+    let drawSource = null;
+    let natW = 0;
+    let natH = 0;
     if (cardImg && cardImg.naturalWidth > 0) {
+      drawSource = cardImg;
+      natW = cardImg.naturalWidth;
+      natH = cardImg.naturalHeight;
+    } else if (cardVideo) {
+      const posterSrc = cardVideo.getAttribute('poster');
+      if (posterSrc) {
+        const posterImg = new Image();
+        posterImg.src = posterSrc;
+        if (posterImg.complete && posterImg.naturalWidth > 0) {
+          drawSource = posterImg;
+          natW = posterImg.naturalWidth;
+          natH = posterImg.naturalHeight;
+        }
+      }
+      if (!drawSource && cardVideo.videoWidth > 0) {
+        drawSource = cardVideo;
+        natW = cardVideo.videoWidth;
+        natH = cardVideo.videoHeight;
+      }
+    }
+    if (drawSource && natW > 0) {
       const PREVIEW_W = 72;
-      const aspect = cardImg.naturalWidth / cardImg.naturalHeight;
+      const aspect = natW / natH;
       const previewH = Math.max(40, Math.min(72, Math.round(PREVIEW_W / aspect)));
 
       // Canvas leaves 12px of padding on the top/right so the badge
@@ -1472,7 +1505,7 @@ export default function App({ entitlement } = {}) {
       ctx.arcTo(0, PAD, PREVIEW_W, PAD, r);
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(cardImg, 0, PAD, PREVIEW_W, previewH);
+      ctx.drawImage(drawSource, 0, PAD, PREVIEW_W, previewH);
       ctx.restore();
 
       // Multi-select: paint a Finder-style total-count badge in the
