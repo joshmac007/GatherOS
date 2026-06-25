@@ -87,10 +87,9 @@
   animation: ghostIn 420ms var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1)) both;
 }
 
-/* The library-derived term gets a touch more presence than the "Try "
-   lead-in so the searchable example reads as the point. */
+/* Term sits inline with the "Try " lead-in at the same colour, just a
+   hair of breathing room before the opening quote. */
 .ghostTerm {
-  color: var(--text-secondary);
   margin-left: 0.35ch;
 }
 
