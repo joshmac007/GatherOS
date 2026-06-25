@@ -2,20 +2,21 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Eclipse as Layers, Plus } from 'lucide-react';
 import styles from './FeaturedBuckets.module.css';
 import { CollectionIcon } from './Sidebar.jsx';
-import { resolveAsset } from '../lib/asset.js';
+import { fileUrl } from '../lib/fileUrl.js';
 import { extractDropImageUrls } from '../lib/dropUrls.js';
 import { useReshuffle } from '../hooks/useReshuffle.js';
 import ContextMenu from './ContextMenu.jsx';
 
 const PREVIEW_COUNT = 4;
 
-// Living cover: the fanned collage of a collection's newest saves. When
-// those newest items change (a save was just added), it re-deals with a
-// staggered riffle. Isolated into its own component so the reshuffle hook
-// is scoped per card.
-function BucketCover({ items }) {
-  const covers = items.slice(0, PREVIEW_COUNT);
-  const shuffling = useReshuffle(covers.map((s) => s.id).join('\x01'));
+// Living cover: the fanned collage of a collection's most recently added
+// saves. Reads the collection's own `thumbs` (ordered by added_at in the
+// DB, capped at four) so the latest drop leads even once the stack is
+// full; when those change it re-deals with a staggered riffle. Isolated
+// into its own component so the reshuffle hook is scoped per card.
+function BucketCover({ thumbs }) {
+  const covers = (thumbs || []).slice(0, PREVIEW_COUNT);
+  const shuffling = useReshuffle(covers.join('\x01'));
   return (
     <div
       className={[styles.stack, shuffling && styles.stackShuffle].filter(Boolean).join(' ')}
@@ -27,10 +28,10 @@ function BucketCover({ items }) {
           </span>
         </div>
       ) : (
-        covers.map((s) => (
+        covers.map((thumb, i) => (
           <img
-            key={s.id}
-            src={resolveAsset(s, 'thumb')}
+            key={`${i}-${thumb}`}
+            src={fileUrl(thumb)}
             alt=""
             loading="lazy"
             decoding="async"
@@ -85,7 +86,6 @@ export default function FeaturedBuckets({
   onOpenCollectionAsSpace,
   onCreateCollection,
 }) {
-  const [previews, setPreviews] = useState({}); // { bucketId: [save, ...] }
   // Right-click context menu anchor + the bucket it targets.
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, collection }
   // Inline rename state — when set, the card's name area renders an
@@ -194,29 +194,6 @@ export default function FeaturedBuckets({
     await onAddSavesToBucket?.(bucketId, ids);
   }
 
-  // Pre-fetch up to N preview images per bucket. One IPC per bucket;
-  // fine for sidebars with a handful of buckets, would want a single
-  // batch query at much larger scale.
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const next = {};
-      await Promise.all(
-        collections.map(async (c) => {
-          try {
-            const data = await window.moodmark.saves.getAll({ collectionId: c.id });
-            next[c.id] = (data || []).slice(0, PREVIEW_COUNT);
-          } catch {
-            next[c.id] = [];
-          }
-        }),
-      );
-      if (!cancelled) setPreviews(next);
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [collections]);
-
   function handleCardContextMenu(e, collection) {
     e.preventDefault();
     setCtxMenu({ x: e.clientX, y: e.clientY, collection });
@@ -283,7 +260,6 @@ export default function FeaturedBuckets({
             </div>
           )}
           {collections.map((c) => {
-            const items = previews[c.id] || [];
             const isRenaming = renamingId === c.id;
             return (
               <div
@@ -316,7 +292,7 @@ export default function FeaturedBuckets({
                 onDrop={(e) => handleCardDrop(e, c.id)}
                 title={c.name}
               >
-                <BucketCover items={items} />
+                <BucketCover thumbs={c.thumbs} />
                 <div className={styles.meta}>
                   {isRenaming ? (
                     <input

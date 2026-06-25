@@ -1136,9 +1136,15 @@ function getAllCollectionsWithThumbs() {
                ELSE COALESCE(NULLIF(s.thumb_path, ''), s.file_path)
              END AS thumb_or_file,
              s.created_at,
+             -- Order the cover by when each save was ADDED to this
+             -- collection (ci.added_at), not when the save was created.
+             -- "Latest drop on top" means the most recently dropped-in
+             -- save leads — so dragging an older save into a full
+             -- collection still surfaces it, instead of the cover looking
+             -- frozen because four newer-by-creation saves outrank it.
              ROW_NUMBER() OVER (
                PARTITION BY ci.collection_id
-               ORDER BY s.created_at DESC
+               ORDER BY ci.added_at DESC, s.created_at DESC
              ) AS rn
       FROM collection_items ci
       JOIN saves s ON s.id = ci.save_id
