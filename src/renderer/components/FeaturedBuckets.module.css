@@ -138,6 +138,17 @@
 .card:hover .stack img:nth-child(3) { transform: rotate(7deg)   translate(14px, -2px); }
 .card:hover .stack img:nth-child(4) { transform: rotate(18deg)  translate(32px, 8px); }
 
+/* Drag-over: fan the cover wider than hover so the stack visibly "opens
+   up" to receive the incoming save — a preview of where it lands. The
+   .card.cardDropTarget selector keeps specificity level with the
+   .card:hover rule above so it wins by source order, and because :hover
+   doesn't update mid-drag in Chromium this is what actually drives the
+   fan while a file is held over the card. */
+.card.cardDropTarget .stack img:nth-child(1) { transform: rotate(-22deg) translate(-42px, 10px); }
+.card.cardDropTarget .stack img:nth-child(2) { transform: rotate(-8deg)  translate(-16px, -4px); }
+.card.cardDropTarget .stack img:nth-child(3) { transform: rotate(9deg)   translate(18px, -4px); }
+.card.cardDropTarget .stack img:nth-child(4) { transform: rotate(24deg)  translate(44px, 10px); }
+
 /* Empty bucket — no preview thumbs yet. Bare bucket icon at low
    opacity, no surrounding tile. Reads as a placeholder, not a card. */
 .stackEmpty {
@@ -209,6 +220,27 @@
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Pre-increment "+1" chip — pops in next to the count while a save/file
+   is dragged over the card, previewing the result of the drop. */
+.countAdd {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--surface-1);
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: baseline;
+  font-variant-numeric: tabular-nums;
+  animation: countAddPop var(--dur-quick, 160ms) var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+
+@keyframes countAddPop {
+  from { opacity: 0; transform: scale(0.5) translateY(2px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* Drop-target highlight while a save card is being dragged over a

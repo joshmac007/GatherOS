@@ -328,6 +328,9 @@ export default function FeaturedBuckets({
                   <span className={styles.count}>
                     <span className={styles.countNum}>{c.save_count}</span>
                     <span className={styles.countLabel}> {c.save_count === 1 ? 'save' : 'saves'}</span>
+                    {dropTargetId === c.id && (
+                      <span className={styles.countAdd} aria-hidden="true">+1</span>
+                    )}
                   </span>
                 </div>
               </div>
