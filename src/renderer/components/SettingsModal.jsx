@@ -18,6 +18,7 @@ import {
   Eraser as EraserIcon,
   Volume2 as SoundIcon,
   Play as PlayIcon,
+  RefreshCw as SyncIcon,
 } from 'lucide-react';
 import styles from './SettingsModal.module.css';
 import { confirm } from '../lib/confirm.js';
@@ -44,6 +45,7 @@ const NAV_ITEMS = [
   { id: 'ai',         label: 'AI Usage',   Icon: Sparkles },
   { id: 'tags',       label: 'Tags',       Icon: Hash },
   { id: 'capture',    label: 'Capture',    Icon: CameraIcon },
+  { id: 'syncing',    label: 'Syncing',    Icon: SyncIcon },
   { id: 'sound',      label: 'Sound',      Icon: SoundIcon },
   { id: 'updates',    label: 'Updates',    Icon: DownloadIcon },
   { id: 'storage',    label: 'Storage',    Icon: HardDriveIcon },
@@ -1504,6 +1506,15 @@ export default function SettingsModal({
                   empty to keep them in your library only.
                 </span>
               </div>
+            </div>
+          )}
+
+          {activePage === 'syncing' && (
+            <div className={styles.page}>
+              <p className={styles.sectionHint}>
+                Pull in what you bookmark elsewhere. When off, those posts
+                stop flowing into your library.
+              </p>
 
               <div className={styles.field}>
                 <label className={styles.fieldLabel}>Syncing</label>
