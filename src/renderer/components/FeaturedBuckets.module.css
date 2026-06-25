@@ -127,10 +127,12 @@
 
 /* Default stacked-and-tilted positions. nth-child for a static
    layout; the hover state overrides each individually for a fan. */
-.stack img:nth-child(1) { transform: rotate(-7deg) translate(-10px, 4px); z-index: 1; }
-.stack img:nth-child(2) { transform: rotate(-2deg) translate(-3px, 0px);  z-index: 2; }
-.stack img:nth-child(3) { transform: rotate(3deg)  translate(5px, 0px);   z-index: 3; }
-.stack img:nth-child(4) { transform: rotate(8deg)  translate(12px, 4px);  z-index: 4; }
+/* z-index descends with recency: thumbs are newest-first, so child 1 (the
+   latest drop) sits on top, then each older one behind it in order. */
+.stack img:nth-child(1) { transform: rotate(-7deg) translate(-10px, 4px); z-index: 4; }
+.stack img:nth-child(2) { transform: rotate(-2deg) translate(-3px, 0px);  z-index: 3; }
+.stack img:nth-child(3) { transform: rotate(3deg)  translate(5px, 0px);   z-index: 2; }
+.stack img:nth-child(4) { transform: rotate(8deg)  translate(12px, 4px);  z-index: 1; }
 
 /* Fan out on hover. */
 .card:hover .stack img:nth-child(1) { transform: rotate(-16deg) translate(-30px, 8px); }
