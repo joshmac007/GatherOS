@@ -950,10 +950,10 @@ export default function App({ entitlement } = {}) {
     if (commit) commit();
   }, []);
 
-  const showActionToast = useCallback(({ message, onUndo, action, onCommit, durationMs = 5000 }) => {
+  const showActionToast = useCallback(({ message, onUndo, action, onCommit, thumb, durationMs = 5000 }) => {
     runPendingCommit();
     actionToastCommitRef.current = onCommit || null;
-    setActionToast({ message, onUndo, action });
+    setActionToast({ message, onUndo, action, thumb });
     actionToastTimerRef.current = setTimeout(() => {
       const commit = actionToastCommitRef.current;
       actionToastCommitRef.current = null;
@@ -1002,6 +1002,18 @@ export default function App({ entitlement } = {}) {
     actionToastTimerRef.current = null;
     setActionToast(null);
     if (undo) undo();
+  }, [actionToast]);
+
+  // Run the toast's primary action (used by both the labeled chip and a
+  // clickable thumbnail), dismissing the toast first.
+  const runActionToastAction = useCallback(() => {
+    if (!actionToast?.action) return;
+    const run = actionToast.action.run;
+    actionToastCommitRef.current = null;
+    if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
+    actionToastTimerRef.current = null;
+    setActionToast(null);
+    run?.();
   }, [actionToast]);
 
   // If the app unmounts while a commit is pending (window close,
@@ -1771,8 +1783,10 @@ export default function App({ entitlement } = {}) {
   useEffect(() => {
     return window.moodmark.on('save:duplicate', (existing) => {
       if (!existing?.id) return;
+      const thumbPath = existing.thumb_path || existing.preview_path || existing.file_path;
       showActionToast({
         message: 'Already in your library',
+        thumb: thumbPath ? fileUrl(thumbPath) : undefined,
         durationMs: 4500,
         action: {
           label: 'Show',
@@ -3338,6 +3352,21 @@ export default function App({ entitlement } = {}) {
 
       {actionToast && (
         <div className="trash-toast" role="status">
+          {actionToast.thumb && (
+            actionToast.action ? (
+              <button
+                type="button"
+                className="trash-toast-thumb-btn"
+                onClick={runActionToastAction}
+                aria-label={actionToast.action.label || 'Show'}
+                title={actionToast.action.label || 'Show'}
+              >
+                <img src={actionToast.thumb} alt="" className="trash-toast-thumb" />
+              </button>
+            ) : (
+              <img src={actionToast.thumb} alt="" className="trash-toast-thumb" />
+            )
+          )}
           <span className="trash-toast-label">{actionToast.message}</span>
           {actionToast.onUndo && (
             <button type="button" className="trash-toast-undo" onClick={handleActionToastUndo}>
@@ -3345,17 +3374,7 @@ export default function App({ entitlement } = {}) {
             </button>
           )}
           {actionToast.action && (
-            <button
-              type="button"
-              className="trash-toast-undo"
-              onClick={() => {
-                if (actionToastTimerRef.current) clearTimeout(actionToastTimerRef.current);
-                actionToastTimerRef.current = null;
-                actionToastCommitRef.current = null;
-                setActionToast(null);
-                actionToast.action.run();
-              }}
-            >
+            <button type="button" className="trash-toast-undo" onClick={runActionToastAction}>
               {actionToast.action.label}
             </button>
           )}
