@@ -1779,7 +1779,10 @@ export default function App({ entitlement } = {}) {
   // Duplicate-on-save toast. Main fires 'save:duplicate' with the
   // existing row whenever a drop / capture / drop-url tries to add
   // bytes that already live in the library. We show a brief toast with
-  // a Show button that flies to the existing save in the grid.
+  // a Show button that opens the existing save in the focused view —
+  // immediate and unambiguous even when the duplicate is buried far down
+  // the feed (no scroll hunting). Closing focus morphs back to its grid
+  // card, so the user still gets the location.
   useEffect(() => {
     return window.moodmark.on('save:duplicate', (existing) => {
       if (!existing?.id) return;
@@ -1790,11 +1793,15 @@ export default function App({ entitlement } = {}) {
         durationMs: 4500,
         action: {
           label: 'Show',
-          run: () => revealSaveInGrid(existing.id),
+          run: () => {
+            // Switch to All so the record is in displaySaves, then open it.
+            handleViewChange({ type: 'all' });
+            setTimeout(() => setFocusedId(existing.id), 80);
+          },
         },
       });
     });
-  }, [showActionToast, revealSaveInGrid]);
+  }, [showActionToast, handleViewChange]);
 
   const handleDeleteCollection = useCallback(async (id) => {
     await window.moodmark.collections.delete(id);

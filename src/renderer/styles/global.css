@@ -206,11 +206,14 @@ body:has(.selection-bar) .trash-toast {
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* Tighten the left padding when a thumbnail leads the toast so it sits
-   as snug as the chip on the right. */
+/* When a thumbnail leads the toast: tighten the left padding so it sits
+   snug, and drop the full pill for a rounded-rect whose corner runs
+   concentric with the square thumbnail (4px thumb + 8px padding = 12px),
+   so the container meshes with it instead of fighting it. */
 .trash-toast:has(.trash-toast-thumb-btn),
 .trash-toast:has(.trash-toast-thumb) {
   padding-left: 8px;
+  border-radius: 12px;
 }
 
 /* Clickable preview of the existing save (duplicate-on-save toast). The
