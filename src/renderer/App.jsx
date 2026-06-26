@@ -3411,13 +3411,14 @@ export default function App({ entitlement } = {}) {
               />
                </div>
               </div>
-              {/* Floating centered mode tabs — shown when the toolbar is
-                  hidden on scroll. Full size (not the compact pill). */}
-              {(appMode === 'library' || (appMode === 'folders' && view.type === 'collection')) && scrolledHideBar && (
-                <div className="mode-pill-float">
-                  <ModePill mode={appMode} onModeChange={handleModeChange} />
-                </div>
-              )}
+              {/* The mode tabs are a single fixed-position pill, always
+                  rendered, overlaying the toolbar's invisible spacer slot
+                  in the exact same place. When the toolbar rolls up on
+                  scroll this pill simply stays put — no crossfade, no
+                  shift, no flash. */}
+              <div className="mode-pill-float">
+                <ModePill mode={appMode} onModeChange={handleModeChange} />
+              </div>
               {appMode === 'search' ? (
                 // Dedicated Search tab — search-first canvas. Hero field
                 // up top, then the landing chips (empty query) or the

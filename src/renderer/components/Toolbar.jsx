@@ -624,27 +624,18 @@ export default function Toolbar({
         )}
       </div>
 
-      <ModePill mode={mode} onModeChange={onModeChange} compact={modePillCompact} />
+      {/* Invisible spacer: the visible, interactive mode pill is a single
+          fixed-position element rendered by App (.mode-pill-float) so it
+          never moves or crossfades between scrolled/un-scrolled states.
+          This keeps the toolbar's height + centered slot identical. */}
+      <div className={styles.modePillSlot} aria-hidden="true">
+        <ModePill mode={mode} onModeChange={onModeChange} compact={modePillCompact} />
+      </div>
 
       <div className={styles.right}>
-        {/* Search joins the right-hand tools cluster (search + a
-            divider + the chrome icons), so the left column stays pure
-            identity / location — logo + Library, plus the back button
-            and collection title when drilled into a collection. The
-            inline field is hidden in the dedicated Search tab, which has
-            its own hero field. */}
-        {mode !== 'search' && (
-          <>
-            <SearchField
-              search={search}
-              onSearchChange={onSearchChange}
-              searchInputRef={searchInputRef}
-              onRecordSearch={onRecordSearch}
-              onOpenQuickSwitcher={onOpenQuickSwitcher}
-            />
-            <span className={styles.toolbarDivider} aria-hidden="true" />
-          </>
-        )}
+        {/* The inline "Search ⌘K" field was removed — search lives in the
+            Search tab (in the mode pill) and ⌘K still opens the quick
+            switcher globally. Right cluster is pure chrome now. */}
         {onOpenRediscover && (
           <button
             type="button"

@@ -682,6 +682,14 @@
   color: var(--surface-1);
 }
 
+/* Holds the in-flow mode pill purely as a layout spacer (the visible
+   pill is the fixed .mode-pill-float). Invisible + non-interactive, but
+   keeps the toolbar's height and centered slot exactly as before. */
+.modePillSlot {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .modePill {
   position: relative;
   display: inline-flex;
