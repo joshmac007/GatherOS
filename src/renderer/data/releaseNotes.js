@@ -147,15 +147,26 @@ export const RELEASE_NOTES = [
 //   • Brand-new install (no lastSeen): never show. Welcome modal owns
 //     first-launch onboarding.
 //   • lastSeen === currentVersion: nothing to show.
-//   • currentVersion > lastSeen: surface the notes block for
-//     currentVersion (intermediate skipped versions are intentionally
-//     not concatenated — keeps the modal readable; users who skip a
-//     release can find prior notes on the GitHub release page).
+//   • Patch bumps (same major.minor — e.g. 0.4.3 → 0.4.4): never show.
+//     These are bug fixes and polish; users don't need a "What's new"
+//     modal every single release.
+//   • Minor/major bumps (e.g. 0.3.x → 0.4.x): surface the notes block for
+//     the new line, matched by major.minor so any patch within it (0.4.4,
+//     0.4.7…) still finds the 0.4 showcase. Intermediate skipped versions
+//     are intentionally not concatenated — keeps the modal readable.
 export function pickNotesForUpgrade(currentVersion, lastSeen) {
   if (!currentVersion || !lastSeen) return null;
-  if (currentVersion === lastSeen) return null;
   if (compareVersions(currentVersion, lastSeen) <= 0) return null;
-  return RELEASE_NOTES.find((r) => r.version === currentVersion) || null;
+  const cur = String(currentVersion).split('.').map((x) => parseInt(x, 10) || 0);
+  const seen = String(lastSeen).split('.').map((x) => parseInt(x, 10) || 0);
+  // Only a minor or major change earns the modal. Same line → silent.
+  if (cur[0] === seen[0] && cur[1] === seen[1]) return null;
+  // Match by major.minor so the showcase shows regardless of which patch
+  // the user happens to land on.
+  return RELEASE_NOTES.find((r) => {
+    const v = String(r.version).split('.').map((x) => parseInt(x, 10) || 0);
+    return v[0] === cur[0] && v[1] === cur[1];
+  }) || null;
 }
 
 // Naive semver compare — splits on '.' and compares integers. Good

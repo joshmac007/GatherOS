@@ -131,7 +131,10 @@
 .gotItBtn {
   min-width: 140px;
   padding: 9px 24px;
-  border-radius: var(--radius-pill, 999px);
+  /* Hardcoded pill radius (not the --radius-pill token) so the button is
+     fully rounded even if the custom property fails to resolve in some
+     render path — this modal portals to document.body. */
+  border-radius: 999px;
   border: none;
   background: var(--text-primary);
   color: var(--surface-1);
