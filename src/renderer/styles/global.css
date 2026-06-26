@@ -311,12 +311,35 @@ body[data-board-print="true"] .main-col {
   font-size: var(--text-md);
   z-index: 1000;
   animation: trashToastIn var(--dur-quick) ease-out;
+  transition: bottom var(--dur-medium) ease;
 }
 
 /* When the multi-select action bar is also on-screen, lift the toast
    so it sits above the bar instead of crashing into it. */
 body:has(.selection-bar) .trash-toast {
   bottom: 84px;
+}
+
+/* ── Bottom-centre stacking ─────────────────────────────────────────
+   The free/trial upgrade banner is standing furniture pinned to the
+   bottom centre with the highest z-index (7000), so any other
+   bottom-centre UI renders *underneath* it and gets buried. Lift the
+   transient bars above the banner so the whole set stacks cleanly
+   instead of overlapping. Heights are ~40px, so each row clears the
+   one below it by ~12px. */
+body:has(.upgrade-banner) .selection-bar {
+  bottom: 72px;
+}
+
+body:has(.upgrade-banner) .trash-toast {
+  bottom: 72px;
+}
+
+/* Banner *and* the multi-select bar both present: the trash toast has
+   to clear the selection bar, which itself cleared the banner. Keep the
+   same 60px selection-bar→toast offset the no-banner case uses. */
+body:has(.upgrade-banner):has(.selection-bar) .trash-toast {
+  bottom: 132px;
 }
 
 /* Symmetric padding when there's no Undo / action chip on the
@@ -409,6 +432,7 @@ body:has(.selection-bar) .trash-toast {
   box-shadow: var(--shadow-card);
   color: var(--text-primary);
   z-index: 60;
+  transition: bottom var(--dur-medium) ease;
 }
 
 .selection-status {
