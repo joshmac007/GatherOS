@@ -147,6 +147,10 @@ export default function CollectionDropDock({
                     <span className={styles.rowIn_badge} title="Already added">
                       <CheckGlyph />
                     </span>
+                  ) : isTarget ? (
+                    // Drag-over only (isTarget is set by dragOver, never by
+                    // passive mouse hover) — previews the result of the drop.
+                    <span className={styles.rowAdd} aria-hidden="true">+1</span>
                   ) : (
                     <span className={styles.rowCount}>{(c.save_count ?? 0).toLocaleString()}</span>
                   )}

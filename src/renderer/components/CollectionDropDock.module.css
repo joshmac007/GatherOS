@@ -130,6 +130,27 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* "+1" preview chip — shown only while a save/file is dragged over the
+   row (drag-over state, never passive mouse hover), so the drop's result
+   is previewed just like the featured-bucket cards above the grid. */
+.rowAdd {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--surface-1);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  animation: rowAddPop var(--dur-quick, 160ms) var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+
+@keyframes rowAddPop {
+  from { opacity: 0; transform: scale(0.5) translateY(2px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
 /* Drop-target: calm in-place tint + the cover fans open a touch. No
    "+1", no accent ring. */
 .rowTarget,
