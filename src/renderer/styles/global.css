@@ -188,12 +188,12 @@ body[data-board-print="true"] .main-col {
   -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
-  /* Disable scroll-anchoring. Without this, when the featured-buckets
-     row collapses from cards to pills, the browser tries to preserve
-     the user's visual position by adjusting scrollTop — which pushes
-     the sentinel back into view, re-expanding the row, in a feedback
-     loop that reads as continuous flashing. */
-  overflow-anchor: none;
+  /* Scroll-anchoring left at the browser default (auto): it pins the
+     visible content when layout above the viewport changes height (e.g.
+     thumbnails finishing decode), so columns don't drift up/down as you
+     scroll. It was previously disabled to stop a feedback loop with the
+     old featured-buckets cards→pills collapse — that collapse no longer
+     exists, so the guard is obsolete and was causing the drift. */
 }
 
 /* External drop overlay. Rendered when an image / file is being
