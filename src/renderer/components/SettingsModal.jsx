@@ -1315,30 +1315,56 @@ export default function SettingsModal({
           {activePage === 'account' && (
             <div className={styles.page}>
               {/* Plan status — entitlement-driven so it's right in every
-                  mode (Free plan / Free trial / paid). Subscribers also get
-                  the detailed renews/ends row in the signed-in block. */}
-              <div className={styles.aboutRow}>
-                <span className={styles.aboutLabel}>Plan</span>
-                <span className={styles.aboutValue}>{planLabel}</span>
+                  mode (Free plan / Free trial / paid). All the key/value
+                  facts live together in one bordered card so the rows read
+                  as a single summary with an even rhythm, instead of loose
+                  lines floating under the title. Actions/notes sit below it. */}
+              <div className={styles.accountCard}>
+                <div className={styles.aboutRow}>
+                  <span className={styles.aboutLabel}>Current plan</span>
+                  <span className={styles.aboutValue}>{planLabel}</span>
+                </div>
+                {onLocalTrial && (
+                  <div className={styles.aboutRow}>
+                    <span className={styles.aboutLabel}>Trial</span>
+                    <span className={styles.aboutValue}>
+                      {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'} left
+                    </span>
+                  </div>
+                )}
+                {/* Show what upgrading costs to anyone without an active
+                    subscription (free / trial / signed-out). */}
+                {!account?.subscription && (
+                  <div className={styles.aboutRow}>
+                    <span className={styles.aboutLabel}>Pro price</span>
+                    <span className={styles.aboutValue}>
+                      {priceSummary()} <span className={styles.priceSave}>(save {YEARLY_SAVINGS} yearly)</span>
+                    </span>
+                  </div>
+                )}
+                {account?.state !== 'unauth' && (
+                  <div className={styles.aboutRow}>
+                    <span className={styles.aboutLabel}>Email</span>
+                    <span className={styles.aboutValue}>
+                      {account?.user?.email || '—'}
+                    </span>
+                  </div>
+                )}
+                {account?.state !== 'unauth' && account?.subscription?.current_period_end && (
+                  <div className={styles.aboutRow}>
+                    <span className={styles.aboutLabel}>
+                      {account.subscription.cancel_at_period_end
+                        ? 'Ends'
+                        : account.subscription.status === 'trialing'
+                          ? 'Trial ends'
+                          : 'Renews'}
+                    </span>
+                    <span className={styles.aboutValue}>
+                      {formatPeriodEnd(account.subscription.current_period_end)}
+                    </span>
+                  </div>
+                )}
               </div>
-              {onLocalTrial && (
-                <div className={styles.aboutRow}>
-                  <span className={styles.aboutLabel}>Trial</span>
-                  <span className={styles.aboutValue}>
-                    {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'} left
-                  </span>
-                </div>
-              )}
-              {/* Show what upgrading costs to anyone without an active
-                  subscription (free / trial / signed-out). */}
-              {!account?.subscription && (
-                <div className={styles.aboutRow}>
-                  <span className={styles.aboutLabel}>Pro price</span>
-                  <span className={styles.aboutValue}>
-                    {priceSummary()} <span className={styles.priceSave}>(save {YEARLY_SAVINGS} yearly)</span>
-                  </span>
-                </div>
-              )}
               {account?.state === 'unauth' ? (
                 <>
                   <div className={styles.signedOutNote}>
@@ -1349,7 +1375,7 @@ export default function SettingsModal({
                       stays on this Mac either way.
                     </p>
                   </div>
-                  <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 10 }}>
+                  <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 16 }}>
                     <button
                       type="button"
                       className={`${styles.btn} ${styles.btnPrimary}`}
@@ -1364,27 +1390,7 @@ export default function SettingsModal({
                 </>
               ) : (
                 <>
-                  <div className={styles.aboutRow}>
-                    <span className={styles.aboutLabel}>Email</span>
-                    <span className={styles.aboutValue}>
-                      {account?.user?.email || '—'}
-                    </span>
-                  </div>
-                  {account?.subscription?.current_period_end && (
-                    <div className={styles.aboutRow}>
-                      <span className={styles.aboutLabel}>
-                        {account.subscription.cancel_at_period_end
-                          ? 'Ends'
-                          : account.subscription.status === 'trialing'
-                            ? 'Trial ends'
-                            : 'Renews'}
-                      </span>
-                      <span className={styles.aboutValue}>
-                        {formatPeriodEnd(account.subscription.current_period_end)}
-                      </span>
-                    </div>
-                  )}
-                  <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 14 }}>
+                  <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 16 }}>
                     <button
                       type="button"
                       className={`${styles.btn} ${styles.btnDanger}`}

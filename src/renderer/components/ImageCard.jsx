@@ -391,9 +391,16 @@ function ImageCard({
         onPointerEnter={() => { if (showVideo) setVideoHover(true); }}
         onPointerLeave={() => { if (showVideo) setVideoHover(false); }}
       >
-        {inView && (isTweet ? (
+        {isTweet ? (
+          // Tweet text cards render unconditionally — never gated on
+          // inView. They're cheap (no media decode) and, crucially, they
+          // have no aspect-ratio to reserve their height. If we unmounted
+          // the TweetCard when scrolled off-screen the frame would collapse
+          // to ~0px, the column would shrink, and everything below it would
+          // jump up — which is exactly the "some columns shift while
+          // scrolling" glitch. Keeping it mounted holds the height steady.
           <TweetCard meta={tweetMeta} variant="grid" source={record.source} />
-        ) : showVideo ? (
+        ) : inView && (showVideo ? (
           // Video saves: render an inline <video> instead of an
           // <img> — the file_path is an MP4 that browsers can't
           // render as a static image. The poster attribute shows

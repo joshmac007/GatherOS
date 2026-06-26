@@ -186,6 +186,27 @@
   font-size: var(--text-sm);
 }
 
+/* Account summary: group the key/value rows into one bordered card so they
+   read as a single block with an even rhythm and hairline dividers, rather
+   than cramped lines floating under the page title. */
+.accountCard {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 4px 14px;
+  margin-top: 4px;
+}
+
+.accountCard .aboutRow {
+  padding: 11px 0;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.accountCard .aboutRow:last-child {
+  border-bottom: none;
+}
+
 .aboutLabel {
   color: var(--text-secondary);
 }
