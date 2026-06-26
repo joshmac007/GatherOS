@@ -24,6 +24,30 @@ const MAX_BODY = 2 * 1024 * 1024;
 let server = null;
 let cachedToken = null;
 
+// --- Sync ordering ------------------------------------------------------
+// The extension streams a social sync (X bookmarks / IG saved) newest-
+// first, one POST per item. If each just took Date.now() the newest item
+// (which arrives first) would get the EARLIEST timestamp and end up oldest
+// in the app — the order inverts. So synced items take a clock that steps
+// BACKWARDS per item: the first-arrived (newest bookmark) gets the latest
+// created_at, each later (older) item a bit earlier. Recent bookmark =
+// recent save. The clock resets when there's a real gap between syncs, so
+// a brand-new sync session starts fresh at "now".
+const SYNC_RESET_MS = 2 * 60 * 1000; // gap that starts a fresh session
+const SYNC_STEP_MS = 1000;           // how much "older" each next item is
+let syncClock = 0;
+let lastSyncWall = 0;
+function nextSyncCreatedAt() {
+  const now = Date.now();
+  if (lastSyncWall === 0 || now - lastSyncWall > SYNC_RESET_MS) {
+    syncClock = now;
+  } else {
+    syncClock -= SYNC_STEP_MS;
+  }
+  lastSyncWall = now;
+  return syncClock;
+}
+
 // Lazily generate + persist a 32-byte base64url token the first time
 // it's needed. Re-reading the pref later returns the same value, so
 // the extension can keep using a token it pasted previously.
@@ -277,6 +301,8 @@ async function handleSave(req, res) {
         // PNG still backs file_path/thumb_path so thumbnails, export,
         // dedupe and OCR-search keep working.
         kind: 'tweet',
+        // Descending clock so a newest-first sync keeps its order.
+        createdAt: nextSyncCreatedAt(),
       });
       attachTags(tweetRecord.id);
       notifyNew(tweetRecord);
@@ -342,6 +368,10 @@ async function handleSave(req, res) {
       notes: notes || null,
       tweetMeta,
       source,
+      // Synced posts (tweetMeta present) ride the descending sync clock so
+      // a newest-first stream stays newest-first in the app; one-off image
+      // saves keep the default now-timestamp.
+      createdAt: tweetMeta ? nextSyncCreatedAt() : undefined,
     });
     attachTags(record.id);
     notifyNew(record);

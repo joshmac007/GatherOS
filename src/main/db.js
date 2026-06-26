@@ -418,6 +418,10 @@ function insertSave({
   // Capture origin — 'x' (default) or 'instagram'. Drives the per-card
   // source badge and the combined "Saved" view filter.
   source,
+  // Optional explicit creation timestamp. Defaults to now. The extension
+  // sync passes a descending clock so a newest-first social stream keeps
+  // its order (newest social = newest in the app) instead of inverting.
+  createdAt,
 } = {}) {
   const db = getDatabase();
   const paletteArr = Array.isArray(palette) && palette.length ? palette : null;
@@ -445,7 +449,7 @@ function insertSave({
     kind: kind || 'image',
     tweet_meta: tweetMeta ? JSON.stringify(tweetMeta) : null,
     source: source || 'x',
-    created_at: Date.now(),
+    created_at: Number.isFinite(createdAt) ? createdAt : Date.now(),
   };
   db.prepare(`
     INSERT INTO saves
