@@ -1474,10 +1474,19 @@ export default function App({ entitlement } = {}) {
       const initials = (name.replace(/^@/, '').slice(0, 1) || '#').toUpperCase();
 
       const chip = document.createElement('div');
-      chip.style.cssText = 'position:fixed;top:0;left:-10000px;box-sizing:border-box;width:248px;'
-        + 'padding:12px 14px;border-radius:12px;display:flex;gap:10px;align-items:flex-start;'
-        + 'background:#1d1d20;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;'
-        + 'box-shadow:0 12px 30px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);pointer-events:none;';
+      // Liquid-glass: translucent + live backdrop blur. A native
+      // setDragImage ghost is a frozen raster (can't blur what's under
+      // it), so this element instead follows the cursor as a real DOM
+      // node — backdrop-filter then frosts the grid moving beneath it.
+      chip.style.cssText = 'position:fixed;top:0;left:0;box-sizing:border-box;width:248px;'
+        + 'padding:12px 14px;border-radius:14px;display:flex;gap:10px;align-items:flex-start;'
+        + 'background:rgba(28,28,32,0.45);color:#fff;'
+        + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;'
+        + 'backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);'
+        + 'border:1px solid rgba(255,255,255,0.18);'
+        + 'box-shadow:0 16px 44px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.22);'
+        + 'z-index:2147483646;pointer-events:none;will-change:transform;'
+        + `transform:translate(${e.clientX + 16}px, ${e.clientY + 14}px);`;
 
       const av = document.createElement('div');
       av.style.cssText = 'flex:0 0 auto;width:34px;height:34px;border-radius:50%;overflow:hidden;'
@@ -1526,8 +1535,37 @@ export default function App({ entitlement } = {}) {
       }
 
       document.body.appendChild(chip);
-      e.dataTransfer.setDragImage(chip, 22, 20);
-      setTimeout(() => chip.remove(), 0);
+      // Hide the native drag ghost (1×1 transparent canvas) so only our
+      // glass card shows.
+      const blank = document.createElement('canvas');
+      blank.width = 1;
+      blank.height = 1;
+      e.dataTransfer.setDragImage(blank, 0, 0);
+
+      // Follow the cursor via dragover (its clientX/Y are reliable, unlike
+      // the `drag` event's), rAF-throttled. Cleaned up on dragend.
+      let raf = 0;
+      let lx = e.clientX;
+      let ly = e.clientY;
+      const moveGhost = (ev) => {
+        if (ev.clientX === 0 && ev.clientY === 0) return; // ignore the stray end event
+        lx = ev.clientX;
+        ly = ev.clientY;
+        if (!raf) {
+          raf = requestAnimationFrame(() => {
+            raf = 0;
+            chip.style.transform = `translate(${lx + 16}px, ${ly + 14}px)`;
+          });
+        }
+      };
+      const endGhost = () => {
+        document.removeEventListener('dragover', moveGhost, true);
+        window.removeEventListener('dragend', endGhost, true);
+        if (raf) cancelAnimationFrame(raf);
+        chip.remove();
+      };
+      document.addEventListener('dragover', moveGhost, true);
+      window.addEventListener('dragend', endGhost, true);
       return;
     }
 
