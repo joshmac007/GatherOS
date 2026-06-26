@@ -200,17 +200,7 @@ async function startScreenshotCapture() {
 
     const buf = fs.readFileSync(tmpPath);
     writeToDropFolder(buf);
-
-    const { saveImageFromBuffer } = require('./storage');
-    const { insertSave } = require('./db');
-    const { notifySaved, notifyDuplicate } = require('./notify');
-    const imgData = await saveImageFromBuffer(buf, 'png');
-    if (imgData.duplicateOf) {
-      notifyDuplicate(imgData.existing);
-    } else {
-      const record = insertSave(imgData);
-      notifySaved(record);
-    }
+    await persistScreenshot(buf);
   } catch (err) {
     console.error('[capture] area capture failed:', err);
   } finally {
@@ -218,6 +208,30 @@ async function startScreenshotCapture() {
       try { fs.unlinkSync(tmpPath); } catch {}
     }
   }
+}
+
+// Shared tail for every screenshot path: store the buffer, detect a
+// duplicate, insert the save, auto-tag it #screenshot (so screenshots
+// are filterable/searchable as a group), and fire the right
+// notification. Returns the record (or the existing dup).
+async function persistScreenshot(buf, ext = 'png') {
+  const { saveImageFromBuffer } = require('./storage');
+  const { insertSave, addTagToSave } = require('./db');
+  const { notifySaved, notifyDuplicate } = require('./notify');
+  const imgData = await saveImageFromBuffer(buf, ext);
+  const tag = (saveId) => {
+    try { addTagToSave({ saveId, name: 'screenshot' }); }
+    catch (err) { console.warn('[capture] auto-tag #screenshot failed:', err); }
+  };
+  if (imgData.duplicateOf) {
+    tag(imgData.existing.id); // idempotent — keeps the existing copy tagged
+    notifyDuplicate(imgData.existing);
+    return imgData.existing;
+  }
+  const record = insertSave(imgData);
+  tag(record.id);
+  notifySaved(record);
+  return record;
 }
 
 // Capture the entire display under the cursor in one shot — no
@@ -247,16 +261,7 @@ async function captureFullscreen() {
   try {
     const png = source.thumbnail.toPNG();
     writeToDropFolder(png);
-    const { saveImageFromBuffer } = require('./storage');
-    const { insertSave } = require('./db');
-    const { notifySaved, notifyDuplicate } = require('./notify');
-    const imgData = await saveImageFromBuffer(png, 'png');
-    if (imgData.duplicateOf) {
-      notifyDuplicate(imgData.existing);
-    } else {
-      const record = insertSave(imgData);
-      notifySaved(record);
-    }
+    await persistScreenshot(png);
   } catch (err) {
     console.error('Failed to capture fullscreen:', err);
   }
@@ -311,19 +316,8 @@ async function captureWindow() {
     const framed = await padWindowImage(raw);
 
     writeToDropFolder(framed);
-
-    const { saveImageFromBuffer } = require('./storage');
-    const { insertSave } = require('./db');
-    const { notifySaved, notifyDuplicate } = require('./notify');
-    const imgData = await saveImageFromBuffer(framed, 'png');
-    if (imgData.duplicateOf) {
-      notifyDuplicate(imgData.existing);
-      console.log('[gatheros] captureWindow: duplicate of', imgData.duplicateOf);
-    } else {
-      const record = insertSave(imgData);
-      notifySaved(record);
-      console.log('[gatheros] captureWindow: saved', record?.id);
-    }
+    const record = await persistScreenshot(framed);
+    console.log('[gatheros] captureWindow: saved/dup', record?.id);
   } catch (err) {
     console.error('[gatheros] Failed to capture window:', err);
   } finally {
