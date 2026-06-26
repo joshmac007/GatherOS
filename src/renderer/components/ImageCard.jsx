@@ -281,8 +281,19 @@ function ImageCard({
   // of the card silently going un-changed.
   const [springback, setSpringback] = useState(false);
   const springTimerRef = useRef(null);
+  // Tweet text cards: we default to card-drag, then a press that lingers
+  // in place hands the gesture to text selection. This timer is that
+  // hand-off; cleared the moment a drag starts or the press ends.
+  const selectArmRef = useRef(null);
+  const clearSelectArm = () => {
+    if (selectArmRef.current) {
+      clearTimeout(selectArmRef.current);
+      selectArmRef.current = null;
+    }
+  };
   useEffect(() => () => {
     if (springTimerRef.current) clearTimeout(springTimerRef.current);
+    if (selectArmRef.current) clearTimeout(selectArmRef.current);
   }, []);
 
   // Pending placeholders are read-only: no select / open / drag /
@@ -321,7 +332,7 @@ function ImageCard({
       }}
       onDoubleClick={isPending ? undefined : () => onOpen(record)}
       onMouseEnter={isPending ? undefined : () => { onHover?.(record.id); preloadPagedImages(); }}
-      onMouseLeave={isPending ? undefined : () => onHover?.(null, record.id)}
+      onMouseLeave={isPending ? undefined : () => { clearSelectArm(); onHover?.(null, record.id); }}
       onContextMenu={isPending ? undefined : (e) => {
         if (onContextMenu) {
           e.preventDefault();
@@ -330,30 +341,32 @@ function ImageCard({
       }}
       onMouseDown={isPending ? undefined : (e) => {
         pressPosRef.current = { x: e.clientX, y: e.clientY };
-        // Tweet cards carry selectable text. A draggable element wins the
-        // gesture before any selection can start, so when the press lands
-        // on that text we switch the card's native drag OFF for this
-        // gesture — letting the browser select text instead. Toggling the
-        // DOM attribute synchronously here beats React's async re-render,
-        // so it's in effect before the drag threshold fires. Pressing on
-        // anything else re-arms dragging.
+        // Tweet cards carry selectable text, but they still need to drag
+        // into collections like every other card. So we DEFAULT to drag
+        // (re-arm draggable) — a quick press-and-move files the card —
+        // and only hand the gesture to text selection if the press
+        // lingers in place ~200ms without moving. Toggling the DOM
+        // attribute beats React's async re-render, so it's in effect
+        // before the next move fires. Non-tweet cards just stay draggable.
+        clearSelectArm();
         const el = wrapperRef.current;
-        if (el) {
-          const onText = isTweet && !!e.target.closest('[data-tweet-selectable]');
-          el.draggable = !onText && !!onDragStart;
+        if (!el) return;
+        el.draggable = !!onDragStart;
+        if (isTweet && onDragStart && e.target.closest('[data-tweet-selectable]')) {
+          selectArmRef.current = setTimeout(() => {
+            if (wrapperRef.current) wrapperRef.current.draggable = false;
+          }, 200);
         }
       }}
+      onMouseUp={isPending ? undefined : clearSelectArm}
       onDragStart={(e) => {
         if (!onDragStart) return;
-        // On a text-tweet card, a drag that begins on the selectable
-        // text is the user highlighting to copy — cancel the card drag
-        // so the browser does a text selection instead.
-        if (isTweet && e.target.closest('[data-tweet-selectable]')) {
-          e.preventDefault();
-          return;
-        }
+        // If a drag actually starts, the long-press text-selection
+        // hand-off lost the race — this is a card drag. Cancel the timer
+        // so it can't disarm draggable mid-gesture.
+        clearSelectArm();
         // The handler decides between HTML5 drag (in-app drops, e.g.
-        // sidebar buckets) and OS drag-out (Alt-drag), and is the
+        // collection cards) and OS drag-out (Alt-drag), and is the
         // one that calls preventDefault when needed.
         onDragStart(e, record);
       }}
