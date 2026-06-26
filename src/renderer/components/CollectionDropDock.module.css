@@ -100,6 +100,7 @@
   object-fit: cover;
   background: rgba(127, 127, 127, 0.18);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .fan img:nth-child(1) { transform: translate(-50%, -50%) rotate(-10deg) translate(-22%, 4%); z-index: 4; }
 .fan img:nth-child(2) { transform: translate(-50%, -50%) rotate(-3deg)  translate(-8%, 0);   z-index: 3; }
@@ -107,7 +108,15 @@
 .fan img:nth-child(4) { transform: translate(-50%, -50%) rotate(11deg)  translate(22%, 4%);  z-index: 1; }
 .fanEmpty { transform: translate(-50%, -50%); }
 
+/* Drag-over: fan the hovered chip's cover open a touch — the only thing
+   that moves, as a "this one receives it" cue. Newest stays on top. */
+.chipTarget .fan img:nth-child(1) { transform: translate(-50%, -50%) rotate(-15deg) translate(-34%, 6%); }
+.chipTarget .fan img:nth-child(2) { transform: translate(-50%, -50%) rotate(-5deg)  translate(-12%, 0); }
+.chipTarget .fan img:nth-child(3) { transform: translate(-50%, -50%) rotate(6deg)   translate(12%, 0); }
+.chipTarget .fan img:nth-child(4) { transform: translate(-50%, -50%) rotate(16deg)  translate(34%, 6%); }
+
 @media (prefers-reduced-motion: reduce) {
+  .fan img { transition: none; }
   .dock { transition: opacity 0.18s ease; transform: none; }
   .dock:not(.visible) { transform: none; }
 }
