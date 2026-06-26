@@ -1321,6 +1321,25 @@ function registerIpcHandlers() {
     onToastsEmpty();
   });
 
+  // Undo from the save toast — soft-delete the records that were just
+  // saved in this toast session. Mirrors saves:delete (Trash, not a
+  // hard delete; files stay on disk) and broadcasts so the open grid
+  // drops the cards immediately.
+  ipcMain.handle('toast:undo-saves', (_e, ids) => {
+    const list = Array.isArray(ids) ? ids.filter((id) => id != null) : [];
+    const removed = [];
+    for (const id of list) {
+      try {
+        if (deleteSave(id)?.ok) removed.push(id);
+      } catch (err) {
+        console.error('[gatheros] toast undo failed for', id, err);
+      }
+    }
+    if (removed.length) broadcastSavesDeleted(removed);
+    refreshTray();
+    return { ok: true, count: removed.length };
+  });
+
   // ─── Licensing ──────────────────────────────────────────────
   // Renderer asks for the entitlement state on launch + on every
   // window focus; main process owns the session token + cache.

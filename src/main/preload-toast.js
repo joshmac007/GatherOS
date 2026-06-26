@@ -17,4 +17,7 @@ contextBridge.exposeInMainWorld('toast', {
   setInteractive: (interactive) => ipcRenderer.send('toast:set-interactive', !!interactive),
   empty: () => ipcRenderer.send('toast:empty'),
   openImage: (filePath) => ipcRenderer.invoke('image:open-in-preview', filePath),
+  // Soft-delete the just-saved records (back to Trash) when the user
+  // hits Undo on the save toast.
+  undo: (ids) => ipcRenderer.invoke('toast:undo-saves', ids),
 });

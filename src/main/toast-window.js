@@ -7,8 +7,10 @@ const DEV_URL = 'http://localhost:5173';
 // Window matches the pill's actual extents so macOS vibrancy
 // (set below) frosts ONLY the pill area — extra window padding
 // would show a visible halo of frosted glass around it.
-const TOAST_WIDTH = 280;
-const TOAST_HEIGHT = 56;
+// Sized to the editorial two-line card (cluster + title/subtitle +
+// inline Undo). Taller and a touch wider than the old single-line pill.
+const TOAST_WIDTH = 312;
+const TOAST_HEIGHT = 70;
 // Distance from the work-area corner. The visual gap used to be
 // owned by the renderer's padding wrapper, but with vibrancy
 // constrained to the window rect the gap has to live in the

@@ -1,44 +1,57 @@
 import React from 'react';
-import { X as XIcon } from 'lucide-react';
 import styles from './Toast.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 
-// When `record` is null, the pill renders as an empty dark shell.
-// The toast window stays mounted at opacity 0 between toasts; the
-// shell makes sure the moment opacity flips to 1, we see the dark
-// glass material — not raw light-mode vibrancy peeking through
-// the window-show → React-render gap.
-export default function Toast({ record, count = 1, onDismiss }) {
-  if (!record) {
+// Editorial "saved to library" toast. Two-line receipt card with a
+// stacked thumbnail cluster (the most recent save front-most, earlier
+// ones fanned behind) and an inline Undo.
+//
+//   records — the saves in this toast session, most-recent-first. The
+//             cluster shows up to three; Undo trashes all of them.
+//   count   — total saved this session (drives the label + subtitle).
+//
+// When `records` is empty the pill renders as an empty dark shell. The
+// toast window stays mounted at opacity 0 between toasts; the shell keeps
+// the dark glass material visible the instant opacity flips to 1, so we
+// never see raw light-mode vibrancy through the show → render gap.
+export default function Toast({ records = [], count = 1, onUndo, onOpen }) {
+  if (!records.length) {
     return <div className={styles.toast} aria-hidden="true" />;
   }
-  const src = fileUrl(record.thumb_path);
-  const label = count > 1 ? `Saved ${count} to library` : 'Saved to library';
+
+  const multi = count > 1;
+  const lead = records[0];
+  // Up to three covers. Render back-to-front so the most recent save
+  // (index 0 → .c0) paints on top of the older ones behind it.
+  const covers = records.slice(0, 3).map((r, i) => ({ r, i })).reverse();
+  const title = multi ? `Saved ${count} to library` : 'Saved to library';
+  const sub = multi ? `${count} images · just now` : '1 image · just now';
+
   return (
     <div className={styles.toast} role="status">
-      {src && (
-        <div className={styles.thumbWrap}>
-          <img
-            key={record.id}
-            src={src}
-            className={styles.thumb}
-            alt=""
-          />
-          {count > 1 && (
-            <span className={styles.badge} aria-label={`${count} saves`}>
-              +{count - 1}
-            </span>
-          )}
-        </div>
-      )}
-      <span className={styles.label}>{label}</span>
       <button
         type="button"
-        className={styles.dismissBtn}
-        onClick={onDismiss}
-        aria-label="Dismiss"
+        className={`${styles.cluster}${multi ? '' : ` ${styles.clusterSingle}`}`}
+        onClick={() => onOpen?.(lead)}
+        aria-label="Open most recent save"
       >
-        <XIcon size={14} strokeWidth={2} aria-hidden="true" />
+        {covers.map(({ r, i }) => (
+          <img
+            key={r.id}
+            src={fileUrl(r.thumb_path)}
+            className={`${styles.cover} ${styles[`c${i}`]}`}
+            alt=""
+          />
+        ))}
+      </button>
+
+      <div className={styles.body}>
+        <span className={styles.h}>{title}</span>
+        <span className={styles.s}>{sub}</span>
+      </div>
+
+      <button type="button" className={styles.undo} onClick={() => onUndo?.()}>
+        Undo
       </button>
     </div>
   );

@@ -1,110 +1,121 @@
-/* Liquid-glass toast. The OS-level macOS vibrancy on the toast
-   BrowserWindow (vibrancy: 'hud' in toast-window.js) supplies the
-   actual blur of whatever's behind the app — this CSS just adds a
-   dark tint and the hairline + shadow that ride on top so the
-   pill reads against any wallpaper. The window is sized to the
-   pill exactly so the frosted material doesn't bleed past its
-   visible edges. */
+/* Editorial "saved" toast — a small two-line receipt card. The toast
+   BrowserWindow supplies the macOS vibrancy blur (vibrancy: 'hud' in
+   toast-window.js); this CSS just adds the dark tint, hairline + shadow,
+   and the card layout that ride on top so the pill reads against any
+   wallpaper. The window is sized to the card exactly so the frosted
+   material doesn't bleed past its visible edges. */
 .toast {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 8px 10px 10px;
-  /* Fill the window. min-width was the right move when the toast
-     lived inside a larger transparent canvas; now the window IS
-     the pill. */
+  gap: 14px;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
+  padding: 12px 14px 12px 12px;
   background: rgba(20, 20, 22, 0.45);
   color: #ffffff;
   border: 0.5px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-xl);
+  border-radius: 16px;
   box-shadow:
     inset 0 0.5px 0 rgba(255, 255, 255, 0.08),
     0 1px 2px rgba(0, 0, 0, 0.22),
     0 12px 32px rgba(0, 0, 0, 0.32);
-  /* No slide-in animation now that the pill is always mounted —
-     the toast window's opacity flip is what makes it appear. */
 }
 
-.thumbWrap {
+/* Stacked thumbnail cluster — the most recent save sits front-most, and
+   up to two earlier saves fan out behind it (the "+N" badge becomes the
+   images themselves). The whole cluster is a button: click it to open
+   the most recent save. */
+.cluster {
   position: relative;
+  width: 46px;
+  height: 42px;
   flex-shrink: 0;
-}
-
-.thumb {
-  width: 32px;
-  height: 32px;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.08);
-  display: block;
-  animation: thumbSwap var(--dur-medium) var(--ease-pop);
-}
-
-.badge {
-  position: absolute;
-  top: -5px;
-  right: -7px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #ffffff;
-  color: #0b0b0d;
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  border-radius: var(--radius-pill);
-  box-shadow:
-    0 0 0 1.5px rgba(20, 20, 22, 0.72),
-    0 1px 2px rgba(0, 0, 0, 0.4);
-  animation: badgePop var(--dur-medium) var(--ease-bounce);
-}
-
-@keyframes thumbSwap {
-  from { transform: scale(0.85); opacity: 0; }
-  to   { transform: scale(1);    opacity: 1; }
-}
-
-@keyframes badgePop {
-  from { transform: scale(0.5); opacity: 0; }
-  to   { transform: scale(1);   opacity: 1; }
-}
-
-.label {
-  flex: 1 1 auto;
-  color: rgba(255, 255, 255, 0.95);
-  font-size: var(--text-md);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-/* Subtle grey X on the right. Tightly visible at rest, brightens on
-   hover so a hesitant click target reads clearly. */
-.dismissBtn {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
   padding: 0;
-  margin-left: 2px;
   border: none;
-  background: transparent;
-  border-radius: 6px;
-  color: rgba(255, 255, 255, 0.45);
+  background: none;
   cursor: pointer;
-  transition: background var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 
-.dismissBtn:hover {
-  background: rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.95);
+.clusterSingle {
+  width: 40px;
 }
 
+.cover {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.4);
+  /* Opacity-only entrance so it can't fight the per-cover rotate/offset
+     transforms below. */
+  animation: coverIn var(--dur-medium) ease both;
+}
+
+.c2 { top: 0;   left: 0;  transform: rotate(-6deg) translateX(-3px); filter: brightness(0.78); }
+.c1 { top: 2px; left: 4px; transform: rotate(5deg);                  filter: brightness(0.88); }
+.c0 {
+  top: 4px;
+  left: 8px;
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.5),
+    0 0 0 0.5px rgba(255, 255, 255, 0.16);
+  transition: transform var(--dur-instant) ease;
+}
+
+.clusterSingle .c0 { top: 2px; left: 1px; }
+
+.cluster:hover .c0 { transform: translateY(-1px); }
+
+@keyframes coverIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.h {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.s {
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+/* Inline undo — soft-deletes the just-saved items back to Trash. The
+   star of this direction: a one-tap escape hatch for an accidental
+   (often bulk) save. */
+.undo {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: background var(--dur-instant) ease, transform var(--dur-instant) ease;
+}
+
+.undo:hover { background: rgba(255, 255, 255, 0.24); }
+.undo:active { transform: scale(0.97); }
