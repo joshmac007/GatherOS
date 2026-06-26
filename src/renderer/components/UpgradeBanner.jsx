@@ -26,7 +26,7 @@ export default function UpgradeBanner({ entitlement, onUpgrade }) {
 
   if (mode === 'free') {
     return (
-      <div className={styles.banner}>
+      <div className={`${styles.banner} upgrade-banner`}>
         <span className={styles.text}>
           You’re on the free plan — upgrade to keep saving.
         </span>
@@ -46,7 +46,7 @@ export default function UpgradeBanner({ entitlement, onUpgrade }) {
 
   const dayWord = daysLeft === 1 ? 'day' : 'days';
   return (
-    <div className={styles.banner}>
+    <div className={`${styles.banner} upgrade-banner`}>
       <span className={styles.text}>
         {daysLeft > 0
           ? `Trial: ${daysLeft} ${dayWord} left`

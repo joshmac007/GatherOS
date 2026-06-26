@@ -609,6 +609,15 @@ body:has(.selection-bar) .trash-toast {
     var(--surface-1);
 }
 
+/* Both the update pill and the upgrade/trial banner pin to bottom-center,
+   so when both are present they'd overlap (and the banner's higher
+   z-index would bury the pill). Lift the pill to sit just above the
+   banner. The banner unmounts when not shown (incl. when dismissed for
+   the session), so :has() naturally drops the pill back to 24px. */
+.app-shell:has(.upgrade-banner) .update-pill {
+  bottom: 72px;
+}
+
 .update-pill-dot {
   width: 7px;
   height: 7px;
