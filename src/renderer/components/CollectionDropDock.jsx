@@ -95,7 +95,9 @@ export default function CollectionDropDock({
       onMouseLeave={() => setHoverExpand(false)}
     >
       <div className={styles.list}>
-        <span className={styles.listLabel}>Collections</span>
+        {/* Caption only once fanned open — at rest it would leave a sliver
+            of space above the deck and throw off the vertical balance. */}
+        {expanded && <span className={styles.listLabel}>Collections</span>}
         <div className={styles.rows}>
           {collections.map((c) => {
             const thumbs = Array.isArray(c.thumbs) ? c.thumbs.slice(0, 4) : [];

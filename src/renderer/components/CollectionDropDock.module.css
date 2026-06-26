@@ -48,25 +48,17 @@
   box-shadow: -10px 16px 44px rgba(0, 0, 0, 0.4);
 }
 
-/* "Collections" caption — only once fanned open. */
+/* "Collections" caption — only mounted once fanned open (see JSX), so it
+   never reserves space in the resting deck. */
 .listLabel {
   display: block;
-  opacity: 0;
-  max-height: 0;
-  padding: 0 8px;
-  overflow: hidden;
+  padding: 4px 8px 7px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-tertiary);
   white-space: nowrap;
-  transition: opacity 0.18s ease, max-height 0.24s ease, padding 0.24s ease;
-}
-.edge.edgeExpanded .listLabel {
-  opacity: 1;
-  max-height: 22px;
-  padding: 4px 8px 7px;
 }
 
 .rows { display: flex; flex-direction: column; }
