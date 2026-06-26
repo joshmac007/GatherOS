@@ -526,6 +526,11 @@ export default function App({ entitlement } = {}) {
   // the user creates / renames / deletes from the library switcher.
   const [libraries, setLibraries] = useState([]);
   const [activeLibraryId, setActiveLibraryId] = useState(null);
+  // Transient overlay shown during a library switch: a quick veil
+  // crossfade that masks the content swap and names the library you're
+  // landing in. { id, name } while playing, null otherwise.
+  const [librarySwitchOverlay, setLibrarySwitchOverlay] = useState(null);
+  const librarySwitchTimerRef = useRef(null);
   const refreshLibraries = useCallback(async () => {
     try {
       const res = await window.moodmark.libraries.list();
@@ -1648,6 +1653,13 @@ export default function App({ entitlement } = {}) {
     if (!id || id === activeLibraryId) return;
     const res = await window.moodmark.libraries.switch(id);
     if (!res?.ok) return;
+    // Kick off the crossfade: name the library we're landing in and let
+    // the veil mask the grid/sidebar reload below. Re-keyed by id so a
+    // rapid re-switch restarts the animation cleanly.
+    const target = libraries.find((l) => l.id === id);
+    setLibrarySwitchOverlay({ id, name: target?.name || 'Library' });
+    if (librarySwitchTimerRef.current) clearTimeout(librarySwitchTimerRef.current);
+    librarySwitchTimerRef.current = setTimeout(() => setLibrarySwitchOverlay(null), 820);
     setActiveLibraryId(id);
     setView({ type: 'all' });
     setFocusedId(null);
@@ -1659,7 +1671,7 @@ export default function App({ entitlement } = {}) {
     setShuffleSeeds(new Map());
     await loadCollections();
     await reload();
-  }, [activeLibraryId, loadCollections, reload, setColorFilter, setSearch, setView]);
+  }, [activeLibraryId, libraries, loadCollections, reload, setColorFilter, setSearch, setView]);
 
   const handleCreateLibrary = useCallback(async (name) => {
     if (proLocked) { requestUpgrade('libraries'); return; }
@@ -3547,6 +3559,15 @@ export default function App({ entitlement } = {}) {
       {dragging && (
         <div className="drop-overlay">
           <span className="drop-message">Drop to save</span>
+        </div>
+      )}
+
+      {librarySwitchOverlay && (
+        <div className="library-switch-overlay" key={librarySwitchOverlay.id} aria-hidden="true">
+          <div className="library-switch-card">
+            <span className="library-switch-eyebrow">Library</span>
+            <span className="library-switch-name">{librarySwitchOverlay.name}</span>
+          </div>
         </div>
       )}
 

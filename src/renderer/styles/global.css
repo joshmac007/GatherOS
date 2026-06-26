@@ -165,6 +165,73 @@ body[data-board-print="true"] .main-col {
   to { opacity: 1; }
 }
 
+/* Library switch crossfade — a frosted veil briefly masks the grid +
+   sidebar reload while the name of the library you're landing in fades
+   through. Opacity-only animation (constant blur) so it stays smooth.
+   pointer-events: none and self-clearing after ~820ms in App. */
+.library-switch-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 100000;
+  background: color-mix(in srgb, var(--surface-1) 84%, transparent);
+  backdrop-filter: blur(14px) saturate(112%);
+  -webkit-backdrop-filter: blur(14px) saturate(112%);
+  animation: librarySwitchVeil 820ms ease both;
+}
+
+.library-switch-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: librarySwitchName 820ms ease both;
+}
+
+.library-switch-eyebrow {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.library-switch-name {
+  font-family: var(--font-ui);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 70vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes librarySwitchVeil {
+  0%   { opacity: 0; }
+  18%  { opacity: 1; }
+  62%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes librarySwitchName {
+  0%   { opacity: 0; transform: translateY(9px) scale(0.98); }
+  20%  { opacity: 1; transform: translateY(0) scale(1); }
+  62%  { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-5px) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-switch-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .library-switch-card { animation: librarySwitchName 820ms ease both; }
+}
+
 .trash-toast {
   position: fixed;
   bottom: 24px;
