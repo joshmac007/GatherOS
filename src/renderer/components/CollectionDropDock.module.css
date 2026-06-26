@@ -183,16 +183,25 @@
   object-fit: cover;
   background: rgba(127, 127, 127, 0.18);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Resting: every cover sits dead-centre and only the lead one is shown,
+     so the stacked deck is one thumbnail per collection — not a fan of
+     four per card multiplied across the whole stack. */
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.18s ease;
 }
-.fan img:nth-child(1) { transform: translate(-50%, -50%) rotate(-10deg) translate(-22%, 4%); z-index: 4; }
-.fan img:nth-child(2) { transform: translate(-50%, -50%) rotate(-3deg)  translate(-8%, 0);   z-index: 3; }
-.fan img:nth-child(3) { transform: translate(-50%, -50%) rotate(4deg)   translate(8%, 0);    z-index: 2; }
-.fan img:nth-child(4) { transform: translate(-50%, -50%) rotate(11deg)  translate(22%, 4%);  z-index: 1; }
-.fanEmpty { transform: translate(-50%, -50%); }
+.fan img:nth-child(1) { opacity: 1; z-index: 4; }
+.fanEmpty { opacity: 1; }
 
-.rowTarget .fan img:nth-child(1) { transform: translate(-50%, -50%) rotate(-15deg) translate(-34%, 6%); }
-.rowTarget .fan img:nth-child(4) { transform: translate(-50%, -50%) rotate(16deg) translate(34%, 6%); }
+/* Fanned open: the four covers spread into the signature fan. */
+.edge.edgeExpanded .fan img { opacity: 1; }
+.edge.edgeExpanded .fan img:nth-child(1) { transform: translate(-50%, -50%) rotate(-10deg) translate(-22%, 4%); z-index: 4; }
+.edge.edgeExpanded .fan img:nth-child(2) { transform: translate(-50%, -50%) rotate(-3deg)  translate(-8%, 0);   z-index: 3; }
+.edge.edgeExpanded .fan img:nth-child(3) { transform: translate(-50%, -50%) rotate(4deg)   translate(8%, 0);    z-index: 2; }
+.edge.edgeExpanded .fan img:nth-child(4) { transform: translate(-50%, -50%) rotate(11deg)  translate(22%, 4%);  z-index: 1; }
+
+.edge.edgeExpanded .rowTarget .fan img:nth-child(1) { transform: translate(-50%, -50%) rotate(-15deg) translate(-34%, 6%); }
+.edge.edgeExpanded .rowTarget .fan img:nth-child(4) { transform: translate(-50%, -50%) rotate(16deg) translate(34%, 6%); }
 
 @media (prefers-reduced-motion: reduce) {
   .edge, .list, .row, .fan img { transition: none; }
