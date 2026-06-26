@@ -402,16 +402,13 @@ body:has(.selection-bar) .trash-toast {
    pops in only when the user has unsorted saves to triage. Same
    aesthetic as the multi-select bar (.selection-bar) so the user's
    eye reads them as the same family of "actions on this view". */
-/* Compact circular FAB pinned bottom-right that pops in once the
-   user has scrolled the masonry meaningfully (>720px). Same glass
-   recipe as .sort-fab so they sit in the same visual family. When
-   .sort-fab is also showing (unsorted view), this button stacks
-   above it via :has-style overflow handled in the App via an
-   `--scroll-top-offset` custom property. */
+/* Compact circular FAB that pops in once the user has scrolled the
+   masonry meaningfully (>720px). Pinned bottom-LEFT so it never sits
+   behind the add FAB / sort-fab, which both live bottom-right. */
 .scroll-top-fab {
   position: fixed;
-  bottom: calc(24px + var(--scroll-top-offset, 0px));
-  right: 24px;
+  bottom: 24px;
+  left: 24px;
   z-index: 60;
   display: inline-flex;
   align-items: center;

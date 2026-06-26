@@ -3759,14 +3759,6 @@ export default function App({ entitlement } = {}) {
           onClick={scrollGridToTop}
           title="Scroll to top"
           aria-label="Scroll to top"
-          style={{
-            '--scroll-top-offset':
-              view.type === 'unsorted'
-                && saves.length > 0
-                && collections.length > 0
-                ? '60px'
-                : '0px',
-          }}
         >
           <ArrowUp aria-hidden="true" />
         </button>
