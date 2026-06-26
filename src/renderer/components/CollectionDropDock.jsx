@@ -97,7 +97,6 @@ export default function CollectionDropDock({
                 )}
               </span>
               <span className={styles.name}>{c.name}</span>
-              {isTarget && <span className={styles.plus} aria-hidden="true">+1</span>}
             </div>
           );
         })}
