@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collection cards reachable as drop targets while scrolled</title>
+<style>
+  :root{
+    --bg:#0f0f11;
+    --panel:#161618;
+    --panel-2:#1c1c1f;
+    --line:rgba(255,255,255,.08);
+    --line-2:rgba(255,255,255,.14);
+    --txt:rgba(255,255,255,.92);
+    --txt-2:rgba(255,255,255,.6);
+    --txt-3:rgba(255,255,255,.4);
+    --accent:#8b7bff;
+    --accent-soft:rgba(139,123,255,.16);
+    --radius:14px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--txt)}
+  body{padding-top:96px}
+
+  /* ---- top nav ---- */
+  .topbar{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(15,15,17,.86);
+    backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:14px 22px 12px}
+  .topbar h1{font-size:14px;font-weight:600;margin:0 0 10px;letter-spacing:-.01em;color:var(--txt)}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .tab{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);
+    color:var(--txt-2);border-radius:999px;padding:6px 13px 6px 8px;font-size:12.5px;cursor:pointer;
+    transition:.15s}
+  .tab .n{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;
+    background:var(--panel-2);color:var(--txt-3);font-size:11px;font-weight:600}
+  .tab:hover{border-color:var(--line-2);color:var(--txt)}
+  .tab.active{background:var(--accent-soft);border-color:var(--accent);color:#fff}
+  .tab.active .n{background:var(--accent);color:#fff}
+
+  /* ---- stage ---- */
+  .iter{display:none;max-width:1120px;margin:0 auto;padding:22px}
+  .iter.active{display:block}
+  .meta{margin:6px 2px 16px}
+  .meta .name{font-size:20px;font-weight:650;letter-spacing:-.02em}
+  .meta .why{margin-top:5px;font-size:13.5px;color:var(--txt-2);max-width:760px;line-height:1.5}
+  .controls{display:flex;gap:6px;margin:12px 2px 14px;align-items:center}
+  .controls .lbl{font-size:11px;color:var(--txt-3);text-transform:uppercase;letter-spacing:.08em;margin-right:4px}
+  .sbtn{border:1px solid var(--line);background:var(--panel);color:var(--txt-2);border-radius:8px;
+    padding:6px 12px;font-size:12px;cursor:pointer;transition:.15s}
+  .sbtn:hover{border-color:var(--line-2);color:var(--txt)}
+  .sbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  /* ---- app frame ---- */
+  .frame{position:relative;height:500px;border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;background:var(--panel)}
+  .toolbar{position:absolute;top:0;left:0;right:0;height:50px;z-index:30;display:flex;align-items:center;
+    justify-content:space-between;padding:0 16px;background:rgba(22,22,24,.92);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line)}
+  .tl-left{display:flex;align-items:center;gap:12px}
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--accent)}
+  .pills{display:flex;gap:4px}
+  .pill{font-size:11.5px;color:var(--txt-2);padding:4px 10px;border-radius:7px;background:var(--panel-2)}
+  .pill.act{color:#fff;background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+  .search{width:180px;height:28px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);
+    font-size:11px;color:var(--txt-3);display:flex;align-items:center;padding:0 10px}
+
+  .viewport{position:absolute;inset:50px 0 0 0;overflow:hidden}
+  .scroller{position:absolute;inset:0;transition:transform .5s cubic-bezier(.4,0,.2,1);padding:16px}
+  .frame[data-state="scroll"] .scroller,
+  .frame[data-state="drag"] .scroller{transform:translateY(-168px)}
+
+  /* featured collection row (the thing that scrolls away) */
+  .featured{display:flex;gap:12px;margin-bottom:18px;overflow:hidden}
+  .scrolled-note{position:absolute;top:62px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--txt-3);
+    background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:3px 11px;opacity:0;
+    transition:.3s;z-index:5;pointer-events:none}
+  .frame[data-state="scroll"] .scrolled-note{opacity:1}
+
+  /* grid */
+  .grid{column-count:4;column-gap:12px}
+  .card{break-inside:avoid;width:100%;border-radius:10px;margin-bottom:12px;background-size:cover;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+  .card.dragged{outline:2px solid #fff;outline-offset:2px}
+
+  /* ---- fanned cover ---- */
+  .fan{position:relative;flex:0 0 auto}
+  .fan .t{position:absolute;left:50%;top:50%;width:78%;height:78%;border-radius:5px;background-size:cover;
+    box-shadow:0 1px 3px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.07)}
+  .fan .t:nth-child(1){transform:translate(-50%,-50%) rotate(-10deg) translate(-20%,5%);z-index:4}
+  .fan .t:nth-child(2){transform:translate(-50%,-50%) rotate(-3deg) translate(-7%,0);z-index:3}
+  .fan .t:nth-child(3){transform:translate(-50%,-50%) rotate(4deg)  translate(7%,0);z-index:2}
+  .fan .t:nth-child(4){transform:translate(-50%,-50%) rotate(11deg) translate(20%,5%);z-index:1}
+
+  /* collection element (generic, variant-scaled) */
+  .col{position:relative;cursor:pointer;transition:transform .2s,background .2s,box-shadow .2s}
+  .col-meta{display:flex;flex-direction:column;gap:1px}
+  .col-name{font-size:13px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .col-count{font-size:11px;color:var(--txt-3)}
+  .plus{position:absolute;background:var(--accent);color:#fff;font-size:10px;font-weight:700;
+    padding:1px 6px;border-radius:999px;opacity:0;transform:scale(.5);transition:.18s cubic-bezier(.2,.8,.2,1)}
+
+  /* full card variant */
+  .col.full{width:128px;padding:10px;border-radius:12px;background:var(--panel-2);border:1px solid var(--line)}
+  .col.full .fan{width:104px;height:74px;margin:0 auto 8px}
+  .col.full .plus{top:6px;right:6px}
+  .col.full:hover{transform:translateY(-2px)}
+
+  /* drop target highlight (during drag) */
+  .frame[data-state="drag"] .col.target{box-shadow:0 0 0 2px var(--accent),0 0 0 6px var(--accent-soft);
+    background:var(--accent-soft)}
+  .frame[data-state="drag"] .col.target .plus{opacity:1;transform:scale(1)}
+  .frame[data-state="drag"] .col.target .fan .t:nth-child(1){transform:translate(-50%,-50%) rotate(-15deg) translate(-30%,7%)}
+  .frame[data-state="drag"] .col.target .fan .t:nth-child(4){transform:translate(-50%,-50%) rotate(16deg) translate(30%,7%)}
+
+  /* drag ghost + cursor */
+  .ghost,.cursor{position:absolute;z-index:42;opacity:0;transition:opacity .2s;pointer-events:none}
+  .frame[data-state="drag"] .ghost,.frame[data-state="drag"] .cursor{opacity:1}
+  .ghost{width:70px;height:52px;border-radius:7px;background-size:cover;transform:rotate(-7deg);
+    box-shadow:0 10px 24px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.12)}
+  .ghost .badge{position:absolute;top:-8px;right:-8px;background:#ff3b30;color:#fff;font-size:10px;font-weight:700;
+    width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 2px var(--panel)}
+  .cursor{width:16px;height:16px}
+  .cursor svg{width:100%;height:100%;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+
+  /* =====================================================================
+     ITERATION 1 — drag-activated dock
+  ===================================================================== */
+  #i1 .dock{position:absolute;top:50px;left:0;right:0;z-index:35;display:flex;gap:8px;align-items:center;
+    padding:10px 14px;background:rgba(20,20,23,.94);backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line-2);transform:translateY(-110%);transition:transform .32s cubic-bezier(.3,.9,.3,1)}
+  #i1 .dock .hint{font-size:11px;color:var(--txt-3);margin-right:4px;white-space:nowrap}
+  #i1 .frame[data-state="drag"] .dock{transform:translateY(0)}
+  #i1 .col.dock-chip{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;border-radius:999px;
+    background:var(--panel-2);border:1px solid var(--line)}
+  #i1 .col.dock-chip .fan{width:34px;height:28px}
+  #i1 .col.dock-chip .col-count{display:none}
+  #i1 .col.dock-chip .plus{top:-6px;right:-4px}
+  #i1 .ghost{top:150px;left:300px}
+  #i1 .cursor{top:150px;left:360px}
+
+  /* =====================================================================
+     ITERATION 2 — collapsing pinned bar
+  ===================================================================== */
+  #i2 .bar{position:absolute;top:50px;left:0;right:0;z-index:35;display:flex;gap:7px;align-items:center;
+    padding:8px 14px;background:rgba(20,20,23,.95);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);
+    opacity:0;transform:translateY(-8px);transition:.28s;pointer-events:none}
+  #i2 .frame[data-state="scroll"] .bar,#i2 .frame[data-state="drag"] .bar{opacity:1;transform:none;pointer-events:auto}
+  #i2 .bar .blbl{font-size:11px;color:var(--txt-3);margin-right:6px;white-space:nowrap}
+  #i2 .col.chip{display:flex;align-items:center;gap:7px;padding:5px 11px 5px 6px;border-radius:9px;
+    background:var(--panel-2);border:1px solid var(--line);max-width:128px}
+  #i2 .col.chip .fan{width:26px;height:24px}
+  #i2 .col.chip .col-count{display:none}
+  #i2 .col.chip .col-name{font-size:12px}
+  #i2 .col.chip .plus{top:-6px;right:-4px}
+  #i2 .ghost{top:130px;left:230px}
+  #i2 .cursor{top:128px;left:290px}
+
+  /* =====================================================================
+     ITERATION 3 — edge auto-reveal / peek
+  ===================================================================== */
+  #i3 .edgehint{position:absolute;top:50px;left:0;right:0;height:5px;z-index:34;
+    background:linear-gradient(180deg,var(--accent-soft),transparent);opacity:0;transition:.3s}
+  #i3 .frame[data-state="scroll"] .edgehint{opacity:1}
+  #i3 .peek{position:absolute;top:50px;left:0;right:0;z-index:35;display:flex;gap:12px;align-items:center;
+    padding:14px;background:linear-gradient(180deg,rgba(20,20,23,.97),rgba(20,20,23,.88));
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line-2);
+    transform:translateY(-112%);transition:transform .34s cubic-bezier(.3,.9,.3,1)}
+  #i3 .frame[data-state="drag"] .peek{transform:translateY(0)}
+  #i3 .peek .arrow{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--accent);
+    display:flex;align-items:center;gap:5px}
+  #i3 .col.full .col-count{display:none}
+  #i3 .ghost{top:120px;left:280px}
+  #i3 .cursor{top:80px;left:300px}
+
+  /* =====================================================================
+     ITERATION 4 — floating minimized cluster puck
+  ===================================================================== */
+  #i4 .puck{position:absolute;right:20px;bottom:20px;z-index:36;display:flex;align-items:center;gap:10px;
+    padding:9px 14px 9px 10px;border-radius:14px;background:rgba(24,24,27,.96);backdrop-filter:blur(14px);
+    border:1px solid var(--line-2);box-shadow:0 12px 30px rgba(0,0,0,.5);cursor:pointer;transition:.2s}
+  #i4 .puck .fan{width:40px;height:32px}
+  #i4 .puck .pk-meta{font-size:12px;color:var(--txt-2)}
+  #i4 .puck .pk-meta b{color:var(--txt);font-weight:600}
+  #i4 .tray{position:absolute;right:20px;bottom:74px;z-index:36;width:230px;display:flex;flex-direction:column;
+    gap:5px;padding:8px;border-radius:14px;background:rgba(24,24,27,.97);backdrop-filter:blur(16px);
+    border:1px solid var(--line-2);box-shadow:0 16px 40px rgba(0,0,0,.55);
+    opacity:0;transform:translateY(10px) scale(.96);transform-origin:bottom right;transition:.24s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+  #i4 .frame[data-state="drag"] .tray{opacity:1;transform:none;pointer-events:auto}
+  #i4 .frame[data-state="drag"] .puck{opacity:.4}
+  #i4 .tray .tlbl{font-size:10px;color:var(--txt-3);text-transform:uppercase;letter-spacing:.08em;padding:3px 6px 5px}
+  #i4 .col.row{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:9px}
+  #i4 .col.row:hover{background:var(--panel-2)}
+  #i4 .col.row .fan{width:30px;height:26px}
+  #i4 .col.row .plus{position:static;margin-left:auto;opacity:0}
+  #i4 .frame[data-state="drag"] .col.row.target{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+  #i4 .frame[data-state="drag"] .col.row.target .plus{opacity:1;transform:scale(1)}
+  #i4 .ghost{right:270px;bottom:120px;left:auto;top:auto}
+  #i4 .cursor{right:250px;bottom:104px;left:auto;top:auto}
+
+  /* =====================================================================
+     ITERATION 5 — persistent right side-rail
+  ===================================================================== */
+  #i5 .viewport{inset:50px 0 0 0}
+  #i5 .scroller{right:200px;padding:16px}
+  #i5 .frame[data-state="scroll"] .scroller,#i5 .frame[data-state="drag"] .scroller{transform:translateY(-168px)}
+  #i5 .grid{column-count:3}
+  #i5 .featured{display:none}
+  #i5 .rail{position:absolute;top:50px;right:0;bottom:0;width:200px;z-index:35;display:flex;flex-direction:column;
+    gap:4px;padding:12px 10px;background:rgba(20,20,23,.96);backdrop-filter:blur(12px);
+    border-left:1px solid var(--line)}
+  #i5 .rail .rlbl{font-size:10px;color:var(--txt-3);text-transform:uppercase;letter-spacing:.08em;padding:2px 6px 8px}
+  #i5 .col.rail-item{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px}
+  #i5 .col.rail-item:hover{background:var(--panel-2)}
+  #i5 .col.rail-item .fan{width:34px;height:28px}
+  #i5 .col.rail-item .col-count{font-size:10px}
+  #i5 .col.rail-item .plus{position:static;margin-left:auto;opacity:0}
+  #i5 .frame[data-state="drag"] .col.rail-item.target{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+  #i5 .frame[data-state="drag"] .col.rail-item.target .plus{opacity:1;transform:scale(1)}
+  #i5 .ghost{right:230px;bottom:auto;top:150px;left:auto}
+  #i5 .cursor{right:210px;top:148px;left:auto;bottom:auto}
+
+  .legend{margin:14px 2px 0;font-size:12px;color:var(--txt-3);line-height:1.6}
+  .legend b{color:var(--txt-2);font-weight:600}
+  kbd{background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px;
+    font-family:inherit;color:var(--txt-2)}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Collection cards reachable as drop targets while scrolled</h1>
+    <div class="tabs">
+      <button class="tab" data-n="1"><span class="n">1</span> drag-activated dock</button>
+      <button class="tab" data-n="2"><span class="n">2</span> collapsing pinned bar</button>
+      <button class="tab" data-n="3"><span class="n">3</span> edge auto-reveal</button>
+      <button class="tab" data-n="4"><span class="n">4</span> floating cluster puck</button>
+      <button class="tab" data-n="5"><span class="n">5</span> right side-rail</button>
+    </div>
+  </div>
+
+  <!-- ITERATION 1 -->
+  <section class="iter" id="i1" data-n="1">
+    <div class="meta">
+      <div class="name">1 · drag-activated dock</div>
+      <div class="why">Zero permanent chrome. Collections scroll away like normal — but the instant you pick up a save, a slim dock of collection chips slides down from under the toolbar. Let go and it's gone. Nothing is on screen unless it's useful right now.</div>
+    </div>
+    <div class="controls"><span class="lbl">state</span>
+      <button class="sbtn on" data-state="rest">at rest</button>
+      <button class="sbtn" data-state="scroll">scrolled</button>
+      <button class="sbtn" data-state="drag">dragging</button>
+    </div>
+    <div class="frame" data-state="rest">
+      <div class="toolbar"><div class="tl-left"><span class="dot"></span><div class="pills"><span class="pill act">Library</span><span class="pill">Folders</span><span class="pill">Boards</span></div></div><div class="search">Try "blue gradient"</div></div>
+      <div class="dock"><span class="hint">Drop into →</span><div class="js-cols" data-variant="dock-chip" data-target="2"></div></div>
+      <div class="viewport">
+        <div class="scroller">
+          <div class="js-cols featured-host" data-variant="full"></div>
+          <div class="grid js-grid" data-n="16"></div>
+        </div>
+        <div class="scrolled-note">collections scrolled off — pick up a card to summon them</div>
+      </div>
+      <div class="ghost"></div>
+      <div class="cursor"></div>
+    </div>
+    <div class="legend"><b>Trade-off:</b> the cleanest at rest, but the dock only exists mid-drag, so you can't <i>see</i> your collections while just browsing scrolled-down.</div>
+  </section>
+
+  <!-- ITERATION 2 -->
+  <section class="iter" id="i2" data-n="2">
+    <div class="meta">
+      <div class="name">2 · collapsing pinned bar</div>
+      <div class="why">The featured row never fully leaves — as you scroll it morphs into a thin sticky strip of collection chips pinned under the toolbar. Always visible, always droppable, takes ~36px.</div>
+    </div>
+    <div class="controls"><span class="lbl">state</span>
+      <button class="sbtn on" data-state="rest">at rest</button>
+      <button class="sbtn" data-state="scroll">scrolled</button>
+      <button class="sbtn" data-state="drag">dragging</button>
+    </div>
+    <div class="frame" data-state="rest">
+      <div class="toolbar"><div class="tl-left"><span class="dot"></span><div class="pills"><span class="pill act">Library</span><span class="pill">Folders</span><span class="pill">Boards</span></div></div><div class="search">Try "navy"</div></div>
+      <div class="bar"><span class="blbl">Collections</span><div class="js-cols" data-variant="chip" data-target="2"></div></div>
+      <div class="viewport">
+        <div class="scroller">
+          <div class="js-cols featured-host" data-variant="full"></div>
+          <div class="grid js-grid" data-n="16"></div>
+        </div>
+      </div>
+      <div class="ghost"></div>
+      <div class="cursor"></div>
+    </div>
+    <div class="legend"><b>Trade-off:</b> always available with no drag required, but it permanently spends a sliver of vertical space and adds a moving part on every scroll.</div>
+  </section>
+
+  <!-- ITERATION 3 -->
+  <section class="iter" id="i3" data-n="3">
+    <div class="meta">
+      <div class="name">3 · edge auto-reveal</div>
+      <div class="why">Keep the row exactly where it is. When you drag a card toward the top edge, the grid auto-scrolls up and the collection row peeks back into view to receive the drop — then snaps back where you were.</div>
+    </div>
+    <div class="controls"><span class="lbl">state</span>
+      <button class="sbtn on" data-state="rest">at rest</button>
+      <button class="sbtn" data-state="scroll">scrolled</button>
+      <button class="sbtn" data-state="drag">drag to top edge</button>
+    </div>
+    <div class="frame" data-state="rest">
+      <div class="toolbar"><div class="tl-left"><span class="dot"></span><div class="pills"><span class="pill act">Library</span><span class="pill">Folders</span><span class="pill">Boards</span></div></div><div class="search">Try "editorial"</div></div>
+      <div class="edgehint"></div>
+      <div class="peek"><div class="js-cols" data-variant="full" data-target="1"></div><span class="arrow">▲ auto-scrolled to reveal</span></div>
+      <div class="viewport">
+        <div class="scroller">
+          <div class="js-cols featured-host" data-variant="full"></div>
+          <div class="grid js-grid" data-n="16"></div>
+        </div>
+        <div class="scrolled-note">scrolled down · drag to the top edge to reveal collections</div>
+      </div>
+      <div class="ghost"></div>
+      <div class="cursor"><svg viewBox="0 0 24 24" fill="#fff"><path d="M4 2l16 9-7 1.5L9 22z"/></svg></div>
+    </div>
+    <div class="legend"><b>Trade-off:</b> no new chrome at all and reuses the real cards, but it's the most "hidden" — discoverability is low and the auto-scroll motion can feel twitchy.</div>
+  </section>
+
+  <!-- ITERATION 4 -->
+  <section class="iter" id="i4" data-n="4">
+    <div class="meta">
+      <div class="name">4 · floating cluster puck</div>
+      <div class="why">A tiny always-on puck floats in the corner showing your collections as a mini stack. Drag a card (or hover) and it blooms upward into a tidy drop-list. Out of the way, but one motion from anywhere on the page.</div>
+    </div>
+    <div class="controls"><span class="lbl">state</span>
+      <button class="sbtn on" data-state="rest">at rest</button>
+      <button class="sbtn" data-state="scroll">scrolled</button>
+      <button class="sbtn" data-state="drag">dragging</button>
+    </div>
+    <div class="frame" data-state="rest">
+      <div class="toolbar"><div class="tl-left"><span class="dot"></span><div class="pills"><span class="pill act">Library</span><span class="pill">Folders</span><span class="pill">Boards</span></div></div><div class="search">Try "3d"</div></div>
+      <div class="viewport">
+        <div class="scroller">
+          <div class="js-cols featured-host" data-variant="full"></div>
+          <div class="grid js-grid" data-n="16"></div>
+        </div>
+      </div>
+      <div class="tray"><span class="tlbl">Drop into a collection</span><div class="js-cols" data-variant="row" data-target="2"></div></div>
+      <div class="puck"><span class="fan js-fan" data-seed="0"></span><span class="pk-meta"><b>6</b> collections</span></div>
+      <div class="ghost"></div>
+      <div class="cursor"></div>
+    </div>
+    <div class="legend"><b>Trade-off:</b> always reachable from any scroll position and space-efficient, but it floats over content and the corner can collide with toasts / the selection bar.</div>
+  </section>
+
+  <!-- ITERATION 5 -->
+  <section class="iter" id="i5" data-n="5">
+    <div class="meta">
+      <div class="name">5 · persistent right side-rail</div>
+      <div class="why">Collections graduate from a horizontal row into a vertical rail that's pinned regardless of scroll. Always-on drop targets, room for many collections, and it doubles as quick navigation.</div>
+    </div>
+    <div class="controls"><span class="lbl">state</span>
+      <button class="sbtn on" data-state="rest">at rest</button>
+      <button class="sbtn" data-state="scroll">scrolled</button>
+      <button class="sbtn" data-state="drag">dragging</button>
+    </div>
+    <div class="frame" data-state="rest">
+      <div class="toolbar"><div class="tl-left"><span class="dot"></span><div class="pills"><span class="pill act">Library</span><span class="pill">Folders</span><span class="pill">Boards</span></div></div><div class="search">Try "branding"</div></div>
+      <div class="viewport">
+        <div class="scroller">
+          <div class="grid js-grid" data-n="15"></div>
+        </div>
+      </div>
+      <div class="rail"><span class="rlbl">Collections</span><div class="js-cols" data-variant="rail-item" data-target="3"></div></div>
+      <div class="ghost"></div>
+      <div class="cursor"></div>
+    </div>
+    <div class="legend"><b>Trade-off:</b> the most robust and scales to many collections, but it's the biggest departure from today's layout and permanently narrows the grid.</div>
+  </section>
+
+<script>
+  const GRADS=[
+    'linear-gradient(135deg,#ff8fb1,#ff5f7e)',
+    'linear-gradient(135deg,#5ee7df,#3a8dde)',
+    'linear-gradient(135deg,#a8ff9e,#36c47a)',
+    'linear-gradient(135deg,#ffd76f,#fc6076)',
+    'linear-gradient(135deg,#b18cff,#7b5cff)',
+    'linear-gradient(135deg,#43e0a0,#2bb6d8)',
+    'linear-gradient(135deg,#fa9a8b,#fbd06b)',
+    'linear-gradient(135deg,#7cc6ff,#5a6cff)',
+    'linear-gradient(135deg,#f78fff,#9a6bff)',
+    'linear-gradient(135deg,#ffb86c,#ff6b6b)'
+  ];
+  const COLLECTIONS=[
+    {name:'Branding',count:128,seed:0},
+    {name:'Typography',count:412,seed:2},
+    {name:'UI patterns',count:89,seed:4},
+    {name:'Color studies',count:233,seed:6},
+    {name:'Editorial',count:57,seed:1},
+    {name:'3D & render',count:140,seed:3}
+  ];
+  const g=i=>GRADS[((i%GRADS.length)+GRADS.length)%GRADS.length];
+
+  function buildFan(el,seed){
+    el.innerHTML='';
+    for(let k=0;k<4;k++){const t=document.createElement('span');t.className='t';t.style.backgroundImage=g(seed+k);el.appendChild(t);}
+  }
+  document.querySelectorAll('.js-fan').forEach(f=>buildFan(f,+f.dataset.seed||0));
+
+  document.querySelectorAll('.js-cols').forEach(host=>{
+    const variant=host.dataset.variant;
+    const target=host.dataset.target;
+    host.innerHTML='';
+    COLLECTIONS.forEach((c,idx)=>{
+      const el=document.createElement('div');
+      el.className='col '+variant;
+      if(target!=null && +target===idx) el.classList.add('target');
+      const fan=document.createElement('span');fan.className='fan';buildFan(fan,c.seed);el.appendChild(fan);
+      const meta=document.createElement('div');meta.className='col-meta';
+      meta.innerHTML='<span class="col-name">'+c.name+'</span><span class="col-count">'+c.count+' saves</span>';
+      el.appendChild(meta);
+      const plus=document.createElement('span');plus.className='plus';plus.textContent='+1';el.appendChild(plus);
+      host.appendChild(el);
+    });
+  });
+
+  document.querySelectorAll('.js-grid').forEach(grid=>{
+    const n=+grid.dataset.n||16;const heights=[120,165,95,205,140,110,180,130,150,100];
+    grid.innerHTML='';
+    for(let k=0;k<n;k++){const c=document.createElement('div');c.className='card';
+      c.style.backgroundImage=g(k+3);c.style.height=heights[k%heights.length]+'px';
+      if(k===4) c.classList.add('dragged');
+      grid.appendChild(c);}
+  });
+
+  // give every ghost a thumbnail + count badge
+  document.querySelectorAll('.ghost').forEach(gh=>{gh.style.backgroundImage=g(7);
+    const b=document.createElement('span');b.className='badge';b.textContent='1';gh.appendChild(b);});
+
+  // simple default cursor arrow where not provided
+  document.querySelectorAll('.cursor:empty').forEach(c=>{
+    c.innerHTML='<svg viewBox="0 0 24 24" fill="#fff"><path d="M4 2l16 9-7 1.5L9 22z"/></svg>';
+  });
+
+  // tab switching
+  function show(n){
+    document.querySelectorAll('.iter').forEach(s=>s.classList.toggle('active',s.dataset.n===String(n)));
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.n===String(n)));
+  }
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>show(t.dataset.n)));
+  window.addEventListener('keydown',e=>{if(e.key>='1'&&e.key<='5')show(e.key);});
+
+  // per-iteration state toggle
+  document.querySelectorAll('.controls').forEach(ctl=>{
+    const frame=ctl.parentElement.querySelector('.frame');
+    ctl.querySelectorAll('.sbtn').forEach(b=>b.addEventListener('click',()=>{
+      frame.dataset.state=b.dataset.state;
+      ctl.querySelectorAll('.sbtn').forEach(x=>x.classList.toggle('on',x===b));
+    }));
+  });
+
+  show(1);
+</script>
+</body>
+</html>
