@@ -84,13 +84,6 @@ export default function CollectionDropDock({
     onDismiss?.();
   }
 
-  // Handle artwork: the lead thumbnail of the few most-recent collections,
-  // stacked, so the tab reads as "your collections live here".
-  const handleThumbs = collections
-    .map((c) => (Array.isArray(c.thumbs) && c.thumbs[0]) || null)
-    .filter(Boolean)
-    .slice(0, 3);
-
   return (
     <div
       className={[
@@ -159,17 +152,6 @@ export default function CollectionDropDock({
             );
           })}
         </div>
-      </div>
-      <div className={styles.handle} aria-hidden="true">
-        <span className={styles.handleStack}>
-          {handleThumbs.length > 0 ? (
-            handleThumbs.map((t, i) => (
-              <img key={`${i}-${t}`} src={fileUrl(t)} alt="" draggable={false} />
-            ))
-          ) : (
-            <span className={styles.handleDot} />
-          )}
-        </span>
       </div>
     </div>
   );
