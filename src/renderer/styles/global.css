@@ -160,9 +160,11 @@ body[data-board-print="true"] .main-col {
   filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.32));
   animation: modePillFloatIn 0.3s cubic-bezier(0.2, 0.85, 0.25, 1) both;
 }
+/* Fade only — never translate. The tab bar must not move on scroll, not
+   even slightly; it appears in place and stays put. */
 @keyframes modePillFloatIn {
-  from { opacity: 0; transform: translate(-50%, -10px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .toolbar-shell { transition: none; }
