@@ -44,6 +44,7 @@ import FocusedView from './components/FocusedView.jsx';
 import SearchView from './components/SearchView.jsx';
 import BoardView from './components/BoardView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
+import CollectionLoader from './components/CollectionLoader.jsx';
 import FocusedSortMode from './components/FocusedSortMode.jsx';
 import {
   LayoutDashboard,
@@ -1806,6 +1807,18 @@ export default function App({ entitlement } = {}) {
 
   // Sidebar nav also drops focus + selection so users land on the masonry grid
   // instead of staying inside the FocusedView.
+  // Collection "opening" flourish — a rotating 3D ring of the collection's
+  // covers shown the first time you open each collection in a session.
+  // { id, fading } | null.
+  const [collectionIntro, setCollectionIntro] = useState(null);
+  const introSeenRef = useRef(new Set());
+  const introTimersRef = useRef([]);
+  const clearIntroTimers = useCallback(() => {
+    introTimersRef.current.forEach((t) => clearTimeout(t));
+    introTimersRef.current = [];
+  }, []);
+  useEffect(() => clearIntroTimers, [clearIntroTimers]);
+
   const handleViewChange = useCallback((newView) => {
     setView(newView);
     setFocusedId(null);
@@ -1813,7 +1826,23 @@ export default function App({ entitlement } = {}) {
     // A view change is a different intent than "more like this one",
     // so drop any active similar-to anchor when the user navigates.
     setSimilarTo(null);
-  }, [setView, setSimilarTo]);
+    // Trigger the ring intro on the first open of a non-empty collection.
+    clearIntroTimers();
+    setCollectionIntro(null);
+    if (newView.type === 'collection' && newView.id && !introSeenRef.current.has(newView.id)) {
+      const col = collections.find((c) => c.id === newView.id);
+      if (col && (col.save_count ?? 0) > 0 && (col.thumbs?.length ?? 0) > 0) {
+        introSeenRef.current.add(newView.id);
+        setCollectionIntro({ id: newView.id, fading: false });
+        introTimersRef.current.push(setTimeout(() => {
+          setCollectionIntro((p) => (p && p.id === newView.id ? { ...p, fading: true } : p));
+        }, 950));
+        introTimersRef.current.push(setTimeout(() => {
+          setCollectionIntro((p) => (p && p.id === newView.id ? null : p));
+        }, 1250));
+      }
+    }
+  }, [setView, setSimilarTo, collections, clearIntroTimers]);
 
   // Opening a collection card from the Search tab leaves search and
   // lands on that collection in Collections mode.
@@ -3399,6 +3428,13 @@ export default function App({ entitlement } = {}) {
                 />
               ) : (
               <div className="library-stage">
+              {collectionIntro && view.type === 'collection' && view.id === collectionIntro.id && (
+                <CollectionLoader
+                  thumbs={collections.find((c) => c.id === collectionIntro.id)?.thumbs || []}
+                  name={collections.find((c) => c.id === collectionIntro.id)?.name}
+                  fading={collectionIntro.fading}
+                />
+              )}
               <CollectionDropDock
                 collections={collections}
                 scrolled={(appMode === 'library' || (appMode === 'folders' && view.type === 'collection')) && scrolledHideBar}
