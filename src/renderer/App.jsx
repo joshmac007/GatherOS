@@ -60,7 +60,6 @@ import {
   Hash,
   Share,
   FolderOpen,
-  Link2,
   Focus,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
@@ -97,7 +96,6 @@ const ExternalLinkIcon = () => <ExternalLink {...ICON} />;
 const HashIcon = () => <Hash {...ICON} />;
 const ShareIcon = () => <Share {...ICON} />;
 const RevealIcon = () => <FolderOpen {...ICON} />;
-const LinkIcon = () => <Link2 {...ICON} />;
 
 // Per-view grid scroll memory — so returning to a view (or relaunching
 // the app) lands exactly where the user left off instead of jumping to
@@ -1142,20 +1140,6 @@ export default function App({ entitlement } = {}) {
       });
       return items;
     }
-    // Open in Preview — top of the menu so both grid right-click and
-    // focused-view right-click lead with the same "look at the
-    // original file" affordance. Single-save only; the OS Preview
-    // app handles one image at a time.
-    if (!isMulti) {
-      const previewAnchor = saves.find((s) => s.id === saveId);
-      if (previewAnchor?.file_path) {
-        items.push({
-          label: 'Open in Preview',
-          icon: <ExternalLinkIcon />,
-          onClick: () => window.moodmark.image.openInPreview(previewAnchor.file_path),
-        });
-      }
-    }
     if (view.type === 'collection') {
       items.push({
         label: `Remove from collection${suffix}`,
@@ -1274,18 +1258,6 @@ export default function App({ entitlement } = {}) {
           icon: <ExternalLinkIcon />,
           onClick: () => {
             window.moodmark.shell.openUrl(anchor.source_url);
-          },
-        });
-        items.push({
-          label: fromX ? 'Copy tweet URL' : 'Copy source URL',
-          icon: <LinkIcon />,
-          onClick: async () => {
-            try {
-              await navigator.clipboard.writeText(anchor.source_url);
-              showActionToast({ message: 'Link copied', durationMs: 1400 });
-            } catch {
-              showActionToast({ message: 'Could not copy link', durationMs: 2400 });
-            }
           },
         });
       }
@@ -3288,7 +3260,6 @@ export default function App({ entitlement } = {}) {
               onNext={goNext}
               hasPrev={focusedIndex > 0}
               hasNext={focusedIndex < saves.length - 1}
-              onOpenInPreview={handleOpenInPreview}
               onDelete={handleDelete}
               morphSource={morphId === focused.id}
               onContextMenu={handleFocusedContextMenu}

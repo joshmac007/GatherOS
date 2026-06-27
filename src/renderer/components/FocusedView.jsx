@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom';
 import {
   PanelLeft,
   ChevronLeft,
-  ExternalLink,
   Download,
   Pipette,
   Trash2,
@@ -69,7 +68,6 @@ function EyedropperLoupe({ loupe, hex, copied, pos }) {
 
 const FV_ICON = { strokeWidth: 1.6, 'aria-hidden': true };
 const SidebarIcon = () => <PanelLeft {...FV_ICON} />;
-const PreviewIcon = () => <ExternalLink {...FV_ICON} />;
 const ExportIcon = () => <Download {...FV_ICON} />;
 // Lucide's Pipette is the canonical eyedropper.
 const EyedropperIcon = () => <Pipette {...FV_ICON} />;
@@ -91,7 +89,6 @@ export default function FocusedView({
   onNext,
   hasPrev,
   hasNext,
-  onOpenInPreview,
   onDelete,
   onToggleSidebar,
   morphSource = false,
@@ -392,17 +389,6 @@ export default function FocusedView({
               <EyedropperIcon />
             </button>
           )}
-
-          <button
-            type="button"
-            className={styles.iconBtn}
-            data-tooltip="Open in Preview"
-            data-tooltip-pos="below"
-            aria-label="Open in Preview"
-            onClick={() => onOpenInPreview(record.file_path)}
-          >
-            <PreviewIcon />
-          </button>
 
           <button
             type="button"

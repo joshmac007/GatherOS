@@ -15,7 +15,7 @@ const COPY = {
   },
   ai: {
     heading: 'Unlock AI features',
-    body: 'Image generation, “more like this”, auto-tagging and visual search are part of GatherOS pro. Upgrade to turn them on.',
+    body: 'Auto-tagging and visual search are part of GatherOS pro. Upgrade to turn them on.',
   },
   'x-sync': {
     heading: 'Unlock X bookmark sync',

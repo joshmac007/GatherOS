@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom';
 import { Info as InfoIcon, Eclipse as LayersIcon } from 'lucide-react';
 import styles from './DetailPanelV2.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
-import { resolveAsset } from '../lib/asset.js';
 import ContextMenu from './ContextMenu.jsx';
 import TagSuggestions from './TagSuggestions.jsx';
 import { fuzzyMatch } from '../lib/fuzzy.js';
@@ -152,8 +151,8 @@ export default function DetailPanel({
   onOpenSave,
   onOpenSpace,
 }) {
-  // AI features (auto-tag, prompt generation, "more like this") are pro;
-  // locked in the free tier. Fails open to unlocked.
+  // AI features (auto-tag, prompt generation) are pro; locked in the
+  // free tier. Fails open to unlocked.
   const proLocked = isLocked(useEntitlementValue());
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
@@ -380,26 +379,6 @@ export default function DetailPanel({
     });
     return () => { cancelled = true; };
   }, [record.id]);
-
-  // "More like this" — pull the top-N visually similar saves from
-  // the existing embeddings table. Anchored to the focused save's
-  // id so it refetches when the user navigates to a different save
-  // (j/k or by clicking another similar thumb). Skipped entirely
-  // when AI isn't configured — embeddings won't be there.
-  const [similar, setSimilar] = useState([]);
-  useEffect(() => {
-    if (!aiConfigured || proLocked) {
-      setSimilar([]);
-      return undefined;
-    }
-    let cancelled = false;
-    window.moodmark.ai.similarSaves(record.id, 5).then((rows) => {
-      if (!cancelled) setSimilar(rows || []);
-    }).catch(() => {
-      if (!cancelled) setSimilar([]);
-    });
-    return () => { cancelled = true; };
-  }, [record.id, aiConfigured, proLocked]);
 
   async function refreshTags() {
     const rows = await window.moodmark.tags.getForSave(record.id);
@@ -1108,32 +1087,6 @@ export default function DetailPanel({
               )}
             </div>
           </label>
-        </div>
-      )}
-
-      {similar.length > 0 && (
-        <div className={styles.similarSection}>
-          <div className={styles.similarLabel}>
-            <span className={styles.sectionLabelIcon}><SparkleIcon /></span>
-            <span>More like this</span>
-          </div>
-          <div className={styles.similarGrid}>
-            {similar.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className={styles.similarTile}
-                onClick={() => onOpenSave?.(s.id)}
-                title={s.title || ''}
-              >
-                <img
-                  src={resolveAsset(s, 'thumb')}
-                  alt=""
-                  draggable={false}
-                />
-              </button>
-            ))}
-          </div>
         </div>
       )}
 

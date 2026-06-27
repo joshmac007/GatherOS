@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom';
 import { Info as InfoIcon, Eclipse as LayersIcon, ExternalLink } from 'lucide-react';
 import styles from './DetailPanel.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
-import { resolveAsset } from '../lib/asset.js';
 import { tweetMediaItems } from '../lib/tweetMedia.js';
 import ContextMenu from './ContextMenu.jsx';
 import contextMenuStyles from './ContextMenu.module.css';
@@ -224,8 +223,8 @@ export default function DetailPanel({
     try { return new URL(record?.source_url).hostname.replace(/^www\./, ''); }
     catch { return ''; }
   })();
-  // AI features (auto-tag, prompt generation, "more like this") are pro;
-  // locked in the free tier. Fails open to unlocked.
+  // AI features (auto-tag, prompt generation) are pro; locked in the
+  // free tier. Fails open to unlocked.
   const proLocked = isLocked(useEntitlementValue());
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
@@ -452,26 +451,6 @@ export default function DetailPanel({
     });
     return () => { cancelled = true; };
   }, [record.id]);
-
-  // "More like this" — pull the top-N visually similar saves from
-  // the existing embeddings table. Anchored to the focused save's
-  // id so it refetches when the user navigates to a different save
-  // (j/k or by clicking another similar thumb). Skipped entirely
-  // when AI isn't configured — embeddings won't be there.
-  const [similar, setSimilar] = useState([]);
-  useEffect(() => {
-    if (!aiConfigured || proLocked) {
-      setSimilar([]);
-      return undefined;
-    }
-    let cancelled = false;
-    window.moodmark.ai.similarSaves(record.id, 5).then((rows) => {
-      if (!cancelled) setSimilar(rows || []);
-    }).catch(() => {
-      if (!cancelled) setSimilar([]);
-    });
-    return () => { cancelled = true; };
-  }, [record.id, aiConfigured, proLocked]);
 
   async function refreshTags() {
     const rows = await window.moodmark.tags.getForSave(record.id);
@@ -700,7 +679,7 @@ export default function DetailPanel({
   return (
     <aside
       className={`${styles.panel}${
-        addingTag && suggestionsOpen && totalSuggestionRows > 0 && similar.length === 0
+        addingTag && suggestionsOpen && totalSuggestionRows > 0
           ? ` ${styles.panelTagRoom}`
           : ''
       }`}
@@ -1314,32 +1293,6 @@ export default function DetailPanel({
               )}
             </div>
           </label>
-        </div>
-      )}
-
-      {similar.length > 0 && (
-        <div className={styles.similarSection}>
-          <div className={styles.similarLabel}>
-            <span className={styles.sectionLabelIcon}><SparkleIcon /></span>
-            <span>More like this</span>
-          </div>
-          <div className={styles.similarGrid}>
-            {similar.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className={styles.similarTile}
-                onClick={() => onOpenSave?.(s.id)}
-                title={s.title || ''}
-              >
-                <img
-                  src={resolveAsset(s, 'thumb')}
-                  alt=""
-                  draggable={false}
-                />
-              </button>
-            ))}
-          </div>
         </div>
       )}
 
