@@ -42,7 +42,6 @@ const {
   analyzeImage,
   embedText,
   generateImagePrompt,
-  generateImage,
   getUsage: getAiUsage,
 } = require('./openai');
 const { detectColorName } = require('./colorNames');
@@ -1162,100 +1161,6 @@ function registerIpcHandlers() {
     }
   });
 
-  // Generate a fresh variation of an existing save. Uses OpenAI's
-  // /v1/images/edits with the source image as a reference, so the
-  // result preserves composition + palette + subject — closer to a
-  // "remix" than a "describe-then-redraw". Resulting PNG is saved
-  // as a new entry in the user's library, not a replacement.
-  ipcMain.handle('ai:generate-variant', async (event, saveId, options = {}) => {
-    // AI generation is a pro feature and also creates a new save — both
-    // gated in the free tier.
-    if (blockNewSave('ai')) return { ok: false, needsUpgrade: true };
-    if (!saveId) return { ok: false, reason: 'no-save-id' };
-    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
-    const save = getSave(saveId);
-    if (!save) return { ok: false, reason: 'save-not-found' };
-
-    event.sender.send('save:indexing-start', saveId);
-    try {
-      // Prompt + aspect come from the modal. gpt-image-1 only
-      // generates at 1024x1024 / 1536x1024 / 1024x1536 / auto, so
-      // non-native aspects (3:4, 9:16, 4:3, 16:9) generate at the
-      // closest native size and we crop the result with sharp.
-      const ASPECT_MAP = {
-        'auto':  { size: 'auto',       crop: null },
-        '1:1':   { size: '1024x1024',  crop: null },
-        '3:4':   { size: '1024x1536',  crop: 3 / 4 },
-        '9:16':  { size: '1024x1536',  crop: 9 / 16 },
-        '4:3':   { size: '1536x1024',  crop: 4 / 3 },
-        '16:9':  { size: '1536x1024',  crop: 16 / 9 },
-      };
-      const aspect = ASPECT_MAP[options.aspect] || ASPECT_MAP.auto;
-      const prompt = (options.prompt || '').trim() ||
-        'Create a fresh variation of this image. Keep the composition and palette.';
-      const { bytes: rawBytes, quota } = await generateImage(prompt, {
-        sourceFilePath: save.file_path,
-        size: aspect.size,
-      });
-      // Center-crop the generated PNG to the exact requested aspect
-      // when it differs from the native generation size. Skipped for
-      // 'auto' and 1:1 / 3:2 / 2:3 native matches.
-      let bytes = rawBytes;
-      if (aspect.crop) {
-        const sharp = require('sharp');
-        const meta = await sharp(rawBytes).metadata();
-        const gw = meta.width || 0;
-        const gh = meta.height || 0;
-        if (gw && gh) {
-          const generated = gw / gh;
-          let cw = gw;
-          let ch = gh;
-          if (aspect.crop > generated) {
-            ch = Math.round(gw / aspect.crop);
-          } else if (aspect.crop < generated) {
-            cw = Math.round(gh * aspect.crop);
-          }
-          if (cw !== gw || ch !== gh) {
-            const left = Math.round((gw - cw) / 2);
-            const top = Math.round((gh - ch) / 2);
-            bytes = await sharp(rawBytes)
-              .extract({ left, top, width: cw, height: ch })
-              .png()
-              .toBuffer();
-          }
-        }
-      }
-      const { saveImageFromBuffer } = require('./storage');
-      const imgData = await saveImageFromBuffer(bytes, 'png');
-      if (imgData.duplicateOf) {
-        // Identical pixels to an existing save (very unlikely for a
-        // generation but cheap to handle). Surface the existing one
-        // and don't re-insert.
-        return { ok: true, save: imgData.existing, quota, duplicate: true };
-      }
-      const record = insertSave({
-        ...imgData,
-        // Carry the source's title onto the variant so the new save
-        // reads as related, not blank. The renderer can rename it
-        // freely afterwards.
-        title: save.title ? `${save.title} (variant)` : null,
-      });
-      // Notify the renderer so the masonry refreshes with the new
-      // save in place. Reuses the same save:created channel that
-      // drag-and-drop uses.
-      try {
-        notifySaved(record);
-      } catch {
-        /* best-effort */
-      }
-      return { ok: true, save: record, quota };
-    } catch (err) {
-      console.error('Generate variant failed:', err.message);
-      return { ok: false, reason: err.code || "api-error", detail: err.message };
-    } finally {
-      event.sender.send('save:indexing-end', saveId);
-    }
-  });
 
   ipcMain.handle('ai:auto-tag', async (_e, saveId) => {
     if (!saveId) return { ok: false, reason: 'no-save-id' };

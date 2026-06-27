@@ -269,29 +269,6 @@
 }
 
 
-/* ── Generation placeholder ──────────────────────────────────────────
-   While an OpenAI variant is in flight, App.jsx prepends a synthetic
-   "pending" save to the masonry. This card shows the source thumb
-   at low opacity with a centered dots indicator + label — visual
-   confirmation the request is running, without leaving the user
-   guessing where the result will land. */
-
-.cardPending {
-  cursor: progress;
-  pointer-events: none;
-}
-
-/* Source thumb sits at full opacity but heavily blurred — the
-   blur alone signals "actively composing", no flat dim needed. */
-.imagePending {
-  opacity: 1;
-  filter: saturate(0.6) blur(18px);
-  transform: scale(1.08);
-}
-
-/* Flat dark overlay sits above the blurred image so the dot
-   pattern reads against a uniform tone instead of competing with
-   the blur's own midtones. */
 /* ── Source / kind badges ──────────────────────────────────────
    Same liquid-glass recipe as the .checkbox / .peekBtn icons in
    the card's other two corners, but persistent: these are
@@ -409,58 +386,3 @@
   pointer-events: auto;
 }
 
-.pendingOverlay {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  background: rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-}
-
-/* Dot field — a CSS radial-gradient tiled at 14px renders as a
-   uniform grid of small white dots. A diagonal linear-gradient
-   mask larger than the element shifts position across the layer,
-   creating a brighter "wave" band that traverses the dots while
-   leaving the rest dimmer. Pure CSS, no per-dot DOM nodes. */
-.pendingDots {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background-image: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.95) 0.7px,
-    transparent 1px
-  );
-  background-size: 8px 8px;
-  -webkit-mask-image: linear-gradient(
-    115deg,
-    rgba(0, 0, 0, 0.18) 0%,
-    rgba(0, 0, 0, 0.18) 35%,
-    rgba(0, 0, 0, 1) 50%,
-    rgba(0, 0, 0, 0.18) 65%,
-    rgba(0, 0, 0, 0.18) 100%
-  );
-  mask-image: linear-gradient(
-    115deg,
-    rgba(0, 0, 0, 0.18) 0%,
-    rgba(0, 0, 0, 0.18) 35%,
-    rgba(0, 0, 0, 1) 50%,
-    rgba(0, 0, 0, 0.18) 65%,
-    rgba(0, 0, 0, 0.18) 100%
-  );
-  -webkit-mask-size: 260% 260%;
-  mask-size: 260% 260%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  animation: pendingDotWave 3.2s ease-in-out infinite;
-}
-
-@keyframes pendingDotWave {
-  0%   { -webkit-mask-position: 100% 100%; mask-position: 100% 100%; }
-  100% { -webkit-mask-position: 0% 0%;     mask-position: 0% 0%; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pendingDots { animation: none; -webkit-mask-image: none; mask-image: none; opacity: 0.45; }
-}

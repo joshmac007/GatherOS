@@ -209,11 +209,10 @@
   word-break: break-word;
 }
 
-/* Hero / artwork section. Stacks the image, the extracted color
-   swatches, and the "Generate variation" CTA so all three read as
-   facets of the same artwork — the user's eye doesn't have to
-   travel to a separate strip lower down to see the palette or
-   trigger a variation. */
+/* Hero / artwork section. Stacks the image and the extracted color
+   swatches so both read as facets of the same artwork — the user's
+   eye doesn't have to travel to a separate strip lower down to see
+   the palette. */
 .preview {
   padding: 16px 16px 18px;
   display: flex;
@@ -1225,46 +1224,6 @@
 }
 
 /* ── V2 additions ────────────────────────────────────────────────── */
-
-/* Compact action row that lives between the preview and the Name
-   field. Replaces V1's full-width pill so Generate variation reads as
-   one capability among many, not the dominant CTA. */
-.actionsRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 4px;
-}
-
-.actionBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background var(--dur-instant) ease, transform var(--dur-instant) ease;
-}
-
-.actionBtn:hover { background: var(--hover-bg); }
-.actionBtn:active { transform: scale(0.97); }
-
-.actionBtnIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--text-secondary);
-}
-
-.actionBtnIcon svg { width: 14px; height: 14px; }
 
 /* "More details" expander — URL, Note, Image Prompt collapse here so
    first-open of the panel reads as scannable. Toggle is a quiet text

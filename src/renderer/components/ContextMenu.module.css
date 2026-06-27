@@ -150,9 +150,9 @@
 }
 
 /* Group dividers used to insert a 6px asymmetric break between
-   "Find similar / Generate variation" and "Copy image / Share"
-   etc. — the resulting uneven gaps read as a layout bug. Zeroed
-   out so every menu item sits at the same vertical rhythm. */
+   "Find similar" and "Copy image / Share" etc. — the resulting
+   uneven gaps read as a layout bug. Zeroed out so every menu item
+   sits at the same vertical rhythm. */
 .separator {
   height: 0;
   margin: 0;

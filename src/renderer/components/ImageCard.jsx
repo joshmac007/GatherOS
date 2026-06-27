@@ -296,20 +296,13 @@ function ImageCard({
     if (selectArmRef.current) clearTimeout(selectArmRef.current);
   }, []);
 
-  // Pending placeholders are read-only: no select / open / drag /
-  // context menu — the card is a transient affordance, not a real
-  // library entry. The id is a `pending-*` synthetic that the
-  // backend doesn't know about; firing these would break.
-  const isPending = !!record.__pending;
-  // Pre-generate the rising-particle field for pending cards: random
-  // x positions, sizes, durations, delays, and horizontal sway so
   return (
     <button
       ref={wrapperRef}
       type="button"
       data-save-id={record.id}
       data-save-title={record.title || undefined}
-      draggable={!isPending && !!onDragStart}
+      draggable={!!onDragStart}
       className={[
         styles.card,
         selected && styles.selected,
@@ -317,10 +310,9 @@ function ImageCard({
         selectionActive && styles.showSelectables,
         enteredFresh && styles.fresh,
         springback && styles.springback,
-        isPending && styles.cardPending,
       ].filter(Boolean).join(' ')}
       style={staggerMs ? { '--card-stagger': `${staggerMs}ms` } : undefined}
-      onClick={isPending ? undefined : (e) => {
+      onClick={(e) => {
         // The click that ends a tweet-text highlight drag must not open
         // the card — detected by pointer movement, not by selection
         // state, so a leftover highlight never blocks a fresh click.
@@ -330,16 +322,16 @@ function ImageCard({
           range: e.shiftKey,
         });
       }}
-      onDoubleClick={isPending ? undefined : () => onOpen(record)}
-      onMouseEnter={isPending ? undefined : () => { onHover?.(record.id); preloadPagedImages(); }}
-      onMouseLeave={isPending ? undefined : () => { clearSelectArm(); onHover?.(null, record.id); }}
-      onContextMenu={isPending ? undefined : (e) => {
+      onDoubleClick={() => onOpen(record)}
+      onMouseEnter={() => { onHover?.(record.id); preloadPagedImages(); }}
+      onMouseLeave={() => { clearSelectArm(); onHover?.(null, record.id); }}
+      onContextMenu={(e) => {
         if (onContextMenu) {
           e.preventDefault();
           onContextMenu(record.id, e.clientX, e.clientY);
         }
       }}
-      onMouseDown={isPending ? undefined : (e) => {
+      onMouseDown={(e) => {
         pressPosRef.current = { x: e.clientX, y: e.clientY };
         // Tweet cards carry selectable text, but they still need to drag
         // into collections like every other card. So we DEFAULT to drag
@@ -358,7 +350,7 @@ function ImageCard({
           }, 200);
         }
       }}
-      onMouseUp={isPending ? undefined : clearSelectArm}
+      onMouseUp={clearSelectArm}
       onDragStart={(e) => {
         if (!onDragStart) return;
         // If a drag actually starts, the long-press text-selection
@@ -419,7 +411,7 @@ function ImageCard({
             ref={gridVideoRef}
             src={videoSrc}
             poster={videoPoster}
-            className={`${styles.image}${record.__pending ? ' ' + styles.imagePending : ''}`}
+            className={styles.image}
             muted
             loop
             playsInline
@@ -436,7 +428,7 @@ function ImageCard({
         ) : src && (
           <img
             src={displaySrc}
-            className={`${styles.image}${record.__pending ? ' ' + styles.imagePending : ''}`}
+            className={styles.image}
             alt={record.title || ''}
             loading="lazy"
             decoding="async"
@@ -485,11 +477,6 @@ function ImageCard({
               </span>
             )}
           </span>
-        )}
-        {record.__pending && (
-          <div className={styles.pendingOverlay} aria-label="Generating variation">
-            <div className={styles.pendingDots} aria-hidden="true" />
-          </div>
         )}
         {inView && (
           <>

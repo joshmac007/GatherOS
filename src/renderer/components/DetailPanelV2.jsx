@@ -150,7 +150,6 @@ export default function DetailPanel({
   onUpdateMeta,
   onOpenSettings,
   onOpenSave,
-  onGenerateVariant,
   onOpenSpace,
 }) {
   // AI features (auto-tag, prompt generation, "more like this") are pro;
@@ -722,23 +721,6 @@ export default function DetailPanel({
           </div>
         )}
       </div>
-
-      {/* Primary actions row — Generate variation is the single AI
-          CTA that warrants always-visible weight. Auto-tag stays in
-          its contextual home next to Tags. */}
-      {aiConfigured && onGenerateVariant && (
-        <div className={styles.actionsRow}>
-          <button
-            type="button"
-            className={styles.actionBtn}
-            onClick={() => onGenerateVariant(record.id)}
-            title="Generate a fresh variation of this image"
-          >
-            <span className={styles.actionBtnIcon}><SparkleIcon /></span>
-            Generate variation
-          </button>
-        </div>
-      )}
 
       {/* Name — primary identity, always visible. */}
       <div className={styles.metaEditSection}>

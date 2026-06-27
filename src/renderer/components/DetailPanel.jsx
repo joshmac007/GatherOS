@@ -201,7 +201,6 @@ export default function DetailPanel({
   onUpdateMeta,
   onOpenSettings,
   onOpenSave,
-  onGenerateVariant,
   onOpenSpace,
   // Multi-image X-bookmark support: which tweet image is currently
   // displayed in FocusedView. App owns the state; we render a
@@ -220,9 +219,6 @@ export default function DetailPanel({
   }, [record?.tweet_meta]);
   // Picks the source glyph + open label on the card (Instagram vs X).
   const igSource = record?.source === 'instagram';
-  // Motion saves (video / animated GIF) can't be image-varied, so the
-  // "Generate variation" action is hidden for them.
-  const isMotion = record?.kind === 'video' || /\.gif$/i.test(record?.file_path || '');
   // Domain shown in the tweet card footer.
   const sourceDomain = (() => {
     try { return new URL(record?.source_url).hostname.replace(/^www\./, ''); }
@@ -234,8 +230,8 @@ export default function DetailPanel({
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
   // Text-only tweets render as a card (no real image), so the preview
-  // hero — the rendered PNG, its color palette, and "Generate variation"
-  // — is all meaningless. Hide that whole top section for them.
+  // hero — the rendered PNG and its color palette — is all meaningless.
+  // Hide that whole top section for them.
   const isTextTweet = record?.kind === 'tweet' && !!tweetMeta;
   const [copiedColor, setCopiedColor] = useState(null);
   const imageRef = useRef(null);
@@ -813,19 +809,6 @@ export default function DetailPanel({
               </button>
             ))}
           </div>
-        )}
-        {aiConfigured && onGenerateVariant && !isMotion && (
-          <button
-            type="button"
-            className={styles.variantBtn}
-            onClick={() => onGenerateVariant(record.id)}
-            title="Generate a fresh variation of this image"
-          >
-            <span className={styles.variantBtnIcon}>
-              <SparkleIcon />
-            </span>
-            Generate variation
-          </button>
         )}
       </div>
       )}

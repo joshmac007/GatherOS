@@ -227,57 +227,11 @@ async function getUsage() {
   }
 }
 
-// Resize a save's image to a server-friendly size and return raw
-// base64 (no data-url prefix). Used to seed image-edit calls so
-// the variant model sees the actual source pixels rather than just
-// a text description. Capped at 1024×1024 since that's the output
-// resolution anyway — anything larger is wasted bandwidth.
-async function imageToBase64(filePath) {
-  if (!filePath || !fs.existsSync(filePath)) {
-    throw new Error('Image file not found');
-  }
-  const sharp = require('sharp');
-  const buf = await sharp(filePath)
-    .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: 88 })
-    .toBuffer();
-  return buf.toString('base64');
-}
-
-// Generate an image. If `sourceFilePath` is provided, the worker
-// routes to /v1/images/edits with the source as a reference — the
-// result is a true variation that preserves composition, palette,
-// and subject. Without a source, falls back to text-to-image
-// generation (used only by callers that genuinely have no image).
-//
-// `size` selects the output aspect ratio — the worker validates it
-// against gpt-image-1's supported set ('1024x1024', '1536x1024',
-// '1024x1536'); model + quality stay locked server-side so the
-// per-image cost curve is predictable.
-async function generateImage(prompt, { sourceFilePath, size } = {}) {
-  const trimmed = (prompt || '').trim();
-  if (!trimmed) throw new Error('Cannot generate from empty prompt');
-  const body = { prompt: trimmed.slice(0, 4000) };
-  if (sourceFilePath) {
-    body.image_b64 = await imageToBase64(sourceFilePath);
-    body.image_mime = 'image/jpeg';
-  }
-  if (size) body.size = size;
-  const data = await postProxy('/ai/image', body);
-  const b64 = data.image?.b64_json;
-  if (!b64) throw new Error('No image in proxy response');
-  return {
-    bytes: Buffer.from(b64, 'base64'),
-    quota: data.quota || null,
-  };
-}
-
 module.exports = {
   hasSession,
   autoTagImage,
   analyzeImage,
   generateImagePrompt,
-  generateImage,
   embedText,
   getUsage,
 };

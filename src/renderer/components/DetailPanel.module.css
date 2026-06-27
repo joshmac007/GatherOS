@@ -225,11 +225,10 @@
   word-break: break-word;
 }
 
-/* Hero / artwork section. Stacks the image, the extracted color
-   swatches, and the "Generate variation" CTA so all three read as
-   facets of the same artwork — the user's eye doesn't have to
-   travel to a separate strip lower down to see the palette or
-   trigger a variation. */
+/* Hero / artwork section. Stacks the image and the extracted color
+   swatches so both read as facets of the same artwork — the user's
+   eye doesn't have to travel to a separate strip lower down to see
+   the palette. */
 .preview {
   padding: 16px 16px 18px;
   display: flex;
@@ -1438,64 +1437,14 @@
 
 
 
-/* Generate-variation CTA — anchored at the bottom of the preview
-   section so it reads as the primary action for *this image*.
-   Same white-button recipe used elsewhere in the app (surface
-   fill, hairline border, soft ambient shadow) so AI affordances
-   read as plain typographic controls instead of a separate
-   coloured channel. */
-.variantBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 9px 14px;
-  /* Glass pill — slightly brighter than the panel itself so it
-     reads as the primary action of the pane. */
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-pill);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  color: rgba(255, 255, 255, 0.95);
-  cursor: pointer;
-  transition:
-    background var(--dur-instant) ease,
-    transform var(--dur-instant) ease;
-}
-
-.variantBtn:hover { background: rgba(255, 255, 255, 0.24); }
-.variantBtn:active { transform: scale(0.98); }
-
-.variantBtnIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--text-primary);
-}
-
-.variantBtnIcon svg {
-  width: 14px;
-  height: 14px;
-}
-
 /* ── Panel-scoped glass overrides ───────────────────────────────────
    The DetailPanel itself is rendered as glass over the FocusedView's
    blurred backdrop. Every interactive surface inside it (inputs,
    buttons, tag pills, collection pills) gets the same translucent-
-   white-on-dark recipe as the .variantBtn CTA so the pane reads as
-   one coherent glass family rather than a mix of opaque + glass
-   elements. These overrides are scoped to .panel so other surfaces
-   using the same classes (e.g. inputCanonical elsewhere) are
-   untouched. */
+   white-on-dark recipe so the pane reads as one coherent glass family
+   rather than a mix of opaque + glass elements. These overrides are
+   scoped to .panel so other surfaces using the same classes (e.g.
+   inputCanonical elsewhere) are untouched. */
 .panel .metaInput,
 .panel .notesInput {
   background: rgba(255, 255, 255, 0.1);
