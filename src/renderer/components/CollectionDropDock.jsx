@@ -94,6 +94,10 @@ export default function CollectionDropDock({
       onMouseEnter={() => { if (!dragging) setHoverExpand(true); }}
       onMouseLeave={() => setHoverExpand(false)}
     >
+      {/* The drawer's glass shell + flared corners, drawn as one shape
+          behind the content so its outline strokes the whole silhouette
+          as a single united form. */}
+      <div className={styles.shell} aria-hidden="true" />
       <div className={styles.list}>
         {/* Caption only once fanned open — at rest it would leave a sliver
             of space above the deck and throw off the vertical balance. */}
