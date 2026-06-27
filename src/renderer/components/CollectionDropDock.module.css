@@ -33,13 +33,15 @@
   inset: 0;
   z-index: 0;
   border-radius: 14px 0 0 14px;
-  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
-  backdrop-filter: blur(22px) saturate(1.6);
-  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  /* Solid fill (NOT frosted glass): the flare pseudo-elements can't carry
+     a matching backdrop-filter, so any translucency made them read as a
+     different colour and broke the outline at the junction. One opaque
+     tone across the body and both flares keeps the shape uniform. */
+  background: var(--surface-1);
   pointer-events: none;
   /* Crisp hairline (4 directional, zero-blur) + soft ambient shadow —
      all following the COMBINED alpha of the shell and its flare pseudos,
-     so the outline is continuous around the flared silhouette. */
+     so the outline is one continuous stroke around the flared silhouette. */
   filter:
     drop-shadow(0.7px 0 0 var(--border-strong, var(--border)))
     drop-shadow(-0.7px 0 0 var(--border-strong, var(--border)))
@@ -55,7 +57,7 @@
   right: 0;
   width: 18px;
   height: 18px;
-  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+  background: var(--surface-1);
 }
 .shell::before {
   top: -18px;
