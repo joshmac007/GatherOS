@@ -243,7 +243,12 @@
 .edge.edgeExpanded .fan img:nth-child(3) { transform: translate(-50%, -50%) rotate(4deg)   translate(8%, 0);    z-index: 2; }
 .edge.edgeExpanded .fan img:nth-child(4) { transform: translate(-50%, -50%) rotate(11deg)  translate(22%, 4%);  z-index: 1; }
 
+/* Fan wider on hover AND on drag-over — same gesture, same payoff, so the
+   cover opens up whether you're just pointing at a collection or dropping
+   into it. */
+.edge.edgeExpanded .row:hover .fan img:nth-child(1),
 .edge.edgeExpanded .rowTarget .fan img:nth-child(1) { transform: translate(-50%, -50%) rotate(-15deg) translate(-34%, 6%); }
+.edge.edgeExpanded .row:hover .fan img:nth-child(4),
 .edge.edgeExpanded .rowTarget .fan img:nth-child(4) { transform: translate(-50%, -50%) rotate(16deg) translate(34%, 6%); }
 
 @media (prefers-reduced-motion: reduce) {
