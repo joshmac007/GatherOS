@@ -1808,10 +1808,8 @@ export default function App({ entitlement } = {}) {
   // Sidebar nav also drops focus + selection so users land on the masonry grid
   // instead of staying inside the FocusedView.
   // Collection "opening" flourish — a rotating 3D ring of the collection's
-  // covers shown the first time you open each collection in a session.
-  // { id, fading } | null.
+  // covers shown every time you open a collection. { id, fading } | null.
   const [collectionIntro, setCollectionIntro] = useState(null);
-  const introSeenRef = useRef(new Set());
   const introTimersRef = useRef([]);
   const clearIntroTimers = useCallback(() => {
     introTimersRef.current.forEach((t) => clearTimeout(t));
@@ -1826,13 +1824,12 @@ export default function App({ entitlement } = {}) {
     // A view change is a different intent than "more like this one",
     // so drop any active similar-to anchor when the user navigates.
     setSimilarTo(null);
-    // Trigger the ring intro on the first open of a non-empty collection.
+    // Trigger the ring intro every time a non-empty collection is opened.
     clearIntroTimers();
     setCollectionIntro(null);
-    if (newView.type === 'collection' && newView.id && !introSeenRef.current.has(newView.id)) {
+    if (newView.type === 'collection' && newView.id) {
       const col = collections.find((c) => c.id === newView.id);
       if (col && (col.save_count ?? 0) > 0 && (col.thumbs?.length ?? 0) > 0) {
-        introSeenRef.current.add(newView.id);
         setCollectionIntro({ id: newView.id, fading: false });
         introTimersRef.current.push(setTimeout(() => {
           setCollectionIntro((p) => (p && p.id === newView.id ? { ...p, fading: true } : p));
