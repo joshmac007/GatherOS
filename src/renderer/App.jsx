@@ -3427,7 +3427,14 @@ export default function App({ entitlement } = {}) {
               <div className="library-stage">
               {collectionIntro && view.type === 'collection' && view.id === collectionIntro.id && (
                 <CollectionLoader
-                  thumbs={collections.find((c) => c.id === collectionIntro.id)?.thumbs || []}
+                  thumbs={(
+                    // Prefer the collection's actual loaded saves so every
+                    // card in the ring is a distinct image; fall back to the
+                    // 4 cover thumbs only until the saves arrive.
+                    saves.length
+                      ? saves.slice(0, 14).map((s) => s.thumb_path)
+                      : collections.find((c) => c.id === collectionIntro.id)?.thumbs || []
+                  ).filter(Boolean)}
                   name={collections.find((c) => c.id === collectionIntro.id)?.name}
                   fading={collectionIntro.fading}
                 />

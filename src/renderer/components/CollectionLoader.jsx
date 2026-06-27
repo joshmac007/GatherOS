@@ -2,20 +2,21 @@ import React, { useMemo } from 'react';
 import styles from './CollectionLoader.module.css';
 import { fileUrl } from '../lib/fileUrl.js';
 
-// Brief opening flourish when you enter a collection: its covers wrap into
+// Brief opening flourish when you enter a collection: its images wrap into
 // a 3D ring that slowly rotates, then the overlay fades to reveal the grid.
 // Purely decorative — the grid is ready underneath the whole time.
-const MIN_CARDS = 9;
-const MAX_CARDS = 14;
+const MAX_CARDS = 16;
 
 export default function CollectionLoader({ thumbs = [], name, fading = false }) {
   const cards = useMemo(() => {
-    const src = (thumbs || []).filter(Boolean);
-    if (src.length === 0) return [];
-    // Pad the ring by repeating so a small collection still reads as a
-    // full band, capped so a huge one doesn't over-populate it.
-    const target = Math.min(MAX_CARDS, Math.max(MIN_CARDS, src.length));
-    return Array.from({ length: target }, (_, i) => src[i % src.length]);
+    // Distinct images only — never pad/repeat, so no image shows twice in
+    // the ring. A small collection just makes a smaller ring.
+    const seen = new Set();
+    const src = [];
+    for (const t of thumbs || []) {
+      if (t && !seen.has(t)) { seen.add(t); src.push(t); }
+    }
+    return src.slice(0, MAX_CARDS);
   }, [thumbs]);
 
   if (cards.length === 0) return null;
@@ -23,8 +24,10 @@ export default function CollectionLoader({ thumbs = [], name, fading = false }) 
   const n = cards.length;
   const cardW = 78;
   // Radius that seats N cards of width cardW evenly around the ring with a
-  // little breathing room.
-  const radius = Math.round((cardW * 1.18) / (2 * Math.tan(Math.PI / n)));
+  // little breathing room. Guard the trig for tiny rings (n < 3).
+  const radius = n >= 3
+    ? Math.round((cardW * 1.18) / (2 * Math.tan(Math.PI / n)))
+    : 130;
 
   return (
     <div className={`${styles.overlay}${fading ? ` ${styles.out}` : ''}`} aria-hidden="true">
