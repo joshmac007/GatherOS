@@ -24,18 +24,22 @@
    where the drawer meets the screen edge, so it reads as "welded" to the
    wall and flares outward into it rather than ending in a flat tab. The
    drawer (.list) clips its own overflow, so the flares hang off the .edge
-   wrapper instead. Same glass material as the drawer; a radial-gradient
-   mask carves the concave quarter-circle. */
+   wrapper instead.
+
+   The stroke is baked INTO the fillet: a single radial-gradient goes
+   transparent → a 1px border-coloured ring along the concave curve →
+   glass fill. (A plain fill + the rectangle's own border left the curved
+   edge unstroked, so it disappeared against light backgrounds.) The arc
+   meets the rectangle's top/bottom border tangentially, so the outline
+   reads as one continuous stroke around the whole flared silhouette. */
 .edge::before,
 .edge::after {
   content: "";
   position: absolute;
   right: 0;
-  width: 18px;
-  height: 18px;
-  background: color-mix(in srgb, var(--surface-1) 90%, transparent);
-  backdrop-filter: blur(22px) saturate(1.6);
-  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  width: 20px;
+  height: 20px;
+  z-index: 1;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.22s ease;
@@ -45,13 +49,19 @@
 
 .edge::before {
   top: -18px;
-  -webkit-mask: radial-gradient(circle at top left, transparent 18px, #000 18.5px);
-  mask: radial-gradient(circle at top left, transparent 18px, #000 18.5px);
+  background: radial-gradient(circle at top left,
+    transparent 17.5px,
+    var(--border-strong, var(--border)) 18px,
+    var(--border-strong, var(--border)) 19px,
+    color-mix(in srgb, var(--surface-1) 90%, transparent) 19.5px);
 }
 .edge::after {
   bottom: -18px;
-  -webkit-mask: radial-gradient(circle at bottom left, transparent 18px, #000 18.5px);
-  mask: radial-gradient(circle at bottom left, transparent 18px, #000 18.5px);
+  background: radial-gradient(circle at bottom left,
+    transparent 17.5px,
+    var(--border-strong, var(--border)) 18px,
+    var(--border-strong, var(--border)) 19px,
+    color-mix(in srgb, var(--surface-1) 90%, transparent) 19.5px);
 }
 
 /* The drawer. Resting = narrow (just the stacked covers); expanded = the
