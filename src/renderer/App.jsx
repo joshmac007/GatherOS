@@ -1720,15 +1720,17 @@ export default function App({ entitlement } = {}) {
   // re-fetches everything against the now-active library. The main
   // process has already closed + reopened the DB by the time we
   // get here.
-  const handleSwitchLibrary = useCallback(async (id) => {
+  const handleSwitchLibrary = useCallback(async (id, knownName) => {
     if (!id || id === activeLibraryId) return;
     const res = await window.moodmark.libraries.switch(id);
     if (!res?.ok) return;
     // Kick off the crossfade: name the library we're landing in and let
     // the veil mask the grid/sidebar reload below. Re-keyed by id so a
-    // rapid re-switch restarts the animation cleanly.
+    // rapid re-switch restarts the animation cleanly. `knownName` is passed
+    // when the caller already has it (e.g. a just-created library that the
+    // stale `libraries` closure here wouldn't find yet).
     const target = libraries.find((l) => l.id === id);
-    setLibrarySwitchOverlay({ id, name: target?.name || 'Library' });
+    setLibrarySwitchOverlay({ id, name: knownName || target?.name || 'Library' });
     if (librarySwitchTimerRef.current) clearTimeout(librarySwitchTimerRef.current);
     librarySwitchTimerRef.current = setTimeout(() => setLibrarySwitchOverlay(null), 820);
     setActiveLibraryId(id);
@@ -1750,8 +1752,10 @@ export default function App({ entitlement } = {}) {
     if (res?.ok && res.library) {
       await refreshLibraries();
       // Auto-switch to the newly-created library so the user lands
-      // in their fresh empty space.
-      await handleSwitchLibrary(res.library.id);
+      // in their fresh empty space. Pass the name explicitly — the
+      // `libraries` list inside handleSwitchLibrary won't include this
+      // brand-new one yet, so the overlay would otherwise show a stale name.
+      await handleSwitchLibrary(res.library.id, res.library.name || name);
     }
   }, [refreshLibraries, handleSwitchLibrary, proLocked]);
 
