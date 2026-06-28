@@ -21,8 +21,10 @@
 }
 
 .scene {
-  perspective: 900px;
-  perspective-origin: 50% 42%;
+  /* Higher perspective = gentler foreshortening, so the far side of the
+     ring stays legible instead of collapsing to nothing. */
+  perspective: 1400px;
+  perspective-origin: 50% 50%;
   width: 78px;
   height: 104px;
 }

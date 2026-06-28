@@ -36,10 +36,12 @@ export default function CollectionLoader({ thumbs = [], name, fading = false }) 
     <div className={`${styles.overlay}${fading ? ` ${styles.out}` : ''}`} aria-hidden="true">
       <div className={styles.scene}>
         {/* Tilt + push-back live on the wrapper (dynamic radius); the ring
-            child just spins, so the animation never fights the transform. */}
+            child just spins, so the animation never fights the transform.
+            A steep rotateX makes us look down onto the horizontal "crown"
+            of cards so the whole angled ring reads, not just a front arc. */}
         <div
           className={styles.tilt}
-          style={{ transform: `rotateX(-14deg) translateZ(${-radius}px)` }}
+          style={{ transform: `rotateX(58deg) translateZ(${-radius}px)` }}
         >
           <div className={styles.ring}>
             {cards.map((t, i) => (
@@ -54,7 +56,6 @@ export default function CollectionLoader({ thumbs = [], name, fading = false }) 
           </div>
         </div>
       </div>
-      {name && <div className={styles.label}>{name}</div>}
     </div>
   );
 }
