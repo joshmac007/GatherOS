@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Make moodboard — animated GIF motion</title>
+<style>
+  :root{
+    --sm:4px; --md:7px; --lg:10px; --xl:14px;
+    --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --letterbox:#ebebeb;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--ui);background:#0d0d0f;color:#111;-webkit-font-smoothing:antialiased}
+
+  header{position:fixed;inset:0 0 auto 0;z-index:80;background:rgba(248,248,250,0.86);
+    backdrop-filter:blur(16px) saturate(1.4);border-bottom:0.5px solid rgba(0,0,0,0.1);padding:12px 20px}
+  header h1{font-size:14px;font-weight:600;margin:0 0 9px;letter-spacing:-0.01em;color:#1a1a1c}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .tab{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
+    border:0.5px solid rgba(0,0,0,0.12);background:#fff;color:#444;font-size:12.5px;font-weight:500;cursor:pointer;transition:all .14s ease}
+  .tab .n{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:999px;
+    background:rgba(0,0,0,0.08);font-size:11px;font-weight:600;color:#666;font-family:var(--mono)}
+  .tab:hover{border-color:rgba(0,0,0,0.24)}
+  .tab.active{background:#111;color:#fff;border-color:#111}
+  .tab.active .n{background:rgba(255,255,255,0.22);color:#fff}
+
+  main{padding:104px 20px 60px;min-height:100%}
+  .panel{display:none;max-width:760px;margin:0 auto}
+  .panel.active{display:block;animation:fade .26s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .pmeta{margin:0 0 18px;color:#eaeaea;text-align:center}
+  .pname{font-size:19px;font-weight:600;letter-spacing:-0.02em;color:#fff}
+  .pname .idx{color:#7a7a7e;font-weight:500;margin-right:8px;font-family:var(--mono)}
+  .prat{font-size:13.5px;line-height:1.5;color:#9a9a9e;margin:6px auto 0;max-width:540px}
+  .trade{font-size:12px;color:#76767a;margin-top:8px}
+  .trade b{color:#bdbdc2;font-weight:600}
+
+  /* the export frame — portrait poster */
+  .frameWrap{display:flex;justify-content:center;margin-top:8px}
+  .frame{
+    position:relative;width:330px;height:440px;overflow:hidden;
+    background:var(--letterbox);
+    border-radius:var(--md);
+    box-shadow:0 1px 0 rgba(255,255,255,0.5) inset, 0 30px 70px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(0,0,0,0.15);
+  }
+  /* subtle paper grain */
+  .frame::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;
+    background-image:radial-gradient(rgba(0,0,0,0.04) 0.5px, transparent 0.5px);background-size:3px 3px;opacity:0.5}
+  /* tiny poster labels like the reference */
+  .frame .lbl{position:absolute;z-index:6;font-family:var(--mono);font-size:7px;letter-spacing:0.06em;color:rgba(40,40,40,0.55)}
+  .frame .lbl.tl{left:12px;top:11px}
+  .frame .lbl.tr{right:12px;top:11px}
+  .frame .lbl.bl{left:12px;bottom:11px}
+  .frame .lbl.br{right:12px;bottom:11px}
+
+  /* a contained image cell (object-fit: contain → letterbox) */
+  .cell{display:flex;align-items:center;justify-content:center;background:var(--letterbox)}
+  .cell img{max-width:100%;max-height:100%;width:auto;height:auto;display:block;
+    box-shadow:0 2px 10px rgba(0,0,0,0.16)}
+  .frameW{width:330px}.frameH{height:440px}
+
+  /* ── 1 · FILMSTRIP PAN ── */
+  .d1 .track{display:flex;height:100%;animation:filmstrip 12s linear infinite}
+  .d1 .cell{width:330px;height:440px;flex:0 0 330px}
+  @keyframes filmstrip{from{transform:translateX(0)}to{transform:translateX(var(--shift))}}
+
+  /* ── 2 · VERTICAL SCROLL ── */
+  .d2 .track{display:flex;flex-direction:column;width:100%;animation:vscroll 13s linear infinite}
+  .d2 .cell{width:330px;height:440px;flex:0 0 440px}
+  @keyframes vscroll{from{transform:translateY(0)}to{transform:translateY(var(--shift))}}
+
+  /* ── 3 · PUSH SLIDESHOW ── (track stepped with holds; keyframes injected) */
+  .d3 .track{display:flex;height:100%}
+  .d3 .cell{width:330px;height:440px;flex:0 0 330px}
+
+  /* ── 4 · CROSSFADE + KEN BURNS ── (stacked, each fades; keyframes injected) */
+  .d4 .stack{position:absolute;inset:0}
+  .d4 .cell{position:absolute;inset:0;opacity:0;will-change:opacity,transform}
+
+  /* ── 5 · CONTACT-SHEET FLY-THROUGH ── (grid, camera move; injected) */
+  .d5 .board{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  .d5 .gcell{position:absolute;display:flex;align-items:center;justify-content:center;background:#e4e4e4;
+    border-radius:3px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.18)}
+  .d5 .gcell img{max-width:100%;max-height:100%;width:auto;height:auto}
+</style>
+</head>
+<body>
+<header>
+  <h1>Make moodboard — animated GIF motion</h1>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main id="main"></main>
+
+<script>
+// Varied-aspect placeholder "images" so the contain/letterbox behaviour shows.
+const IMAGES = [
+  { w: 1600, h: 900, c1: '#7c5cff', c2: '#c45bff' },  // landscape
+  { w: 900,  h: 1300, c1: '#ff8a5b', c2: '#ffd166' }, // portrait
+  { w: 1100, h: 1100, c1: '#36d1c4', c2: '#4f9dff' }, // square
+  { w: 1500, h: 1000, c1: '#ff5e87', c2: '#ff9e5e' }, // landscape
+  { w: 800,  h: 1200, c1: '#23c483', c2: '#36d1c4' }, // tall portrait
+];
+function svg(im){
+  const s = `<svg xmlns='http://www.w3.org/2000/svg' width='${im.w}' height='${im.h}'>`
+    + `<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>`
+    + `<stop offset='0' stop-color='${im.c1}'/><stop offset='1' stop-color='${im.c2}'/></linearGradient></defs>`
+    + `<rect width='100%' height='100%' fill='url(#g)'/></svg>`;
+  return 'data:image/svg+xml,' + encodeURIComponent(s);
+}
+const N = IMAGES.length;
+const FW = 330, FH = 440;
+const imgTag = (im) => `<img src="${svg(im)}" alt="">`;
+const labels = `<span class="lbl tl">MOODBOARD</span><span class="lbl tr">${N} images</span>`
+  + `<span class="lbl bl">GATHEROS</span><span class="lbl br">18 JUN 2026</span>`;
+
+const dyn = document.createElement('style'); // injected keyframes
+document.head.appendChild(dyn);
+let dynCss = '';
+
+// 1 · filmstrip: row of cells + clone of first for a seamless loop
+function filmstrip(){
+  const cells = [...IMAGES, IMAGES[0]].map(im => `<div class="cell frameH">${imgTag(im)}</div>`).join('');
+  return { html:`<div class="frame d1">${labels}<div class="track" style="--shift:-${N*FW}px">${cells}</div></div>` };
+}
+// 2 · vertical scroll
+function vscroll(){
+  const cells = [...IMAGES, IMAGES[0]].map(im => `<div class="cell frameW">${imgTag(im)}</div>`).join('');
+  return { html:`<div class="frame d2">${labels}<div class="track" style="--shift:-${N*FH}px">${cells}</div></div>` };
+}
+// 3 · push slideshow — hold each, then slide to next
+function push(id){
+  const cells = [...IMAGES, IMAGES[0]].map(im => `<div class="cell frameH">${imgTag(im)}</div>`).join('');
+  // keyframes: hold then move, per image
+  const seg = 100 / N, hold = seg * 0.62;
+  let kf = '';
+  for (let i = 0; i <= N; i++){
+    const at = (i * seg).toFixed(3);
+    kf += `${at}%{transform:translateX(-${i*FW}px)}`;
+    if (i < N){
+      const holdAt = (i*seg + hold).toFixed(3);
+      kf += `${holdAt}%{transform:translateX(-${i*FW}px)}`;
+    }
+  }
+  dynCss += `@keyframes push_${id}{${kf}} .push_${id}{animation:push_${id} 14s cubic-bezier(.7,0,.2,1) infinite}`;
+  return { html:`<div class="frame d3">${labels}<div class="track push_${id}">${cells}</div></div>` };
+}
+// 4 · crossfade + ken burns
+function kenburns(id){
+  const cells = IMAGES.map((im,i) => `<div class="cell kb_${id}_${i}">${imgTag(im)}</div>`).join('');
+  const dur = N * 2.6;
+  const vis = 100 / N;            // % of cycle each image is up
+  const drifts = ['scale(1.0) translate(0,0)','scale(1.09) translate(-2%, 2%)'];
+  for (let i = 0; i < N; i++){
+    dynCss += `@keyframes kb_${id}_${i}{`
+      + `0%{opacity:0;transform:${drifts[0]}}`
+      + `${(vis*0.16).toFixed(2)}%{opacity:1}`
+      + `${(vis*0.84).toFixed(2)}%{opacity:1}`
+      + `${vis.toFixed(2)}%{opacity:0;transform:${drifts[1]}}`
+      + `100%{opacity:0;transform:${drifts[1]}}}`;
+    dynCss += `.kb_${id}_${i}{animation:kb_${id}_${i} ${dur}s ease-in-out infinite;animation-delay:${(i*dur/N).toFixed(3)}s}`;
+  }
+  return { html:`<div class="frame d4">${labels}<div class="stack">${cells}</div></div>` };
+}
+// 5 · contact-sheet fly-through
+function contact(id){
+  const COLS = 3, GAP = 16, CW = 180, CH = 150;
+  const rows = Math.ceil(N / COLS);
+  const boardW = COLS*CW + (COLS-1)*GAP;
+  const boardH = rows*CH + (rows-1)*GAP;
+  let cells = '';
+  const centers = [];
+  IMAGES.forEach((im,i) => {
+    const cx = i % COLS, cy = Math.floor(i / COLS);
+    const x = cx*(CW+GAP), y = cy*(CH+GAP);
+    cells += `<div class="gcell" style="left:${x}px;top:${y}px;width:${CW}px;height:${CH}px">${imgTag(im)}</div>`;
+    centers.push({ x: x + CW/2, y: y + CH/2 });
+  });
+  // Camera: scale up so a cell ~fills the frame, translate to center each cell.
+  const Z = 1.7;
+  const seg = 100 / N, hold = seg * 0.55;
+  let kf = '';
+  function frameFor(c){
+    // translate so the (scaled) cell center sits at the frame center
+    const tx = FW/2 - c.x*Z, ty = FH/2 - c.y*Z;
+    return `transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px) scale(${Z})`;
+  }
+  // start zoomed-out overview, then visit each cell, end back near first for a clean loop
+  const overviewScale = Math.min(FW/boardW, FH/boardH) * 0.92;
+  const ovx = (FW - boardW*overviewScale)/2, ovy = (FH - boardH*overviewScale)/2;
+  kf += `0%{transform:translate(${ovx.toFixed(1)}px,${ovy.toFixed(1)}px) scale(${overviewScale.toFixed(3)})}`;
+  kf += `7%{transform:translate(${ovx.toFixed(1)}px,${ovy.toFixed(1)}px) scale(${overviewScale.toFixed(3)})}`;
+  centers.forEach((c,i) => {
+    const a = (10 + i*seg).toFixed(2);
+    const b = (10 + i*seg + hold).toFixed(2);
+    if (10 + i*seg < 100){ kf += `${a}%{${frameFor(c)}}`; kf += `${Math.min(100,+b).toFixed(2)}%{${frameFor(c)}}`; }
+  });
+  kf += `100%{transform:translate(${ovx.toFixed(1)}px,${ovy.toFixed(1)}px) scale(${overviewScale.toFixed(3)})}`;
+  dynCss += `@keyframes contact_${id}{${kf}} .contact_${id}{animation:contact_${id} 16s cubic-bezier(.7,0,.25,1) infinite}`;
+  return { html:`<div class="frame d5">${labels}<div class="board contact_${id}" style="width:${boardW}px;height:${boardH}px">${cells}</div></div>` };
+}
+
+const DIRS = [
+  { name:'Filmstrip pan', build:()=>filmstrip(),
+    rat:'All images sit in a row, each fully contained; the frame glides left→right across the strip and loops seamlessly. Reads like flipping through a contact strip.',
+    trade:'Continuous motion, every image gets equal time. Each image is only fully centered for a moment. Suits 4–10 images.' },
+  { name:'Vertical scroll', build:()=>vscroll(),
+    rat:'Images stacked in a column; the frame scrolls down through them forever — matches a tall scrolling poster.',
+    trade:'Calm and editorial. Same continuous trade-off as filmstrip. Portrait-friendly; great for many images.' },
+  { name:'Push slideshow', build:()=>push('a'),
+    rat:'One image fully on screen at a time — it holds a beat, then the next pushes it out. Each image gets a clear, legible moment.',
+    trade:'Most legible per image; feels like a slideshow. Larger file size (more hold frames). Best for 3–6 hero images.' },
+  { name:'Crossfade + Ken Burns', build:()=>kenburns('a'),
+    rat:'Each image cross-dissolves into the next with a slow zoom/drift — the calmest, most premium, closest to your reference.',
+    trade:'Most elegant; great for any aspect. Gradients cross-dissolve cleanly but the gentle zoom slightly crops — least "contained-strict" of the five.' },
+  { name:'Contact-sheet fly-through', build:()=>contact('a'),
+    rat:'All images laid as a small board; the camera opens on the whole grid, then flies in to visit each image, then pulls back. Shows the set AND each piece.',
+    trade:'Most cinematic and "moodboard-like". Heaviest to encode (lots of motion frames). Best as a showpiece for a curated set.' },
+];
+
+const tabs=document.getElementById('tabs');
+const main=document.getElementById('main');
+DIRS.forEach((d,i)=>{
+  const built = d.build();
+  const t=document.createElement('button');
+  t.className='tab'+(i===0?' active':'');t.dataset.i=i;
+  t.innerHTML=`<span class="n">${i+1}</span>${d.name}`;
+  t.onclick=()=>show(i);tabs.appendChild(t);
+
+  const p=document.createElement('section');
+  p.className='panel'+(i===0?' active':'');p.dataset.i=i;
+  p.innerHTML=`
+    <div class="pmeta">
+      <div class="pname"><span class="idx">${i+1}</span>${d.name}</div>
+      <div class="prat">${d.rat}</div>
+      <div class="trade"><b>Trade-off:</b> ${d.trade}</div>
+    </div>
+    <div class="frameWrap">${built.html}</div>`;
+  main.appendChild(p);
+});
+dyn.textContent = dynCss;
+
+function show(i){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',+t.dataset.i===i));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',+p.dataset.i===i));
+}
+window.addEventListener('keydown',e=>{const n=parseInt(e.key,10);if(n>=1&&n<=DIRS.length)show(n-1)});
+</script>
+</body>
+</html>
