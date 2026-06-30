@@ -417,12 +417,12 @@ async function composeMoodBoardGif(saves, outputPath, opts = {}) {
   const sharp = require('sharp');
   const { GIFEncoder, quantize, applyPalette } = require('gifenc');
 
-  // Square frame (1:1). Kept modest so the GIF stays a sane size.
-  const W = opts.width || 1080;
-  const H = opts.height || 1080;
+  // Square frame (1:1). Higher resolution so contained images stay crisp.
+  const W = opts.width || 1600;
+  const H = opts.height || 1600;
   const holdMs = opts.holdMs || 600;           // time each image is on screen
-  const PADDING = opts.padding != null ? opts.padding : 64; // breathing room around each image
-  const MATTE = opts.matte || { r: 235, g: 235, b: 235 }; // #EBEBEB (letterbox fill)
+  const PADDING = opts.padding != null ? opts.padding : 96; // breathing room around each image
+  const MATTE = opts.matte || { r: 226, g: 226, b: 224 }; // #E2E2E0 (letterbox fill)
 
   // The area an image is allowed to occupy, inset by the padding on all sides.
   const contentW = Math.max(1, W - PADDING * 2);
@@ -444,7 +444,13 @@ async function composeMoodBoardGif(saves, outputPath, opts = {}) {
       // around every image. The matte shows as the surrounding padding plus
       // any letterbox gaps left by the image's own aspect.
       placed = await sharp(src)
-        .resize({ width: contentW, height: contentH, fit: 'inside', withoutEnlargement: false })
+        .resize({
+          width: contentW,
+          height: contentH,
+          fit: 'inside',
+          withoutEnlargement: false,
+          kernel: 'lanczos3', // sharpest downscale kernel
+        })
         .flatten({ background: { r: 255, g: 255, b: 255 } }) // drop alpha onto white
         .png()
         .toBuffer({ resolveWithObject: true });
