@@ -52,7 +52,7 @@ export const STEPS = [
       '[data-onboarding="detail-close"]',
     ],
     title: 'Your library',
-    body: 'Everything you collect lives here. Drag images in or save URLs. Browser extension coming soon.',
+    body: 'Everything you collect lives here. Drag images in, save URLs, or sync your social bookmarks.',
     advance: {
       type: 'next',
       label: 'Next',
@@ -109,7 +109,24 @@ export const STEPS = [
     body: 'Infinite canvases for moodboards or explorations. Drag images in, arrange them, add notes, and present full-screen.',
     advance: { type: 'next', label: 'Next' },
   },
-  // 5. Keep / start-fresh. The chosen option's `action` fires
+  // 5. Chrome extension — prompt to install it so X bookmarks and
+  // Instagram saves sync into the library automatically. The `cta`
+  // opens the Chrome Web Store listing in the browser; the regular
+  // Next ('Maybe later') lets them skip without installing.
+  {
+    id: 'extension',
+    target: null,
+    icon: 'extension',
+    onEnter: '[data-onboarding="mode-library"]',
+    title: 'Sync your X & Instagram saves',
+    body: 'Add the Chrome extension and everything you bookmark on X or save on Instagram flows straight into your library — no copy-paste.',
+    advance: { type: 'next', label: 'Maybe later' },
+    cta: {
+      label: 'Install extension',
+      url: 'https://chromewebstore.google.com/detail/gatheros/jflmnonpoapjncoeankehcmenldecojk',
+    },
+  },
+  // 6. Keep / start-fresh. The chosen option's `action` fires
   // before the overlay closes — 'fresh' removes the starter pack
   // (saves + collections + boards) on the main process. Both
   // branches flip back to the Library tab so the user lands

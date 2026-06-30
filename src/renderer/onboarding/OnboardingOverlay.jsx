@@ -7,6 +7,7 @@ import {
   Eclipse as LayersIcon,
   PanelRight as DetailIcon,
   Gift as GiftIcon,
+  Chrome as ChromeIcon,
 } from 'lucide-react';
 import { useOnboarding } from './OnboardingContext.jsx';
 import styles from './OnboardingOverlay.module.css';
@@ -22,6 +23,7 @@ const STEP_ICONS = {
   spaces: LayersIcon,
   detail: DetailIcon,
   starter: GiftIcon,
+  extension: ChromeIcon,
 };
 
 // Visual padding around the spotlight ring, in CSS px.
@@ -199,7 +201,9 @@ export default function OnboardingOverlay() {
           {step.advance?.type === 'next' && (
             <button
               type="button"
-              className={styles.primaryBtn}
+              // When the step carries an install CTA, the Next button
+              // becomes the quiet "skip" option and the CTA is primary.
+              className={step.cta ? styles.ghostBtn : styles.primaryBtn}
               onClick={() => {
                 // Some steps need to nudge the app state before
                 // advancing (e.g. opening a save's detail panel or
@@ -221,6 +225,19 @@ export default function OnboardingOverlay() {
               }}
             >
               {step.advance.label || 'Next'}
+            </button>
+          )}
+          {step.cta && (
+            <button
+              type="button"
+              className={styles.primaryBtn}
+              onClick={() => {
+                try { window.moodmark?.shell?.openUrl?.(step.cta.url); }
+                catch { /* opening the store link is best-effort */ }
+                advance();
+              }}
+            >
+              {step.cta.label}
             </button>
           )}
           {step.advance?.type === 'choice' && step.advance.options.map((opt, i, arr) => (
