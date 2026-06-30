@@ -430,11 +430,13 @@ export default function App({ entitlement } = {}) {
   const [sortMode, setSortMode] = useState(() => {
     try {
       const raw = localStorage.getItem('moodmark.sortMode');
-      if (raw === 'oldest' || raw === 'name_asc' || raw === 'name_desc' || raw === 'recent') return raw;
+      // name_asc/name_desc were removed; any persisted value falls through
+      // to 'recent'.
+      if (raw === 'oldest' || raw === 'recent') return raw;
     } catch {}
     // First launch fallback — read the Settings → Defaults pref.
     const def = window.moodmark?.app?.defaults?.defaultSort;
-    if (def === 'oldest' || def === 'name_asc' || def === 'name_desc' || def === 'recent') return def;
+    if (def === 'oldest' || def === 'recent') return def;
     return 'recent';
   });
   useEffect(() => {
@@ -2079,19 +2081,6 @@ export default function App({ entitlement } = {}) {
     const sorted = saves.slice();
     if (sortMode === 'oldest') {
       sorted.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
-    } else if (sortMode === 'name_asc' || sortMode === 'name_desc') {
-      const dir = sortMode === 'name_asc' ? 1 : -1;
-      // Untitled saves sort to the bottom regardless of direction so
-      // a wall of "Untitled" entries doesn't flood the top of the
-      // grid when sorting alphabetically.
-      sorted.sort((a, b) => {
-        const an = (a.title || '').trim();
-        const bn = (b.title || '').trim();
-        if (!an && !bn) return 0;
-        if (!an) return 1;
-        if (!bn) return -1;
-        return an.localeCompare(bn) * dir;
-      });
     }
     return sorted;
   }, [saves, shuffleSeed, shuffleAt, sortMode]);
