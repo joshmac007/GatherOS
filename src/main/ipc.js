@@ -20,6 +20,7 @@ const {
   saveImageFromUrl,
   saveImageFromBuffer,
   composeMoodBoard,
+  composeMoodBoardGif,
   getStorageUsage,
   reclaimLibraryStorage,
 } = require('./storage');
@@ -923,14 +924,14 @@ function registerIpcHandlers() {
     const owner = BrowserWindow.fromWebContents(e.sender);
     const stamp = new Date().toISOString().slice(0, 10);
     const dialogResult = await dialog.showSaveDialog(owner ?? undefined, {
-      defaultPath: `moodmark-board-${stamp}.png`,
-      filters: [{ name: 'PNG Image', extensions: ['png'] }],
+      defaultPath: `moodmark-board-${stamp}.gif`,
+      filters: [{ name: 'Animated GIF', extensions: ['gif'] }],
     });
     if (dialogResult.canceled || !dialogResult.filePath) {
       return { ok: false, canceled: true };
     }
     try {
-      const meta = await composeMoodBoard(saves, dialogResult.filePath);
+      const meta = await composeMoodBoardGif(saves, dialogResult.filePath);
       // Pop the file in Finder so the user can immediately see / drag it.
       shell.showItemInFolder(dialogResult.filePath);
       return { ok: true, savedPath: dialogResult.filePath, ...meta };

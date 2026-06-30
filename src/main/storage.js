@@ -405,6 +405,90 @@ async function composeMoodBoard(saves, outputPath) {
   return { width: totalWidth, height: totalHeight, count: tiles.length };
 }
 
+// Compose an animated mood board GIF that hard-cuts between the selected
+// images — each one contained (letterboxed, never cropped) on a matte
+// "poster" frame with a soft drop shadow, held for a beat, then cut to the
+// next. Loops forever. GIF is inherently 256-colour, so flat graphics look
+// crisp and photos band a little — expected for the format.
+async function composeMoodBoardGif(saves, outputPath, opts = {}) {
+  if (!Array.isArray(saves) || saves.length === 0) {
+    throw new Error('composeMoodBoardGif called without any saves');
+  }
+  const sharp = require('sharp');
+  const { GIFEncoder, quantize, applyPalette } = require('gifenc');
+
+  // Portrait poster frame (4:5). Kept modest so the GIF stays a sane size.
+  const W = opts.width || 1080;
+  const H = opts.height || 1350;
+  const holdMs = opts.holdMs || 1500;          // time each image is on screen
+  const MATTE = opts.matte || { r: 235, g: 235, b: 235 }; // #EBEBEB
+  const MARGIN = opts.margin ?? 0.085;          // border around the image
+  const SHADOW_BLUR = 26;
+  const SHADOW_PAD = 40;
+
+  const contentW = Math.round(W * (1 - 2 * MARGIN));
+  const contentH = Math.round(H * (1 - 2 * MARGIN));
+
+  const enc = GIFEncoder();
+  let frames = 0;
+
+  for (const save of saves) {
+    // Video saves can't be decoded by sharp — use the poster still.
+    const src = save?.kind === 'video' && save?.thumb_path ? save.thumb_path : save?.file_path;
+    if (!src || !fs.existsSync(src)) continue;
+
+    let placed;
+    try {
+      // Contain within the content box (never enlarge past the frame, but
+      // do upscale small images so they fill it).
+      placed = await sharp(src)
+        .resize({ width: contentW, height: contentH, fit: 'inside', withoutEnlargement: false })
+        .flatten({ background: { r: 255, g: 255, b: 255 } }) // drop alpha onto white
+        .png()
+        .toBuffer({ resolveWithObject: true });
+    } catch (err) {
+      console.error('[moodboard-gif] skip unreadable save:', src, err.message);
+      continue;
+    }
+
+    const iw = placed.info.width;
+    const ih = placed.info.height;
+    const left = Math.round((W - iw) / 2);
+    const top = Math.round((H - ih) / 2);
+
+    // Soft drop shadow: a black slab the size of the image, padded + blurred.
+    const shadow = await sharp({
+      create: { width: iw, height: ih, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0.26 } },
+    })
+      .extend({ top: SHADOW_PAD, bottom: SHADOW_PAD, left: SHADOW_PAD, right: SHADOW_PAD,
+        background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .blur(SHADOW_BLUR)
+      .png()
+      .toBuffer();
+
+    const frame = await sharp({
+      create: { width: W, height: H, channels: 4, background: { ...MATTE, alpha: 1 } },
+    })
+      .composite([
+        { input: shadow, left: left - SHADOW_PAD, top: top - SHADOW_PAD + 14 },
+        { input: placed.data, left, top },
+      ])
+      .raw()
+      .toBuffer();
+
+    const data = new Uint8Array(frame);
+    const palette = quantize(data, 256, { format: 'rgba4444' });
+    const index = applyPalette(data, palette, 'rgba4444');
+    enc.writeFrame(index, W, H, { palette, delay: holdMs });
+    frames += 1;
+  }
+
+  if (frames === 0) throw new Error('No readable images to compose');
+  enc.finish();
+  fs.writeFileSync(outputPath, Buffer.from(enc.bytes()));
+  return { width: W, height: H, count: frames };
+}
+
 // Download a remote video (MP4) into the library and write a JPEG
 // thumbnail from a separately-fetched poster image. Used by the
 // X-bookmark capture path when the bookmarked tweet has a video
@@ -627,4 +711,5 @@ module.exports = {
   saveAuxMedia,
   deleteImageFiles,
   composeMoodBoard,
+  composeMoodBoardGif,
 };

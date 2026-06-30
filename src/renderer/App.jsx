@@ -3638,7 +3638,7 @@ export default function App({ entitlement } = {}) {
               className="selection-btn selection-btn-compact"
               onClick={handleBulkExportBoard}
               data-tooltip="Make moodboard"
-              aria-label="Composite the selection into a single moodboard PNG"
+              aria-label="Make an animated moodboard GIF that cycles through the selection"
             >
               <span className="selection-btn-icon"><BoardExportIcon /></span>
             </button>
