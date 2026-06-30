@@ -55,7 +55,12 @@ function titleFromEntry(entry) {
 //     '__starter__' tag — otherwise a user who already has the
 //     same image would never have it tagged, and "Start fresh"
 //     would silently spare it.
-function ingestZip(zipPath, { onInserted, onDuplicate } = {}) {
+//   silent: when true, suppress the per-image save/duplicate
+//     notifications (toast, sound, grid land-animation). The
+//     starter-pack install uses this so first-launch images just
+//     appear pre-loaded via the post-install reload instead of
+//     animating in as if the user saved them one by one.
+function ingestZip(zipPath, { onInserted, onDuplicate, silent = false } = {}) {
   return new Promise((resolve, reject) => {
     yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
       if (err) return reject(err);
@@ -74,14 +79,14 @@ function ingestZip(zipPath, { onInserted, onDuplicate } = {}) {
             const ext = path.extname(entry.fileName).slice(1).toLowerCase();
             const imgData = await saveImageFromBuffer(buffer, ext);
             if (imgData.duplicateOf) {
-              notifyDuplicate(imgData.existing);
+              if (!silent) notifyDuplicate(imgData.existing);
               counts.duplicates += 1;
               if (typeof onDuplicate === 'function') {
                 try { onDuplicate(imgData.existing, entry.fileName); } catch { /* non-fatal */ }
               }
             } else {
               const record = insertSave({ ...imgData, title: titleFromEntry(entry) });
-              notifySaved(record);
+              if (!silent) notifySaved(record);
               counts.inserted += 1;
               if (typeof onInserted === 'function') {
                 try { onInserted(record, entry.fileName); } catch { /* non-fatal */ }

@@ -121,6 +121,10 @@ async function doInstallStarterPack() {
     // newly-inserted save rows after ingest finishes.
     const filenameToSaveId = new Map();
     const counts = await ingestZip(STARTER_PACK_PATH, {
+      // First-launch starter images should appear pre-loaded, not animate
+      // in with a save toast + sound as if the user saved each one. The
+      // walkthrough's post-install reload brings them into the grid.
+      silent: true,
       onInserted: (record, fileName) => {
         tagAsStarter(record.id);
         if (fileName) filenameToSaveId.set(fileName, record.id);
