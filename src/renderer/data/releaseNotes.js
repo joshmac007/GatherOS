@@ -28,11 +28,6 @@ export const RELEASE_NOTES = [
         description: 'Select a few images and export an animated moodboard — a clean, square GIF that cuts through your picks. Videos come along as their first frame.',
       },
       {
-        Icon: GlassIcon,
-        title: 'Preview before you export',
-        description: 'Hover “make moodboard” and a live preview plays right above the button, so you see exactly what you’ll get before saving a thing.',
-      },
-      {
         Icon: PermissionIcon,
         title: 'Smoother with big libraries',
         description: 'Scrolling stays fluid through thousands of bookmarks — off-screen cards no longer do rendering work they don’t need to.',

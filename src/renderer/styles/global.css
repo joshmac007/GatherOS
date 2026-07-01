@@ -653,13 +653,16 @@ body:has(.upgrade-banner):has(.selection-bar) .trash-toast {
    away from any bottom-pinned UI (selection-bar, sort-fab). */
 .update-pill {
   position: fixed;
-  /* Bottom-center so it doesn't overlap the toolbar's + Add
-     button or any other corner-anchored UI. translateX centers
-     it against the viewport. */
+  /* Bottom-LEFT corner. Kept out of the bottom-centre lane (selection
+     bar, upgrade banner) and the bottom-right lane (+ Add / sort FAB)
+     so it never collides with a transient action bar. */
   bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 80;
+  left: 24px;
+  /* Above every other piece of app furniture — FABs, selection bar,
+     scroll-to-top, upgrade banner — so a ready update is never buried.
+     Sits just below true modal dialogs (9100+), which should still
+     cover it. */
+  z-index: 9000;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -691,13 +694,12 @@ body:has(.upgrade-banner):has(.selection-bar) .trash-toast {
     var(--surface-1);
 }
 
-/* Both the update pill and the upgrade/trial banner pin to bottom-center,
-   so when both are present they'd overlap (and the banner's higher
-   z-index would bury the pill). Lift the pill to sit just above the
-   banner. The banner unmounts when not shown (incl. when dismissed for
-   the session), so :has() naturally drops the pill back to 24px. */
-.app-shell:has(.upgrade-banner) .update-pill {
-  bottom: 72px;
+/* The update pill lives in the bottom-LEFT corner, sharing that lane
+   only with the scroll-to-top FAB. When the pill is showing, lift the
+   FAB above it so the two stack cleanly instead of overlapping (the pill
+   wins on z-index, so without this it would bury the FAB). */
+body:has(.update-pill) .scroll-top-fab {
+  bottom: 70px;
 }
 
 .update-pill-dot {
@@ -710,11 +712,9 @@ body:has(.upgrade-banner):has(.selection-bar) .trash-toast {
 }
 
 @keyframes updatePillIn {
-  /* Slides up from below while preserving the X centering set on
-     the resting state. Without the translateX(-50%) on the `to`
-     keyframe the pill would snap left as the animation ends. */
-  from { opacity: 0; transform: translate(-50%, 8px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+  /* Left-anchored now, so just slide up from below — no X translate. */
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes updateDotPulse {

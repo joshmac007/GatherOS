@@ -131,6 +131,12 @@
 .gotItBtn {
   min-width: 140px;
   padding: 9px 24px;
+  /* Reset the native macOS button appearance FIRST. Without this, WebKit
+     keeps the platform button rendering and clips the corners square no
+     matter what border-radius we set — the reason earlier radius-only
+     fixes never took. Every other styled button in the app does this too. */
+  -webkit-appearance: none;
+  appearance: none;
   /* Hardcoded pill radius (not the --radius-pill token) so the button is
      fully rounded even if the custom property fails to resolve in some
      render path — this modal portals to document.body. */
