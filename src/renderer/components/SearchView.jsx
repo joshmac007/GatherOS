@@ -4,9 +4,9 @@ import { fileUrl } from '../lib/fileUrl.js';
 import { buildSearchPlaceholders } from '../lib/searchPlaceholders.js';
 import { COLOR_SUGGESTIONS, parseHexColor, resolveColor } from '../lib/searchColors.js';
 import {
+  addChips,
   composeQuery,
   explodeQuery,
-  isValidChip,
   quoteValue,
   trailingFragment,
 } from '../lib/searchTokens.js';
@@ -186,11 +186,17 @@ export default function SearchView({
   // the prop changes to something we didn't compose ourselves (recents
   // click, Escape clear, programmatic set) — otherwise the local shape
   // is authoritative so typing never reflows mid-keystroke.
-  const [tok, setTok] = useState(() => explodeQuery(search));
+  const [tok, setTok] = useState(() => {
+    const ex = explodeQuery(search);
+    return { chips: addChips([], ex.chips), text: ex.text };
+  });
   const lastComposedRef = useRef(search);
   useEffect(() => {
     if (search !== lastComposedRef.current) {
-      setTok(explodeQuery(search));
+      // addChips applies singleton semantics (color/is/before/after) to
+      // hand-typed or recorded strings that repeat a last-wins key.
+      const ex = explodeQuery(search);
+      setTok({ chips: addChips([], ex.chips), text: ex.text });
       lastComposedRef.current = search;
     }
   }, [search]);
@@ -287,7 +293,7 @@ export default function SearchView({
   const applySuggestion = (row) => {
     if (!row || !frag) return;
     const base = text.slice(0, text.length - frag.len);
-    commit({ chips: [...chips, { key: row.key, value: row.value }], text: base });
+    commit({ chips: addChips(chips, [{ key: row.key, value: row.value }]), text: base });
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
@@ -297,14 +303,21 @@ export default function SearchView({
   };
 
   const handleInputChange = (val) => {
-    // A space right after a complete valid token commits it as a chip,
-    // so plain typed syntax chips exactly like picking a suggestion.
-    if (/\s$/.test(val)) {
-      const parsed = explodeQuery(val);
+    // Chipify every COMPLETE valid token in the settled part of the
+    // input (everything before the trailing in-progress fragment). This
+    // catches typed-syntax-plus-space, pasted multi-token queries, and
+    // free text mixed around tokens — while never grabbing the token
+    // still being typed.
+    const tail = trailingFragment(val);
+    const head = tail ? val.slice(0, val.length - tail.len) : val;
+    if (/\S/.test(head)) {
+      const parsed = explodeQuery(head);
       if (parsed.chips.length) {
+        const fragStr = tail ? val.slice(val.length - tail.len) : '';
+        const sep = parsed.text && /\s$/.test(head) ? ' ' : '';
         commit({
-          chips: [...chips, ...parsed.chips],
-          text: parsed.text ? `${parsed.text} ` : '',
+          chips: addChips(chips, parsed.chips),
+          text: `${parsed.text}${sep}${fragStr}`,
         });
         return;
       }
@@ -340,13 +353,14 @@ export default function SearchView({
       }
     }
     if (e.key === 'Enter') {
-      // Commit a complete typed token even without touching the popover.
-      if (frag && isValidChip(frag.key, frag.value)) {
+      // Commit every complete typed token as chips (including the
+      // trailing one) even without touching the popover.
+      const parsed = explodeQuery(text);
+      if (parsed.chips.length) {
         e.preventDefault();
-        const base = text.slice(0, text.length - frag.len);
-        const nextChips = [...chips, { key: frag.key, value: frag.key === 'tag' ? frag.value.toLowerCase().replace(/^#+/, '') : frag.value }];
-        commit({ chips: nextChips, text: base });
-        onRecordSearch?.(composeQuery(nextChips, base).trim());
+        const nextChips = addChips(chips, parsed.chips);
+        commit({ chips: nextChips, text: parsed.text });
+        onRecordSearch?.(composeQuery(nextChips, parsed.text).trim());
         return;
       }
       if (search.trim()) onRecordSearch?.(search.trim());
@@ -392,17 +406,21 @@ export default function SearchView({
 
   const pickFilter = (key) => {
     setFilterMenuOpen(false);
+    // Commit anything complete already sitting in the input (e.g. a
+    // half-finished `tag:serif` the user typed before reaching for the
+    // menu) so it becomes a chip instead of stranded text.
+    const parsed = explodeQuery(text);
+    const baseChips = addChips(chips, parsed.chips);
+    const baseText = parsed.text;
     if (key === 'is') {
-      if (!chips.some((c) => c.key === 'is')) {
-        commit({ chips: [...chips, { key: 'is', value: 'untagged' }], text });
-      }
+      commit({ chips: addChips(baseChips, [{ key: 'is', value: 'untagged' }]), text: baseText });
       requestAnimationFrame(() => inputRef.current?.focus());
       return;
     }
     // Seed the token prefix into the input; the suggestion popover opens
     // off the trailing fragment as soon as the field refocuses.
-    const sep = text && !/\s$/.test(text) ? ' ' : '';
-    commit({ chips, text: `${text}${sep}${key}:` });
+    const sep = baseText && !/\s$/.test(baseText) ? ' ' : '';
+    commit({ chips: baseChips, text: `${baseText}${sep}${key}:` });
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 

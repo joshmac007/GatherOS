@@ -86,3 +86,24 @@ export function trailingFragment(text) {
   if (value.endsWith('"')) value = value.slice(0, -1);
   return { key: normalizeKey(rawKey), value, len: m[0].length };
 }
+
+// The backend collapses repeats of these keys to last-wins (a palette
+// rarely matches two hexes at once; before/after each hold one bound),
+// so a second chip must REPLACE the first rather than stack — otherwise
+// the UI shows two filters while only one applies.
+export const SINGLETON_KEYS = new Set(['color', 'is', 'before', 'after']);
+
+// Merge newly-committed chips into the existing list, replacing rather
+// than duplicating singleton keys (and exact tag/collection repeats).
+export function addChips(existing, incoming) {
+  let next = [...existing];
+  for (const chip of incoming) {
+    if (SINGLETON_KEYS.has(chip.key)) {
+      next = next.filter((c) => c.key !== chip.key);
+    } else {
+      next = next.filter((c) => !(c.key === chip.key && c.value === chip.value));
+    }
+    next.push(chip);
+  }
+  return next;
+}
