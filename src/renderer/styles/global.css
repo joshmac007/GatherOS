@@ -33,6 +33,14 @@ textarea,
 button {
   font-family: inherit;
   color: inherit;
+  /* Strip the native macOS control appearance app-wide. Without this,
+     when the window loses key focus Chromium repaints native-appearance
+     buttons in their inactive state — which drops any custom
+     border-radius and makes rounded buttons render square (e.g. the
+     What's-new modal's "Got it" pill). Every button here is custom
+     styled, so removing native theming globally is safe. */
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /* Only show focus rings for true keyboard navigation. Without this,

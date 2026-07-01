@@ -24,13 +24,16 @@ export default function WhatsNewModal({ open, onClose, notes }) {
   if (!open || !notes) return null;
 
   return ReactDOM.createPortal(
-    <div className={styles.backdrop} onMouseDown={onClose}>
+    // No click-outside-to-close: dismissing needs an explicit "Got it"
+    // (or Escape). Otherwise the very click that re-focuses the window
+    // when the app is in the background would close the modal before the
+    // user has read it.
+    <div className={styles.backdrop}>
       <div
         className={styles.modal}
         role="dialog"
         aria-modal="true"
         aria-label={`What's new in ${notes.version}`}
-        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className={styles.hero}>
           <div className={styles.heroIcon}>
