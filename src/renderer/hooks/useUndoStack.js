@@ -19,18 +19,30 @@ export function useUndoStack() {
     if (stackRef.current.length > MAX_DEPTH) stackRef.current.shift();
   }, []);
 
-  const undo = useCallback(() => {
+  // Pops and runs the latest reversal. Returns the entry's label on
+  // (apparent) success, null when the stack is empty or the fn threw
+  // synchronously. `onError(label)` fires for BOTH sync throws and
+  // async rejections so the caller can show a real "couldn't undo"
+  // toast — previously failures logged to the console while the UI
+  // still said "Undid …", which reads as data loss when the user later
+  // finds the mutation stuck.
+  const undo = useCallback((onError) => {
     const entry = stackRef.current.pop();
     if (!entry) return null;
     try {
       const result = entry.undoFn();
-      // Allow async undo fns; we still resolve the label
-      // synchronously for the toast.
+      // Async undo fns resolve the label optimistically for the toast;
+      // a late rejection downgrades it via onError.
       if (result && typeof result.then === 'function') {
-        result.catch((err) => console.error('Async undo failed:', err));
+        result.catch((err) => {
+          console.error('Async undo failed:', err);
+          onError?.(entry.label);
+        });
       }
     } catch (err) {
       console.error('Undo failed:', err);
+      onError?.(entry.label);
+      return null;
     }
     return entry.label;
   }, []);

@@ -5,6 +5,8 @@ let savedNotifier = () => {};
 let duplicateNotifier = () => {};
 let needsUpgradeNotifier = () => {};
 let bookmarkNotifier = () => {};
+let bookmarkFailedNotifier = () => {};
+let errorNotifier = () => {};
 
 function setSaveNotifier(fn) {
   savedNotifier = typeof fn === 'function' ? fn : () => {};
@@ -19,6 +21,28 @@ function setBookmarkNotifier(fn) {
 
 function notifyBookmarkSaved(record) {
   bookmarkNotifier(record);
+}
+
+// A bookmark that arrived from the extension but failed to persist.
+// Counted into the same batch so the summary toast can say
+// "· N failed" instead of silently under-reporting.
+function setBookmarkFailedNotifier(fn) {
+  bookmarkFailedNotifier = typeof fn === 'function' ? fn : () => {};
+}
+
+function notifyBookmarkFailed() {
+  bookmarkFailedNotifier();
+}
+
+// Generic user-facing error line for fire-and-forget main-process
+// paths (dock drops, background saves) that previously only logged.
+// Renders as a plain action toast in the window.
+function setErrorNotifier(fn) {
+  errorNotifier = typeof fn === 'function' ? fn : () => {};
+}
+
+function notifyError(message) {
+  try { errorNotifier(message); } catch { /* toast is best-effort */ }
 }
 
 function setDuplicateNotifier(fn) {
@@ -63,10 +87,14 @@ module.exports = {
   setDuplicateNotifier,
   setNeedsUpgradeNotifier,
   setBookmarkNotifier,
+  setBookmarkFailedNotifier,
+  setErrorNotifier,
   setTrayRefresher,
   notifySaved,
   notifyDuplicate,
   notifyNeedsUpgrade,
   notifyBookmarkSaved,
+  notifyBookmarkFailed,
+  notifyError,
   refreshTray,
 };

@@ -132,7 +132,7 @@ const {
 } = require('./capture');
 const extensionServer = require('./extension-server');
 const { showToast, destroyToastWindow } = require('./toast-window');
-const { setSaveNotifier, setDuplicateNotifier, setNeedsUpgradeNotifier, setBookmarkNotifier, setTrayRefresher } = require('./notify');
+const { setSaveNotifier, setDuplicateNotifier, setNeedsUpgradeNotifier, setBookmarkNotifier, setBookmarkFailedNotifier, setErrorNotifier, setTrayRefresher, notifyError } = require('./notify');
 const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
 const libraryRegistry = require('./library-registry');
@@ -215,6 +215,8 @@ async function drainDockOpenQueue() {
       }
     } catch (err) {
       console.error('[gatheros] Dock-drop save failed:', filePath, err?.message || err);
+      const name = (() => { try { return require('node:path').basename(filePath); } catch { return 'file'; } })();
+      notifyError(`Couldn\u2019t save ${name} \u2014 drop it into the app window to retry`);
     }
   }
 }
@@ -273,6 +275,7 @@ async function handleDockDropUrl(url, deps) {
     }
   } catch (captureErr) {
     console.error('[gatheros] Dock-drop URL capture also failed:', url, captureErr?.message || captureErr);
+    notifyError('Couldn\u2019t save the dropped link \u2014 try saving it from inside the app');
   }
 }
 
@@ -445,22 +448,32 @@ function notifySaved(record) {
 // the per-item UI, and emit one "Synced N bookmarks" summary plus a
 // single grid refresh after the burst settles.
 let bookmarkBatchCount = 0;
+let bookmarkBatchFailed = 0;
 let bookmarkBatchTimer = null;
 let bookmarkBatchStartedAt = 0;
 function flushBookmarkBatch() {
   if (bookmarkBatchTimer) { clearTimeout(bookmarkBatchTimer); bookmarkBatchTimer = null; }
   const count = bookmarkBatchCount;
+  const failed = bookmarkBatchFailed;
   bookmarkBatchCount = 0;
+  bookmarkBatchFailed = 0;
   bookmarkBatchStartedAt = 0;
-  if (count <= 0) return;
+  if (count <= 0 && failed <= 0) return;
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('bookmarks:synced', { count });
+      mainWindow.webContents.send('bookmarks:synced', { count, failed });
     }
   } catch (err) { console.error('[gatheros] bookmarks:synced send failed:', err); }
   try { rebuildTrayMenu(); }
   catch (err) { console.error('[gatheros] rebuildTrayMenu failed:', err); }
 }
+function notifyBookmarkFailed() {
+  if (bookmarkBatchCount === 0 && bookmarkBatchFailed === 0) bookmarkBatchStartedAt = Date.now();
+  bookmarkBatchFailed += 1;
+  if (bookmarkBatchTimer) clearTimeout(bookmarkBatchTimer);
+  bookmarkBatchTimer = setTimeout(flushBookmarkBatch, 1500);
+}
+
 function notifyBookmarkSaved(record) {
   // Keep search working — embeddings still index in the background.
   try { maybeAIIndexInBackground(record); }
@@ -1010,6 +1023,16 @@ app.whenReady().then(() => {
   setDuplicateNotifier(notifyDuplicateInRenderer);
   setNeedsUpgradeNotifier(notifyNeedsUpgrade);
   setBookmarkNotifier(notifyBookmarkSaved);
+  setBookmarkFailedNotifier(notifyBookmarkFailed);
+  // Generic error line for fire-and-forget paths (dock drops etc.) —
+  // previously these only logged, which reads as data loss.
+  setErrorNotifier((message) => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:error-toast', { message: String(message || 'Something went wrong') });
+      }
+    } catch (err) { console.error('[gatheros] error toast send failed:', err); }
+  });
   setTrayRefresher(rebuildTrayMenu);
   registerMoodmarkFileProtocol();
   // Bootstrap the library registry first — moves any pre-multi-

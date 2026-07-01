@@ -886,7 +886,16 @@ export default function App({ entitlement } = {}) {
     if (!wasActive && onboarding.active) {
       (async () => {
         try { await window.moodmark?.onboarding?.installStarterPack?.(); }
-        catch (e) { console.warn('[onboarding] starter-pack install failed:', e); }
+        catch (e) {
+          console.warn('[onboarding] starter-pack install failed:', e);
+          // Routed via CustomEvent because showActionToast is declared
+          // further down the component — the error-toast listener effect
+          // picks this up. Without it, the walkthrough narrates saves
+          // that never appeared.
+          window.dispatchEvent(new CustomEvent('moodmark:error-toast', {
+            detail: { message: "Couldn't load the starter pack — your library still works fine" },
+          }));
+        }
         reload();
       })();
     } else if (wasActive && !onboarding.active) {
@@ -1009,16 +1018,41 @@ export default function App({ entitlement } = {}) {
   // "Synced N bookmarks" note.
   useEffect(() => {
     if (!window.moodmark?.on) return undefined;
-    return window.moodmark.on('bookmarks:synced', ({ count } = {}) => {
+    return window.moodmark.on('bookmarks:synced', ({ count, failed } = {}) => {
       const n = Number(count) || 0;
-      if (n <= 0) return;
-      reload();
-      showActionToast({
-        message: `Synced ${n} bookmark${n === 1 ? '' : 's'}`,
-        durationMs: 2600,
-      });
+      const bad = Number(failed) || 0;
+      if (n <= 0 && bad <= 0) return;
+      if (n > 0) reload();
+      // Failures surface instead of silently under-reporting the count —
+      // "Synced 12" when 3 more failed reads as data loss later.
+      const message = bad <= 0
+        ? `Synced ${n} bookmark${n === 1 ? '' : 's'}`
+        : n > 0
+          ? `Synced ${n} bookmark${n === 1 ? '' : 's'} · ${bad} failed`
+          : `Couldn't sync ${bad} bookmark${bad === 1 ? '' : 's'}`;
+      showActionToast({ message, durationMs: bad > 0 ? 5200 : 2600 });
     });
   }, [reload, showActionToast]);
+
+  // Generic error line from fire-and-forget main-process paths (dock
+  // drops, extension saves) — plus a renderer-local CustomEvent variant
+  // for sites that can't reach showActionToast directly. These used to
+  // log to the console only, which reads as silent data loss.
+  useEffect(() => {
+    const offIpc = window.moodmark?.on
+      ? window.moodmark.on('app:error-toast', ({ message } = {}) => {
+        showActionToast({ message: message || 'Something went wrong', durationMs: 5200 });
+      })
+      : undefined;
+    const onLocal = (e) => {
+      showActionToast({ message: e?.detail?.message || 'Something went wrong', durationMs: 5200 });
+    };
+    window.addEventListener('moodmark:error-toast', onLocal);
+    return () => {
+      offIpc?.();
+      window.removeEventListener('moodmark:error-toast', onLocal);
+    };
+  }, [showActionToast]);
 
   // Surface updater errors so a wedged install no longer fails
   // silently. Most common cause: the running .app bundle is in a
@@ -2835,7 +2869,12 @@ export default function App({ entitlement } = {}) {
         t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
       ) return;
       e.preventDefault();
-      const label = undoStack.undo();
+      const label = undoStack.undo((failedLabel) => {
+        showActionToast({
+          message: `Couldn't undo${failedLabel ? ` ${failedLabel}` : ''}`,
+          durationMs: 4200,
+        });
+      });
       if (label) {
         showActionToast({ message: `Undid ${label}`, durationMs: 1600 });
       }

@@ -378,6 +378,14 @@ async function handleSave(req, res) {
     sendJson(res, 200, { ok: true, id: record.id });
   } catch (err) {
     console.error('[ext-server] /save failed:', err?.message || err);
+    // Surface the failure in the app, not just the extension response.
+    // Bookmark syncs fold into the batch summary ("· N failed"); one-off
+    // extension saves get a direct error line.
+    try {
+      const { notifyBookmarkFailed, notifyError } = require('./notify');
+      if (tweetMeta) notifyBookmarkFailed();
+      else notifyError('Couldn\u2019t save from the extension \u2014 try again');
+    } catch { /* toast is best-effort */ }
     sendJson(res, 500, { ok: false, error: err?.message || 'save failed' });
   }
 }

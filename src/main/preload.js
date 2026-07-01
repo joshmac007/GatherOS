@@ -251,6 +251,7 @@ contextBridge.exposeInMainWorld('moodmark', {
       'save:indexing-end',
       'update-ready',
       'update-error',
+      'app:error-toast',
       'ai:reindex-progress',
       'storage:reclaim-progress',
       'library:switched',
