@@ -47,7 +47,7 @@ import BoardView from './components/BoardView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
 import FocusedSortMode from './components/FocusedSortMode.jsx';
 import {
-  LayoutDashboard,
+  Film,
   Download,
   X,
   Inbox,
@@ -83,7 +83,9 @@ import UpgradeBanner from './components/UpgradeBanner.jsx';
 // click menus, selection bar, focused-view toolbar, etc.) keeps
 // working without a sweep.
 const ICON = { strokeWidth: 1.6, 'aria-hidden': true };
-const BoardExportIcon = () => <LayoutDashboard {...ICON} />;
+// Filmstrip — the moodboard output is an animated GIF that cuts through
+// the selected frames, so a film reel reads truer than a static board.
+const BoardExportIcon = () => <Film {...ICON} />;
 const DownloadIcon = () => <Download {...ICON} />;
 const ClearIcon = () => <X {...ICON} strokeWidth={2} />;
 const TrashIcon = () => <Trash2 {...ICON} />;
