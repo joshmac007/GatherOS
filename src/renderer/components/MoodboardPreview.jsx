@@ -36,14 +36,6 @@ export default function MoodboardPreview({ saves }) {
             style={{ opacity: i === safeIdx ? 1 : 0 }}
           />
         ))}
-        <span className={styles.dots}>
-          {saves.map((s, i) => (
-            <span
-              key={s.id}
-              className={i === safeIdx ? styles.dotOn : styles.dot}
-            />
-          ))}
-        </span>
       </div>
       <div className={styles.caption}>{saves.length} frames · 0.6s each</div>
     </div>

@@ -45,29 +45,6 @@
   /* No transition: hard cut between frames, like the GIF. */
 }
 
-/* Tiny progress dots along the bottom of the frame. */
-.dots {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 7px;
-  display: flex;
-  justify-content: center;
-  gap: 4px;
-}
-
-.dot,
-.dotOn {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.22);
-}
-
-.dotOn {
-  background: rgba(0, 0, 0, 0.62);
-}
-
 .caption {
   font-size: var(--text-sm, 12px);
   color: var(--text-primary, #1d1d1f);
