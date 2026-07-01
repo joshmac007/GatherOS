@@ -3335,7 +3335,7 @@ export default function App({ entitlement } = {}) {
                 onColumnsChange={setGridColumns}
                 layout={gridLayout}
                 onLayoutChange={setGridLayout}
-                onOpenQuickSwitcher={() => setQuickSwitcherOpen(true)}
+                onOpenCommandPalette={() => setQuickSwitcherOpen(true)}
                 semanticSearchActive={semanticSearchActive}
                 colorFilter={colorFilter}
                 onClearColorFilter={() => setColorFilter(null)}
@@ -3389,6 +3389,7 @@ export default function App({ entitlement } = {}) {
                   recentSearches={recentSearches.items}
                   suggestedTags={suggestedTags}
                   allTags={allTags}
+                  onOpenCommandPalette={() => setQuickSwitcherOpen(true)}
                   collections={collections}
                   onOpenCollection={handleOpenCollectionFromSearch}
                   searchInputRef={searchInputRef}

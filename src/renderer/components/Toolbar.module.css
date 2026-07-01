@@ -1113,3 +1113,30 @@
   .brandDot { transition: none; }
   .left:has(.librarySwitcherSlot:hover) .brandDot { animation: none; }
 }
+
+/* "Search ⌘K" pill in the right cluster — the persistent, clickable
+   home of the command-palette shortcut. Same recipe as the old
+   collapsed search pill; children reuse .searchIcon / .searchLabel /
+   .searchKbd. */
+.paletteBtn {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 5px 8px 5px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-control);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background var(--dur-instant) ease;
+}
+
+.paletteBtn:hover {
+  background: var(--hover-bg);
+}
+
+.paletteBtn:hover .searchIcon,
+.paletteBtn:hover .searchLabel {
+  color: var(--text-primary);
+}

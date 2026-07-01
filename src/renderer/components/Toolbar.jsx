@@ -9,7 +9,6 @@ import {
   LayoutGrid,
   AlignJustify,
   LayoutDashboard,
-  X as LucideX,
   Settings as SettingsLucide,
   HelpCircle,
   Keyboard,
@@ -53,98 +52,25 @@ const GridLargeIcon = () => <LayoutGrid className={styles.zoomIcon} {...ICON} />
 // inline, no surrounding container, no placeholder, no shortcuts,
 // no recents popup. Blur with empty query collapses back to the
 // glyph; Escape clears + collapses in one step.
-function SearchField({
-  search,
-  onSearchChange,
-  searchInputRef,
-  onRecordSearch,
-  onOpenQuickSwitcher,
-}) {
-  const [expanded, setExpanded] = useState(!!search);
-  const wrapRef = useRef(null);
-
-  // External edits to `search` (e.g. quick switcher) should also
-  // force the field open so the user sees the active query.
-  useEffect(() => {
-    if (search && !expanded) setExpanded(true);
-  }, [search, expanded]);
-
+// Slim "Search ⌘K" pill for the toolbar's right cluster. The one
+// always-visible home of the ⌘K shortcut — a keycap that sits in the
+// chrome all day is how the muscle memory actually gets learned.
+// Clicking it opens the same command palette as the key.
+function PaletteButton({ onOpen }) {
   return (
-    <div
-      ref={wrapRef}
-      className={[styles.searchWrap, !expanded && styles.searchWrapCollapsed]
-        .filter(Boolean)
-        .join(' ')}
+    <button
+      type="button"
+      className={styles.paletteBtn}
+      onClick={onOpen}
       data-onboarding="search"
-      onClick={(e) => {
-        if (expanded) return;
-        // Collapsed click → open the Quick Switcher (same modal as
-        // Cmd+K) so a deliberate click on the icon doesn't mean "use
-        // the cramped inline pill". The inline path is still reached
-        // via Cmd+F (which focuses the input directly and expands
-        // via onFocus below).
-        if (typeof onOpenQuickSwitcher === 'function') {
-          e.stopPropagation();
-          onOpenQuickSwitcher();
-        }
-      }}
+      aria-label="Search and commands (⌘K)"
     >
       <span className={styles.searchIcon}>
         <SearchIcon />
       </span>
-      <input
-        ref={searchInputRef}
-        className={styles.search}
-        type="search"
-        placeholder=""
-        aria-label="Search"
-        value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
-        onFocus={() => setExpanded(true)}
-        onBlur={() => {
-          // Record the search after a successful "completed" search:
-          // the user typed something and is moving on.
-          if (search && search.trim()) {
-            onRecordSearch?.(search);
-          } else {
-            // No query → collapse the pill back to the icon.
-            setExpanded(false);
-          }
-        }}
-        onKeyDown={(e) => {
-          // Escape always exits the field. When the input is empty
-          // we just blur; when it has content we clear-then-blur on
-          // a single keystroke (native <input type="search"> only
-          // clears, leaving focus behind).
-          if (e.key === 'Escape') {
-            if (search) onSearchChange('');
-            e.currentTarget.blur();
-            setExpanded(false);
-          }
-        }}
-      />
-      {!expanded && (
-        <>
-          <span className={styles.searchLabel}>Search</span>
-          <span className={styles.searchKbd} aria-hidden="true">⌘K</span>
-        </>
-      )}
-      {expanded && search && (
-        <button
-          type="button"
-          className={styles.clearSearchBtn}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => {
-            onSearchChange('');
-            searchInputRef?.current?.focus();
-          }}
-          title="Clear search"
-          aria-label="Clear search"
-        >
-          <LucideX size={11} strokeWidth={2.4} aria-hidden="true" />
-        </button>
-      )}
-    </div>
+      <span className={styles.searchLabel}>Search</span>
+      <span className={styles.searchKbd} aria-hidden="true">⌘K</span>
+    </button>
   );
 }
 
@@ -453,7 +379,7 @@ export default function Toolbar({
   onBackToAll = null,
   layout = 'masonry',
   onLayoutChange,
-  onOpenQuickSwitcher,
+  onOpenCommandPalette,
   mode = 'library',
   onModeChange = () => {},
   modePillCompact = false,
@@ -633,9 +559,10 @@ export default function Toolbar({
       </div>
 
       <div className={styles.right}>
-        {/* The inline "Search ⌘K" field was removed — search lives in the
-            Search tab (in the mode pill) and ⌘K still opens the quick
-            switcher globally. Right cluster is pure chrome now. */}
+        {/* Search & commands pill — the always-visible home of ⌘K.
+            Opens the command palette; full-text search still lives in
+            the Search tab (mode pill). */}
+        {onOpenCommandPalette && <PaletteButton onOpen={onOpenCommandPalette} />}
         {onOpenRediscover && (
           <button
             type="button"

@@ -501,3 +501,22 @@
   font-size: var(--text-sm);
   color: var(--text-tertiary);
 }
+
+/* ⌘K keycap in the hero field — clickable, opens the command palette.
+   Same chip recipe as the palette's own kbd hints. */
+.kbdBtn {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  background: var(--hover-bg-soft);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color var(--dur-instant) ease, background var(--dur-instant) ease;
+}
+.kbdBtn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}

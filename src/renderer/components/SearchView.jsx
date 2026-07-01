@@ -152,6 +152,7 @@ export default function SearchView({
   allTags = [],
   collections = [],
   onOpenCollection,
+  onOpenCommandPalette,
   searchInputRef,
   scrollRef,
   // grid passthrough
@@ -541,6 +542,20 @@ export default function SearchView({
                 )
               )}
             </div>
+            {/* Teach the shortcut at the moment of highest relevance:
+                the user is mid-search, and ⌘K would've gotten them here
+                (and more) from anywhere. */}
+            {onOpenCommandPalette && (
+              <button
+                type="button"
+                className={styles.kbdBtn}
+                onClick={onOpenCommandPalette}
+                aria-label="Open command palette"
+                data-tooltip="Search & commands anywhere"
+              >
+                ⌘K
+              </button>
+            )}
             <span className={styles.filterWrap} ref={filterWrapRef}>
               <button
                 type="button"
