@@ -99,3 +99,16 @@
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
+
+/* Drop-target state — same accent ring language as the other bucket
+   drop surfaces, so "this will file here" reads consistently. */
+.cardDropTarget {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg-soft);
+  transform: translateY(-1px);
+}
+
+.countAdd {
+  color: var(--accent);
+  font-weight: 600;
+}

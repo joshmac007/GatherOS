@@ -3636,6 +3636,10 @@ export default function App({ entitlement } = {}) {
                     childCollections={childrenByParent.get(view.id) || []}
                     onPick={(id) => handleViewChange({ type: 'collection', id })}
                     onCreateChild={() => handleCreateChildCollection(view.id)}
+                    onAddSavesToBucket={handleAddSavesToBucket}
+                    onDropFilesToBucket={handleDropFilesToBucket}
+                    onExternalDropToBucket={handleExternalDropToBucket}
+                    onSetAppDragging={setDragging}
                   />
                 )}
                 <Grid
