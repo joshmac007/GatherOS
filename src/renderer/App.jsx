@@ -3906,7 +3906,14 @@ export default function App({ entitlement } = {}) {
           setView({ type: 'board', id });
         }}
         onPickSave={(id) => {
-          setFocusedId(id);
+          // Mirror the tray's 'focus:save' flow: the focused view only
+          // resolves ids present in displaySaves (the current view's
+          // list), so a bare setFocusedId from the search tab, a
+          // collection, or a filtered view silently no-ops. Land in
+          // library All first, then focus once the view swap has fired.
+          if (appMode !== 'library') handleModeChange('library');
+          handleViewChange({ type: 'all' });
+          setTimeout(() => setFocusedId(id), 80);
         }}
       />
 
