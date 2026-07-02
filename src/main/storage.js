@@ -415,7 +415,6 @@ async function composeMoodBoardGif(saves, outputPath, opts = {}) {
     throw new Error('composeMoodBoardGif called without any saves');
   }
   const sharp = require('sharp');
-  const { GIFEncoder, quantize, applyPalette } = require('gifenc');
 
   // Square frame (1:1). Higher resolution so contained images stay crisp.
   const W = opts.width || 1600;
@@ -428,8 +427,10 @@ async function composeMoodBoardGif(saves, outputPath, opts = {}) {
   const contentW = Math.max(1, W - PADDING * 2);
   const contentH = Math.max(1, H - PADDING * 2);
 
-  const enc = GIFEncoder();
-  let frames = 0;
+  // Raw RGBA frames collected here, then encoded in a worker thread —
+  // gifenc's quantize/encode loop is pure-JS CPU work that used to
+  // freeze the main process for the whole export (see gifEncodeWorker).
+  const rawFrames = [];
 
   for (const save of saves) {
     // Video saves store an MP4 at file_path that sharp can't decode, so
@@ -472,17 +473,34 @@ async function composeMoodBoardGif(saves, outputPath, opts = {}) {
       .raw()
       .toBuffer();
 
-    const data = new Uint8Array(frame);
-    const palette = quantize(data, 256, { format: 'rgba4444' });
-    const index = applyPalette(data, palette, 'rgba4444');
-    enc.writeFrame(index, W, H, { palette, delay: holdMs });
-    frames += 1;
+    // Copy into a standalone ArrayBuffer: sharp's Buffer may sit on a
+    // pooled slab shared with other buffers, and transferring a pooled
+    // slab to the worker would detach it out from under them.
+    const ab = new ArrayBuffer(frame.byteLength);
+    new Uint8Array(ab).set(frame);
+    rawFrames.push({ data: ab, delay: holdMs });
   }
 
-  if (frames === 0) throw new Error('No readable images to compose');
-  enc.finish();
-  fs.writeFileSync(outputPath, Buffer.from(enc.bytes()));
-  return { width: W, height: H, count: frames };
+  if (rawFrames.length === 0) throw new Error('No readable images to compose');
+
+  const gifBytes = await new Promise((resolve, reject) => {
+    const { Worker } = require('node:worker_threads');
+    const worker = new Worker(path.join(__dirname, 'gifEncodeWorker.js'), {
+      workerData: { frames: rawFrames, width: W, height: H },
+      transferList: rawFrames.map((f) => f.data),
+    });
+    worker.once('message', (msg) => {
+      if (msg?.ok) resolve(Buffer.from(msg.bytes));
+      else reject(new Error(msg?.error || 'GIF encode failed'));
+    });
+    worker.once('error', reject);
+    worker.once('exit', (code) => {
+      if (code !== 0) reject(new Error(`GIF encode worker exited with ${code}`));
+    });
+  });
+
+  fs.writeFileSync(outputPath, gifBytes);
+  return { width: W, height: H, count: rawFrames.length };
 }
 
 // Download a remote video (MP4) into the library and write a JPEG

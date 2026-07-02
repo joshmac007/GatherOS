@@ -117,9 +117,14 @@ let lastIntegrityResult = { ok: true, errors: [] };
 
 function checkIntegrity(database) {
   try {
-    const rows = database.prepare('PRAGMA integrity_check').all();
+    // quick_check, not integrity_check: the full check reads the ENTIRE
+    // database on every launch, which is seconds of cold-start on a
+    // multi-GB library. quick_check catches the same page-level
+    // corruption classes (it skips some index cross-validation) in a
+    // small fraction of the time.
+    const rows = database.prepare('PRAGMA quick_check').all();
     const errors = rows
-      .map((r) => r.integrity_check)
+      .map((r) => r.quick_check)
       .filter((s) => s && s !== 'ok');
     if (errors.length > 0) {
       console.error('[db] integrity_check found issues:', errors);
@@ -305,6 +310,14 @@ const MIGRATIONS = [
   // view. Powers the grid's "Most viewed" sort.
   (database) => {
     addColumnIfMissing(database, 'saves', 'view_count', 'INTEGER NOT NULL DEFAULT 0');
+  },
+  // Partial index covering the hot list query: nearly every fetch
+  // filters deleted_at IS NULL and orders by created_at DESC. The bare
+  // created_at index can't serve the filter; this serves both at once.
+  (database) => {
+    database.exec(
+      'CREATE INDEX IF NOT EXISTS idx_saves_live_created ON saves (created_at DESC) WHERE deleted_at IS NULL',
+    );
   },
 ];
 
@@ -689,6 +702,20 @@ function findSimilarByPalette(anchorId, limit = 24) {
   return records;
 }
 
+// Columns shipped to the renderer for list views — everything EXCEPT
+// the search-only heavies the UI never reads: embedding (a ~6 KB
+// Float32 BLOB per save), ocr_text and ai_description. With SELECT *,
+// every grid reload serialized megabytes of them over IPC. palette_lab
+// stays: filterByColor reads it off these rows before they leave the
+// main process (it's a few dozen bytes of JSON). The semantic path has
+// its own getSaveEmbeddings() query and is unaffected.
+const SAVE_LIST_COLUMNS = [
+  'id', 'file_path', 'thumb_path', 'title', 'source_url', 'width',
+  'height', 'file_size', 'palette', 'palette_lab', 'created_at',
+  'ai_prompt', 'deleted_at', 'meta', 'notes', 'content_hash', 'kind',
+  'tweet_meta', 'source', 'preview_path', 'view_count',
+].join(', ');
+
 function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorHex = null, view = 'all' } = {}) {
   const db = getDatabase();
   const conditions = [];
@@ -805,7 +832,7 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
 
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
   const order = sort === 'oldest' ? ' ORDER BY created_at ASC' : ' ORDER BY created_at DESC';
-  const rows = db.prepare(`SELECT * FROM saves${where}${order}`).all(...params);
+  const rows = db.prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves${where}${order}`).all(...params);
   // Color filter: requested hex matched against each save's stored
   // palette in LAB space. Done in JS because SQLite doesn't have the
   // math we need; tractable up to a few thousand saves.
@@ -1093,8 +1120,10 @@ function getSaveEmbeddings() {
 function getSavesByIds(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const placeholders = ids.map(() => '?').join(',');
+  // Same renderer-bound column list as getAllSaves — these rows flow
+  // straight to the grid as semantic-search candidates.
   return getDatabase()
-    .prepare(`SELECT * FROM saves WHERE id IN (${placeholders})`)
+    .prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves WHERE id IN (${placeholders})`)
     .all(...ids);
 }
 
