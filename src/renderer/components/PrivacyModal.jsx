@@ -6,16 +6,16 @@ import styles from './PrivacyModal.module.css';
 // enough to scan in one sitting; for the full long-form text the
 // "View full policy" link opens the GitHub copy.
 
-const POLICY_URL = 'https://github.com/BrettfromDJ/GatherOS/blob/main/PRIVACY.md';
-const SUPPORT_EMAIL = 'hey@gatheros.co';
+const POLICY_URL = null;
+const SUPPORT_EMAIL = null;
 
 const SECTIONS = [
   {
     title: 'Local-first',
     body:
       'Every save, collection, tag, and note lives in ' +
-      '~/Library/Application Support/GatherOS/ on your machine. ' +
-      'GatherOS doesn’t run servers — nothing in that folder is uploaded by us.',
+      '~/Library/Application Support/GatherLocal/ on your machine. ' +
+      'GatherLocal doesn’t run servers — nothing in that folder is uploaded by us.',
   },
   {
     title: 'No tracking',
@@ -25,19 +25,18 @@ const SECTIONS = [
       'data with third parties.',
   },
   {
-    title: 'Your OpenAI key',
+    title: 'AI providers',
     body:
-      'When you supply an OpenAI key, it’s stored in the macOS ' +
-      'Keychain (encrypted by the OS). It’s used only to authenticate ' +
-      'requests sent directly from your machine to api.openai.com. ' +
-      'We never see it.',
+      'GatherLocal does not use an OpenAI Platform API key by default. ' +
+      'AI can run through Codex subscription auth on this Mac or through ' +
+      'a local model server such as Ollama or LM Studio.',
   },
   {
-    title: 'AI features and OpenAI',
+    title: 'AI data',
     body:
-      'When AI features are on, GatherOS sends image data and short ' +
-      'text snippets to OpenAI on your behalf. OpenAI handles that data ' +
-      'under their own terms. Toggle the features off and no calls are made.',
+      'When AI features are on, GatherLocal sends image data and short ' +
+      'text snippets only to your configured desktop provider. Semantic ' +
+      'search uses a local embedding model when configured.',
   },
   {
     title: 'Auto-updates',
@@ -98,23 +97,29 @@ export default function PrivacyModal({ open, onClose }) {
             </section>
           ))}
 
-          <div className={styles.footerLinks}>
-            <a
-              href={POLICY_URL}
-              onClick={(e) => openExternal(e, POLICY_URL)}
-              className={styles.link}
-            >
-              View full policy
-            </a>
-            <span className={styles.dot}>·</span>
-            <a
-              href={`mailto:${SUPPORT_EMAIL}`}
-              onClick={(e) => openExternal(e, `mailto:${SUPPORT_EMAIL}`)}
-              className={styles.link}
-            >
-              Email support
-            </a>
-          </div>
+          {(POLICY_URL || SUPPORT_EMAIL) && (
+            <div className={styles.footerLinks}>
+              {POLICY_URL && (
+                <a
+                  href={POLICY_URL}
+                  onClick={(e) => openExternal(e, POLICY_URL)}
+                  className={styles.link}
+                >
+                  View full policy
+                </a>
+              )}
+              {POLICY_URL && SUPPORT_EMAIL && <span className={styles.dot}>·</span>}
+              {SUPPORT_EMAIL && (
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}`}
+                  onClick={(e) => openExternal(e, `mailto:${SUPPORT_EMAIL}`)}
+                  className={styles.link}
+                >
+                  Email support
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>,

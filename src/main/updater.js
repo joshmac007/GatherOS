@@ -1,6 +1,5 @@
-// Auto-update via electron-updater pointed at GitHub Releases (the
-// release channel is configured in electron-builder.yml). Skipped in
-// dev because checkForUpdates won't find a manifest there anyway.
+// Auto-update is disabled for GatherLocal until a public release target
+// is confirmed. Upstream GatherOS used GitHub Releases here.
 //
 // Flow:
 //   1. App launches → waits ~4s so we don't fight startup IO
@@ -45,23 +44,15 @@ function applyPrefs() {
 // progress + completion still flow through the existing event
 // channels (update-ready, update-error).
 async function checkNow() {
-  if (!app.isPackaged) return { unsupported: true };
-  try {
-    const result = await autoUpdater.checkForUpdates();
-    const current = app.getVersion();
-    const available = result?.updateInfo?.version;
-    if (!available || available === current) {
-      return { upToDate: true, currentVersion: current };
-    }
-    return { downloading: true, version: available };
-  } catch (err) {
-    return { error: err?.message || String(err) };
-  }
+  return {
+    unsupported: true,
+    reason: 'GatherLocal updates are disabled until a release target is configured.',
+  };
 }
 
 function initUpdater(window) {
   mainWin = window;
-  if (!app.isPackaged) return;
+  return;
 
   // Pipe updater logs through console; helpful for the asar console
   // log without pulling in electron-log as a dependency.

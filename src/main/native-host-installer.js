@@ -74,6 +74,8 @@ function launcherScript() {
     '#!/bin/bash',
     `export GATHEROS_BINARY=${JSON.stringify(electron)}`,
     `export GATHEROS_APP_PATH=${JSON.stringify(appRoot)}`,
+    `export GATHEROS_USER_DATA_DIR=${JSON.stringify(app.getPath('userData'))}`,
+    `export GATHERLOCAL_USER_DATA_DIR=${JSON.stringify(app.getPath('userData'))}`,
     'export ELECTRON_RUN_AS_NODE=1',
     `exec ${JSON.stringify(electron)} ${JSON.stringify(hostScript)}`,
     '',
@@ -97,7 +99,7 @@ function writeLauncherIfChanged() {
 function manifestPayload(launcher) {
   return {
     name: HOST_NAME,
-    description: 'GatherOS native messaging host',
+    description: 'GatherLocal native messaging host',
     path: launcher,
     type: 'stdio',
     allowed_origins: ALLOWED_EXTENSION_IDS.map((id) => `chrome-extension://${id}/`),
@@ -105,6 +107,8 @@ function manifestPayload(launcher) {
 }
 
 function install() {
+  if (process.env.GATHERLOCAL_SKIP_NATIVE_HOST_INSTALL === '1') return;
+
   if (process.platform !== 'darwin') {
     // Windows/Linux installers can land in a follow-up — paths
     // and registry handling are different on those platforms.

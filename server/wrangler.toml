@@ -1,4 +1,4 @@
-name = "gatheros-api"
+name = "gatherlocal-api"
 main = "src/index.ts"
 compatibility_date = "2025-01-15"
 
@@ -6,24 +6,24 @@ compatibility_date = "2025-01-15"
 # the printed database_id below before deploying.
 [[d1_databases]]
 binding = "DB"
-database_name = "gatheros-db"
-database_id = "4ee66c06-85c5-4b0d-9286-051a4276a99c"
+database_name = "gatherlocal-db"
+database_id = "replace-with-your-d1-database-id"
 migrations_dir = "migrations"
 
 # Non-secret config. Secrets go through `wrangler secret put` so they
 # never end up in source control. See server/README.md for the full
 # list of secrets the worker needs.
 [vars]
-APP_NAME = "GatherOS"
+APP_NAME = "GatherLocal"
 # 0 disables the server-side trial entirely — users go straight to
 # the paywall after first sign-in. Lemon Squeezy's variant-level
 # trial is the only trial the user ever sees.
-TRIAL_DAYS = "0"
+TRIAL_DAYS = "36500"
 # Custom URL scheme the desktop app registers. Magic-link emails point
 # at https://api.gatheros.co/auth/verify?token=… which redirects
 # into this scheme so the app picks up the session token natively.
-APP_DEEP_LINK_SCHEME = "gatheros"
-EMAIL_FROM = "GatherOS <noreply@mail.gatheros.co>"
+APP_DEEP_LINK_SCHEME = "gatherlocal"
+EMAIL_FROM = "GatherLocal <noreply@mail.gatherlocal.local>"
 # 'true' = Lemon Squeezy test mode, 'false' = live. Affects which
 # checkouts the worker creates. Webhook signature verification works
 # the same in either mode.

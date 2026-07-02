@@ -948,11 +948,10 @@ function registerIpcHandlers() {
     }
   });
 
-  // ── AI entitlement + monthly usage ────────────────────────────────────
-  // BYOK was retired — the licensing Worker proxies OpenAI calls on
-  // behalf of any signed-in user. The renderer just needs to know
-  // whether a session is present and what the monthly counter looks
-  // like so it can show "AI features unlocked" + remaining quota.
+  // ── AI provider status ────────────────────────────────────────────────
+  // GatherLocal runs AI through Codex subscription auth or local model
+  // servers. The renderer only needs a coarse configured/unconfigured
+  // answer so it can show AI actions without a Platform API key flow.
   ipcMain.handle('ai:has-session', () => hasAiSession());
 
   ipcMain.handle('ai:usage', async () => {
@@ -1016,8 +1015,8 @@ function registerIpcHandlers() {
   // []) if the anchor itself isn't indexed yet — calling code can
   // skip rendering the section in that case. Trashed saves are
   // filtered out so the user doesn't get suggestions from the bin.
-  // Right-click "Find similar" — works without an OpenAI key. Tries
-  // embedding cosine similarity first when both the anchor and at
+  // Right-click "Find similar" — works without Platform API keys. Tries
+  // local embedding cosine similarity first when both the anchor and at
   // least one other save have embeddings; otherwise falls back to
   // palette ΔE distance over the swatches we already extract on save.
   // Returns full save records sorted by similarity, anchor excluded.

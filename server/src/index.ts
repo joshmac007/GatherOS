@@ -1,4 +1,4 @@
-// GatherOS API — Cloudflare Worker entry.
+// GatherLocal API — Cloudflare Worker entry.
 //
 // Mounts three sub-routers:
 //   /auth/*       magic-link request, browser bridge, token exchange, signout
@@ -30,7 +30,7 @@ app.get('/', (c) =>
   c.json({
     ok: true,
     name: c.env.APP_NAME,
-    docs: 'https://github.com/brettfromdj/gatheros (server/README.md)',
+    docs: 'server/README.md',
   }),
 );
 
@@ -41,8 +41,7 @@ app.route('/license', licenseRoutes);
 app.route('/webhooks', webhookRoutes);
 app.route('/ai', aiRoutes);
 app.route('/announcement', announcementRoutes);
-// Marketing-site download button → 302 to the latest macOS .dmg.
-// Direct route (not a mounted sub-app) so the bare /download path matches.
+// Public download target is intentionally disabled for local builds.
 app.get('/download', downloadHandler);
 
 // 404 fallback — keep it tight, no body leak.

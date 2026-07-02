@@ -407,7 +407,7 @@ function start() {
       const settings = require('./settings');
       sendJson(res, 200, {
         ok: true,
-        app: 'GatherOS',
+        app: 'GatherLocal',
         syncX: settings.getPref('syncXEnabled', true) !== false,
         syncInstagram: settings.getPref('syncInstagramEnabled', true) !== false,
       });

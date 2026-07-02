@@ -1,6 +1,6 @@
 // Pre-dev cleanup: free the single-instance lock before `npm run dev`.
 //
-// Both the dev Electron instance AND the packaged GatherOS.app call
+// Both the dev Electron instance AND the packaged GatherLocal.app call
 // app.requestSingleInstanceLock(), so if either is already running the
 // dev build sees the lock, quits immediately, and exits 0 — which then
 // makes `concurrently -k` tear Vite down too. (That's the "electron
@@ -16,6 +16,6 @@ function quiet(cmd) {
 }
 
 // Graceful first, then force.
-quiet('osascript -e \'quit app "GatherOS"\'');
-quiet('pkill -f "GatherOS.app/Contents/MacOS/GatherOS"');
+quiet('osascript -e \'quit app "GatherLocal"\'');
+quiet('pkill -f "GatherLocal.app/Contents/MacOS/GatherLocal"');
 quiet('pkill -f "Electron.app/Contents/MacOS/Electron"');

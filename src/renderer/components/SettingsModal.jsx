@@ -888,9 +888,8 @@ export default function SettingsModal({
   onRenameLibrary,
   onDeleteLibrary,
 }) {
-  // Whether the licensing session is present — proxy-mode AI is
-  // gated on it, not on a per-user OpenAI key. AppGate already shows
-  // the signin screen when this is false, so for the most part this
+  // Whether a desktop AI provider is configured. AppGate already
+  // shows the signin screen when needed, so for the most part this
   // flag stays true throughout Settings.
   const [hasAi, setHasAi] = useState(false);
   const [usage, setUsage] = useState(null);
@@ -1555,9 +1554,9 @@ export default function SettingsModal({
           {activePage === 'ai' && (
             <div className={styles.page}>
               <p className={styles.sectionHint}>
-                Auto-tagging, auto-titles, semantic search, and image-prompt
-                generation run on a managed OpenAI integration that ships
-                with your subscription — no API key to set up.
+                Auto-tagging, auto-titles, and image-prompt generation run
+                through Codex subscription auth or a local model server. Semantic
+                search needs a local embedding model such as nomic-embed-text.
               </p>
 
               {!hasAi && (
@@ -1988,4 +1987,3 @@ function formatBackupSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-

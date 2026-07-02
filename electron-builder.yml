@@ -1,5 +1,5 @@
-appId: com.gatheros.app
-productName: GatherOS
+appId: com.gatherlocal.app
+productName: GatherLocal
 afterPack: scripts/strip-gendered-locales.js
 afterSign: scripts/notarize.js
 directories:
@@ -109,7 +109,7 @@ mac:
           - http
           - https
         LSHandlerRank: None
-    # macOS Services menu — registers a "Save to GatherOS" item that
+    # macOS Services menu — registers a "Save to GatherLocal" item that
     # appears under Services in any app's menu / right-click when the
     # selection is an image or URL. The runtime handler reads the
     # incoming pasteboard via NSApplication's openFile / openURL
@@ -118,9 +118,9 @@ mac:
     # exactly like a Finder drag-on-Dock.
     NSServices:
       - NSMenuItem:
-          default: Save to GatherOS
-        NSMessage: saveToGatherOS
-        NSPortName: GatherOS
+          default: Save to GatherLocal
+        NSMessage: saveToGatherLocal
+        NSPortName: GatherLocal
         NSSendTypes:
           - public.image
           - public.url
@@ -139,7 +139,7 @@ mac:
 # background image. UDZO produces a slightly larger file (~5%) but
 # the background reliably shows up.
 #
-# DO NOT specify path: GatherOS.app on the type:file entry —
+# DO NOT specify path: GatherLocal.app on the type:file entry —
 # electron-builder auto-resolves the .app path internally and
 # rejects the build with "cannot find specified resource" when the
 # path is given explicitly.
@@ -158,7 +158,4 @@ dmg:
       y: 170
       type: link
       path: /Applications
-publish:
-  provider: github
-  owner: BrettfromDJ
-  repo: gatheros
+publish: null

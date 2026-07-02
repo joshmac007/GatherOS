@@ -1,12 +1,12 @@
 {
-  "name": "moodmark",
-  "productName": "GatherOS",
-  "version": "0.5.1",
+  "name": "gatherlocal",
+  "productName": "GatherLocal",
+  "version": "0.5.1-local.1",
   "description": "A local-first macOS app for saving, browsing, and organizing visual inspiration.",
   "private": true,
   "main": "src/main/index.js",
   "author": {
-    "name": "GatherOS"
+    "name": "GatherLocal"
   },
   "scripts": {
     "predev": "node scripts/predev.js",
@@ -18,11 +18,12 @@
     "build:renderer": "vite build",
     "build:mac:arm": "vite build && electron-builder --mac --arm64",
     "build:mac:x64": "vite build && electron-builder --mac --x64",
-    "prerelease": "node scripts/check-release-version.js",
+    "prerelease": "node -e \"console.log('GatherLocal public release check skipped: publishing is disabled for local builds.')\"",
     "smoke-test": "node scripts/smoke-test.js",
+    "test:ai": "node --test test/*.test.js",
     "pack:extension": "node scripts/pack-extension.js",
     "pack:starter": "ELECTRON_RUN_AS_NODE=1 electron scripts/build-starter-pack.js",
-    "release": "rm -rf dist/build && mkdir -p dist && touch dist/.metadata_never_index && vite build && electron-builder --publish never && node scripts/smoke-test.js && electron-builder --publish always",
+    "release": "rm -rf dist/build && mkdir -p dist && touch dist/.metadata_never_index && vite build && electron-builder --publish never && node scripts/smoke-test.js",
     "ship": "node scripts/ship.js",
     "postrelease": "electron-builder install-app-deps",
     "version:patch": "npm version patch",

@@ -42,13 +42,15 @@ const LAUNCH_POLL_MS = 300;
 // worker output. A tail-able file in the user's support dir is much
 // easier to read when a save mysteriously fails.
 function appSupportDir() {
+  if (process.env.GATHERLOCAL_USER_DATA_DIR) return process.env.GATHERLOCAL_USER_DATA_DIR;
+  if (process.env.GATHEROS_USER_DATA_DIR) return process.env.GATHEROS_USER_DATA_DIR;
   if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'GatherOS');
+    return path.join(os.homedir(), 'Library', 'Application Support', 'GatherLocal');
   }
   if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA || '', 'GatherOS');
+    return path.join(process.env.APPDATA || '', 'GatherLocal');
   }
-  return path.join(os.homedir(), '.config', 'GatherOS');
+  return path.join(os.homedir(), '.config', 'GatherLocal');
 }
 
 function debug(...parts) {
@@ -242,7 +244,7 @@ async function handleMessage(msg) {
     const info = await ping();
     writeMessage({
       ok: true,
-      app: 'GatherOS',
+      app: 'GatherLocal',
       appRunning: !!info,
       // Sync switches (default on when the app is down or pre-update).
       syncX: info ? info.syncX !== false : true,
@@ -251,8 +253,8 @@ async function handleMessage(msg) {
     return;
   }
   if (msg.type === 'open') {
-    // Launch / focus GatherOS without saving anything — backs the
-    // extension popup's "Open GatherOS" button.
+    // Launch / focus GatherLocal without saving anything — backs the
+    // extension popup's "Open GatherLocal" button.
     const ok = await ensureAppRunning();
     writeMessage({ ok, appRunning: ok });
     return;
@@ -263,13 +265,13 @@ async function handleMessage(msg) {
     // ping; if it's down it cold-launches hidden via `open -g`.
     const ready = await ensureAppRunning({ background: true });
     if (!ready) {
-      writeMessage({ ok: false, error: 'Could not launch GatherOS. Try opening it manually.' });
+      writeMessage({ ok: false, error: 'Could not launch GatherLocal. Try opening it manually.' });
       return;
     }
     const token = readToken();
     if (!token) {
       debug('handleMessage: no token in prefs.json');
-      writeMessage({ ok: false, error: 'GatherOS is not installed or has never been launched.' });
+      writeMessage({ ok: false, error: 'GatherLocal is not installed or has never been launched.' });
       return;
     }
     const result = await postToApp(
@@ -302,6 +304,25 @@ async function handleMessage(msg) {
 function run() {
   debug('run: native-host started, pid', process.pid, 'GATHEROS_BINARY', process.env.GATHEROS_BINARY || '(unset)');
   let buffer = Buffer.alloc(0);
+  let inFlight = 0;
+  let stdinClosed = false;
+
+  function maybeExit() {
+    if (stdinClosed && inFlight === 0) process.exit(0);
+  }
+
+  async function processBody(body) {
+    inFlight += 1;
+    try {
+      const msg = JSON.parse(body);
+      await handleMessage(msg);
+    } catch {
+      writeMessage({ ok: false, error: 'invalid JSON' });
+    } finally {
+      inFlight -= 1;
+      maybeExit();
+    }
+  }
 
   process.stdin.on('data', async (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
@@ -314,17 +335,18 @@ function run() {
       if (buffer.length < 4 + len) break;
       const body = buffer.slice(4, 4 + len).toString('utf8');
       buffer = buffer.slice(4 + len);
-      try {
-        const msg = JSON.parse(body);
-        await handleMessage(msg);
-      } catch {
-        writeMessage({ ok: false, error: 'invalid JSON' });
-      }
+      processBody(body);
     }
   });
 
-  process.stdin.on('end', () => process.exit(0));
-  process.stdin.on('close', () => process.exit(0));
+  process.stdin.on('end', () => {
+    stdinClosed = true;
+    maybeExit();
+  });
+  process.stdin.on('close', () => {
+    stdinClosed = true;
+    maybeExit();
+  });
 }
 
 // Allow the script to run as a standalone node process (the dev

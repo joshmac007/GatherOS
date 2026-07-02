@@ -115,7 +115,7 @@ export const RELEASE_NOTES = [
       {
         Icon: CardsIcon,
         title: 'Find similar from any image',
-        description: 'Right-click a save and pick "Find similar" — works without an OpenAI key by falling back to color palette comparisons.',
+        description: 'Right-click a save and pick "Find similar" — works without Platform API keys by falling back to color palette comparisons.',
       },
       {
         Icon: WindowIcon,
