@@ -319,6 +319,71 @@ const MIGRATIONS = [
       'CREATE INDEX IF NOT EXISTS idx_saves_live_created ON saves (created_at DESC) WHERE deleted_at IS NULL',
     );
   },
+  // FTS5 shadow table for text search. The LIKE pass scanned every row
+  // and json_extract-parsed tweet_meta per row PER KEYSTROKE — fine at
+  // 2k saves, the wall at 20k. Triggers keep it in sync with saves;
+  // tag-name matching stays in plain SQL (tags is a small table).
+  // Tokenizer note: FTS matches token prefixes ("mou" → mountain), not
+  // mid-word substrings — accepted trade for indexed lookups.
+  (database) => {
+    database.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS saves_fts USING fts5(
+        save_id UNINDEXED,
+        title,
+        ocr_text,
+        tweet_text,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      CREATE TRIGGER IF NOT EXISTS saves_fts_ai AFTER INSERT ON saves BEGIN
+        INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+        VALUES (
+          new.id,
+          COALESCE(new.title, ''),
+          COALESCE(new.ocr_text, ''),
+          COALESCE(json_extract(new.tweet_meta,'$.caption'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.authorName'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.authorHandle'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.thread'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.caption'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorHandle'),'')
+        );
+      END;
+      CREATE TRIGGER IF NOT EXISTS saves_fts_ad AFTER DELETE ON saves BEGIN
+        DELETE FROM saves_fts WHERE save_id = old.id;
+      END;
+      CREATE TRIGGER IF NOT EXISTS saves_fts_au
+      AFTER UPDATE OF title, ocr_text, tweet_meta ON saves BEGIN
+        DELETE FROM saves_fts WHERE save_id = new.id;
+        INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+        VALUES (
+          new.id,
+          COALESCE(new.title, ''),
+          COALESCE(new.ocr_text, ''),
+          COALESCE(json_extract(new.tweet_meta,'$.caption'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.authorName'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.authorHandle'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.thread'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.caption'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorHandle'),'')
+        );
+      END;
+    `);
+    // Backfill existing rows once; triggers own it from here.
+    database.exec(`
+      INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+      SELECT id, COALESCE(title, ''), COALESCE(ocr_text, ''),
+        COALESCE(json_extract(saves.tweet_meta,'$.caption'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.authorName'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.authorHandle'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.thread'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.quoted.caption'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.quoted.authorHandle'),'')
+      FROM saves;
+    `);
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -400,6 +465,8 @@ function closeDatabase() {
     db.close();
     db = null;
   }
+  // The cache belongs to the closed library's DB.
+  invalidateEmbeddingCache();
 }
 
 // Closes the current handle and reopens against whatever library
@@ -716,7 +783,19 @@ const SAVE_LIST_COLUMNS = [
   'tweet_meta', 'source', 'preview_path', 'view_count',
 ].join(', ');
 
-function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorHex = null, view = 'all' } = {}) {
+// Sanitize free text into an FTS5 phrase-prefix query: each whitespace
+// term becomes "term"* (quotes doubled), joined with implicit AND.
+// Returns null when nothing tokenizable remains.
+function ftsPrefixQuery(text) {
+  const terms = String(text)
+    .split(/\s+/)
+    .map((t) => t.replace(/"/g, '""').trim())
+    .filter(Boolean);
+  if (terms.length === 0) return null;
+  return terms.map((t) => `"${t}"*`).join(' ');
+}
+
+function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorHex = null, view = 'all', _noFts = false } = {}) {
   const db = getDatabase();
   const conditions = [];
   const params = [];
@@ -804,35 +883,57 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   }
 
   if (text) {
-    // Substring match against title, tags, and OCR text. ai_description
-    // is intentionally excluded — descriptions enumerate every visible
-    // object so substring-matching them turns "sky" into a 50% hit
-    // rate. ocr_text is the actual text inside the image (UI labels,
-    // signage, body copy) so a literal match there is high-signal.
-    // Tweet saves also match on their text + author. tweet_meta is
-    // valid JSON or NULL, so json_extract returns NULL (no match)
-    // rather than throwing on the non-tweet rows. Covers the tweet
-    // itself, its thread follow-ups, and any quoted tweet.
-    conditions.push(`(title LIKE ? OR ocr_text LIKE ?
-      OR json_extract(tweet_meta, '$.caption') LIKE ?
-      OR json_extract(tweet_meta, '$.authorName') LIKE ?
-      OR json_extract(tweet_meta, '$.authorHandle') LIKE ?
-      OR json_extract(tweet_meta, '$.thread') LIKE ?
-      OR json_extract(tweet_meta, '$.quoted.caption') LIKE ?
-      OR json_extract(tweet_meta, '$.quoted.authorName') LIKE ?
-      OR json_extract(tweet_meta, '$.quoted.authorHandle') LIKE ?
-      OR id IN (
-        SELECT save_id FROM save_tags
-        JOIN tags ON save_tags.tag_id = tags.id
-        WHERE tags.name LIKE ?
-      ))`);
-    const like = `%${text}%`;
-    params.push(like, like, like, like, like, like, like, like, like, like);
+    // Indexed FTS5 match over title / ocr_text / tweet text (the old
+    // LIKE pass full-scanned the table and json_extract-parsed
+    // tweet_meta per row on every keystroke). ai_description stays
+    // intentionally excluded — descriptions enumerate every visible
+    // object, so matching them turns "sky" into a 50% hit rate.
+    // Tag-name matching keeps the substring LIKE (tags is tiny).
+    // ftsQuery is null for punctuation-only input; _noFts is the
+    // fallback escape hatch if an FTS query ever errors at run time.
+    const ftsQuery = _noFts ? null : ftsPrefixQuery(text);
+    if (ftsQuery) {
+      conditions.push(`(id IN (SELECT save_id FROM saves_fts WHERE saves_fts MATCH ?)
+        OR id IN (
+          SELECT save_id FROM save_tags
+          JOIN tags ON save_tags.tag_id = tags.id
+          WHERE tags.name LIKE ?
+        ))`);
+      params.push(ftsQuery, `%${text}%`);
+    } else {
+      conditions.push(`(title LIKE ? OR ocr_text LIKE ?
+        OR json_extract(tweet_meta, '$.caption') LIKE ?
+        OR json_extract(tweet_meta, '$.authorName') LIKE ?
+        OR json_extract(tweet_meta, '$.authorHandle') LIKE ?
+        OR json_extract(tweet_meta, '$.thread') LIKE ?
+        OR json_extract(tweet_meta, '$.quoted.caption') LIKE ?
+        OR json_extract(tweet_meta, '$.quoted.authorName') LIKE ?
+        OR json_extract(tweet_meta, '$.quoted.authorHandle') LIKE ?
+        OR id IN (
+          SELECT save_id FROM save_tags
+          JOIN tags ON save_tags.tag_id = tags.id
+          WHERE tags.name LIKE ?
+        ))`);
+      const like = `%${text}%`;
+      params.push(like, like, like, like, like, like, like, like, like, like);
+    }
   }
 
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
   const order = sort === 'oldest' ? ' ORDER BY created_at ASC' : ' ORDER BY created_at DESC';
-  const rows = db.prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves${where}${order}`).all(...params);
+  let rows;
+  try {
+    rows = db.prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves${where}${order}`).all(...params);
+  } catch (err) {
+    // Belt-and-braces: a malformed FTS MATCH shouldn't be possible with
+    // the sanitized phrase-prefix form, but if one slips through, run
+    // the legacy LIKE pass rather than failing the whole search.
+    if (!_noFts && text) {
+      console.warn('[db] FTS search failed, falling back to LIKE:', err.message);
+      return getAllSaves({ search, sort, collectionId, colorHex, view, _noFts: true });
+    }
+    throw err;
+  }
   // Color filter: requested hex matched against each save's stored
   // palette in LAB space. Done in JS because SQLite doesn't have the
   // math we need; tractable up to a few thousand saves.
@@ -942,6 +1043,7 @@ function restoreSave(id) {
 // Hard delete: removes the DB row and returns the file paths so the
 // caller (ipc.js) can unlink the underlying files.
 function permanentlyDeleteSave(id) {
+  invalidateEmbeddingCache();
   const db = getDatabase();
   const save = db.prepare('SELECT file_path, thumb_path, source_url FROM saves WHERE id = ?').get(id);
   if (!save) return { ok: false };
@@ -960,6 +1062,7 @@ function permanentlyDeleteSave(id) {
 }
 
 function emptyTrash() {
+  invalidateEmbeddingCache();
   const db = getDatabase();
   const rows = db
     .prepare('SELECT id, file_path, thumb_path FROM saves WHERE deleted_at IS NOT NULL')
@@ -1024,6 +1127,7 @@ function purgeTrashBefore(cutoff) {
 // list of file paths so ipc.js can unlink them off disk afterward.
 // Caller is responsible for guarding behind a confirmation prompt.
 function wipeLibrary() {
+  invalidateEmbeddingCache();
   const db = getDatabase();
   const rows = db.prepare('SELECT file_path, thumb_path FROM saves').all();
   const tx = db.transaction(() => {
@@ -1053,7 +1157,11 @@ function updateSave({ id, title, sourceUrl, aiDescription, ocrText, aiPrompt, em
   if (aiDescription !== undefined) { fields.push('ai_description = ?'); params.push(aiDescription); }
   if (ocrText !== undefined) { fields.push('ocr_text = ?'); params.push(ocrText); }
   if (aiPrompt !== undefined) { fields.push('ai_prompt = ?'); params.push(aiPrompt); }
-  if (embedding !== undefined) { fields.push('embedding = ?'); params.push(embedding); }
+  if (embedding !== undefined) {
+    fields.push('embedding = ?');
+    params.push(embedding);
+    invalidateEmbeddingCache();
+  }
   if (notes !== undefined) { fields.push('notes = ?'); params.push(notes); }
   if (meta !== undefined) {
     // Accept either a JSON string or an object — better-sqlite3 only
@@ -1115,6 +1223,39 @@ function getSaveEmbeddings() {
   return getDatabase()
     .prepare('SELECT id, embedding FROM saves WHERE embedding IS NOT NULL')
     .all();
+}
+
+// ── In-memory embedding cache ──────────────────────────────────────
+// Semantic search and find-similar used to re-read and re-parse every
+// embedding BLOB from SQLite on every query. Cache them once as
+// pre-NORMALIZED Float32Arrays so cosine similarity reduces to a dot
+// product. ~6 KB per save → ~60 MB at 10k saves, main-process only.
+// Trashed saves stay in the cache on purpose: scored candidates are
+// intersected with live rows downstream, and keeping them means a
+// restore needs no invalidation.
+let embeddingCache = null;
+
+function invalidateEmbeddingCache() {
+  embeddingCache = null;
+}
+
+function normalizeEmbedding(buf) {
+  const src = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+  const out = new Float32Array(src.length);
+  let norm = 0;
+  for (let i = 0; i < src.length; i += 1) norm += src[i] * src[i];
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < src.length; i += 1) out[i] = src[i] / norm;
+  return out;
+}
+
+function getSaveEmbeddingsCached() {
+  if (embeddingCache) return embeddingCache;
+  embeddingCache = getSaveEmbeddings().map((r) => ({
+    id: r.id,
+    vec: normalizeEmbedding(r.embedding),
+  }));
+  return embeddingCache;
 }
 
 function getSavesByIds(ids) {
@@ -1716,6 +1857,8 @@ function deleteBoardItems({ boardId, itemIds } = {}) {
 module.exports = {
   initDatabase,
   markSaveViewed,
+  getSaveEmbeddingsCached,
+  invalidateEmbeddingCache,
   getDatabase,
   closeDatabase,
   reopenDatabase,
