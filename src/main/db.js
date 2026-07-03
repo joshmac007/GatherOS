@@ -970,7 +970,25 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   }
 
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
-  const order = sort === 'oldest' ? ' ORDER BY created_at ASC' : ' ORDER BY created_at DESC';
+  const recency = sort === 'oldest' ? 'created_at ASC' : 'created_at DESC';
+  let order;
+  if (text) {
+    // Relevance first: a save the user literally NAMED like the query
+    // should outrank items that only mention it in a tweet caption or
+    // OCR text. Exact title → prefix → any-substring → everything else,
+    // then the chosen recency sort within each tier. The ORDER BY params
+    // are bound after the WHERE params (positional), so push them here.
+    order = ` ORDER BY
+      CASE
+        WHEN LOWER(COALESCE(title,'')) = LOWER(?) THEN 0
+        WHEN LOWER(COALESCE(title,'')) LIKE LOWER(?) || '%' THEN 1
+        WHEN LOWER(COALESCE(title,'')) LIKE '%' || LOWER(?) || '%' THEN 2
+        ELSE 3
+      END, ${recency}`;
+    params.push(text, text, text);
+  } else {
+    order = ` ORDER BY ${recency}`;
+  }
   let rows;
   try {
     rows = db.prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves${where}${order}`).all(...params);
