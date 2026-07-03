@@ -620,15 +620,26 @@ export default function DetailPanel({
     setPicker({ x: rect.left, y: rect.bottom + 4 });
   }
 
-  const pickerItems = availableToAdd.length > 0
-    ? [
-        { type: 'header', label: 'Add to collection' },
-        ...availableToAdd.map((c) => ({
-          label: c.name,
-          onClick: () => addToCollection(c.id),
-        })),
-      ]
-    : [];
+  // Nest children under their parent and reveal on hover, matching the
+  // grid's card menu / bulk picker. A parent stays as the hover anchor
+  // even when it's already a member itself, as long as it has offered
+  // children; a fully-covered childless tree drops out.
+  const pickerItems = useMemo(() => {
+    const available = (c) => !memberIds.has(c.id);
+    const buildAdd = (c) => ({ label: c.name, onClick: () => addToCollection(c.id) });
+    const tops = [];
+    for (const c of allCollections) {
+      if (c.parent_id) continue;
+      const kids = allCollections.filter((k) => k.parent_id === c.id && available(k));
+      if (!available(c) && kids.length === 0) continue;
+      const base = buildAdd(c);
+      tops.push(kids.length > 0 ? { ...base, children: kids.map(buildAdd) } : base);
+    }
+    return tops.length > 0 ? [{ type: 'header', label: 'Add to collection' }, ...tops] : [];
+    // addToCollection is stable enough for this panel's lifetime; rebuild
+    // only when the collection set or the save's memberships change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allCollections, memberships]);
 
   const palette = useMemo(() => {
     if (!record.palette) return [];
