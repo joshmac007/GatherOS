@@ -1217,8 +1217,19 @@ export default function App({ entitlement } = {}) {
         icon: <MinusCircleIcon />,
         danger: true,
         onClick: async () => {
+          // Roll-up semantics: this view shows the parent's own saves
+          // plus its children's, so "remove" strips membership across
+          // the whole shown subtree — otherwise a child-member save
+          // would silently stay in the grid. removeSave no-ops for
+          // collections the save isn't actually in.
+          const treeIds = [
+            view.id,
+            ...collections.filter((c) => c.parent_id === view.id).map((c) => c.id),
+          ];
           for (const id of targetIds) {
-            await window.moodmark.collections.removeSave({ collectionId: view.id, saveId: id });
+            for (const cid of treeIds) {
+              await window.moodmark.collections.removeSave({ collectionId: cid, saveId: id });
+            }
           }
           if (isMulti) setSelected(new Set());
           reload();

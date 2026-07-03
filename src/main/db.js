@@ -844,8 +844,15 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   }
 
   if (collectionId) {
-    conditions.push(`id IN (SELECT save_id FROM collection_items WHERE collection_id = ?)`);
-    params.push(collectionId);
+    // Roll-up semantics: a parent collection CONTAINS its children, so
+    // its view shows direct members plus every child's members (the IN
+    // over both dedups naturally). One level deep, like the schema.
+    conditions.push(`id IN (
+      SELECT save_id FROM collection_items
+      WHERE collection_id = ?
+         OR collection_id IN (SELECT id FROM collections WHERE parent_id = ?)
+    )`);
+    params.push(collectionId, collectionId);
   }
 
   // tag:<name> — INNER JOIN through save_tags. Multiple tag filters
@@ -862,11 +869,17 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   // bucket:<name> — resolve via collections.name (case-insensitive).
   // Multiple bucket filters intersect, same as tags.
   for (const name of parsed.bucketNames) {
+    // Same roll-up as the collectionId filter: collection:"Branding"
+    // matches saves filed in Branding OR any of its children.
     conditions.push(`id IN (
       SELECT save_id FROM collection_items
-      WHERE collection_id IN (SELECT id FROM collections WHERE LOWER(name) = ?)
+      WHERE collection_id IN (
+        SELECT id FROM collections WHERE LOWER(name) = ?
+        UNION
+        SELECT id FROM collections WHERE parent_id IN (SELECT id FROM collections WHERE LOWER(name) = ?)
+      )
     )`);
-    params.push(name);
+    params.push(name, name);
   }
 
   if (parsed.untagged) {
@@ -1291,12 +1304,15 @@ function getUnindexedCount() {
 // ── Collections ────────────────────────────────────────────────────────────
 
 function getAllCollections() {
+  // save_count rolls up: a parent counts its own members plus its
+  // children's, deduped (a save in parent AND child counts once).
   return getDatabase().prepare(`
     SELECT c.id, c.name, c.color, c.created_at, c.order_index, c.parent_id,
-           COUNT(ci.save_id) AS save_count
+           (SELECT COUNT(DISTINCT ci.save_id) FROM collection_items ci
+             WHERE ci.collection_id = c.id
+                OR ci.collection_id IN (SELECT id FROM collections k WHERE k.parent_id = c.id)
+           ) AS save_count
     FROM collections c
-    LEFT JOIN collection_items ci ON ci.collection_id = c.id
-    GROUP BY c.id
     ORDER BY c.order_index ASC, c.created_at ASC
   `).all();
 }
@@ -1311,30 +1327,38 @@ function getAllCollections() {
 // appear in a path).
 function getAllCollectionsWithThumbs() {
   const rows = getDatabase().prepare(`
-    WITH ranked AS (
+    WITH membership AS (
+      -- Roll-up membership: every item row counts for its own
+      -- collection AND for that collection's parent (one level).
+      -- GROUP BY dedups a save that sits in both parent and child;
+      -- MAX(added_at) keeps "latest drop on top" honest either way.
+      SELECT cid, save_id, MAX(added_at) AS added_at FROM (
+        SELECT ci.collection_id AS cid, ci.save_id, ci.added_at FROM collection_items ci
+        UNION ALL
+        SELECT k.parent_id AS cid, ci.save_id, ci.added_at
+        FROM collection_items ci
+        JOIN collections k ON k.id = ci.collection_id
+        WHERE k.parent_id IS NOT NULL
+      )
+      GROUP BY cid, save_id
+    ),
+    ranked AS (
       -- thumb_or_file mirrors the FeaturedBuckets fallback so legacy
       -- saves with empty thumb_path still feed the fanned tile. GIFs
       -- get the original file_path so they animate in the stack
       -- instead of showing the static first-frame JPG that sharp
       -- generates for the thumb_path.
-      SELECT ci.collection_id,
+      SELECT m.cid AS collection_id,
              CASE
                WHEN LOWER(s.file_path) LIKE '%.gif' THEN s.file_path
                ELSE COALESCE(NULLIF(s.thumb_path, ''), s.file_path)
              END AS thumb_or_file,
-             s.created_at,
-             -- Order the cover by when each save was ADDED to this
-             -- collection (ci.added_at), not when the save was created.
-             -- "Latest drop on top" means the most recently dropped-in
-             -- save leads — so dragging an older save into a full
-             -- collection still surfaces it, instead of the cover looking
-             -- frozen because four newer-by-creation saves outrank it.
              ROW_NUMBER() OVER (
-               PARTITION BY ci.collection_id
-               ORDER BY ci.added_at DESC, s.created_at DESC
+               PARTITION BY m.cid
+               ORDER BY m.added_at DESC, s.created_at DESC
              ) AS rn
-      FROM collection_items ci
-      JOIN saves s ON s.id = ci.save_id
+      FROM membership m
+      JOIN saves s ON s.id = m.save_id
       WHERE s.deleted_at IS NULL
     ),
     top_thumbs AS (
@@ -1345,12 +1369,10 @@ function getAllCollectionsWithThumbs() {
       GROUP BY collection_id
     )
     SELECT c.id, c.name, c.color, c.created_at, c.order_index, c.parent_id,
-           COUNT(ci.save_id) AS save_count,
+           (SELECT COUNT(*) FROM membership m WHERE m.cid = c.id) AS save_count,
            tt.thumbs AS thumbs_blob
     FROM collections c
-    LEFT JOIN collection_items ci ON ci.collection_id = c.id
     LEFT JOIN top_thumbs tt ON tt.collection_id = c.id
-    GROUP BY c.id
     ORDER BY c.order_index ASC, c.created_at ASC
   `).all();
   return rows.map((row) => {
