@@ -4231,6 +4231,7 @@ export default function App({ entitlement } = {}) {
       <ShortcutsModal
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
+        captureShortcut={prefs?.captureShortcut}
       />
 
       <AIUnlockedModal

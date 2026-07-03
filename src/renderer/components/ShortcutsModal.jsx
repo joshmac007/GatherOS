@@ -2,11 +2,42 @@ import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './ShortcutsModal.module.css';
 
-const SECTIONS = [
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
+
+// Electron accelerator string ("CommandOrControl+Shift+S") → display
+// key chips (⌘ ⇧ S). Mirrors SettingsModal's formatter so the capture
+// row shows the user's actual configured hotkey, not a hardcoded one.
+function acceleratorToKeys(value) {
+  if (!value) return [];
+  return value.split('+').map((tok) => {
+    const t = tok.trim();
+    switch (t) {
+      case 'CommandOrControl':
+      case 'CmdOrCtrl': return IS_MAC ? '⌘' : 'Ctrl';
+      case 'Command': case 'Cmd': case 'Meta': case 'Super': return '⌘';
+      case 'Control': case 'Ctrl': return IS_MAC ? '⌃' : 'Ctrl';
+      case 'Shift': return '⇧';
+      case 'Alt': case 'Option': return IS_MAC ? '⌥' : 'Alt';
+      case 'Space': return 'Space';
+      default: return t.length === 1 ? t.toUpperCase() : t;
+    }
+  });
+}
+
+const BASE_SECTIONS = [
   {
     title: 'Search',
     items: [
       { keys: ['⌘', 'K'], label: 'Open command palette' },
+      { keys: ['⌘', 'F'], label: 'Focus search field' },
+    ],
+  },
+  {
+    title: 'Navigate',
+    items: [
+      { keys: ['⌘', '1'], label: 'Library' },
+      { keys: ['⌘', '2'], label: 'Collections' },
+      { keys: ['⌘', '3'], label: 'Spaces' },
     ],
   },
   {
@@ -14,6 +45,7 @@ const SECTIONS = [
     items: [
       { keys: ['⌘', 'N'], label: 'New collection' },
       { keys: ['⌘', 'V'], label: 'Paste image from clipboard' },
+      { keys: ['⌘', 'C'], label: 'Copy image to clipboard' },
       { keys: ['⌘ +', 'click'], label: 'Multi-select an image' },
     ],
   },
@@ -36,7 +68,22 @@ const SECTIONS = [
   },
 ];
 
-export default function ShortcutsModal({ open, onClose }) {
+const DEFAULT_CAPTURE_SHORTCUT = 'CommandOrControl+Shift+S';
+
+// Build the section list, splicing in a Capture section whose keys
+// reflect the user's configured global hotkey.
+function buildSections(captureShortcut) {
+  const captureKeys = acceleratorToKeys(captureShortcut || DEFAULT_CAPTURE_SHORTCUT);
+  const capture = {
+    title: 'Capture',
+    items: [{ keys: captureKeys, label: 'Capture a screenshot' }],
+  };
+  // After Search + Navigate, before Library.
+  return [BASE_SECTIONS[0], BASE_SECTIONS[1], capture, ...BASE_SECTIONS.slice(2)];
+}
+
+export default function ShortcutsModal({ open, onClose, captureShortcut }) {
+  const sections = buildSections(captureShortcut);
   useEffect(() => {
     if (!open) return;
     function onKey(e) {
@@ -63,7 +110,7 @@ export default function ShortcutsModal({ open, onClose }) {
         </header>
 
         <div className={styles.body}>
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <section key={section.title} className={styles.section}>
               <div className={styles.sectionTitle}>{section.title}</div>
               <ul className={styles.list}>
