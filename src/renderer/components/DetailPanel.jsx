@@ -596,6 +596,13 @@ export default function DetailPanel({
   }
 
   async function removeFromCollection(collectionId) {
+    // Roll-up semantics: leaving a child collection doesn't leave the
+    // parent — keep the save there via a direct membership if it
+    // didn't already have one.
+    const row = memberships.find((c) => c.id === collectionId);
+    if (row?.parent_id && !memberships.some((c) => c.id === row.parent_id)) {
+      await window.moodmark.collections.addSave({ collectionId: row.parent_id, saveId: record.id });
+    }
     await window.moodmark.collections.removeSave({ collectionId, saveId: record.id });
     refreshMemberships();
   }

@@ -1229,12 +1229,28 @@ export default function App({ entitlement } = {}) {
         icon: <MinusCircleIcon />,
         danger: true,
         onClick: async () => {
+          // Roll-up semantics: leaving a child collection doesn't
+          // leave the parent. Promote the save to a direct parent
+          // membership first (tracking which saves actually needed
+          // it, so undo demotes exactly those and nothing else).
+          const promoted = [];
           for (const id of targetIds) {
+            if (node.parent_id) {
+              let mem = [];
+              try { mem = (await window.moodmark.collections.getForSave(id)) || []; } catch { /* empty */ }
+              if (!mem.some((m) => m.id === node.parent_id)) {
+                await window.moodmark.collections.addSave({ collectionId: node.parent_id, saveId: id });
+                promoted.push(id);
+              }
+            }
             await window.moodmark.collections.removeSave({ collectionId: node.id, saveId: id });
           }
           undoStack.push(`remove from ${node.name}`, async () => {
             for (const id of targetIds) {
               await window.moodmark.collections.addSave({ collectionId: node.id, saveId: id });
+            }
+            for (const id of promoted) {
+              await window.moodmark.collections.removeSave({ collectionId: node.parent_id, saveId: id });
             }
             loadCollections();
             reload();
@@ -1253,15 +1269,28 @@ export default function App({ entitlement } = {}) {
           danger: true,
           onClick: async () => {
             // Capture what actually gets removed so undo restores
-            // exactly those memberships, nothing more.
+            // exactly those memberships, nothing more. When a removed
+            // membership is a child whose parent sits OUTSIDE the
+            // removal scope (i.e. we're viewing the child itself),
+            // roll-up semantics keep the save in the parent — promote
+            // it to a direct parent membership.
             const treeIds = treeNodes.map((n) => n.id);
             const removed = [];
+            const promoted = [];
             for (const id of targetIds) {
               let mem = [];
               try { mem = (await window.moodmark.collections.getForSave(id)) || []; } catch { /* empty */ }
+              const memIds = mem.map((m) => m.id);
               for (const m of mem) {
-                if (treeIds.includes(m.id)) removed.push({ cid: m.id, saveId: id });
+                if (!treeIds.includes(m.id)) continue;
+                removed.push({ cid: m.id, saveId: id });
+                if (m.parent_id && !treeIds.includes(m.parent_id) && !memIds.includes(m.parent_id)) {
+                  promoted.push({ cid: m.parent_id, saveId: id });
+                }
               }
+            }
+            for (const p of promoted) {
+              await window.moodmark.collections.addSave({ collectionId: p.cid, saveId: p.saveId });
             }
             for (const r of removed) {
               await window.moodmark.collections.removeSave({ collectionId: r.cid, saveId: r.saveId });
@@ -1270,6 +1299,9 @@ export default function App({ entitlement } = {}) {
               undoStack.push('remove from collection', async () => {
                 for (const r of removed) {
                   await window.moodmark.collections.addSave({ collectionId: r.cid, saveId: r.saveId });
+                }
+                for (const p of promoted) {
+                  await window.moodmark.collections.removeSave({ collectionId: p.cid, saveId: p.saveId });
                 }
                 loadCollections();
                 reload();
