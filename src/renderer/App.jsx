@@ -111,7 +111,8 @@ import UpgradeBanner from './components/UpgradeBanner.jsx';
 const ICON = { strokeWidth: 1.6, 'aria-hidden': true };
 // The moodboard output is a square animated GIF cutting through the
 // selection, so a simple play triangle reads as "press to see it move".
-const BoardExportIcon = () => <Play {...ICON} fill="currentColor" />;
+// Solid fill in the current icon colour, no outline stroke.
+const BoardExportIcon = () => <Play fill="currentColor" stroke="none" aria-hidden="true" />;
 const DownloadIcon = () => <Download {...ICON} />;
 const ClearIcon = () => <X {...ICON} strokeWidth={2} />;
 const TrashIcon = () => <Trash2 {...ICON} />;
