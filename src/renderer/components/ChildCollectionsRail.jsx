@@ -27,7 +27,10 @@ export default function ChildCollectionsRail({
   onSetAppDragging,
 }) {
   const [dropTargetId, setDropTargetId] = useState(null);
-  if (!childCollections.length) return null;
+  // Render even with zero children so the create card is always
+  // discoverable — this rail is the natural place to start nesting.
+  // Without a create handler there'd be nothing to show, so bail.
+  if (!childCollections.length && !onCreateChild) return null;
 
   const isSaveDrag = (e) => e.dataTransfer.types.includes(SAVE_DROP_MIME);
   const isFileDrag = (e) => e.dataTransfer.types.includes('Files');
@@ -123,7 +126,7 @@ export default function ChildCollectionsRail({
               <Plus size={16} strokeWidth={1.6} />
             </span>
             <span className={styles.meta}>
-              <span className={`${styles.name} ${styles.nameMuted}`}>New child</span>
+              <span className={`${styles.name} ${styles.nameMuted}`}>New collection</span>
             </span>
           </button>
         )}

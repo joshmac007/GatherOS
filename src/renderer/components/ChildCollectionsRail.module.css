@@ -3,7 +3,11 @@
    at a compact row scale so it reads as furniture, not content. */
 
 .rail {
-  padding: 16px 20px 2px;
+  padding: 16px 20px 0;
+  /* Pull the grid below up tight against the rail — the row keeps a
+     6px bottom clip pad (hover shadow room) and the grid brings its
+     own 20px top padding, so without this the gap reads doubled. */
+  margin-bottom: -12px;
 }
 
 .label {

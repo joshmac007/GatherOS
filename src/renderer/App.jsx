@@ -3737,7 +3737,11 @@ export default function App({ entitlement } = {}) {
                   <ChildCollectionsRail
                     childCollections={childrenByParent.get(view.id) || []}
                     onPick={(id) => handleViewChange({ type: 'collection', id })}
-                    onCreateChild={() => handleCreateChildCollection(view.id)}
+                    // One level of nesting only — no create card inside
+                    // a child (the rail hides itself when both are empty).
+                    onCreateChild={collections.find((c) => c.id === view.id)?.parent_id
+                      ? null
+                      : () => handleCreateChildCollection(view.id)}
                     onAddSavesToBucket={handleAddSavesToBucket}
                     onDropFilesToBucket={handleDropFilesToBucket}
                     onExternalDropToBucket={handleExternalDropToBucket}
