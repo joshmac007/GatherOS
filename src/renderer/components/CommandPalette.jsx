@@ -41,6 +41,42 @@ function SpaceIcon() {
   return <Eclipse size={14} strokeWidth={1.6} aria-hidden="true" />;
 }
 
+// Source marks — the same X and Instagram glyphs the Saved-view toggle
+// uses, so a captured post reads as a post rather than a plain save.
+function XMark({ size = 11 }) {
+  return (
+    <svg viewBox="0 0 1200 1227" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M714 519L1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z" />
+    </svg>
+  );
+}
+function InstagramMark({ size = 12 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="20" height="20" x="2" y="2" rx="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
+// A captured social post carries tweet_meta (or an x/instagram source).
+// Returns the source-aware kind label + glyph, or a plain "Save".
+function saveKind(s) {
+  let hasMeta = false;
+  try { hasMeta = !!(s.tweet_meta && JSON.parse(s.tweet_meta)); } catch { /* malformed → treat as none */ }
+  const url = s.source_url || '';
+  const isSocial = hasMeta
+    || s.source === 'instagram'
+    || /(?:x\.com|twitter\.com|instagram\.com)/i.test(url);
+  if (!isSocial) return { label: 'Save', glyph: null };
+  if (s.source === 'instagram' || /instagram\.com/i.test(url)) {
+    return { label: 'Instagram', glyph: <InstagramMark /> };
+  }
+  return { label: 'Post', glyph: <XMark /> };
+}
+
 const SEARCH_DEBOUNCE = 80;
 const PER_GROUP = 6;
 
@@ -318,7 +354,15 @@ export default function CommandPalette({
                       <span className={styles.rowLabel}>
                         {s.title || <span className={styles.rowUntitled}>Untitled</span>}
                       </span>
-                      <span className={styles.rowKind}>Save</span>
+                      {(() => {
+                        const kind = saveKind(s);
+                        return (
+                          <span className={styles.rowKind}>
+                            {kind.glyph && <span className={styles.rowKindGlyph}>{kind.glyph}</span>}
+                            {kind.label}
+                          </span>
+                        );
+                      })()}
                     </button>
                   );
                 })}

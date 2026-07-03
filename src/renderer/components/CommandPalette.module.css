@@ -190,12 +190,21 @@
 }
 
 .rowKind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-tertiary);
   flex-shrink: 0;
+}
+
+.rowKindGlyph {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
 }
 
 .empty {
