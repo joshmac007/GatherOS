@@ -122,9 +122,14 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
 
   const hasIcons = items.some((it) => it && it.icon);
   const activeSub = openSubmenu ? items[openSubmenu.idx] : null;
-  const subHasIcons = activeSub?.submenu?.some((s) => s && s.icon);
+  // A flyout is fed by either `submenu` (a pure grouping parent, not
+  // clickable) or `children` (a clickable parent that also reveals its
+  // nested items on hover — used by the multi-select collection picker
+  // where the collections themselves are the top level).
+  const subItems = activeSub ? (activeSub.submenu || activeSub.children || []) : [];
+  const subHasIcons = subItems.some((s) => s && s.icon);
   const activeChild = activeSub && openChildMenu
-    ? activeSub.submenu?.[openChildMenu.idx]
+    ? subItems[openChildMenu.idx]
     : null;
   const childHasIcons = activeChild?.children?.some((c) => c && c.icon);
 
@@ -152,14 +157,18 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
             if (item.type === 'header') {
               return <div key={i} className={styles.header}>{item.label}</div>;
             }
+            // `submenu` = pure grouping parent (not clickable);
+            // `children` = clickable parent that also reveals a flyout.
             const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
-            const isOpen = hasSubmenu && openSubmenu?.idx === i;
+            const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+            const hasFlyout = hasSubmenu || hasChildren;
+            const isOpen = hasFlyout && openSubmenu?.idx === i;
             return (
               <div
                 key={i}
                 className={styles.itemContainer}
                 onMouseEnter={(e) => {
-                  if (hasSubmenu) setOpenSubmenu(anchorBeside(i, e.currentTarget));
+                  if (hasFlyout) setOpenSubmenu(anchorBeside(i, e.currentTarget));
                   else setOpenSubmenu(null);
                 }}
               >
@@ -170,8 +179,8 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
                     isOpen && styles.itemActive,
                   ].filter(Boolean).join(' ')}
                   onClick={() => {
-                    if (hasSubmenu) return; // submenu items handle their own clicks
-                    item.onClick();
+                    if (hasSubmenu) return; // pure grouping parent — no action
+                    item.onClick?.();
                     onClose();
                   }}
                 >
@@ -179,7 +188,7 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
                     <span className={styles.itemIcon}>{item.icon || null}</span>
                   )}
                   <span className={styles.itemLabel}>{item.label}</span>
-                  {hasSubmenu && (
+                  {hasFlyout && (
                     <span className={styles.itemChevron}><ChevronRightIcon /></span>
                   )}
                 </button>
@@ -204,7 +213,7 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
             left: openSubmenu.x,
           }}
         >
-          {activeSub.submenu.map((sub, j) => {
+          {subItems.map((sub, j) => {
             if (sub.type === 'separator') {
               return <div key={j} className={styles.separator} />;
             }

@@ -2773,36 +2773,46 @@ export default function App({ entitlement } = {}) {
   const bulkPickerItems = useMemo(() => {
     if (!bulkPicker) return [];
     const ids = [...selected];
-    // Hide folders every selected save is already a member of —
-    // adding again would be a no-op for all of them. The picker
-    // never opens with an empty offer set; openBulkPicker shows a
-    // toast instead, so we don't render a "Already in every folder"
-    // header here anymore.
-    const offer = collections.filter((c) => !bulkAlreadyIn.has(c.id));
+    // A folder is offered unless every selected save is already in it
+    // (adding again would be a no-op for all of them).
+    const available = (c) => !bulkAlreadyIn.has(c.id);
+    const buildAdd = (c) => ({
+      label: c.name,
+      icon: (
+        <span style={{ color: 'var(--icon-blue)', display: 'inline-flex' }}>
+          <CollectionIcon />
+        </span>
+      ),
+      onClick: async () => {
+        flyToCollection({
+          collectionId: c.id,
+          items: ids.map((id) => {
+            const s = saves.find((x) => x.id === id);
+            return { saveId: id, imageSrc: s ? fileUrl(s.file_path) : null };
+          }),
+        });
+        for (const saveId of ids) {
+          await window.moodmark.collections.addSave({ collectionId: c.id, saveId });
+        }
+        loadCollections();
+        if (view.type === 'unsorted') reload();
+      },
+    });
+    // Nest children under their parent and reveal on hover, matching
+    // the single-card menu. A parent stays as the hover anchor even
+    // when it's already a member itself (as long as it has offered
+    // children); a fully-covered childless tree drops out.
+    const tops = [];
+    for (const c of collections) {
+      if (c.parent_id) continue;
+      const kids = collections.filter((k) => k.parent_id === c.id && available(k));
+      if (!available(c) && kids.length === 0) continue;
+      const base = buildAdd(c);
+      tops.push(kids.length > 0 ? { ...base, children: kids.map(buildAdd) } : base);
+    }
     return [
       { type: 'header', label: `Add ${ids.length} to collection` },
-      ...offer.map((c) => ({
-        label: c.name,
-        icon: (
-          <span style={{ color: 'var(--icon-blue)', display: 'inline-flex' }}>
-            <CollectionIcon />
-          </span>
-        ),
-        onClick: async () => {
-          flyToCollection({
-            collectionId: c.id,
-            items: ids.map((id) => {
-              const s = saves.find((x) => x.id === id);
-              return { saveId: id, imageSrc: s ? fileUrl(s.file_path) : null };
-            }),
-          });
-          for (const saveId of ids) {
-            await window.moodmark.collections.addSave({ collectionId: c.id, saveId });
-          }
-          loadCollections();
-          if (view.type === 'unsorted') reload();
-        },
-      })),
+      ...tops,
     ];
   }, [bulkPicker, bulkAlreadyIn, selected, collections, saves, loadCollections, view, reload]);
 
@@ -3439,6 +3449,16 @@ export default function App({ entitlement } = {}) {
     ];
   }, [handleCreateAndOpenCollection, handleCreateBoard, handleModeChange, handleViewChange, handleOpenReleaseNotes, setView]);
 
+  // The multi-select bar belongs to surfaces that show selectable image
+  // cards. On the Collections and Spaces browse tabs there's nothing to
+  // act on, so hide it there — but the selection itself is kept, so it
+  // reappears when the user returns to the library (or a collection's
+  // own grid).
+  const selectionSurfaceActive =
+    appMode === 'library'
+    || appMode === 'search'
+    || (appMode === 'folders' && view.type === 'collection');
+
   return (
    <EntitlementProvider value={ent}>
     <div
@@ -3868,7 +3888,7 @@ export default function App({ entitlement } = {}) {
         </div>
       )}
 
-      {!focused && selected.size > 0 && view.type !== 'trash' && (
+      {!focused && selected.size > 0 && view.type !== 'trash' && selectionSurfaceActive && (
         <div className="selection-bar">
           <div className="selection-status">
             <span className="selection-count">
