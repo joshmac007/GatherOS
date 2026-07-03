@@ -62,6 +62,7 @@ import {
   Share,
   FolderOpen,
   Focus,
+  Play,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -83,29 +84,9 @@ import UpgradeBanner from './components/UpgradeBanner.jsx';
 // click menus, selection bar, focused-view toolbar, etc.) keeps
 // working without a sweep.
 const ICON = { strokeWidth: 1.6, 'aria-hidden': true };
-// "Board that animates" — a 2×2 collage whose last cell is a play
-// triangle. The moodboard output is a square animated GIF cutting
-// through the selection, so board + motion is the literal product.
-// Custom 24-grid glyph at lucide stroke weight; Film read as a waffle
-// at 16px and Clapperboard said "cinema", not "moodboard".
-const BoardExportIcon = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <rect x="3" y="3" width="8" height="8" rx="1.6" />
-    <rect x="13" y="3" width="8" height="8" rx="1.6" />
-    <rect x="3" y="13" width="8" height="8" rx="1.6" />
-    <path d="M14.8 13.6v6.8l5.6-3.4z" />
-  </svg>
-);
+// The moodboard output is a square animated GIF cutting through the
+// selection, so a simple play triangle reads as "press to see it move".
+const BoardExportIcon = () => <Play {...ICON} fill="currentColor" />;
 const DownloadIcon = () => <Download {...ICON} />;
 const ClearIcon = () => <X {...ICON} strokeWidth={2} />;
 const TrashIcon = () => <Trash2 {...ICON} />;
