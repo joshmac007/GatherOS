@@ -130,6 +130,14 @@ export default function CommandPalette({
       .slice(0, PER_GROUP);
   }, [q, commandsOnly, collections]);
 
+  // Parent name for a child collection, so results can read "in ⟨Parent⟩"
+  // instead of a bare "Collection" and children aren't mistaken for
+  // top-level ones.
+  const parentNameOf = useMemo(() => {
+    const byId = new Map(collections.map((c) => [c.id, c.name]));
+    return (c) => (c.parent_id ? byId.get(c.parent_id) : null);
+  }, [collections]);
+
   const tagResults = useMemo(() => {
     if (!q || commandsOnly) return [];
     return allTags
@@ -252,11 +260,12 @@ export default function CommandPalette({
                 <div className={styles.groupLabel}>Collections</div>
                 {bucketResults.map((b) => {
                   const idx = nextIdx();
+                  const parent = parentNameOf(b);
                   return (
                     <button key={`b:${b.id}`} {...rowProps(idx, { type: 'bucket', record: b })}>
                       <span className={styles.rowIcon}><CollectionIcon /></span>
                       <span className={styles.rowLabel}>{b.name}</span>
-                      <span className={styles.rowKind}>Collection</span>
+                      <span className={styles.rowKind}>{parent ? `in ${parent}` : 'Collection'}</span>
                     </button>
                   );
                 })}
