@@ -421,6 +421,11 @@ const MIGRATIONS = [
       FROM saves;
     `);
   },
+  // Last-viewed timestamp, so the command palette can show a
+  // "Recently viewed" strip ordered by when each save was opened.
+  (database) => {
+    addColumnIfMissing(database, 'saves', 'viewed_at', 'INTEGER');
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -1013,7 +1018,21 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
 // order applies on the next reload.
 function markSaveViewed(id) {
   if (!id) return;
-  db.prepare('UPDATE saves SET view_count = COALESCE(view_count, 0) + 1 WHERE id = ?').run(id);
+  getDatabase()
+    .prepare('UPDATE saves SET view_count = COALESCE(view_count, 0) + 1, viewed_at = ? WHERE id = ?')
+    .run(Date.now(), id);
+}
+
+// Most-recently-opened saves, newest view first. Powers the command
+// palette's "Recently viewed" strip. Only rows actually opened (a
+// viewed_at timestamp) qualify.
+function getRecentlyViewed(limit = 12) {
+  const n = Math.max(1, Math.min(50, Number(limit) || 12));
+  return getDatabase()
+    .prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves
+       WHERE deleted_at IS NULL AND viewed_at IS NOT NULL
+       ORDER BY viewed_at DESC LIMIT ?`)
+    .all(n);
 }
 
 function getSave(id) {
@@ -1938,6 +1957,7 @@ function deleteBoardItems({ boardId, itemIds } = {}) {
 module.exports = {
   initDatabase,
   markSaveViewed,
+  getRecentlyViewed,
   getSaveEmbeddingsCached,
   invalidateEmbeddingCache,
   getDatabase,

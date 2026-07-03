@@ -107,6 +107,7 @@ export default function CommandPalette({
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const [saveResults, setSaveResults] = useState([]);
+  const [recentSaves, setRecentSaves] = useState([]);
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const pickedRef = useRef(false);
@@ -115,7 +116,8 @@ export default function CommandPalette({
   const commandsOnly = query.startsWith('>');
   const q = (commandsOnly ? query.slice(1) : query).trim().toLowerCase();
 
-  // Reset state on open / close.
+  // Reset state on open / close, and pull the recently-viewed strip
+  // shown on the empty (home) state.
   useEffect(() => {
     if (open) {
       setQuery('');
@@ -123,6 +125,9 @@ export default function CommandPalette({
       setSaveResults([]);
       pickedRef.current = false;
       requestAnimationFrame(() => inputRef.current?.focus());
+      window.moodmark.saves.recentlyViewed?.(12)
+        .then((rows) => setRecentSaves(rows || []))
+        .catch(() => setRecentSaves([]));
     }
   }, [open]);
 
@@ -275,6 +280,31 @@ export default function CommandPalette({
 
         {(items.length > 0) ? (
           <div className={styles.results} ref={listRef}>
+            {/* Recently viewed — a visual jump-back strip on the empty
+                (home) state only. Mouse-clickable; not part of the
+                arrow-key flow (which stays on the command/result list). */}
+            {!q && recentSaves.length > 0 && (
+              <div className={styles.group}>
+                <div className={styles.groupLabel}>Recently viewed</div>
+                <div className={styles.recentStrip}>
+                  {recentSaves.map((s) => {
+                    const src = resolveAsset(s, 'thumb');
+                    return (
+                      <button
+                        key={`r:${s.id}`}
+                        type="button"
+                        className={styles.recentTile}
+                        title={s.title || 'Untitled'}
+                        onPointerDown={(e) => { e.preventDefault(); pick({ type: 'save', record: s }); }}
+                        onClick={() => pick({ type: 'save', record: s })}
+                      >
+                        {src && <img src={src} alt={s.title || ''} draggable={false} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {commandResults.length > 0 && (
               <div className={styles.group}>
                 <div className={styles.groupLabel}>Commands</div>

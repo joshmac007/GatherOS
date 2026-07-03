@@ -273,6 +273,10 @@ function registerIpcHandlers() {
     markSaveViewed(id);
     return { ok: true };
   });
+  ipcMain.handle('saves:recently-viewed', (_e, limit) => {
+    const { getRecentlyViewed } = require('./db');
+    return getRecentlyViewed(limit);
+  });
 
   // Hard delete from Trash: also removes the underlying image + thumb.
   ipcMain.handle('saves:permanent-delete', (_e, id) => {
