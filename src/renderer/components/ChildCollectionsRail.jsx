@@ -25,6 +25,10 @@ export default function ChildCollectionsRail({
   onDropFilesToBucket,
   onExternalDropToBucket,
   onSetAppDragging,
+  // First-run affordance: a small "New" pill on the create card for
+  // users who haven't nested anything yet. App owns the dismissal
+  // (first child created anywhere, ever).
+  showNewBadge = false,
 }) {
   const [dropTargetId, setDropTargetId] = useState(null);
   // Render even with zero children so the create card is always
@@ -128,6 +132,9 @@ export default function ChildCollectionsRail({
             <span className={styles.meta}>
               <span className={`${styles.name} ${styles.nameMuted}`}>New collection</span>
             </span>
+            {showNewBadge && (
+              <span className={styles.newBadge}>New</span>
+            )}
           </button>
         )}
       </div>

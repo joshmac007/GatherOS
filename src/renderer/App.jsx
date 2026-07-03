@@ -2024,8 +2024,18 @@ export default function App({ entitlement } = {}) {
     [collections],
   );
 
+  // First-run "New" pill on the child rail's create card. Dismissed
+  // forever the first time the user creates a child collection; also
+  // implicitly hidden for libraries that already contain children.
+  const [childBadgeDismissed, setChildBadgeDismissed] = useState(() => {
+    try { return localStorage.getItem('moodmark.childRailBadgeDismissed') === '1'; }
+    catch { return true; }
+  });
+
   const handleCreateChildCollection = useCallback(async (parentId) => {
     if (!parentId) return null;
+    setChildBadgeDismissed(true);
+    try { localStorage.setItem('moodmark.childRailBadgeDismissed', '1'); } catch { /* empty */ }
     const created = await window.moodmark.collections.create({ name: 'New collection', parentId });
     await loadCollections();
     if (!created?.id) return created;
@@ -3742,6 +3752,7 @@ export default function App({ entitlement } = {}) {
                     onCreateChild={collections.find((c) => c.id === view.id)?.parent_id
                       ? null
                       : () => handleCreateChildCollection(view.id)}
+                    showNewBadge={!childBadgeDismissed && !collections.some((c) => c.parent_id)}
                     onAddSavesToBucket={handleAddSavesToBucket}
                     onDropFilesToBucket={handleDropFilesToBucket}
                     onExternalDropToBucket={handleExternalDropToBucket}
