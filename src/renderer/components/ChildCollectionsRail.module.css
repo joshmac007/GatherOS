@@ -24,11 +24,12 @@
   gap: 10px;
   overflow-x: auto;
   /* overflow-x: auto forces vertical clipping too (overflow-y computes
-     to auto), which sheared the cards' hover lift and drop ring at the
-     container's top edge. Pad the clip box on all sides and pull it
-     back with negative margins so the layout doesn't shift. */
-  padding: 4px 4px 6px;
-  margin: -4px -4px 0;
+     to auto), which shears the cards' soft ambient shadow at the clip
+     edges. Pad the clip box generously on all sides — enough for the
+     hover shadow's blur — and pull it back with matching negative
+     margins so the layout is pixel-identical to a zero-pad row. */
+  padding: 16px 16px 28px;
+  margin: -16px -16px -22px;
   scrollbar-width: none;
 }
 .row::-webkit-scrollbar { display: none; }
