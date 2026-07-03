@@ -2,6 +2,10 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './ContextMenu.module.css';
 
+// Horizontal offset between a menu and its flyout — enough to clear the
+// parent menu's padding + border and still leave a couple px of gap.
+const FLYOUT_GAP = 8;
+
 function ChevronRightIcon() {
   return (
     <svg width="6" height="10" viewBox="0 0 6 10" aria-hidden="true">
@@ -78,7 +82,7 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
     let changed = false;
     if (sx + rect.width > window.innerWidth - margin) {
       // Flip to the left of the parent item.
-      sx = Math.max(margin, openSubmenu.parentLeft - rect.width - 4);
+      sx = Math.max(margin, openSubmenu.parentLeft - rect.width - FLYOUT_GAP);
       changed = true;
     }
     if (sy + rect.height > window.innerHeight - margin) {
@@ -99,7 +103,7 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
     let { x: cx, y: cy } = openChildMenu;
     let changed = false;
     if (cx + rect.width > window.innerWidth - margin) {
-      cx = Math.max(margin, openChildMenu.parentLeft - rect.width - 4);
+      cx = Math.max(margin, openChildMenu.parentLeft - rect.width - FLYOUT_GAP);
       changed = true;
     }
     if (cy + rect.height > window.innerHeight - margin) {
@@ -114,7 +118,10 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
     const r = target.getBoundingClientRect();
     return {
       idx,
-      x: r.right + 4,
+      // The row sits ~5px inside the menu's outer edge (4px padding +
+      // 1px border), so offset past that plus a couple px of visible
+      // breathing room between the two menus.
+      x: r.right + FLYOUT_GAP,
       y: r.top - 4,
       parentLeft: r.left,
     };
