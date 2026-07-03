@@ -1,12 +1,11 @@
 /* Child-collections rail — shown above a parent collection's saves.
-   Matches the FolderGrid tile recipe (surface fill, hairline border)
-   at a compact row scale so it reads as furniture, not content. */
+   "Quiet pill" recipe: text-first capsules with a tiny cover chip, so
+   the row reads as calm furniture above the grid and never competes
+   with the saves below. */
 
 .rail {
   padding: 16px 20px 0;
-  /* Pull the grid below up tight against the rail — the row keeps a
-     6px bottom clip pad (hover shadow room) and the grid brings its
-     own 20px top padding, so without this the gap reads doubled. */
+  /* Pull the grid below up tight against the rail. */
   margin-bottom: -12px;
 }
 
@@ -21,51 +20,40 @@
 
 .row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   overflow-x: auto;
-  /* overflow-x: auto forces vertical clipping too (overflow-y computes
-     to auto), which shears the cards' soft ambient shadow at the clip
-     edges. Pad the clip box generously on all sides — enough for the
-     hover shadow's blur — and pull it back with matching negative
-     margins so the layout is pixel-identical to a zero-pad row. */
-  padding: 16px 16px 28px;
-  margin: -16px -16px -22px;
+  /* overflow-x: auto forces vertical clipping too; pad the clip box so
+     the pills' soft shadow + hover ring aren't sheared, and pull it
+     back with matching negative margins so the layout is unchanged. */
+  padding: 8px 8px 10px;
+  margin: -8px -8px -4px;
   scrollbar-width: none;
 }
 .row::-webkit-scrollbar { display: none; }
 
+/* The pill. */
 .card {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 14px 8px 8px;
+  gap: 9px;
+  padding: 7px 13px 7px 8px;
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font: inherit;
   color: inherit;
   text-align: left;
-  /* Same card recipe as the featured collection cards — a soft
-     ambient shadow at rest that lifts gently on hover, no heavy
-     drop or border-colour flash. */
-  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.05);
-  transform: translate3d(0, 0, 0);
-  transition: transform var(--dur-quick) ease, box-shadow var(--dur-quick) ease;
-}
-
-:root[data-theme="dark"] .card {
-  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 3px -1px rgba(16, 16, 19, 0.05);
+  transition:
+    background var(--dur-instant) ease,
+    border-color var(--dur-instant) ease;
 }
 
 .card:hover {
-  transform: translate3d(0, -2px, 0);
-  box-shadow: 0 8px 28px 0 rgba(0, 0, 0, 0.08);
-}
-
-:root[data-theme="dark"] .card:hover {
-  box-shadow: 0 8px 28px 0 rgba(0, 0, 0, 0.55);
+  background: var(--hover-bg-soft);
+  border-color: var(--border-strong);
 }
 
 .cardNew {
@@ -73,11 +61,12 @@
   background: transparent;
   box-shadow: none;
 }
-.cardNew:hover { box-shadow: none; }
+.cardNew:hover { background: var(--hover-bg-soft); }
 
-.cover {
-  width: 34px;
-  height: 34px;
+/* Tiny cover chip — the child's first thumbnail, or a folder glyph. */
+.dot {
+  width: 22px;
+  height: 22px;
   border-radius: var(--radius-md);
   object-fit: cover;
   background: var(--hover-bg-soft);
@@ -85,47 +74,24 @@
   flex: 0 0 auto;
 }
 
-.coverEmpty {
+.dotEmpty {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--icon-muted);
   box-shadow: none;
 }
-
-.meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
+.cardNew .dot { background: transparent; }
 
 .name {
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: 550;
   letter-spacing: -0.01em;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
-}
-
-/* Inline rename field — styled to read like the .name it replaces,
-   with a subtle focus ring so it's clearly editable. */
-.renameInput {
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
-  background: var(--surface-2, rgba(127, 127, 127, 0.1));
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm, 6px);
-  padding: 1px 5px;
-  margin: -2px 0;
-  width: 130px;
-  outline: none;
+  max-width: 160px;
 }
 
 .nameMuted {
@@ -133,21 +99,42 @@
   font-weight: 500;
 }
 
+/* Count — a bare number set off by a hairline divider. */
 .count {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
-}
-
-/* Drop-target state — same accent ring language as the other bucket
-   drop surfaces, so "this will file here" reads consistently. */
-.cardDropTarget {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-bg-soft);
-  transform: translateY(-1px);
+  padding-left: 9px;
+  border-left: 1px solid var(--border);
+  flex: 0 0 auto;
+  line-height: 1.4;
 }
 
 .countAdd {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Drop-target state — same accent ring language as the other bucket
+   drop surfaces. */
+.cardDropTarget {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg-soft);
+}
+
+/* Inline rename field — styled to read like the .name it replaces,
+   with a subtle focus ring so it's clearly editable. */
+.renameInput {
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  background: var(--input-bg-focus, #fff);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm, 4px);
+  padding: 1px 6px;
+  margin: -1px 0;
+  width: 130px;
+  outline: none;
 }

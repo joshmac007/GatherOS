@@ -123,33 +123,31 @@ export default function ChildCollectionsRail({
         {childCollections.map((c) => {
           const cover = Array.isArray(c.thumbs) && c.thumbs.length > 0 ? c.thumbs[0] : null;
           const count = c.save_count || 0;
-          const coverEl = cover ? (
-            <img className={styles.cover} src={fileUrl(cover)} alt="" draggable={false} loading="lazy" />
+          const dotEl = cover ? (
+            <img className={styles.dot} src={fileUrl(cover)} alt="" draggable={false} loading="lazy" />
           ) : (
-            <span className={`${styles.cover} ${styles.coverEmpty}`} aria-hidden="true">
-              <FolderClosed size={18} strokeWidth={1.5} />
+            <span className={`${styles.dot} ${styles.dotEmpty}`} aria-hidden="true">
+              <FolderClosed size={13} strokeWidth={1.6} />
             </span>
           );
-          // Rename mode swaps the button for a non-button card so the
+          // Rename mode swaps the button for a non-button pill so the
           // text input isn't nested inside a <button> (invalid + eats
           // focus). Same visual shell.
           if (renamingId === c.id) {
             return (
               <div key={c.id} className={styles.card}>
-                {coverEl}
-                <span className={styles.meta}>
-                  <input
-                    ref={renameInputRef}
-                    className={styles.renameInput}
-                    value={renameDraft}
-                    onChange={(e) => setRenameDraft(e.target.value)}
-                    onBlur={commitRename}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
-                      else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
-                    }}
-                  />
-                </span>
+                {dotEl}
+                <input
+                  ref={renameInputRef}
+                  className={styles.renameInput}
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                  }}
+                />
               </div>
             );
           }
@@ -165,15 +163,12 @@ export default function ChildCollectionsRail({
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, c.id)}
             >
-              {coverEl}
-              <span className={styles.meta}>
-                <span className={styles.name}>{c.name}</span>
-                <span className={styles.count}>
-                  {count} {count === 1 ? 'save' : 'saves'}
-                  {dropTargetId === c.id && (
-                    <span className={styles.countAdd} aria-hidden="true"> +1</span>
-                  )}
-                </span>
+              {dotEl}
+              <span className={styles.name}>{c.name}</span>
+              <span className={styles.count}>
+                {dropTargetId === c.id
+                  ? <span className={styles.countAdd} aria-hidden="true">+1</span>
+                  : count.toLocaleString()}
               </span>
             </button>
           );
@@ -184,12 +179,10 @@ export default function ChildCollectionsRail({
             className={`${styles.card} ${styles.cardNew}`}
             onClick={onCreateChild}
           >
-            <span className={`${styles.cover} ${styles.coverEmpty}`} aria-hidden="true">
-              <Plus size={16} strokeWidth={1.6} />
+            <span className={`${styles.dot} ${styles.dotEmpty}`} aria-hidden="true">
+              <Plus size={13} strokeWidth={1.7} />
             </span>
-            <span className={styles.meta}>
-              <span className={`${styles.name} ${styles.nameMuted}`}>New collection</span>
-            </span>
+            <span className={`${styles.name} ${styles.nameMuted}`}>New collection</span>
           </button>
         )}
       </div>
