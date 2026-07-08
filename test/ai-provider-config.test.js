@@ -37,3 +37,11 @@ test('extracts JSON from fenced provider responses', () => {
   assert.deepEqual(extractLocalJson('```json\n{"tags":["ui"]}\n```'), { tags: ['ui'] });
   assert.deepEqual(extractCodexJson('Answer:\n{"title":"Dashboard"}'), { title: 'Dashboard' });
 });
+
+test('Codex provider uses app-server read-only sandbox spelling', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('../src/main/ai-codex-provider'), 'utf8');
+
+  assert.match(source, /sandbox:\s*'read-only'/);
+  assert.doesNotMatch(source, /sandbox:\s*'readOnly'/);
+});

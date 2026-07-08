@@ -72,7 +72,7 @@ function runCodexTurn(config, { prompt, imagePath }) {
       const threadParams = {
         cwd: process.cwd(),
         approvalPolicy: 'never',
-        sandbox: 'readOnly',
+        sandbox: 'read-only',
         serviceName: 'gatherlocal',
       };
       if (config.model) threadParams.model = config.model;
