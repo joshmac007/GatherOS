@@ -82,6 +82,22 @@ CREATE TABLE IF NOT EXISTS dismissed_tweets (
 
 `;
 
+function safeJsonExpr(col) {
+  return `(CASE WHEN json_valid(${col}) THEN ${col} END)`;
+}
+
+function tweetTextSql(col) {
+  const safe = safeJsonExpr(col);
+  return `
+    COALESCE(json_extract(${safe},'$.caption'),'') || ' ' ||
+    COALESCE(json_extract(${safe},'$.authorName'),'') || ' ' ||
+    COALESCE(json_extract(${safe},'$.authorHandle'),'') || ' ' ||
+    COALESCE(json_extract(${safe},'$.thread'),'') || ' ' ||
+    COALESCE(json_extract(${safe},'$.quoted.caption'),'') || ' ' ||
+    COALESCE(json_extract(${safe},'$.quoted.authorName'),'') || ' ' ||
+    COALESCE(json_extract(${safe},'$.quoted.authorHandle'),'')`;
+}
+
 let db = null;
 
 function getDatabasePath() {
@@ -340,13 +356,7 @@ const MIGRATIONS = [
           new.id,
           COALESCE(new.title, ''),
           COALESCE(new.ocr_text, ''),
-          COALESCE(json_extract(new.tweet_meta,'$.caption'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.authorName'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.authorHandle'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.thread'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.quoted.caption'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorHandle'),'')
+          ${tweetTextSql('new.tweet_meta')}
         );
       END;
       CREATE TRIGGER IF NOT EXISTS saves_fts_ad AFTER DELETE ON saves BEGIN
@@ -360,13 +370,7 @@ const MIGRATIONS = [
           new.id,
           COALESCE(new.title, ''),
           COALESCE(new.ocr_text, ''),
-          COALESCE(json_extract(new.tweet_meta,'$.caption'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.authorName'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.authorHandle'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.thread'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.quoted.caption'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
-          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorHandle'),'')
+          ${tweetTextSql('new.tweet_meta')}
         );
       END;
     `);
@@ -374,13 +378,7 @@ const MIGRATIONS = [
     database.exec(`
       INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
       SELECT id, COALESCE(title, ''), COALESCE(ocr_text, ''),
-        COALESCE(json_extract(saves.tweet_meta,'$.caption'),'') || ' ' ||
-          COALESCE(json_extract(saves.tweet_meta,'$.authorName'),'') || ' ' ||
-          COALESCE(json_extract(saves.tweet_meta,'$.authorHandle'),'') || ' ' ||
-          COALESCE(json_extract(saves.tweet_meta,'$.thread'),'') || ' ' ||
-          COALESCE(json_extract(saves.tweet_meta,'$.quoted.caption'),'') || ' ' ||
-          COALESCE(json_extract(saves.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
-          COALESCE(json_extract(saves.tweet_meta,'$.quoted.authorHandle'),'')
+        ${tweetTextSql('saves.tweet_meta')}
       FROM saves;
     `);
   },
@@ -393,31 +391,22 @@ const MIGRATIONS = [
   // throwing, recreate the triggers, and rebuild the index so already-
   // broken libraries recover on this launch.
   (database) => {
-    const safe = (col) => `(CASE WHEN json_valid(${col}) THEN ${col} END)`;
-    const tweetText = (col) => `
-      COALESCE(json_extract(${safe(col)},'$.caption'),'') || ' ' ||
-      COALESCE(json_extract(${safe(col)},'$.authorName'),'') || ' ' ||
-      COALESCE(json_extract(${safe(col)},'$.authorHandle'),'') || ' ' ||
-      COALESCE(json_extract(${safe(col)},'$.thread'),'') || ' ' ||
-      COALESCE(json_extract(${safe(col)},'$.quoted.caption'),'') || ' ' ||
-      COALESCE(json_extract(${safe(col)},'$.quoted.authorName'),'') || ' ' ||
-      COALESCE(json_extract(${safe(col)},'$.quoted.authorHandle'),'')`;
     database.exec(`
       DROP TRIGGER IF EXISTS saves_fts_ai;
       DROP TRIGGER IF EXISTS saves_fts_au;
       CREATE TRIGGER saves_fts_ai AFTER INSERT ON saves BEGIN
         INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
-        VALUES (new.id, COALESCE(new.title,''), COALESCE(new.ocr_text,''), ${tweetText('new.tweet_meta')});
+        VALUES (new.id, COALESCE(new.title,''), COALESCE(new.ocr_text,''), ${tweetTextSql('new.tweet_meta')});
       END;
       CREATE TRIGGER saves_fts_au
       AFTER UPDATE OF title, ocr_text, tweet_meta ON saves BEGIN
         DELETE FROM saves_fts WHERE save_id = new.id;
         INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
-        VALUES (new.id, COALESCE(new.title,''), COALESCE(new.ocr_text,''), ${tweetText('new.tweet_meta')});
+        VALUES (new.id, COALESCE(new.title,''), COALESCE(new.ocr_text,''), ${tweetTextSql('new.tweet_meta')});
       END;
       DELETE FROM saves_fts;
       INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
-      SELECT id, COALESCE(title,''), COALESCE(ocr_text,''), ${tweetText('saves.tweet_meta')}
+      SELECT id, COALESCE(title,''), COALESCE(ocr_text,''), ${tweetTextSql('saves.tweet_meta')}
       FROM saves;
     `);
   },
@@ -956,14 +945,15 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
         ))`);
       params.push(ftsQuery, `%${text}%`);
     } else {
+      const safeTweetMeta = safeJsonExpr('tweet_meta');
       conditions.push(`(title LIKE ? OR ocr_text LIKE ?
-        OR json_extract(tweet_meta, '$.caption') LIKE ?
-        OR json_extract(tweet_meta, '$.authorName') LIKE ?
-        OR json_extract(tweet_meta, '$.authorHandle') LIKE ?
-        OR json_extract(tweet_meta, '$.thread') LIKE ?
-        OR json_extract(tweet_meta, '$.quoted.caption') LIKE ?
-        OR json_extract(tweet_meta, '$.quoted.authorName') LIKE ?
-        OR json_extract(tweet_meta, '$.quoted.authorHandle') LIKE ?
+        OR json_extract(${safeTweetMeta}, '$.caption') LIKE ?
+        OR json_extract(${safeTweetMeta}, '$.authorName') LIKE ?
+        OR json_extract(${safeTweetMeta}, '$.authorHandle') LIKE ?
+        OR json_extract(${safeTweetMeta}, '$.thread') LIKE ?
+        OR json_extract(${safeTweetMeta}, '$.quoted.caption') LIKE ?
+        OR json_extract(${safeTweetMeta}, '$.quoted.authorName') LIKE ?
+        OR json_extract(${safeTweetMeta}, '$.quoted.authorHandle') LIKE ?
         OR id IN (
           SELECT save_id FROM save_tags
           JOIN tags ON save_tags.tag_id = tags.id

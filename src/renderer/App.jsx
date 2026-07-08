@@ -149,6 +149,12 @@ function isMotionSave(save) {
   return save?.kind === 'video' || /\.gif$/i.test(save?.file_path || '');
 }
 
+function sameReleaseVersion(a, b) {
+  const pa = String(a || '').split('.').map((x) => parseInt(x, 10) || 0);
+  const pb = String(b || '').split('.').map((x) => parseInt(x, 10) || 0);
+  return pa[0] === pb[0] && pa[1] === pb[1] && pa[2] === pb[2];
+}
+
 export default function App({ entitlement } = {}) {
   const onboarding = useOnboarding();
   // The resolved entitlement (mode paid/trial/free) flows in from
@@ -738,7 +744,7 @@ export default function App({ entitlement } = {}) {
   const latestReleaseNotes = RELEASE_NOTES[0] || null;
   const releaseNotesUnseen = !!latestReleaseNotes
     && !!currentAppVersion
-    && latestReleaseNotes.version === currentAppVersion
+    && sameReleaseVersion(latestReleaseNotes.version, currentAppVersion)
     && lastViewedNotesVersion !== currentAppVersion;
   const handleOpenReleaseNotes = useCallback(() => {
     if (!latestReleaseNotes) return;
