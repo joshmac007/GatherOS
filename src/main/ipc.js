@@ -43,6 +43,7 @@ const {
   analyzeImage,
   embedText,
   generateImagePrompt,
+  generateImage,
   getUsage: getAiUsage,
 } = require('./openai');
 const { detectColorName } = require('./colorNames');
@@ -58,6 +59,8 @@ function blockNewSave(source) {
   try { notifyNeedsUpgrade({ source: source || 'save' }); } catch { /* ignore */ }
   return true;
 }
+
+let aiVariantBusy = false;
 
 // Cosine similarity over Float32 BLOBs from SQLite. ~1 ms per save at
 // 1536 dims; fine up to a few thousand records before we'd want a
@@ -1164,6 +1167,109 @@ function registerIpcHandlers() {
       console.error('Generate prompt failed:', err.message);
       return { ok: false, reason: err.code || "api-error", detail: err.message };
     } finally {
+      event.sender.send('save:indexing-end', saveId);
+    }
+  });
+
+  // Generate a fresh variation of an existing save when the configured
+  // local provider exposes image bytes. Codex subscription auth does not
+  // expose a generic image-generation byte API, so that provider returns
+  // image_generation_unavailable here.
+  ipcMain.handle('ai:generate-variant', async (event, saveId, options = {}) => {
+    // AI generation is a pro feature and also creates a new save — both
+    // gated in the free tier.
+    if (blockNewSave('ai')) return { ok: false, needsUpgrade: true };
+    if (!saveId) return { ok: false, reason: 'no-save-id' };
+    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
+    if (aiVariantBusy) {
+      return {
+        ok: false,
+        reason: 'ai-busy',
+        detail: 'AI is already working. Try again in a moment.',
+      };
+    }
+    const save = getSave(saveId);
+    if (!save) return { ok: false, reason: 'save-not-found' };
+
+    aiVariantBusy = true;
+    event.sender.send('save:indexing-start', saveId);
+    try {
+      // Prompt + aspect come from the modal. Local image providers may
+      // only support a subset of sizes; unsupported providers fail with
+      // a clear image_generation_unavailable reason.
+      const ASPECT_MAP = {
+        auto:  { size: 'auto',       crop: null },
+        '1:1':   { size: '1024x1024',  crop: null },
+        '3:4':   { size: '1024x1536',  crop: 3 / 4 },
+        '9:16':  { size: '1024x1536',  crop: 9 / 16 },
+        '4:3':   { size: '1536x1024',  crop: 4 / 3 },
+        '16:9':  { size: '1536x1024',  crop: 16 / 9 },
+      };
+      const aspect = ASPECT_MAP[options.aspect] || ASPECT_MAP.auto;
+      const prompt = (options.prompt || '').trim() ||
+        'Create a fresh variation of this image. Keep the composition and palette.';
+      const { bytes: rawBytes, quota } = await generateImage(prompt, {
+        sourceFilePath: save.file_path,
+        size: aspect.size,
+      });
+
+      // Center-crop the generated PNG to the exact requested aspect
+      // when it differs from the native generation size. Skipped for
+      // 'auto' and 1:1 native matches.
+      let bytes = rawBytes;
+      if (aspect.crop) {
+        const sharp = require('sharp');
+        const meta = await sharp(rawBytes).metadata();
+        const gw = meta.width || 0;
+        const gh = meta.height || 0;
+        if (gw && gh) {
+          const generated = gw / gh;
+          let cw = gw;
+          let ch = gh;
+          if (aspect.crop > generated) {
+            ch = Math.round(gw / aspect.crop);
+          } else if (aspect.crop < generated) {
+            cw = Math.round(gh * aspect.crop);
+          }
+          if (cw !== gw || ch !== gh) {
+            const left = Math.round((gw - cw) / 2);
+            const top = Math.round((gh - ch) / 2);
+            bytes = await sharp(rawBytes)
+              .extract({ left, top, width: cw, height: ch })
+              .png()
+              .toBuffer();
+          }
+        }
+      }
+
+      const imgData = await saveImageFromBuffer(bytes, 'png');
+      if (imgData.duplicateOf) {
+        // Identical pixels to an existing save (very unlikely for a
+        // generation but cheap to handle). Surface the existing one
+        // and don't re-insert.
+        return { ok: true, save: imgData.existing, quota, duplicate: true };
+      }
+      const record = insertSave({
+        ...imgData,
+        // Carry the source's title onto the variant so the new save
+        // reads as related, not blank. The renderer can rename it
+        // freely afterwards.
+        title: save.title ? `${save.title} (variant)` : null,
+      });
+      // Notify the renderer so the masonry refreshes with the new
+      // save in place. Reuses the same save:created channel that
+      // drag-and-drop uses.
+      try {
+        notifySaved(record);
+      } catch {
+        /* best-effort */
+      }
+      return { ok: true, save: record, quota };
+    } catch (err) {
+      console.error('Generate variant failed:', err.message);
+      return { ok: false, reason: err.code || "api-error", detail: err.message };
+    } finally {
+      aiVariantBusy = false;
       event.sender.send('save:indexing-end', saveId);
     }
   });

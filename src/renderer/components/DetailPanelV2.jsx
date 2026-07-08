@@ -150,12 +150,14 @@ export default function DetailPanel({
   onOpenSettings,
   onOpenSave,
   onOpenSpace,
+  onGenerateVariant,
 }) {
   // AI features (auto-tag, prompt generation) are pro; locked in the
   // free tier. Fails open to unlocked.
   const proLocked = isLocked(useEntitlementValue());
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
+  const isMotion = record?.kind === 'video' || /\.gif$/i.test(record?.file_path || '');
   const [copiedColor, setCopiedColor] = useState(null);
   const imageRef = useRef(null);
   const previewWrapRef = useRef(null);
@@ -700,6 +702,20 @@ export default function DetailPanel({
           </div>
         )}
       </div>
+
+      {aiConfigured && onGenerateVariant && !isMotion && (
+        <div className={styles.actionsRow}>
+          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={() => onGenerateVariant(record.id)}
+            title="Generate a fresh variation of this image"
+          >
+            <span className={styles.actionBtnIcon}><SparkleIcon /></span>
+            Generate variation
+          </button>
+        </div>
+      )}
 
       {/* Name — primary identity, always visible. */}
       <div className={styles.metaEditSection}>

@@ -1,3 +1,10 @@
+import {
+  claimImportItem,
+  importLimitReached,
+  importProcessedCount,
+  rememberImportEntries,
+} from './import-limit.mjs';
+
 // Service worker for the GatherOS browser extension.
 //
 // v1 capture surface: right-click any image → "Save to GatherOS".
@@ -535,7 +542,15 @@ async function runXApiImport(limit) {
   let entries = pollExtractBookmarkEntries(json);
   if (entries.length === 0) return runXScrollImport(limit);
 
-  importState = { active: true, apiMode: true, limit, imported: 0, processed: 0 };
+  const state = {
+    active: true,
+    apiMode: true,
+    limit,
+    imported: 0,
+    processed: new Set(),
+    seenIds: new Set(),
+  };
+  importState = state;
   notify('Importing bookmarks from X…');
 
   const PAGE_DELAY_MS = 1200;
@@ -544,13 +559,16 @@ async function runXApiImport(limit) {
   let lastCursor = null;
   let pages = 0;
   try {
-    while (importState && importState.active && importState.processed < limit && pages < MAX_PAGES) {
+    while (state.active && !importLimitReached(state) && pages < MAX_PAGES) {
+      rememberImportEntries(state, entries);
       for (const b of entries) {
-        if (importState.processed >= limit) break;
-        importState.processed += 1;
+        if (!claimImportItem(state, b && b.tweetId)) {
+          if (importLimitReached(state)) break;
+          continue;
+        }
         try {
           const resp = await syncBookmarkToGather(b, { force: true });
-          if (resp && resp.ok && !resp.duplicate && !resp.dismissed) importState.imported += 1;
+          if (state.active && resp && resp.ok && !resp.duplicate && !resp.dismissed) state.imported += 1;
         } catch (err) {
           console.warn('[gatheros] X import save failed:', err?.message || err);
         }
@@ -559,7 +577,7 @@ async function runXApiImport(limit) {
       const next = extractBottomCursor(json);
       // Stop at the bottom: no cursor, an unchanging cursor, an empty
       // page (X pads the tail with cursor-only pages), or limit reached.
-      if (!next || next === lastCursor || entries.length === 0 || importState.processed >= limit) break;
+      if (!next || next === lastCursor || entries.length === 0 || importLimitReached(state)) break;
       lastCursor = next;
       cursor = next;
       await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
@@ -572,10 +590,11 @@ async function runXApiImport(limit) {
       entries = pollExtractBookmarkEntries(json);
     }
   } finally {
-    const imported = importState ? importState.imported : 0;
-    importState = null;
+    const imported = state.imported;
+    if (importState === state) importState = null;
     try {
       const { seen } = await readSeenSet();
+      for (const id of state.seenIds) seen.add(id);
       await writeSeenSet(seen, { baseline: true, version: CAPTURE_VERSION });
     } catch { /* ignore */ }
     notify(imported > 0
@@ -612,7 +631,7 @@ async function runXScrollImport(limit) {
 // times with backoff until the message is received.
 function scheduleImportStart(tabId, attempt = 0) {
   setTimeout(() => {
-    if (!importState || !importState.active || importState.tabId !== tabId) return;
+    if (!importState || !importState.active || importState.scrollPaused || importState.tabId !== tabId) return;
     chrome.tabs.sendMessage(tabId, { type: 'gatheros:start-import' }, () => {
       if (chrome.runtime.lastError && attempt < 6) {
         scheduleImportStart(tabId, attempt + 1);
@@ -621,44 +640,69 @@ function scheduleImportStart(tabId, attempt = 0) {
   }, attempt === 0 ? 2500 : 1000);
 }
 
+function pauseImportScroll(state) {
+  if (!state || state.scrollPaused || state.tabId == null) return;
+  state.scrollPaused = true;
+  chrome.tabs.sendMessage(state.tabId, {
+    type: 'gatheros:pause-import-scroll',
+    processed: importProcessedCount(state),
+  }, () => { void chrome.runtime.lastError; });
+}
+
 async function handleImportBatch(bookmarks) {
+  const state = importState;
+  if (!state || !state.active || state.apiMode) return;
   let foundNew = false;
   let reachedLimit = false;
+  const toSave = [];
   for (const b of bookmarks) {
     if (!b || !b.tweetId) continue;
-    if (importState.processed.has(b.tweetId)) continue; // counted this run already
-    importState.processed.add(b.tweetId);
+    if (!claimImportItem(state, b.tweetId)) {
+      if (importLimitReached(state)) {
+        reachedLimit = true;
+        pauseImportScroll(state);
+        break;
+      }
+      continue;
+    }
+    if (importLimitReached(state)) {
+      reachedLimit = true;
+      pauseImportScroll(state);
+    }
     foundNew = true;
+    toSave.push(b);
+    if (reachedLimit) break;
+  }
+  for (const b of toSave) {
     try {
       // force: true → explicit backfill overrides tombstones (re-imports
       // bookmarks the user previously deleted). Count only genuinely new
       // saves — not duplicates, and not dismissed (so the toast is honest).
       const resp = await syncBookmarkToGather(b, { force: true });
-      if (resp && resp.ok && !resp.duplicate && !resp.dismissed) importState.imported += 1;
+      if (!state.active) return;
+      if (resp && resp.ok && !resp.duplicate && !resp.dismissed) state.imported += 1;
     } catch (err) {
       console.warn('[gatheros] backfill import failed:', err?.message || err);
     }
-    // Limit counts bookmarks *traversed*, newest-first — "most recent
-    // N" — not just the ones that turned out to be new.
-    if (importState.processed.size >= importState.limit) { reachedLimit = true; break; }
   }
   // Keep the seen-set current so the normal incremental poll doesn't
   // re-handle these later.
   await markBookmarksSeen(bookmarks.map((b) => b && b.tweetId).filter(Boolean));
+  if (!state.active || importState !== state) return;
 
   // Stream the running count to the tab so the import toast updates live.
-  if (importState.tabId != null) {
-    chrome.tabs.sendMessage(importState.tabId, {
+  if (state.tabId != null) {
+    chrome.tabs.sendMessage(state.tabId, {
       type: 'gatheros:import-progress',
-      imported: importState.imported,
-      processed: importState.processed.size,
+      imported: state.imported,
+      processed: importProcessedCount(state),
     }, () => { void chrome.runtime.lastError; });
   }
 
-  if (foundNew) importState.stagnant = 0;
-  else importState.stagnant += 1;
+  if (foundNew) state.stagnant = 0;
+  else state.stagnant += 1;
 
-  if (reachedLimit || importState.stagnant >= IMPORT_STAGNANT_BATCHES_LIMIT) {
+  if (reachedLimit || state.stagnant >= IMPORT_STAGNANT_BATCHES_LIMIT) {
     await endImport(reachedLimit ? 'limit' : 'bottom');
   }
 }
@@ -700,6 +744,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (importState && importState.active && importState.tabId === tabId) {
     if (importState.watchdog) clearTimeout(importState.watchdog);
     const imported = importState.imported;
+    importState.active = false;
     importState = null;
     if (imported > 0) notify(`Bookmark import stopped — imported ${imported} so far.`);
   }

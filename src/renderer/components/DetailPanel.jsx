@@ -201,6 +201,7 @@ export default function DetailPanel({
   onOpenSettings,
   onOpenSave,
   onOpenSpace,
+  onGenerateVariant,
   // Multi-image X-bookmark support: which tweet image is currently
   // displayed in FocusedView. App owns the state; we render a
   // thumbnail strip in the glass tweet card and call back with the
@@ -228,6 +229,9 @@ export default function DetailPanel({
   const proLocked = isLocked(useEntitlementValue());
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
+  // Motion saves (video / animated GIF) can't be image-varied, so the
+  // Generate variation CTA stays hidden for those records.
+  const isMotion = record?.kind === 'video' || /\.gif$/i.test(record?.file_path || '');
   // Text-only tweets render as a card (no real image), so the preview
   // hero — the rendered PNG and its color palette — is all meaningless.
   // Hide that whole top section for them.
@@ -788,6 +792,19 @@ export default function DetailPanel({
               </button>
             ))}
           </div>
+        )}
+        {aiConfigured && onGenerateVariant && !isMotion && (
+          <button
+            type="button"
+            className={styles.variantBtn}
+            onClick={() => onGenerateVariant(record.id)}
+            title="Generate a fresh variation of this image"
+          >
+            <span className={styles.variantBtnIcon}>
+              <SparkleIcon />
+            </span>
+            Generate variation
+          </button>
         )}
       </div>
       )}

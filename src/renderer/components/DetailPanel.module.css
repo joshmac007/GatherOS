@@ -1388,6 +1388,49 @@
    rather than a mix of opaque + glass elements. These overrides are
    scoped to .panel so other surfaces using the same classes (e.g.
    inputCanonical elsewhere) are untouched. */
+/* Generate-variation CTA — anchored at the bottom of the preview
+   section so it reads as the primary action for this image. */
+.variantBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  transition:
+    background var(--dur-instant) ease,
+    transform var(--dur-instant) ease;
+}
+
+.variantBtn:hover { background: rgba(255, 255, 255, 0.24); }
+.variantBtn:active { transform: scale(0.98); }
+
+.variantBtnIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-primary);
+}
+
+.variantBtnIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
 .panel .metaInput,
 .panel .notesInput {
   background: rgba(255, 255, 255, 0.1);

@@ -492,9 +492,20 @@ function stopImportScroll(summary) {
   }
 }
 
+function pauseImportScroll(msg) {
+  importScrollActive = false;
+  setInterceptorImportMode(false);
+  const scanned = msg && typeof msg.processed === 'number' ? msg.processed : null;
+  showGatherToast(
+    scanned ? `Finishing first ${scanned} bookmarks…` : 'Finishing import…',
+    { tone: 'ok', sticky: true },
+  );
+}
+
 chrome.runtime.onMessage.addListener((msg) => {
   if (!msg) return undefined;
   if (msg.type === 'gatheros:start-import') { runImportScroll(); return false; }
+  if (msg.type === 'gatheros:pause-import-scroll') { pauseImportScroll(msg); return false; }
   if (msg.type === 'gatheros:import-progress') {
     if (importScrollActive) {
       const saved = typeof msg.imported === 'number' ? msg.imported : 0;

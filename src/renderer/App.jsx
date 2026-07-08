@@ -46,6 +46,7 @@ import SearchView from './components/SearchView.jsx';
 import BoardView from './components/BoardView.jsx';
 import ContextMenu from './components/ContextMenu.jsx';
 import FocusedSortMode from './components/FocusedSortMode.jsx';
+import VariantOptionsModal from './components/VariantOptionsModal.jsx';
 import {
   Film,
   Download,
@@ -60,6 +61,7 @@ import {
   ExternalLink,
   Hash,
   Share,
+  Sparkles,
   FolderOpen,
   Focus,
 } from 'lucide-react';
@@ -99,6 +101,7 @@ const ExternalLinkIcon = () => <ExternalLink {...ICON} />;
 const HashIcon = () => <Hash {...ICON} />;
 const ShareIcon = () => <Share {...ICON} />;
 const RevealIcon = () => <FolderOpen {...ICON} />;
+const SparklesIcon = () => <Sparkles {...ICON} />;
 
 // Per-view grid scroll memory — so returning to a view (or relaunching
 // the app) lands exactly where the user left off instead of jumping to
@@ -114,6 +117,10 @@ function readViewScroll() {
   } catch {
     return {};
   }
+}
+
+function isMotionSave(save) {
+  return save?.kind === 'video' || /\.gif$/i.test(save?.file_path || '');
 }
 
 export default function App({ entitlement } = {}) {
@@ -426,6 +433,11 @@ export default function App({ entitlement } = {}) {
     if (typeof def === 'number' && def >= 2 && def <= 8) return def;
     return 3;
   });
+
+  // In-flight image variant generations. Each entry is a placeholder
+  // that prepends to the masonry while local image generation is running so
+  // the user sees an immediate "something is happening" affordance.
+  const [pendingVariants, setPendingVariants] = useState([]);
 
   // Active sort mode for the masonry. Persisted per-app (not per-
   // view) — the user's preference is a global setting, not a
@@ -1145,6 +1157,60 @@ export default function App({ entitlement } = {}) {
   const [bulkTagPicker, setBulkTagPicker] = useState(null); // { x, y } | null
   const [rediscoverOpen, setRediscoverOpen] = useState(false);
 
+  // Modal-backed variant generation. The opener (right-click or
+  // DetailPanel) sets `variantOptions` with a saveId + whether the
+  // user wants the result auto-opened in focus view; the modal
+  // collects prompt + aspect, then calls handleGenerateVariant.
+  const [variantOptions, setVariantOptions] = useState(null);
+
+  const handleGenerateVariant = useCallback(async (saveId, opts = {}) => {
+    if (proLocked) { requestUpgrade('ai'); return; }
+    const { prompt, aspect, openOnComplete = false } = opts;
+    const source = saves.find((s) => s.id === saveId);
+    const pendingId = `pending-${saveId}-${Date.now()}`;
+    if (source) {
+      setPendingVariants((prev) => [
+        ...prev,
+        {
+          id: pendingId,
+          __pending: true,
+          file_path: source.file_path,
+          thumb_path: source.thumb_path,
+          width: source.width,
+          height: source.height,
+          title: source.title,
+          created_at: Date.now(),
+        },
+      ]);
+    }
+    const result = await window.moodmark.ai.generateVariant(saveId, { prompt, aspect });
+    setPendingVariants((prev) => prev.filter((p) => p.id !== pendingId));
+    if (result?.ok) {
+      await reload();
+      if (openOnComplete && result.save?.id) {
+        setFocusedId(result.save.id);
+      }
+      showActionToast({ message: 'Variation created', durationMs: 1800 });
+    } else if (result?.needsUpgrade) {
+      requestUpgrade('ai');
+    } else if (result?.reason === 'monthly_cap_reached') {
+      showActionToast({
+        message: 'Monthly image limit reached. Resets at the start of next month.',
+        durationMs: 3200,
+      });
+    } else {
+      showActionToast({
+        message: result?.detail || 'Could not generate variation',
+        durationMs: 2400,
+      });
+    }
+  }, [saves, reload, showActionToast, proLocked]);
+
+  const openVariantModal = useCallback((saveId, openOnComplete) => {
+    if (proLocked) { requestUpgrade('ai'); return; }
+    setVariantOptions({ saveId, openOnComplete });
+  }, [proLocked]);
+
   const buildCardMenuItems = useCallback((saveId, memberIds) => {
     // If the right-clicked save is part of an active multi-selection,
     // every menu action operates on the full selection. Otherwise
@@ -1263,6 +1329,19 @@ export default function App({ entitlement } = {}) {
       });
     }
 
+    // Generate a new image inspired by this one when the configured
+    // local provider supports image bytes. Codex provider can still
+    // generate prompts, but not downloadable images.
+    const variantAnchor = saves.find((s) => s.id === saveId);
+    if (!isMulti && aiConfigured && !isMotionSave(variantAnchor)) {
+      if (items.length > 0) items.push({ type: 'separator' });
+      items.push({
+        label: 'Generate variation',
+        icon: <SparklesIcon />,
+        onClick: () => openVariantModal(saveId, false),
+      });
+    }
+
     // Copy image bytes to the system clipboard so the user can
     // paste into Figma / Slack / Mail / etc. Single-save only — the
     // clipboard holds one image at a time.
@@ -1364,7 +1443,7 @@ export default function App({ entitlement } = {}) {
       },
     });
     return items;
-  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack, similarTo, setSimilarTo, showActionToast, aiConfigured]);
+  }, [selected, collections, view, reload, loadCollections, restoreSave, showRestoreToast, showPermanentDeleteToast, deleteSave, showTrashToast, focusedId, saves, undoStack, similarTo, setSimilarTo, showActionToast, aiConfigured, openVariantModal]);
 
   const handleCardContextMenu = useCallback(async (saveId, x, y) => {
     // Resolve the bucket memberships used to filter the Add-to-Bucket
@@ -2135,8 +2214,9 @@ export default function App({ entitlement } = {}) {
     if (view.type === 'bookmarks' && sourceFilter !== 'all') {
       base = base.filter((s) => (s.source || 'x') === sourceFilter);
     }
-    return base;
-  }, [displaySaves, view.type, tweetTypeFilter, sourceFilter]);
+    if (pendingVariants.length === 0) return base;
+    return [...pendingVariants, ...base];
+  }, [pendingVariants, displaySaves, view.type, tweetTypeFilter, sourceFilter]);
 
   // Mirror of visibleSaves for dependency-free callbacks (shift-click
   // range selection, ⌘C copy) that need the current ordered list without
@@ -3597,6 +3677,13 @@ export default function App({ entitlement } = {}) {
             onUpdateMeta={undoableUpdateSaveMeta}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenSave={(id) => setFocusedId(id)}
+            onGenerateVariant={(id) => {
+              // Drop back to the grid before the variant modal opens
+              // so the pending placeholder card is visible while
+              // generation runs.
+              setFocusedId(null);
+              openVariantModal(id, false);
+            }}
             onOpenSpace={(boardId) => {
               setFocusedId(null);
               handleViewChange({ type: 'board', id: boardId });
@@ -3604,6 +3691,18 @@ export default function App({ entitlement } = {}) {
           />
         )}
       </div>
+
+      <VariantOptionsModal
+        open={!!variantOptions}
+        record={variantOptions ? saves.find((s) => s.id === variantOptions.saveId) : null}
+        onCancel={() => setVariantOptions(null)}
+        onConfirm={({ prompt, aspect }) => {
+          const { saveId, openOnComplete } = variantOptions;
+          setVariantOptions(null);
+          setFocusedId(null);
+          handleGenerateVariant(saveId, { prompt, aspect, openOnComplete });
+        }}
+      />
 
       {actionToast && (
         <div className="trash-toast" role="status">
