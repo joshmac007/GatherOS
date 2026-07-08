@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nested collections — five ways to use them</title>
+<style>
+  :root{
+    --sm:4px; --md:7px; --lg:10px; --xl:14px;
+    --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --bg:#FAFAF9; --surface:#fff; --border:rgba(0,0,0,.09); --border-soft:rgba(0,0,0,.06);
+    --ink:#1a1a1c; --sub:#6b6b70; --faint:#9a9a9e; --hover:rgba(0,0,0,.045);
+    --accent:#111;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--ui);background:#0d0d0f;color:var(--ink);-webkit-font-smoothing:antialiased}
+
+  header{position:fixed;inset:0 0 auto 0;z-index:80;background:rgba(248,248,250,.88);
+    backdrop-filter:blur(16px) saturate(1.4);border-bottom:.5px solid var(--border);padding:12px 20px}
+  header h1{font-size:14px;font-weight:600;margin:0 0 9px;letter-spacing:-.01em}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .tab{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
+    border:.5px solid rgba(0,0,0,.12);background:#fff;color:#444;font-size:12.5px;font-weight:500;cursor:pointer;transition:all .14s ease}
+  .tab .n{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:999px;
+    background:rgba(0,0,0,.08);font-size:11px;font-weight:600;color:#666;font-family:var(--mono)}
+  .tab:hover{border-color:rgba(0,0,0,.24)}
+  .tab.active{background:#111;color:#fff;border-color:#111}
+  .tab.active .n{background:rgba(255,255,255,.22);color:#fff}
+
+  main{padding:104px 20px 60px;min-height:100%}
+  .panel{display:none;max-width:960px;margin:0 auto}
+  .panel.active{display:block;animation:fade .26s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .pmeta{margin:0 0 16px;color:#eaeaea;text-align:center}
+  .pname{font-size:19px;font-weight:600;letter-spacing:-.02em;color:#fff}
+  .pname .idx{color:#7a7a7e;font-weight:500;margin-right:8px;font-family:var(--mono)}
+  .prat{font-size:13.5px;line-height:1.5;color:#9a9a9e;margin:6px auto 0;max-width:640px}
+  .trade{font-size:12px;color:#76767a;margin-top:8px;max-width:640px;margin-left:auto;margin-right:auto}
+  .trade b{color:#bdbdc2;font-weight:600}
+
+  /* the mock app viewport */
+  .app{background:var(--bg);border-radius:var(--xl);min-height:560px;overflow:hidden;position:relative;
+    box-shadow:0 30px 70px rgba(0,0,0,.5),0 0 0 .5px rgba(0,0,0,.2)}
+  .appbar{display:flex;align-items:center;gap:8px;padding:13px 18px;border-bottom:.5px solid var(--border-soft)}
+  .dot{width:10px;height:10px;border-radius:50%;background:rgba(0,0,0,.12)}
+  .appbar .title{margin-left:10px;font-size:12.5px;font-weight:600;color:var(--sub)}
+  .stage{padding:22px 26px 30px}
+  .sectionLabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--faint);margin:0 0 12px}
+
+  /* collection tile (matches FolderGrid recipe) */
+  .tileGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .tile{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:14px;cursor:pointer;transition:box-shadow .15s ease,transform .15s ease}
+  .tile:hover{box-shadow:0 6px 18px rgba(0,0,0,.07);transform:translateY(-1px)}
+  .cover{position:relative;height:86px;margin-bottom:10px}
+  .cover img{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:8px;object-fit:cover;
+    box-shadow:0 2px 6px rgba(0,0,0,.13),inset 0 0 0 1px rgba(255,255,255,.5);transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+  .cover img:nth-child(1){transform:translateY(-12px) scale(.8);z-index:1}
+  .cover img:nth-child(2){transform:translateY(-6px) scale(.9);z-index:2}
+  .cover img:nth-child(3){transform:none;z-index:3}
+  .tname{font-size:13px;font-weight:600;letter-spacing:-.01em}
+  .tmeta{font-size:11.5px;color:var(--faint);margin-top:2px}
+
+  /* shared toast */
+  .toast{position:absolute;left:50%;bottom:18px;transform:translateX(-50%) translateY(8px);background:#1c1c1e;color:#fff;
+    font-size:12.5px;padding:9px 16px;border-radius:999px;opacity:0;pointer-events:none;transition:all .22s ease;z-index:60;
+    box-shadow:0 8px 24px rgba(0,0,0,.3)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ── 1 · EXPAND IN PLACE ── */
+  .childPill{position:absolute;top:10px;right:10px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+    border-radius:999px;background:var(--hover);border:.5px solid var(--border-soft);font-size:10.5px;font-weight:600;color:var(--sub);z-index:5}
+  .childPill svg{transition:transform .2s ease}
+  .tile.open .childPill{background:#111;color:#fff;border-color:#111}
+  .tile.open .childPill svg{transform:rotate(90deg)}
+  .childRow{grid-column:1 / -1;display:none;padding:4px 0 6px 26px;position:relative}
+  .childRow.open{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;animation:slideDown .24s ease}
+  @keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+  .childRow::before{content:"";position:absolute;left:12px;top:0;bottom:14px;width:1.5px;background:var(--border);border-radius:2px}
+  .childTile{background:var(--surface);border:1px solid var(--border-soft);border-radius:8px;padding:10px 12px;display:flex;
+    align-items:center;gap:10px;cursor:pointer;transition:all .14s ease}
+  .childTile:hover{border-color:rgba(0,0,0,.18);box-shadow:0 3px 10px rgba(0,0,0,.06)}
+  .childTile img{width:30px;height:30px;border-radius:6px;object-fit:cover}
+  .childTile .cn{font-size:12.5px;font-weight:600}
+  .childTile .cm{font-size:10.5px;color:var(--faint)}
+  .childTile.newChild{border-style:dashed;color:var(--faint);justify-content:center;font-size:12px;font-weight:500}
+  .childTile.newChild:hover{color:var(--ink)}
+
+  /* ── 2 · DRILL IN ── */
+  .crumbs{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--faint);margin-bottom:16px}
+  .crumbs a{color:var(--sub);cursor:pointer;text-decoration:none;font-weight:500}
+  .crumbs a:hover{color:var(--ink)}
+  .crumbs .here{color:var(--ink);font-weight:600}
+  .childRail{display:flex;gap:10px;margin-bottom:20px;overflow-x:auto;padding-bottom:4px}
+  .railCard{flex:0 0 150px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px;cursor:pointer;transition:all .14s ease}
+  .railCard:hover{box-shadow:0 4px 14px rgba(0,0,0,.07);transform:translateY(-1px)}
+  .railCard img{width:100%;height:54px;border-radius:6px;object-fit:cover;margin-bottom:7px}
+  .railCard .cn{font-size:12px;font-weight:600}
+  .railCard .cm{font-size:10.5px;color:var(--faint)}
+  .railCard.newChild{display:flex;align-items:center;justify-content:center;border-style:dashed;color:var(--faint);font-size:12px;font-weight:500;min-height:96px}
+  .masonry{columns:4;column-gap:12px}
+  .mCard{break-inside:avoid;margin-bottom:12px;border-radius:8px;overflow:hidden;background:#eee;transition:transform .14s ease}
+  .mCard:hover{transform:translateY(-1px)}
+  .mCard img{width:100%;display:block}
+
+  /* ── 3 · PEEK SHELF ── */
+  .shelf{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:230px;z-index:40;
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 38px rgba(0,0,0,.14);
+    padding:6px;display:none;animation:shelfIn .18s ease}
+  .shelf.open{display:block}
+  @keyframes shelfIn{from{opacity:0;transform:translateX(-50%) translateY(-4px)}to{opacity:1;transform:translateX(-50%)}}
+  .shelfRow{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:7px;cursor:pointer;transition:background .12s ease}
+  .shelfRow:hover,.shelfRow.dropHot{background:var(--hover)}
+  .shelfRow.dropHot{outline:1.5px solid #111;outline-offset:-1.5px}
+  .shelfRow img{width:26px;height:26px;border-radius:5px;object-fit:cover}
+  .shelfRow .cn{font-size:12.5px;font-weight:600;flex:1}
+  .shelfRow .cm{font-size:10.5px;color:var(--faint)}
+  .shelfHint{padding:7px 9px 5px;font-size:10.5px;color:var(--faint);border-top:.5px solid var(--border-soft);margin-top:4px}
+  .dragTray{display:flex;align-items:center;gap:12px;margin-top:26px;padding:13px 16px;border:1.5px dashed var(--border);border-radius:10px;color:var(--sub);font-size:12.5px}
+  .dragChip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;background:var(--surface);border:1px solid var(--border);
+    border-radius:999px;cursor:grab;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .dragChip img{width:24px;height:24px;border-radius:50%;object-fit:cover}
+  .dragChip:active{cursor:grabbing}
+  .tile.dragOver{border-color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.14)}
+
+  /* ── 4 · RIFFLE SPREAD ── */
+  .deckField{display:flex;justify-content:center;gap:70px;padding:60px 0 30px;position:relative}
+  .deck{position:relative;width:120px;cursor:pointer;text-align:center}
+  .deck .stack{position:relative;height:110px}
+  .deck .stack img{position:absolute;left:50%;top:50%;width:84px;height:84px;margin:-42px 0 0 -42px;border-radius:10px;object-fit:cover;
+    box-shadow:0 3px 9px rgba(0,0,0,.16),inset 0 0 0 1px rgba(255,255,255,.5);
+    transition:transform .38s cubic-bezier(.2,.8,.2,1),opacity .3s ease}
+  .deck .stack img:nth-child(1){transform:translateY(-14px) scale(.8);z-index:1}
+  .deck .stack img:nth-child(2){transform:translateY(-7px) scale(.9);z-index:2}
+  .deck .stack img:nth-child(3){transform:none;z-index:3}
+  .deck .dn{font-size:13px;font-weight:600;margin-top:8px}
+  .deck .dm{font-size:11px;color:var(--faint)}
+  .scrim{position:absolute;inset:0;background:rgba(250,250,249,.82);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .3s ease;z-index:20}
+  .scrim.on{opacity:1;pointer-events:auto}
+  .spread{position:absolute;z-index:30;left:0;top:0;width:100%;height:100%;pointer-events:none}
+  .spreadCard{position:absolute;left:50%;top:44%;width:96px;margin-left:-48px;text-align:center;opacity:0;
+    transform:translate(0,0) scale(.5);transition:all .42s cubic-bezier(.2,.85,.25,1.08);pointer-events:none;cursor:pointer}
+  .spread.on .spreadCard{opacity:1;pointer-events:auto}
+  .spreadCard img{width:84px;height:84px;border-radius:10px;object-fit:cover;box-shadow:0 10px 26px rgba(0,0,0,.2),inset 0 0 0 1px rgba(255,255,255,.5);transition:transform .16s ease}
+  .spreadCard:hover img{transform:scale(1.06)}
+  .spreadCard .cn{font-size:12px;font-weight:600;margin-top:6px}
+  .spreadCard .cm{font-size:10.5px;color:var(--faint)}
+  .escHint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);font-size:11px;color:var(--faint);opacity:0;transition:opacity .3s ease;z-index:31}
+  .escHint.on{opacity:1}
+  .escHint kbd{padding:1px 5px;border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:10px;background:var(--surface)}
+
+  /* ── 5 · CHIPS RAIL ── */
+  .rail{display:flex;align-items:center;gap:8px;padding:0 0 16px;border-bottom:.5px solid var(--border-soft);margin-bottom:18px}
+  .backBtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
+    border:1px solid var(--border);background:var(--surface);cursor:pointer;color:var(--sub)}
+  .railTitle{font-size:14px;font-weight:700;letter-spacing:-.01em;margin-right:10px}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:999px;border:1px solid var(--border);
+    background:var(--surface);font-size:12px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .13s ease}
+  .chip:hover{border-color:rgba(0,0,0,.2);color:var(--ink)}
+  .chip.on{background:#111;border-color:#111;color:#fff}
+  .chip .cnt{font-size:10.5px;color:var(--faint);font-family:var(--mono)}
+  .chip.on .cnt{color:rgba(255,255,255,.6)}
+  .chip.add{border-style:dashed;color:var(--faint)}
+  .mCard{position:relative}
+  .mCard .tag{position:absolute;left:7px;bottom:7px;padding:2px 7px;border-radius:999px;background:rgba(20,20,22,.55);
+    color:#fff;font-size:9.5px;font-weight:600;backdrop-filter:blur(6px)}
+  .mCard.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Nested collections — five ways to use them</h1>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main id="main"></main>
+
+<script>
+/* Gradient placeholder images */
+const PALS=[["#7c5cff","#c45bff"],["#ff8a5b","#ffd166"],["#36d1c4","#4f9dff"],["#23c483","#a4e786"],
+  ["#ff5e87","#ff9e5e"],["#5b8cff","#8b5bff"],["#f0c419","#f45d48"],["#2ec4b6","#a06cd5"]];
+const svg=(i,w=120,h=120)=>{const[a,b]=PALS[i%PALS.length];
+  return "data:image/svg+xml,"+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='${a}'/><stop offset='1' stop-color='${b}'/></linearGradient></defs><rect width='100%' height='100%' fill='url(#g)'/></svg>`)};
+const chev='<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+const toast=(el,msg)=>{const t=el.querySelector(".toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),1600)};
+const appShell=(inner)=>`<div class="app"><div class="appbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+  <span class="title">GatherOS — Collections</span></div><div class="stage">${inner}</div><div class="toast"></div></div>`;
+const covers=(o)=>[0,1,2].map(k=>`<img src="${svg(o+k)}" draggable="false">`).join("");
+const CHILDREN={Branding:[["Logos",12,0],["Type",8,5],["Packaging",5,3]],Interfaces:[["Mobile",9,2],["Dashboards",6,6]]};
+const PARENTS=[["Branding",25,0],["Interfaces",15,2],["3D",13,4],["Typefaces",3,6]];
+
+/* ── 1 · expand in place ── */
+function build1(root){
+  const tiles=PARENTS.map(([n,c,o],i)=>{
+    const kids=CHILDREN[n];
+    return `<div class="tile" data-p="${n}">
+      ${kids?`<span class="childPill" data-pill="${n}">${kids.length} ${chev}</span>`:""}
+      <div class="cover">${covers(o)}</div><div class="tname">${n}</div><div class="tmeta">${c} saves</div>
+    </div>${kids?`<div class="childRow" data-row="${n}">
+      ${kids.map(([kn,kc,ko])=>`<div class="childTile" data-open="${kn}"><img src="${svg(ko)}"><span><span class="cn">${kn}</span><br><span class="cm">${kc} saves</span></span></div>`).join("")}
+      <div class="childTile newChild" data-new="${n}">+ new child</div>
+    </div>`:""}`;
+  }).join("");
+  root.innerHTML=appShell(`<p class="sectionLabel">Your collections</p><div class="tileGrid">${tiles}</div>`);
+  root.querySelectorAll("[data-pill]").forEach(p=>p.addEventListener("click",(e)=>{
+    e.stopPropagation();
+    const n=p.dataset.pill,row=root.querySelector(`[data-row="${n}"]`),tile=root.querySelector(`[data-p="${n}"]`);
+    const open=row.classList.toggle("open");tile.classList.toggle("open",open);
+  }));
+  root.querySelectorAll("[data-open]").forEach(c=>c.addEventListener("click",()=>toast(root,`Opened ${c.dataset.open}`)));
+  root.querySelectorAll("[data-new]").forEach(c=>c.addEventListener("click",()=>toast(root,`New child in ${c.dataset.new}…`)));
+  root.querySelectorAll(".tile").forEach(t=>t.addEventListener("click",()=>toast(root,`Opened ${t.dataset.p}`)));
+}
+
+/* ── 2 · drill in ── */
+function build2(root){
+  const grid=PARENTS.map(([n,c,o])=>{const kids=CHILDREN[n];
+    return `<div class="tile" data-drill="${n}">${kids?`<span class="childPill">${kids.length} inside</span>`:""}
+      <div class="cover">${covers(o)}</div><div class="tname">${n}</div><div class="tmeta">${c} saves${kids?` · ${kids.length} collections`:""}</div></div>`}).join("");
+  const home=`<p class="sectionLabel">Your collections</p><div class="tileGrid">${grid}</div>`;
+  root.innerHTML=appShell(`<div data-view>${home}</div>`);
+  const view=root.querySelector("[data-view]");
+  const heights=[110,150,90,130,120,100,140,95];
+  const masonry=(o)=>`<div class="masonry">${Array.from({length:8},(_,i)=>
+    `<div class="mCard"><img src="${svg(o+i,160,heights[i%heights.length])}"></div>`).join("")}</div>`;
+  function wireHome(){view.querySelectorAll("[data-drill]").forEach(t=>t.addEventListener("click",()=>{
+    const n=t.dataset.drill,kids=CHILDREN[n];
+    view.innerHTML=`
+      <div class="crumbs"><a data-back>Collections</a> ${chev} <span class="here">${n}</span></div>
+      ${kids?`<p class="sectionLabel">Inside ${n}</p><div class="childRail">
+        ${kids.map(([kn,kc,ko])=>`<div class="railCard" data-kid="${kn}"><img src="${svg(ko,180,60)}"><div class="cn">${kn}</div><div class="cm">${kc} saves</div></div>`).join("")}
+        <div class="railCard newChild">+ new child</div></div>`:""}
+      <p class="sectionLabel">Saves</p>${masonry(2)}`;
+    view.querySelector("[data-back]").addEventListener("click",()=>{view.innerHTML=home;wireHome();});
+    view.querySelectorAll("[data-kid]").forEach(k=>k.addEventListener("click",()=>toast(root,`Opened ${n} / ${k.dataset.kid}`)));
+  }));}
+  wireHome();
+}
+
+/* ── 3 · peek shelf ── */
+function build3(root){
+  const grid=PARENTS.map(([n,c,o])=>{const kids=CHILDREN[n];
+    return `<div class="tile" data-shelf-tile="${n}" style="overflow:visible">${kids?`<span class="childPill" data-peek="${n}">${kids.length} ${chev}</span>`:""}
+      <div class="cover">${covers(o)}</div><div class="tname">${n}</div><div class="tmeta">${c} saves</div>
+      ${kids?`<div class="shelf" data-shelf="${n}">
+        ${kids.map(([kn,kc,ko])=>`<div class="shelfRow" data-file="${kn}"><img src="${svg(ko)}"><span class="cn">${kn}</span><span class="cm">${kc}</span></div>`).join("")}
+        <div class="shelfHint">Drop an image on a row to file it there</div></div>`:""}</div>`}).join("");
+  root.innerHTML=appShell(`<p class="sectionLabel">Your collections</p>
+    <div class="tileGrid" style="overflow:visible">${grid}</div>
+    <div class="dragTray"><span class="dragChip" draggable="true" id="dragMe"><img src="${svg(5)}">Drag me onto Branding</span>
+    <span>— hover a tile's badge to peek; drag over a parent and its shelf springs open.</span></div>`);
+  const closeAll=()=>root.querySelectorAll(".shelf").forEach(s=>s.classList.remove("open"));
+  root.querySelectorAll("[data-peek]").forEach(p=>{
+    p.addEventListener("click",(e)=>{e.stopPropagation();const s=root.querySelector(`[data-shelf="${p.dataset.peek}"]`);
+      const was=s.classList.contains("open");closeAll();if(!was)s.classList.add("open");});
+  });
+  root.querySelectorAll("[data-file]").forEach(r=>r.addEventListener("click",()=>toast(root,`Opened ${r.dataset.file}`)));
+  /* drag: spring-loaded shelf */
+  const chip=root.querySelector("#dragMe");
+  chip.addEventListener("dragstart",(e)=>{e.dataTransfer.setData("text/plain","img");e.dataTransfer.effectAllowed="copy";});
+  root.querySelectorAll("[data-shelf-tile]").forEach(t=>{
+    const shelf=t.querySelector(".shelf");
+    t.addEventListener("dragover",(e)=>{e.preventDefault();t.classList.add("dragOver");if(shelf)shelf.classList.add("open");});
+    t.addEventListener("dragleave",(e)=>{if(!t.contains(e.relatedTarget)){t.classList.remove("dragOver");if(shelf)shelf.classList.remove("open");}});
+    t.addEventListener("drop",(e)=>{e.preventDefault();t.classList.remove("dragOver");closeAll();
+      toast(root,`Filed to ${t.dataset.shelfTile}`);});
+  });
+  root.querySelectorAll(".shelfRow").forEach(r=>{
+    r.addEventListener("dragover",(e)=>{e.preventDefault();e.stopPropagation();r.classList.add("dropHot");});
+    r.addEventListener("dragleave",()=>r.classList.remove("dropHot"));
+    r.addEventListener("drop",(e)=>{e.preventDefault();e.stopPropagation();r.classList.remove("dropHot");closeAll();
+      toast(root,`Filed to ${r.dataset.file}`);});
+  });
+  document.addEventListener("click",()=>closeAll());
+}
+
+/* ── 4 · riffle spread ── */
+function build4(root){
+  const decks=PARENTS.map(([n,c,o])=>{const kids=CHILDREN[n];
+    return `<div class="deck" data-deck="${n}"><div class="stack">${covers(o)}</div>
+      <div class="dn">${n}</div><div class="dm">${c} saves${kids?` · ${kids.length} inside`:""}</div></div>`}).join("");
+  root.innerHTML=appShell(`<p class="sectionLabel">Collections — click a stack with children to riffle it open</p>
+    <div class="deckField" id="field">${decks}</div>
+    <div class="scrim" id="scrim"></div><div class="spread" id="spread"></div>
+    <div class="escHint" id="escHint"><kbd>esc</kbd> or click away to close</div>`);
+  const scrim=root.querySelector("#scrim"),spread=root.querySelector("#spread"),hint=root.querySelector("#escHint");
+  let openDeck=null;
+  function close(){scrim.classList.remove("on");spread.classList.remove("on");hint.classList.remove("on");
+    spread.innerHTML="";openDeck=null;}
+  function open(name,deckEl){
+    const kids=CHILDREN[name];if(!kids){toast(root,`Opened ${name}`);return;}
+    if(openDeck===name){close();return;}
+    close();openDeck=name;
+    const rect=deckEl.getBoundingClientRect(),host=root.querySelector(".app").getBoundingClientRect();
+    const cx=rect.left-host.left+rect.width/2,cy=rect.top-host.top+55;
+    const arc=[[-150,-30],[0,-95],[150,-30]];
+    spread.innerHTML=kids.map(([kn,kc,ko],i)=>{
+      const[dx,dy]=arc[i%arc.length];
+      return `<div class="spreadCard" data-kid="${kn}" style="left:${cx}px;top:${cy}px;margin-left:-48px;transform:translate(0,0) scale(.5)" data-dx="${dx}" data-dy="${dy}">
+        <img src="${svg(ko)}"><div class="cn">${kn}</div><div class="cm">${kc} saves</div></div>`}).join("");
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      scrim.classList.add("on");spread.classList.add("on");hint.classList.add("on");
+      spread.querySelectorAll(".spreadCard").forEach(c=>{c.style.transform=`translate(${c.dataset.dx}px,${c.dataset.dy}px) scale(1)`;});
+    }));
+    spread.querySelectorAll("[data-kid]").forEach(c=>c.addEventListener("click",(e)=>{e.stopPropagation();
+      toast(root,`Opened ${name} / ${c.dataset.kid}`);close();}));
+  }
+  root.querySelectorAll("[data-deck]").forEach(d=>d.addEventListener("click",(e)=>{e.stopPropagation();open(d.dataset.deck,d);}));
+  scrim.addEventListener("click",close);
+  document.addEventListener("keydown",(e)=>{if(e.key==="Escape")close();});
+}
+
+/* ── 5 · chips rail ── */
+function build5(root){
+  const kids=CHILDREN.Branding;
+  const items=Array.from({length:12},(_,i)=>({tag:i<3?"Logos":i<7?"Type":i<9?"Packaging":null,o:i}));
+  const heights=[120,150,95,135,110,100,145,90];
+  root.innerHTML=appShell(`
+    <div class="rail"><span class="backBtn">‹</span><span class="railTitle">Branding</span>
+      <span class="chip on" data-chip="all">All <span class="cnt">25</span></span>
+      ${kids.map(([kn,kc])=>`<span class="chip" data-chip="${kn}">${kn} <span class="cnt">${kc}</span></span>`).join("")}
+      <span class="chip add">+ child</span></div>
+    <div class="masonry">${items.map((it,i)=>`<div class="mCard" data-tag="${it.tag||""}">
+      <img src="${svg(it.o,160,heights[i%heights.length])}">${it.tag?`<span class="tag">${it.tag}</span>`:""}</div>`).join("")}</div>`);
+  root.querySelectorAll("[data-chip]").forEach(ch=>ch.addEventListener("click",()=>{
+    root.querySelectorAll("[data-chip]").forEach(c=>c.classList.remove("on"));ch.classList.add("on");
+    const pick=ch.dataset.chip;
+    root.querySelectorAll(".mCard").forEach(m=>{
+      m.classList.toggle("hidden",pick!=="all"&&m.dataset.tag!==pick);});
+  }));
+  root.querySelector(".chip.add").addEventListener("click",()=>toast(root,"New child in Branding…"));
+  root.querySelector(".backBtn").addEventListener("click",()=>toast(root,"Back to collections"));
+}
+
+/* ── shell ── */
+const DIRS=[
+  {name:"Expand in place",build:build1,
+   rat:"A child-count pill sits on the parent tile; clicking it accordions an indented row of child tiles open right inside the grid. Hierarchy without leaving the page.",
+   trade:"Zero navigation cost and great scannability, but open rows push siblings down — noisy if several parents are expanded at once. Best when few parents have children."},
+  {name:"Drill in",build:build2,
+   rat:"The top-level grid doesn't change at all. Children only appear once you're inside a parent — a compact rail above its saves, with a breadcrumb back. The iOS-albums model.",
+   trade:"Cleanest top level and infinitely calm, but children are invisible until you enter — worst discoverability of the five. One extra click to reach a child."},
+  {name:"Peek shelf",build:build3,
+   rat:"The tile badge opens a floating shelf of children — and the same shelf springs open when you DRAG an image over the parent, so you can file into a child in one gesture (macOS spring-loaded folders). Try the drag chip below the grid.",
+   trade:"Best filing story by far. Flyouts add chrome and need careful hover/timing tuning; on a crowded grid the shelf can occlude neighbors."},
+  {name:"Riffle the stack",build:build4,
+   rat:"The fanned stack you already have becomes the interaction: click a parent deck and its children riffle out into a spread around it. Spatial, playful, very GatherOS.",
+   trade:"The most delightful and most on-brand, but it's a modal moment — slower for rapid navigation, and it needs a fallback for keyboard users. Caps out around 4–5 children."},
+  {name:"Children as chips",build:build5,
+   rat:"No navigation at all: inside a parent, children are filter chips in the rail you already have. 'Logos' scopes the grid; 'All' shows everything including unfiled saves. Children behave like scoped views, not folders.",
+   trade:"Fastest to flip between children and keeps saves visible in context, but it reframes children as filters — filing still needs a separate gesture, and deep hierarchies would never fit a chip row (fine at one level)."},
+];
+const tabs=document.getElementById("tabs"),main=document.getElementById("main");
+DIRS.forEach((d,i)=>{
+  const t=document.createElement("button");t.className="tab"+(i===0?" active":"");t.dataset.i=i;
+  t.innerHTML=`<span class="n">${i+1}</span>${d.name}`;t.onclick=()=>show(i);tabs.appendChild(t);
+  const p=document.createElement("section");p.className="panel"+(i===0?" active":"");p.dataset.i=i;
+  p.innerHTML=`<div class="pmeta"><div class="pname"><span class="idx">${i+1}</span>${d.name}</div>
+    <div class="prat">${d.rat}</div><div class="trade"><b>Trade-off:</b> ${d.trade}</div></div><div data-root></div>`;
+  main.appendChild(p);d.build(p.querySelector("[data-root]"));
+});
+function show(i){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",+t.dataset.i===i));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",+p.dataset.i===i));
+}
+window.addEventListener("keydown",(e)=>{
+  if(e.target.tagName==="INPUT")return;
+  const n=parseInt(e.key,10);if(n>=1&&n<=DIRS.length)show(n-1);
+});
+</script>
+</body>
+</html>

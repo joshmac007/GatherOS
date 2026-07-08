@@ -117,9 +117,14 @@ let lastIntegrityResult = { ok: true, errors: [] };
 
 function checkIntegrity(database) {
   try {
-    const rows = database.prepare('PRAGMA integrity_check').all();
+    // quick_check, not integrity_check: the full check reads the ENTIRE
+    // database on every launch, which is seconds of cold-start on a
+    // multi-GB library. quick_check catches the same page-level
+    // corruption classes (it skips some index cross-validation) in a
+    // small fraction of the time.
+    const rows = database.prepare('PRAGMA quick_check').all();
     const errors = rows
-      .map((r) => r.integrity_check)
+      .map((r) => r.quick_check)
       .filter((s) => s && s !== 'ok');
     if (errors.length > 0) {
       console.error('[db] integrity_check found issues:', errors);
@@ -301,6 +306,126 @@ const MIGRATIONS = [
   (database) => {
     addColumnIfMissing(database, 'saves', 'preview_path', 'TEXT');
   },
+  // Per-save view counter — bumped when a save opens in the focused
+  // view. Powers the grid's "Most viewed" sort.
+  (database) => {
+    addColumnIfMissing(database, 'saves', 'view_count', 'INTEGER NOT NULL DEFAULT 0');
+  },
+  // Partial index covering the hot list query: nearly every fetch
+  // filters deleted_at IS NULL and orders by created_at DESC. The bare
+  // created_at index can't serve the filter; this serves both at once.
+  (database) => {
+    database.exec(
+      'CREATE INDEX IF NOT EXISTS idx_saves_live_created ON saves (created_at DESC) WHERE deleted_at IS NULL',
+    );
+  },
+  // FTS5 shadow table for text search. The LIKE pass scanned every row
+  // and json_extract-parsed tweet_meta per row PER KEYSTROKE — fine at
+  // 2k saves, the wall at 20k. Triggers keep it in sync with saves;
+  // tag-name matching stays in plain SQL (tags is a small table).
+  // Tokenizer note: FTS matches token prefixes ("mou" → mountain), not
+  // mid-word substrings — accepted trade for indexed lookups.
+  (database) => {
+    database.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS saves_fts USING fts5(
+        save_id UNINDEXED,
+        title,
+        ocr_text,
+        tweet_text,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      CREATE TRIGGER IF NOT EXISTS saves_fts_ai AFTER INSERT ON saves BEGIN
+        INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+        VALUES (
+          new.id,
+          COALESCE(new.title, ''),
+          COALESCE(new.ocr_text, ''),
+          COALESCE(json_extract(new.tweet_meta,'$.caption'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.authorName'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.authorHandle'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.thread'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.caption'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorHandle'),'')
+        );
+      END;
+      CREATE TRIGGER IF NOT EXISTS saves_fts_ad AFTER DELETE ON saves BEGIN
+        DELETE FROM saves_fts WHERE save_id = old.id;
+      END;
+      CREATE TRIGGER IF NOT EXISTS saves_fts_au
+      AFTER UPDATE OF title, ocr_text, tweet_meta ON saves BEGIN
+        DELETE FROM saves_fts WHERE save_id = new.id;
+        INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+        VALUES (
+          new.id,
+          COALESCE(new.title, ''),
+          COALESCE(new.ocr_text, ''),
+          COALESCE(json_extract(new.tweet_meta,'$.caption'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.authorName'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.authorHandle'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.thread'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.caption'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
+          COALESCE(json_extract(new.tweet_meta,'$.quoted.authorHandle'),'')
+        );
+      END;
+    `);
+    // Backfill existing rows once; triggers own it from here.
+    database.exec(`
+      INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+      SELECT id, COALESCE(title, ''), COALESCE(ocr_text, ''),
+        COALESCE(json_extract(saves.tweet_meta,'$.caption'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.authorName'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.authorHandle'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.thread'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.quoted.caption'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.quoted.authorName'),'') || ' ' ||
+          COALESCE(json_extract(saves.tweet_meta,'$.quoted.authorHandle'),'')
+      FROM saves;
+    `);
+  },
+  // FTS repair: the triggers/backfill above call json_extract on
+  // tweet_meta directly, and json_extract THROWS on any malformed-JSON
+  // value. A single legacy/corrupt tweet_meta row therefore aborted the
+  // one-time backfill, leaving every pre-existing save unindexed (and so
+  // unsearchable — a save's own title/caption wouldn't match). Guard
+  // every extraction with json_valid so a bad row yields '' instead of
+  // throwing, recreate the triggers, and rebuild the index so already-
+  // broken libraries recover on this launch.
+  (database) => {
+    const safe = (col) => `(CASE WHEN json_valid(${col}) THEN ${col} END)`;
+    const tweetText = (col) => `
+      COALESCE(json_extract(${safe(col)},'$.caption'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.authorName'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.authorHandle'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.thread'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.quoted.caption'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.quoted.authorName'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.quoted.authorHandle'),'')`;
+    database.exec(`
+      DROP TRIGGER IF EXISTS saves_fts_ai;
+      DROP TRIGGER IF EXISTS saves_fts_au;
+      CREATE TRIGGER saves_fts_ai AFTER INSERT ON saves BEGIN
+        INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+        VALUES (new.id, COALESCE(new.title,''), COALESCE(new.ocr_text,''), ${tweetText('new.tweet_meta')});
+      END;
+      CREATE TRIGGER saves_fts_au
+      AFTER UPDATE OF title, ocr_text, tweet_meta ON saves BEGIN
+        DELETE FROM saves_fts WHERE save_id = new.id;
+        INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+        VALUES (new.id, COALESCE(new.title,''), COALESCE(new.ocr_text,''), ${tweetText('new.tweet_meta')});
+      END;
+      DELETE FROM saves_fts;
+      INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+      SELECT id, COALESCE(title,''), COALESCE(ocr_text,''), ${tweetText('saves.tweet_meta')}
+      FROM saves;
+    `);
+  },
+  // Last-viewed timestamp, so the command palette can show a
+  // "Recently viewed" strip ordered by when each save was opened.
+  (database) => {
+    addColumnIfMissing(database, 'saves', 'viewed_at', 'INTEGER');
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -382,6 +507,8 @@ function closeDatabase() {
     db.close();
     db = null;
   }
+  // The cache belongs to the closed library's DB.
+  invalidateEmbeddingCache();
 }
 
 // Closes the current handle and reopens against whatever library
@@ -684,7 +811,33 @@ function findSimilarByPalette(anchorId, limit = 24) {
   return records;
 }
 
-function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorHex = null, view = 'all' } = {}) {
+// Columns shipped to the renderer for list views — everything EXCEPT
+// the search-only heavies the UI never reads: embedding (a ~6 KB
+// Float32 BLOB per save), ocr_text and ai_description. With SELECT *,
+// every grid reload serialized megabytes of them over IPC. palette_lab
+// stays: filterByColor reads it off these rows before they leave the
+// main process (it's a few dozen bytes of JSON). The semantic path has
+// its own getSaveEmbeddings() query and is unaffected.
+const SAVE_LIST_COLUMNS = [
+  'id', 'file_path', 'thumb_path', 'title', 'source_url', 'width',
+  'height', 'file_size', 'palette', 'palette_lab', 'created_at',
+  'ai_prompt', 'deleted_at', 'meta', 'notes', 'content_hash', 'kind',
+  'tweet_meta', 'source', 'preview_path', 'view_count',
+].join(', ');
+
+// Sanitize free text into an FTS5 phrase-prefix query: each whitespace
+// term becomes "term"* (quotes doubled), joined with implicit AND.
+// Returns null when nothing tokenizable remains.
+function ftsPrefixQuery(text) {
+  const terms = String(text)
+    .split(/\s+/)
+    .map((t) => t.replace(/"/g, '""').trim())
+    .filter(Boolean);
+  if (terms.length === 0) return null;
+  return terms.map((t) => `"${t}"*`).join(' ');
+}
+
+function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorHex = null, view = 'all', _noFts = false } = {}) {
   const db = getDatabase();
   const conditions = [];
   const params = [];
@@ -733,8 +886,15 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   }
 
   if (collectionId) {
-    conditions.push(`id IN (SELECT save_id FROM collection_items WHERE collection_id = ?)`);
-    params.push(collectionId);
+    // Roll-up semantics: a parent collection CONTAINS its children, so
+    // its view shows direct members plus every child's members (the IN
+    // over both dedups naturally). One level deep, like the schema.
+    conditions.push(`id IN (
+      SELECT save_id FROM collection_items
+      WHERE collection_id = ?
+         OR collection_id IN (SELECT id FROM collections WHERE parent_id = ?)
+    )`);
+    params.push(collectionId, collectionId);
   }
 
   // tag:<name> — INNER JOIN through save_tags. Multiple tag filters
@@ -751,11 +911,17 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   // bucket:<name> — resolve via collections.name (case-insensitive).
   // Multiple bucket filters intersect, same as tags.
   for (const name of parsed.bucketNames) {
+    // Same roll-up as the collectionId filter: collection:"Branding"
+    // matches saves filed in Branding OR any of its children.
     conditions.push(`id IN (
       SELECT save_id FROM collection_items
-      WHERE collection_id IN (SELECT id FROM collections WHERE LOWER(name) = ?)
+      WHERE collection_id IN (
+        SELECT id FROM collections WHERE LOWER(name) = ?
+        UNION
+        SELECT id FROM collections WHERE parent_id IN (SELECT id FROM collections WHERE LOWER(name) = ?)
+      )
     )`);
-    params.push(name);
+    params.push(name, name);
   }
 
   if (parsed.untagged) {
@@ -772,39 +938,101 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
   }
 
   if (text) {
-    // Substring match against title, tags, and OCR text. ai_description
-    // is intentionally excluded — descriptions enumerate every visible
-    // object so substring-matching them turns "sky" into a 50% hit
-    // rate. ocr_text is the actual text inside the image (UI labels,
-    // signage, body copy) so a literal match there is high-signal.
-    // Tweet saves also match on their text + author. tweet_meta is
-    // valid JSON or NULL, so json_extract returns NULL (no match)
-    // rather than throwing on the non-tweet rows. Covers the tweet
-    // itself, its thread follow-ups, and any quoted tweet.
-    conditions.push(`(title LIKE ? OR ocr_text LIKE ?
-      OR json_extract(tweet_meta, '$.caption') LIKE ?
-      OR json_extract(tweet_meta, '$.authorName') LIKE ?
-      OR json_extract(tweet_meta, '$.authorHandle') LIKE ?
-      OR json_extract(tweet_meta, '$.thread') LIKE ?
-      OR json_extract(tweet_meta, '$.quoted.caption') LIKE ?
-      OR json_extract(tweet_meta, '$.quoted.authorName') LIKE ?
-      OR json_extract(tweet_meta, '$.quoted.authorHandle') LIKE ?
-      OR id IN (
-        SELECT save_id FROM save_tags
-        JOIN tags ON save_tags.tag_id = tags.id
-        WHERE tags.name LIKE ?
-      ))`);
-    const like = `%${text}%`;
-    params.push(like, like, like, like, like, like, like, like, like, like);
+    // Indexed FTS5 match over title / ocr_text / tweet text (the old
+    // LIKE pass full-scanned the table and json_extract-parsed
+    // tweet_meta per row on every keystroke). ai_description stays
+    // intentionally excluded — descriptions enumerate every visible
+    // object, so matching them turns "sky" into a 50% hit rate.
+    // Tag-name matching keeps the substring LIKE (tags is tiny).
+    // ftsQuery is null for punctuation-only input; _noFts is the
+    // fallback escape hatch if an FTS query ever errors at run time.
+    const ftsQuery = _noFts ? null : ftsPrefixQuery(text);
+    if (ftsQuery) {
+      conditions.push(`(id IN (SELECT save_id FROM saves_fts WHERE saves_fts MATCH ?)
+        OR id IN (
+          SELECT save_id FROM save_tags
+          JOIN tags ON save_tags.tag_id = tags.id
+          WHERE tags.name LIKE ?
+        ))`);
+      params.push(ftsQuery, `%${text}%`);
+    } else {
+      conditions.push(`(title LIKE ? OR ocr_text LIKE ?
+        OR json_extract(tweet_meta, '$.caption') LIKE ?
+        OR json_extract(tweet_meta, '$.authorName') LIKE ?
+        OR json_extract(tweet_meta, '$.authorHandle') LIKE ?
+        OR json_extract(tweet_meta, '$.thread') LIKE ?
+        OR json_extract(tweet_meta, '$.quoted.caption') LIKE ?
+        OR json_extract(tweet_meta, '$.quoted.authorName') LIKE ?
+        OR json_extract(tweet_meta, '$.quoted.authorHandle') LIKE ?
+        OR id IN (
+          SELECT save_id FROM save_tags
+          JOIN tags ON save_tags.tag_id = tags.id
+          WHERE tags.name LIKE ?
+        ))`);
+      const like = `%${text}%`;
+      params.push(like, like, like, like, like, like, like, like, like, like);
+    }
   }
 
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
-  const order = sort === 'oldest' ? ' ORDER BY created_at ASC' : ' ORDER BY created_at DESC';
-  const rows = db.prepare(`SELECT * FROM saves${where}${order}`).all(...params);
+  const recency = sort === 'oldest' ? 'created_at ASC' : 'created_at DESC';
+  let order;
+  if (text) {
+    // Relevance first: a save the user literally NAMED like the query
+    // should outrank items that only mention it in a tweet caption or
+    // OCR text. Exact title → prefix → any-substring → everything else,
+    // then the chosen recency sort within each tier. The ORDER BY params
+    // are bound after the WHERE params (positional), so push them here.
+    order = ` ORDER BY
+      CASE
+        WHEN LOWER(COALESCE(title,'')) = LOWER(?) THEN 0
+        WHEN LOWER(COALESCE(title,'')) LIKE LOWER(?) || '%' THEN 1
+        WHEN LOWER(COALESCE(title,'')) LIKE '%' || LOWER(?) || '%' THEN 2
+        ELSE 3
+      END, ${recency}`;
+    params.push(text, text, text);
+  } else {
+    order = ` ORDER BY ${recency}`;
+  }
+  let rows;
+  try {
+    rows = db.prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves${where}${order}`).all(...params);
+  } catch (err) {
+    // Belt-and-braces: a malformed FTS MATCH shouldn't be possible with
+    // the sanitized phrase-prefix form, but if one slips through, run
+    // the legacy LIKE pass rather than failing the whole search.
+    if (!_noFts && text) {
+      console.warn('[db] FTS search failed, falling back to LIKE:', err.message);
+      return getAllSaves({ search, sort, collectionId, colorHex, view, _noFts: true });
+    }
+    throw err;
+  }
   // Color filter: requested hex matched against each save's stored
   // palette in LAB space. Done in JS because SQLite doesn't have the
   // math we need; tractable up to a few thousand saves.
   return effectiveColorHex ? filterByColor(rows, effectiveColorHex) : rows;
+}
+
+// Fire-and-forget view bump. Deliberately does NOT emit save:updated —
+// a view count changing shouldn't reflow the grid mid-session; the new
+// order applies on the next reload.
+function markSaveViewed(id) {
+  if (!id) return;
+  getDatabase()
+    .prepare('UPDATE saves SET view_count = COALESCE(view_count, 0) + 1, viewed_at = ? WHERE id = ?')
+    .run(Date.now(), id);
+}
+
+// Most-recently-opened saves, newest view first. Powers the command
+// palette's "Recently viewed" strip. Only rows actually opened (a
+// viewed_at timestamp) qualify.
+function getRecentlyViewed(limit = 12) {
+  const n = Math.max(1, Math.min(50, Number(limit) || 12));
+  return getDatabase()
+    .prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves
+       WHERE deleted_at IS NULL AND viewed_at IS NOT NULL
+       ORDER BY viewed_at DESC LIMIT ?`)
+    .all(n);
 }
 
 function getSave(id) {
@@ -902,6 +1130,7 @@ function restoreSave(id) {
 // Hard delete: removes the DB row and returns the file paths so the
 // caller (ipc.js) can unlink the underlying files.
 function permanentlyDeleteSave(id) {
+  invalidateEmbeddingCache();
   const db = getDatabase();
   const save = db.prepare('SELECT file_path, thumb_path, source_url FROM saves WHERE id = ?').get(id);
   if (!save) return { ok: false };
@@ -920,6 +1149,7 @@ function permanentlyDeleteSave(id) {
 }
 
 function emptyTrash() {
+  invalidateEmbeddingCache();
   const db = getDatabase();
   const rows = db
     .prepare('SELECT id, file_path, thumb_path FROM saves WHERE deleted_at IS NOT NULL')
@@ -984,6 +1214,7 @@ function purgeTrashBefore(cutoff) {
 // list of file paths so ipc.js can unlink them off disk afterward.
 // Caller is responsible for guarding behind a confirmation prompt.
 function wipeLibrary() {
+  invalidateEmbeddingCache();
   const db = getDatabase();
   const rows = db.prepare('SELECT file_path, thumb_path FROM saves').all();
   const tx = db.transaction(() => {
@@ -1013,7 +1244,11 @@ function updateSave({ id, title, sourceUrl, aiDescription, ocrText, aiPrompt, em
   if (aiDescription !== undefined) { fields.push('ai_description = ?'); params.push(aiDescription); }
   if (ocrText !== undefined) { fields.push('ocr_text = ?'); params.push(ocrText); }
   if (aiPrompt !== undefined) { fields.push('ai_prompt = ?'); params.push(aiPrompt); }
-  if (embedding !== undefined) { fields.push('embedding = ?'); params.push(embedding); }
+  if (embedding !== undefined) {
+    fields.push('embedding = ?');
+    params.push(embedding);
+    invalidateEmbeddingCache();
+  }
   if (notes !== undefined) { fields.push('notes = ?'); params.push(notes); }
   if (meta !== undefined) {
     // Accept either a JSON string or an object — better-sqlite3 only
@@ -1077,11 +1312,46 @@ function getSaveEmbeddings() {
     .all();
 }
 
+// ── In-memory embedding cache ──────────────────────────────────────
+// Semantic search and find-similar used to re-read and re-parse every
+// embedding BLOB from SQLite on every query. Cache them once as
+// pre-NORMALIZED Float32Arrays so cosine similarity reduces to a dot
+// product. ~6 KB per save → ~60 MB at 10k saves, main-process only.
+// Trashed saves stay in the cache on purpose: scored candidates are
+// intersected with live rows downstream, and keeping them means a
+// restore needs no invalidation.
+let embeddingCache = null;
+
+function invalidateEmbeddingCache() {
+  embeddingCache = null;
+}
+
+function normalizeEmbedding(buf) {
+  const src = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+  const out = new Float32Array(src.length);
+  let norm = 0;
+  for (let i = 0; i < src.length; i += 1) norm += src[i] * src[i];
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < src.length; i += 1) out[i] = src[i] / norm;
+  return out;
+}
+
+function getSaveEmbeddingsCached() {
+  if (embeddingCache) return embeddingCache;
+  embeddingCache = getSaveEmbeddings().map((r) => ({
+    id: r.id,
+    vec: normalizeEmbedding(r.embedding),
+  }));
+  return embeddingCache;
+}
+
 function getSavesByIds(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const placeholders = ids.map(() => '?').join(',');
+  // Same renderer-bound column list as getAllSaves — these rows flow
+  // straight to the grid as semantic-search candidates.
   return getDatabase()
-    .prepare(`SELECT * FROM saves WHERE id IN (${placeholders})`)
+    .prepare(`SELECT ${SAVE_LIST_COLUMNS} FROM saves WHERE id IN (${placeholders})`)
     .all(...ids);
 }
 
@@ -1108,12 +1378,15 @@ function getUnindexedCount() {
 // ── Collections ────────────────────────────────────────────────────────────
 
 function getAllCollections() {
+  // save_count rolls up: a parent counts its own members plus its
+  // children's, deduped (a save in parent AND child counts once).
   return getDatabase().prepare(`
     SELECT c.id, c.name, c.color, c.created_at, c.order_index, c.parent_id,
-           COUNT(ci.save_id) AS save_count
+           (SELECT COUNT(DISTINCT ci.save_id) FROM collection_items ci
+             WHERE ci.collection_id = c.id
+                OR ci.collection_id IN (SELECT id FROM collections k WHERE k.parent_id = c.id)
+           ) AS save_count
     FROM collections c
-    LEFT JOIN collection_items ci ON ci.collection_id = c.id
-    GROUP BY c.id
     ORDER BY c.order_index ASC, c.created_at ASC
   `).all();
 }
@@ -1128,46 +1401,56 @@ function getAllCollections() {
 // appear in a path).
 function getAllCollectionsWithThumbs() {
   const rows = getDatabase().prepare(`
-    WITH ranked AS (
+    WITH membership AS (
+      -- Roll-up membership: every item row counts for its own
+      -- collection AND for that collection's parent (one level).
+      -- GROUP BY dedups a save that sits in both parent and child;
+      -- MAX(added_at) keeps "latest drop on top" honest either way.
+      SELECT cid, save_id, MAX(added_at) AS added_at FROM (
+        SELECT ci.collection_id AS cid, ci.save_id, ci.added_at FROM collection_items ci
+        UNION ALL
+        SELECT k.parent_id AS cid, ci.save_id, ci.added_at
+        FROM collection_items ci
+        JOIN collections k ON k.id = ci.collection_id
+        WHERE k.parent_id IS NOT NULL
+      )
+      GROUP BY cid, save_id
+    ),
+    ranked AS (
       -- thumb_or_file mirrors the FeaturedBuckets fallback so legacy
       -- saves with empty thumb_path still feed the fanned tile. GIFs
       -- get the original file_path so they animate in the stack
       -- instead of showing the static first-frame JPG that sharp
       -- generates for the thumb_path.
-      SELECT ci.collection_id,
+      SELECT m.cid AS collection_id,
              CASE
                WHEN LOWER(s.file_path) LIKE '%.gif' THEN s.file_path
                ELSE COALESCE(NULLIF(s.thumb_path, ''), s.file_path)
              END AS thumb_or_file,
-             s.created_at,
-             -- Order the cover by when each save was ADDED to this
-             -- collection (ci.added_at), not when the save was created.
-             -- "Latest drop on top" means the most recently dropped-in
-             -- save leads — so dragging an older save into a full
-             -- collection still surfaces it, instead of the cover looking
-             -- frozen because four newer-by-creation saves outrank it.
              ROW_NUMBER() OVER (
-               PARTITION BY ci.collection_id
-               ORDER BY ci.added_at DESC, s.created_at DESC
+               PARTITION BY m.cid
+               ORDER BY m.added_at DESC, s.created_at DESC
              ) AS rn
-      FROM collection_items ci
-      JOIN saves s ON s.id = ci.save_id
+      FROM membership m
+      JOIN saves s ON s.id = m.save_id
       WHERE s.deleted_at IS NULL
     ),
     top_thumbs AS (
+      -- Concatenate in rn order (newest drop first) via the aggregate
+      -- ORDER BY — plain group_concat leaves the order undefined, so
+      -- the cover thumb (thumbs[0]) could otherwise be an older save
+      -- instead of the most recently added one.
       SELECT collection_id,
-             group_concat(thumb_or_file, x'01') AS thumbs
+             group_concat(thumb_or_file, x'01' ORDER BY rn) AS thumbs
       FROM ranked
       WHERE rn <= 4
       GROUP BY collection_id
     )
     SELECT c.id, c.name, c.color, c.created_at, c.order_index, c.parent_id,
-           COUNT(ci.save_id) AS save_count,
+           (SELECT COUNT(*) FROM membership m WHERE m.cid = c.id) AS save_count,
            tt.thumbs AS thumbs_blob
     FROM collections c
-    LEFT JOIN collection_items ci ON ci.collection_id = c.id
     LEFT JOIN top_thumbs tt ON tt.collection_id = c.id
-    GROUP BY c.id
     ORDER BY c.order_index ASC, c.created_at ASC
   `).all();
   return rows.map((row) => {
@@ -1673,6 +1956,10 @@ function deleteBoardItems({ boardId, itemIds } = {}) {
 
 module.exports = {
   initDatabase,
+  markSaveViewed,
+  getRecentlyViewed,
+  getSaveEmbeddingsCached,
+  invalidateEmbeddingCache,
   getDatabase,
   closeDatabase,
   reopenDatabase,

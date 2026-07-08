@@ -24,6 +24,7 @@ import ConfirmHost from './components/ConfirmHost.jsx';
 import Toolbar, { ModePill } from './components/Toolbar.jsx';
 import Grid from './components/Grid.jsx';
 import FeaturedBuckets from './components/FeaturedBuckets.jsx';
+import ChildCollectionsRail from './components/ChildCollectionsRail.jsx';
 import CollectionDropDock from './components/CollectionDropDock.jsx';
 import FolderGrid from './components/FolderGrid.jsx';
 import BoardGrid from './components/BoardGrid.jsx';
@@ -48,7 +49,6 @@ import ContextMenu from './components/ContextMenu.jsx';
 import FocusedSortMode from './components/FocusedSortMode.jsx';
 import VariantOptionsModal from './components/VariantOptionsModal.jsx';
 import {
-  Film,
   Download,
   X,
   Inbox,
@@ -64,6 +64,31 @@ import {
   Sparkles,
   FolderOpen,
   Focus,
+  Play,
+  FolderPlus,
+  SquarePlus,
+  Camera,
+  Shuffle,
+  Search,
+  Images,
+  Folder,
+  Eclipse,
+  Moon,
+  Keyboard,
+  Archive,
+  Save,
+  Settings,
+  Palette,
+  Library,
+  Bot,
+  Tag,
+  Crop,
+  RefreshCw,
+  Volume2,
+  RotateCw,
+  HardDrive,
+  Database,
+  Info,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -85,9 +110,10 @@ import UpgradeBanner from './components/UpgradeBanner.jsx';
 // click menus, selection bar, focused-view toolbar, etc.) keeps
 // working without a sweep.
 const ICON = { strokeWidth: 1.6, 'aria-hidden': true };
-// Filmstrip — the moodboard output is an animated GIF that cuts through
-// the selected frames, so a film reel reads truer than a static board.
-const BoardExportIcon = () => <Film {...ICON} />;
+// The moodboard output is a square animated GIF cutting through the
+// selection, so a simple play triangle reads as "press to see it move".
+// Solid fill in the current icon colour, no outline stroke.
+const BoardExportIcon = () => <Play fill="currentColor" stroke="none" aria-hidden="true" />;
 const DownloadIcon = () => <Download {...ICON} />;
 const ClearIcon = () => <X {...ICON} strokeWidth={2} />;
 const TrashIcon = () => <Trash2 {...ICON} />;
@@ -447,7 +473,7 @@ export default function App({ entitlement } = {}) {
       const raw = localStorage.getItem('moodmark.sortMode');
       // name_asc/name_desc were removed; any persisted value falls through
       // to 'recent'.
-      if (raw === 'oldest' || raw === 'recent') return raw;
+      if (raw === 'oldest' || raw === 'recent' || raw === 'most-viewed') return raw;
     } catch {}
     // First launch fallback — read the Settings → Defaults pref.
     const def = window.moodmark?.app?.defaults?.defaultSort;
@@ -609,6 +635,14 @@ export default function App({ entitlement } = {}) {
       setFocusedId(null);
     }
   }, [loading, saves, focusedId]);
+
+  // Count a view whenever a save opens in the focused view — powers the
+  // "Most viewed" sort. Fire-and-forget; deliberately no reload, so the
+  // grid doesn't reorder under the user mid-session.
+  useEffect(() => {
+    if (!focusedId) return;
+    try { window.moodmark?.saves?.markViewed?.(focusedId); } catch { /* best-effort */ }
+  }, [focusedId]);
 
   // Native menu commands. The menu lives in main and routes user
   // intent through this single channel so we don't have to thread
@@ -963,9 +997,13 @@ export default function App({ entitlement } = {}) {
   useEffect(() => { loadAllTags(); }, [loadAllTags]);
 
   // Most-used tags, surfaced as quick-jump chips on the Search tab's
-  // landing state. Sorted by usage so the densest tags lead.
+  // landing state. Sorted by usage so the densest tags lead. Filters:
+  //   - zero-count tags (nothing to jump to),
+  //   - 'bookmark' — the extension auto-tags every X save with it, so
+  //     it dwarfs real tags and only duplicates the Saved view.
   const suggestedTags = useMemo(
-    () => [...allTags]
+    () => allTags
+      .filter((t) => (t.save_count || 0) > 0 && t.name !== 'bookmark')
       .sort((a, b) => (b.save_count || 0) - (a.save_count || 0))
       .slice(0, 12),
     [allTags],
@@ -1246,19 +1284,107 @@ export default function App({ entitlement } = {}) {
       return items;
     }
     if (view.type === 'collection') {
-      items.push({
-        label: `Remove from collection${suffix}`,
+      // Membership-aware removal. The menu already knows which
+      // collections hold the save(s) (memberIds resolved at open), so
+      // when the membership within this view's subtree is known, offer
+      // precise "Remove from ⟨name⟩" entries — e.g. a save living in
+      // the Logos child, right-clicked from the Branding parent view,
+      // removes from Logos specifically. Falls back to a subtree-wide
+      // sweep for scattered multi-selections with no common membership.
+      const treeNodes = [
+        collections.find((c) => c.id === view.id),
+        ...collections.filter((c) => c.parent_id === view.id),
+      ].filter(Boolean);
+      const held = treeNodes.filter((n) => (memberIds || []).includes(n.id));
+      const pushRemoveOne = (node) => items.push({
+        label: `Remove from ${node.name}${suffix}`,
         icon: <MinusCircleIcon />,
         danger: true,
         onClick: async () => {
+          // Roll-up semantics: leaving a child collection doesn't
+          // leave the parent. Promote the save to a direct parent
+          // membership first (tracking which saves actually needed
+          // it, so undo demotes exactly those and nothing else).
+          const promoted = [];
           for (const id of targetIds) {
-            await window.moodmark.collections.removeSave({ collectionId: view.id, saveId: id });
+            if (node.parent_id) {
+              let mem = [];
+              try { mem = (await window.moodmark.collections.getForSave(id)) || []; } catch { /* empty */ }
+              if (!mem.some((m) => m.id === node.parent_id)) {
+                await window.moodmark.collections.addSave({ collectionId: node.parent_id, saveId: id });
+                promoted.push(id);
+              }
+            }
+            await window.moodmark.collections.removeSave({ collectionId: node.id, saveId: id });
           }
+          undoStack.push(`remove from ${node.name}`, async () => {
+            for (const id of targetIds) {
+              await window.moodmark.collections.addSave({ collectionId: node.id, saveId: id });
+            }
+            for (const id of promoted) {
+              await window.moodmark.collections.removeSave({ collectionId: node.parent_id, saveId: id });
+            }
+            loadCollections();
+            reload();
+          });
           if (isMulti) setSelected(new Set());
           reload();
           loadCollections();
         },
       });
+      if (held.length > 0) {
+        held.forEach(pushRemoveOne);
+      } else {
+        items.push({
+          label: `Remove from collection${suffix}`,
+          icon: <MinusCircleIcon />,
+          danger: true,
+          onClick: async () => {
+            // Capture what actually gets removed so undo restores
+            // exactly those memberships, nothing more. When a removed
+            // membership is a child whose parent sits OUTSIDE the
+            // removal scope (i.e. we're viewing the child itself),
+            // roll-up semantics keep the save in the parent — promote
+            // it to a direct parent membership.
+            const treeIds = treeNodes.map((n) => n.id);
+            const removed = [];
+            const promoted = [];
+            for (const id of targetIds) {
+              let mem = [];
+              try { mem = (await window.moodmark.collections.getForSave(id)) || []; } catch { /* empty */ }
+              const memIds = mem.map((m) => m.id);
+              for (const m of mem) {
+                if (!treeIds.includes(m.id)) continue;
+                removed.push({ cid: m.id, saveId: id });
+                if (m.parent_id && !treeIds.includes(m.parent_id) && !memIds.includes(m.parent_id)) {
+                  promoted.push({ cid: m.parent_id, saveId: id });
+                }
+              }
+            }
+            for (const p of promoted) {
+              await window.moodmark.collections.addSave({ collectionId: p.cid, saveId: p.saveId });
+            }
+            for (const r of removed) {
+              await window.moodmark.collections.removeSave({ collectionId: r.cid, saveId: r.saveId });
+            }
+            if (removed.length > 0) {
+              undoStack.push('remove from collection', async () => {
+                for (const r of removed) {
+                  await window.moodmark.collections.addSave({ collectionId: r.cid, saveId: r.saveId });
+                }
+                for (const p of promoted) {
+                  await window.moodmark.collections.removeSave({ collectionId: p.cid, saveId: p.saveId });
+                }
+                loadCollections();
+                reload();
+              });
+            }
+            if (isMulti) setSelected(new Set());
+            reload();
+            loadCollections();
+          },
+        });
+      }
     }
     // Hide buckets the saves are already in — for single, that's
     // every bucket the one save belongs to; for multi, only buckets
@@ -1267,28 +1393,29 @@ export default function App({ entitlement } = {}) {
     // dups it for the saves that weren't yet members). memberIds is
     // resolved at menu-open time accordingly.
     const memberSet = memberIds instanceof Set ? memberIds : new Set(memberIds || []);
-    const others = (view.type === 'collection'
-      ? collections.filter((c) => c.id !== view.id)
-      : collections
-    ).filter((c) => !memberSet.has(c.id));
-    if (others.length > 0) {
+    // A collection is an available add target unless the save(s)
+    // already live in it or it's the collection being viewed.
+    const available = (c) => !memberSet.has(c.id)
+      && !(view.type === 'collection' && view.id === c.id);
+    // Group children under their top-level parent, keeping the
+    // hierarchy intact even when the parent itself isn't available
+    // (it's the current view, or already holds the save): the parent
+    // row stays in the submenu as the hover anchor for its
+    // third-level children, instead of the children being promoted
+    // to a flat list where the cascade disappears. The anchor's own
+    // add action stays wired — the insert dedups, so a click on an
+    // already-member parent is harmless.
+    const childrenByParent = new Map();
+    const tops = [];
+    for (const c of collections) {
+      if (c.parent_id) continue;
+      const kids = collections.filter((k) => k.parent_id === c.id && available(k));
+      if (!available(c) && kids.length === 0) continue;
+      tops.push(c);
+      childrenByParent.set(c.id, kids);
+    }
+    if (tops.length > 0) {
       if (items.length > 0) items.push({ type: 'separator' });
-      // Group children under their top-level parent. Children whose
-      // parent is missing from `others` (e.g. the save is already in
-      // the parent, so the parent was filtered out) are promoted to
-      // top-level so they don't disappear from the picker.
-      const otherIds = new Set(others.map((c) => c.id));
-      const childrenByParent = new Map();
-      const tops = [];
-      for (const c of others) {
-        if (c.parent_id && otherIds.has(c.parent_id)) {
-          const arr = childrenByParent.get(c.parent_id) || [];
-          arr.push(c);
-          childrenByParent.set(c.parent_id, arr);
-        } else {
-          tops.push(c);
-        }
-      }
       const buildAddItem = (col) => ({
         label: col.name,
         icon: (
@@ -1965,6 +2092,38 @@ export default function App({ entitlement } = {}) {
     return created;
   }, [loadCollections, undoStack, handleViewChange]);
 
+  // Drill-in nesting (one level, enforced by the DB). Children are
+  // hidden from every top-level surface and only appear inside their
+  // parent, as a rail above its saves.
+  const childrenByParent = useMemo(() => {
+    const m = new Map();
+    for (const c of collections) {
+      if (!c.parent_id) continue;
+      if (!m.has(c.parent_id)) m.set(c.parent_id, []);
+      m.get(c.parent_id).push(c);
+    }
+    return m;
+  }, [collections]);
+  const topLevelCollections = useMemo(
+    () => collections.filter((c) => !c.parent_id),
+    [collections],
+  );
+
+  const handleCreateChildCollection = useCallback(async (parentId) => {
+    if (!parentId) return null;
+    const created = await window.moodmark.collections.create({ name: 'New collection', parentId });
+    await loadCollections();
+    if (!created?.id) return created;
+    undoStack.push('new collection', async () => {
+      await window.moodmark.collections.delete(created.id);
+      loadCollections();
+    });
+    setAppMode((m) => (m === 'boards' ? 'folders' : m));
+    handleViewChange({ type: 'collection', id: created.id });
+    setRenameViewSignal((s) => s + 1);
+    return created;
+  }, [loadCollections, undoStack, handleViewChange]);
+
   // Tray-menu "Recent saves" entry click. Main fires 'focus:save'
   // with the id; mirror the duplicate-toast flow — switch to All so
   // the record is in displaySaves, then open it in the focused view.
@@ -2197,6 +2356,11 @@ export default function App({ entitlement } = {}) {
     const sorted = saves.slice();
     if (sortMode === 'oldest') {
       sorted.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+    } else if (sortMode === 'most-viewed') {
+      // view_count bumps as saves open in the focused view; ties fall
+      // back to recency so unviewed libraries still have a stable order.
+      sorted.sort((a, b) => (b.view_count || 0) - (a.view_count || 0)
+        || (b.created_at || 0) - (a.created_at || 0));
     }
     return sorted;
   }, [saves, shuffleSeed, shuffleAt, sortMode]);
@@ -2714,36 +2878,46 @@ export default function App({ entitlement } = {}) {
   const bulkPickerItems = useMemo(() => {
     if (!bulkPicker) return [];
     const ids = [...selected];
-    // Hide folders every selected save is already a member of —
-    // adding again would be a no-op for all of them. The picker
-    // never opens with an empty offer set; openBulkPicker shows a
-    // toast instead, so we don't render a "Already in every folder"
-    // header here anymore.
-    const offer = collections.filter((c) => !bulkAlreadyIn.has(c.id));
+    // A folder is offered unless every selected save is already in it
+    // (adding again would be a no-op for all of them).
+    const available = (c) => !bulkAlreadyIn.has(c.id);
+    const buildAdd = (c) => ({
+      label: c.name,
+      icon: (
+        <span style={{ color: 'var(--icon-blue)', display: 'inline-flex' }}>
+          <CollectionIcon />
+        </span>
+      ),
+      onClick: async () => {
+        flyToCollection({
+          collectionId: c.id,
+          items: ids.map((id) => {
+            const s = saves.find((x) => x.id === id);
+            return { saveId: id, imageSrc: s ? fileUrl(s.file_path) : null };
+          }),
+        });
+        for (const saveId of ids) {
+          await window.moodmark.collections.addSave({ collectionId: c.id, saveId });
+        }
+        loadCollections();
+        if (view.type === 'unsorted') reload();
+      },
+    });
+    // Nest children under their parent and reveal on hover, matching
+    // the single-card menu. A parent stays as the hover anchor even
+    // when it's already a member itself (as long as it has offered
+    // children); a fully-covered childless tree drops out.
+    const tops = [];
+    for (const c of collections) {
+      if (c.parent_id) continue;
+      const kids = collections.filter((k) => k.parent_id === c.id && available(k));
+      if (!available(c) && kids.length === 0) continue;
+      const base = buildAdd(c);
+      tops.push(kids.length > 0 ? { ...base, children: kids.map(buildAdd) } : base);
+    }
     return [
       { type: 'header', label: `Add ${ids.length} to collection` },
-      ...offer.map((c) => ({
-        label: c.name,
-        icon: (
-          <span style={{ color: 'var(--icon-blue)', display: 'inline-flex' }}>
-            <CollectionIcon />
-          </span>
-        ),
-        onClick: async () => {
-          flyToCollection({
-            collectionId: c.id,
-            items: ids.map((id) => {
-              const s = saves.find((x) => x.id === id);
-              return { saveId: id, imageSrc: s ? fileUrl(s.file_path) : null };
-            }),
-          });
-          for (const saveId of ids) {
-            await window.moodmark.collections.addSave({ collectionId: c.id, saveId });
-          }
-          loadCollections();
-          if (view.type === 'unsorted') reload();
-        },
-      })),
+      ...tops,
     ];
   }, [bulkPicker, bulkAlreadyIn, selected, collections, saves, loadCollections, view, reload]);
 
@@ -3340,45 +3514,56 @@ export default function App({ entitlement } = {}) {
   // from the real behavior. Order matters: the first nine double as the
   // palette's empty-state menu.
   const paletteCommands = useMemo(() => {
-    const settingsPage = (drawer, label, keywords) => ({
+    const settingsPage = (drawer, label, keywords, Icon) => ({
       id: `settings-${drawer}`,
       label,
       keywords: `settings ${keywords || ''}`,
+      Icon,
       run: () => {
         setSettingsDrawerHint({ drawer, key: Date.now() });
         setSettingsOpen(true);
       },
     });
     return [
-      { id: 'new-collection', label: 'New collection', hint: '⌘N', keywords: 'create folder bucket', run: () => handleCreateAndOpenCollection() },
-      { id: 'new-space', label: 'New space', hint: '⌘⇧N', keywords: 'create board canvas moodboard', run: () => { handleCreateBoard?.().then((b) => { if (b?.id) setView({ type: 'board', id: b.id }); }); } },
-      { id: 'capture-screenshot', label: 'Capture screenshot', hint: '⌘⇧S', keywords: 'screen shot grab region', run: () => window.moodmark.capture?.screenshot?.() },
-      { id: 'rediscover', label: 'Rediscover', hint: '⌘⇧R', keywords: 'review shuffle triage deck', run: () => setRediscoverOpen(true) },
-      { id: 'go-search', label: 'Go to search', keywords: 'find query', run: () => handleModeChange('search') },
-      { id: 'go-library', label: 'Go to library', hint: '⌘1', keywords: 'home all saves grid', run: () => handleModeChange('library') },
-      { id: 'go-collections', label: 'Go to collections', hint: '⌘2', keywords: 'folders buckets', run: () => handleModeChange('folders') },
-      { id: 'go-spaces', label: 'Go to spaces', hint: '⌘3', keywords: 'boards canvas', run: () => handleModeChange('boards') },
-      { id: 'toggle-theme', label: 'Toggle dark mode', keywords: 'theme light appearance', run: () => window.dispatchEvent(new CustomEvent('moodmark:toggle-theme')) },
-      { id: 'open-unsorted', label: 'Open unsorted', keywords: 'inbox triage', run: () => { handleModeChange('library'); handleViewChange({ type: 'unsorted' }); } },
-      { id: 'open-trash', label: 'Open trash', keywords: 'deleted bin', run: () => { handleModeChange('library'); handleViewChange({ type: 'trash' }); } },
-      { id: 'shortcuts', label: 'Keyboard shortcuts', hint: '⌘/', keywords: 'keys help hotkeys', run: () => setShortcutsOpen(true) },
-      { id: 'whats-new', label: "What's new", keywords: 'release notes changelog version', run: () => handleOpenReleaseNotes() },
-      { id: 'export-library', label: 'Export library as zip', keywords: 'backup download archive', run: () => window.moodmark.library?.exportZip?.() },
-      { id: 'snapshot-library', label: 'Back up library now', keywords: 'snapshot data safety', run: () => window.moodmark.backup?.snapshot?.() },
-      { id: 'settings', label: 'Open settings', hint: '⌘,', keywords: 'preferences options', run: () => setSettingsOpen(true) },
-      settingsPage('appearance', 'Settings · Appearance', 'theme dark light'),
-      settingsPage('libraries', 'Settings · Libraries', 'switch create library'),
-      settingsPage('ai', 'Settings · AI usage', 'openai key semantic tokens'),
-      settingsPage('tags', 'Settings · Tags', 'manage rename merge'),
-      settingsPage('capture', 'Settings · Capture', 'hotkey shortcut screenshot drop folder'),
-      settingsPage('syncing', 'Settings · Syncing', 'x instagram bookmarks extension'),
-      settingsPage('sound', 'Settings · Sound', 'effects volume'),
-      settingsPage('updates', 'Settings · Updates', 'version beta check'),
-      settingsPage('storage', 'Settings · Storage', 'space optimize reclaim size'),
-      settingsPage('data', 'Settings · Data', 'backup snapshot restore wipe export'),
-      settingsPage('about', 'Settings · About', 'acknowledgments version privacy'),
+      { id: 'new-collection', label: 'New collection', hint: '⌘N', keywords: 'create folder bucket', Icon: () => <FolderPlus {...ICON} />, run: () => handleCreateAndOpenCollection() },
+      { id: 'new-space', label: 'New space', hint: '⌘⇧N', keywords: 'create board canvas moodboard', Icon: () => <SquarePlus {...ICON} />, run: () => { handleCreateBoard?.().then((b) => { if (b?.id) setView({ type: 'board', id: b.id }); }); } },
+      { id: 'capture-screenshot', label: 'Capture screenshot', hint: '⌘⇧S', keywords: 'screen shot grab region', Icon: () => <Camera {...ICON} />, run: () => window.moodmark.capture?.screenshot?.() },
+      { id: 'rediscover', label: 'Rediscover', hint: '⌘⇧R', keywords: 'review shuffle triage deck', Icon: () => <Shuffle {...ICON} />, run: () => setRediscoverOpen(true) },
+      { id: 'go-search', label: 'Go to search', keywords: 'find query', Icon: () => <Search {...ICON} />, run: () => handleModeChange('search') },
+      { id: 'go-library', label: 'Go to library', hint: '⌘1', keywords: 'home all saves grid', Icon: () => <Images {...ICON} />, run: () => handleModeChange('library') },
+      { id: 'go-collections', label: 'Go to collections', hint: '⌘2', keywords: 'folders buckets', Icon: () => <Folder {...ICON} />, run: () => handleModeChange('folders') },
+      { id: 'go-spaces', label: 'Go to spaces', hint: '⌘3', keywords: 'boards canvas', Icon: () => <Eclipse {...ICON} />, run: () => handleModeChange('boards') },
+      { id: 'toggle-theme', label: 'Toggle dark mode', keywords: 'theme light appearance', Icon: () => <Moon {...ICON} />, run: () => window.dispatchEvent(new CustomEvent('moodmark:toggle-theme')) },
+      { id: 'open-unsorted', label: 'Open unsorted', keywords: 'inbox triage', Icon: () => <Inbox {...ICON} />, run: () => { handleModeChange('library'); handleViewChange({ type: 'unsorted' }); } },
+      { id: 'open-trash', label: 'Open trash', keywords: 'deleted bin', Icon: () => <Trash2 {...ICON} />, run: () => { handleModeChange('library'); handleViewChange({ type: 'trash' }); } },
+      { id: 'shortcuts', label: 'Keyboard shortcuts', hint: '⌘/', keywords: 'keys help hotkeys', Icon: () => <Keyboard {...ICON} />, run: () => setShortcutsOpen(true) },
+      { id: 'whats-new', label: "What's new", keywords: 'release notes changelog version', Icon: () => <Sparkles {...ICON} />, run: () => handleOpenReleaseNotes() },
+      { id: 'export-library', label: 'Export library as zip', keywords: 'backup download archive', Icon: () => <Archive {...ICON} />, run: () => window.moodmark.library?.exportZip?.() },
+      { id: 'snapshot-library', label: 'Back up library now', keywords: 'snapshot data safety', Icon: () => <Save {...ICON} />, run: () => window.moodmark.backup?.snapshot?.() },
+      { id: 'settings', label: 'Open settings', hint: '⌘,', keywords: 'preferences options', Icon: () => <Settings {...ICON} />, run: () => setSettingsOpen(true) },
+      settingsPage('appearance', 'Settings · Appearance', 'theme dark light', () => <Palette {...ICON} />),
+      settingsPage('libraries', 'Settings · Libraries', 'switch create library', () => <Library {...ICON} />),
+      settingsPage('ai', 'Settings · AI usage', 'openai key semantic tokens', () => <Bot {...ICON} />),
+      settingsPage('tags', 'Settings · Tags', 'manage rename merge', () => <Tag {...ICON} />),
+      settingsPage('capture', 'Settings · Capture', 'hotkey shortcut screenshot drop folder', () => <Crop {...ICON} />),
+      settingsPage('syncing', 'Settings · Syncing', 'x instagram bookmarks extension', () => <RefreshCw {...ICON} />),
+      settingsPage('sound', 'Settings · Sound', 'effects volume', () => <Volume2 {...ICON} />),
+      settingsPage('updates', 'Settings · Updates', 'version beta check', () => <RotateCw {...ICON} />),
+      settingsPage('storage', 'Settings · Storage', 'space optimize reclaim size', () => <HardDrive {...ICON} />),
+      settingsPage('data', 'Settings · Data', 'backup snapshot restore wipe export', () => <Database {...ICON} />),
+      settingsPage('about', 'Settings · About', 'acknowledgments version privacy', () => <Info {...ICON} />),
     ];
   }, [handleCreateAndOpenCollection, handleCreateBoard, handleModeChange, handleViewChange, handleOpenReleaseNotes, setView]);
+
+  // The multi-select bar belongs to surfaces that show selectable image
+  // cards. On the Collections and Spaces browse tabs there's nothing to
+  // act on, so hide it there — but the selection itself is kept, so it
+  // reappears when the user returns to the library (or a collection's
+  // own grid).
+  const selectionSurfaceActive =
+    appMode === 'library'
+    || appMode === 'search'
+    || (appMode === 'folders' && view.type === 'collection');
 
   return (
    <EntitlementProvider value={ent}>
@@ -3509,7 +3694,7 @@ export default function App({ entitlement } = {}) {
                   suggestedTags={suggestedTags}
                   allTags={allTags}
                   onOpenCommandPalette={() => setQuickSwitcherOpen(true)}
-                  collections={collections}
+                  collections={topLevelCollections}
                   onOpenCollection={handleOpenCollectionFromSearch}
                   searchInputRef={searchInputRef}
                   scrollRef={setGridScrollNode}
@@ -3541,6 +3726,7 @@ export default function App({ entitlement } = {}) {
                 <FolderGrid
                   folders={collections}
                   parentId={null}
+                  onCreateChildFolder={handleCreateChildCollection}
                   onPickFolder={(id) => handleViewChange({ type: 'collection', id })}
                   onCreateFolder={handleCreateAndOpenCollection}
                   onRenameFolder={handleRenameCollection}
@@ -3608,8 +3794,30 @@ export default function App({ entitlement } = {}) {
                     viewTitle={view.type === 'collection'
                       ? collections.find((c) => c.id === view.id)?.name ?? null
                       : null}
+                    parentCrumb={(() => {
+                      if (view.type !== 'collection') return null;
+                      const cur = collections.find((c) => c.id === view.id);
+                      const parent = cur?.parent_id
+                        ? collections.find((c) => c.id === cur.parent_id)
+                        : null;
+                      return parent
+                        ? {
+                          name: parent.name,
+                          onClick: () => handleViewChange({ type: 'collection', id: parent.id }),
+                        }
+                        : null;
+                    })()}
                     onBack={view.type === 'collection'
-                      ? () => handleViewChange({ type: 'all' })
+                      ? () => {
+                        // A child collection backs out to its parent;
+                        // top-level collections back out to All.
+                        const cur = collections.find((c) => c.id === view.id);
+                        if (cur?.parent_id) {
+                          handleViewChange({ type: 'collection', id: cur.parent_id });
+                        } else {
+                          handleViewChange({ type: 'all' });
+                        }
+                      }
                       : null}
                     onRenameViewTitle={view.type === 'collection'
                       ? (name) => handleRenameCollection({ id: view.id, name })
@@ -3619,7 +3827,7 @@ export default function App({ entitlement } = {}) {
                 )}
                 {view.type === 'all' && collections.length > 0 && !search && (
                   <FeaturedBuckets
-                    collections={collections}
+                    collections={topLevelCollections}
                     onCreateCollection={handleCreateAndOpenCollection}
                     onPickBucket={(id) => handleViewChange({ type: 'collection', id })}
                     onRenameCollection={handleRenameCollection}
@@ -3630,6 +3838,23 @@ export default function App({ entitlement } = {}) {
                     onExternalDropToBucket={handleExternalDropToBucket}
                     onSetAppDragging={setDragging}
                     onOpenCollectionAsSpace={handleOpenCollectionAsSpace}
+                  />
+                )}
+                {view.type === 'collection' && (
+                  <ChildCollectionsRail
+                    childCollections={childrenByParent.get(view.id) || []}
+                    onPick={(id) => handleViewChange({ type: 'collection', id })}
+                    onRenameCollection={handleRenameCollection}
+                    onDeleteCollection={handleDeleteCollection}
+                    // One level of nesting only — no create card inside
+                    // a child (the rail hides itself when both are empty).
+                    onCreateChild={collections.find((c) => c.id === view.id)?.parent_id
+                      ? null
+                      : () => handleCreateChildCollection(view.id)}
+                    onAddSavesToBucket={handleAddSavesToBucket}
+                    onDropFilesToBucket={handleDropFilesToBucket}
+                    onExternalDropToBucket={handleExternalDropToBucket}
+                    onSetAppDragging={setDragging}
                   />
                 )}
                 <Grid
@@ -3654,6 +3879,13 @@ export default function App({ entitlement } = {}) {
                   tweetTypeFilter={tweetTypeFilter}
                   sourceFilter={sourceFilter}
                   highlightId={highlightId}
+                  onAddImages={handleUploadClick}
+                  onClearColorFilter={() => setColorFilter(null)}
+                  onClearSearch={() => setSearch('')}
+                  onShowAllBookmarks={() => {
+                    setTweetTypeFilter('all');
+                    setSourceFilter('all');
+                  }}
                 />
               </div>
               </div>
@@ -3783,7 +4015,7 @@ export default function App({ entitlement } = {}) {
         </div>
       )}
 
-      {!focused && selected.size > 0 && view.type !== 'trash' && (
+      {!focused && selected.size > 0 && view.type !== 'trash' && selectionSurfaceActive && (
         <div className="selection-bar">
           <div className="selection-status">
             <span className="selection-count">
@@ -3998,7 +4230,14 @@ export default function App({ entitlement } = {}) {
           setView({ type: 'board', id });
         }}
         onPickSave={(id) => {
-          setFocusedId(id);
+          // Mirror the tray's 'focus:save' flow: the focused view only
+          // resolves ids present in displaySaves (the current view's
+          // list), so a bare setFocusedId from the search tab, a
+          // collection, or a filtered view silently no-ops. Land in
+          // library All first, then focus once the view swap has fired.
+          if (appMode !== 'library') handleModeChange('library');
+          handleViewChange({ type: 'all' });
+          setTimeout(() => setFocusedId(id), 80);
         }}
       />
 
@@ -4090,6 +4329,7 @@ export default function App({ entitlement } = {}) {
       <ShortcutsModal
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
+        captureShortcut={prefs?.captureShortcut}
       />
 
       <AIUnlockedModal

@@ -5,7 +5,7 @@ const { spawn } = require('node:child_process');
 const {
   getAllSaves, getSave, deleteSave, restoreSave, permanentlyDeleteSave,
   emptyTrash, wipeLibrary, updateSave, insertSave,
-  getSaveEmbeddings, getSavesByIds, getUnindexedSaves, getUnindexedCount, getSmartViewCounts,
+  getSaveEmbeddingsCached, getSavesByIds, getUnindexedSaves, getUnindexedCount, getSmartViewCounts,
   filterByColor, findSimilarByPalette,
   getAllCollections, getAllCollectionsWithThumbs, getCollectionsForSave, getCollectionsContainingAll, createCollection, renameCollection, setCollectionParent,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
@@ -62,24 +62,13 @@ function blockNewSave(source) {
 
 let aiVariantBusy = false;
 
-// Cosine similarity over Float32 BLOBs from SQLite. ~1 ms per save at
-// 1536 dims; fine up to a few thousand records before we'd want a
-// proper vector index.
-function cosineSim(a, b, len) {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < len; i += 1) {
-    const x = a[i];
-    const y = b[i];
-    dot += x * y;
-    na += x * x;
-    nb += y * y;
-  }
-  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
-}
-
-function bufferToFloat32(buf) {
-  // SQLite returns a Buffer; reinterpret as Float32Array without copying.
-  return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+// Dot product over pre-normalized vectors (the embedding cache stores
+// unit vectors) — equivalent to cosine at half the arithmetic.
+function dotSim(a, b) {
+  const len = Math.min(a.length, b.length);
+  let dot = 0;
+  for (let i = 0; i < len; i += 1) dot += a[i] * b[i];
+  return dot;
 }
 
 // LRU-ish cache for embedding the current search query. Each
@@ -180,8 +169,13 @@ function registerIpcHandlers() {
       // narrow queries; threshold + relative cap below is the
       // precision filter.
       const queryVec = await embedQueryCached(queryText);
+      // Normalize the query once; cached doc vectors are pre-normalized,
+      // so scoring is a plain dot product.
       const queryF32 = new Float32Array(queryVec);
-      const dim = queryF32.length;
+      let qn = 0;
+      for (let i = 0; i < queryF32.length; i += 1) qn += queryF32[i] * queryF32[i];
+      qn = Math.sqrt(qn) || 1;
+      for (let i = 0; i < queryF32.length; i += 1) queryF32[i] /= qn;
 
       // Cosine threshold tuned for text-embedding-3-small over the
       // analyzeImage description format. Below ~0.26 reads as noise;
@@ -195,12 +189,8 @@ function registerIpcHandlers() {
       // close cluster around the top.
       const RELATIVE_CUTOFF = 0.72;
 
-      const rows = getSaveEmbeddings();
-      const scored = rows
-        .map((row) => {
-          const v = bufferToFloat32(row.embedding);
-          return { id: row.id, score: cosineSim(queryF32, v, dim) };
-        })
+      const scored = getSaveEmbeddingsCached()
+        .map(({ id, vec }) => ({ id, score: dotSim(queryF32, vec) }))
         .filter((r) => r.score >= MIN_SCORE)
         .sort((a, b) => b.score - a.score);
 
@@ -277,6 +267,18 @@ function registerIpcHandlers() {
     const r = restoreSave(id);
     refreshTray();
     return r;
+  });
+
+  // View bump for the "Most viewed" sort. Fire-and-forget; no event
+  // emitted (see db.markSaveViewed).
+  ipcMain.handle('saves:mark-viewed', (_e, id) => {
+    const { markSaveViewed } = require('./db');
+    markSaveViewed(id);
+    return { ok: true };
+  });
+  ipcMain.handle('saves:recently-viewed', (_e, limit) => {
+    const { getRecentlyViewed } = require('./db');
+    return getRecentlyViewed(limit);
   });
 
   // Hard delete from Trash: also removes the underlying image + thumb.
@@ -1027,17 +1029,12 @@ function registerIpcHandlers() {
     if (!saveId) return [];
     const cap = Math.max(1, Math.min(Number(limit) || 24, 60));
 
-    const rows = getSaveEmbeddings();
+    const rows = getSaveEmbeddingsCached();
     const anchor = rows.find((r) => r.id === saveId);
     if (anchor && rows.length >= 2) {
-      const a = bufferToFloat32(anchor.embedding);
-      const dim = a.length;
       const scored = rows
         .filter((r) => r.id !== saveId)
-        .map((row) => ({
-          id: row.id,
-          score: cosineSim(a, bufferToFloat32(row.embedding), dim),
-        }))
+        .map(({ id, vec }) => ({ id, score: dotSim(anchor.vec, vec) }))
         .filter((r) => r.score >= 0.30)
         .sort((a, b) => b.score - a.score)
         .slice(0, cap);
@@ -1057,17 +1054,12 @@ function registerIpcHandlers() {
 
   ipcMain.handle('ai:similar-saves', (_e, saveId, limit = 5) => {
     if (!saveId) return [];
-    const rows = getSaveEmbeddings();
+    const rows = getSaveEmbeddingsCached();
     const anchor = rows.find((r) => r.id === saveId);
     if (!anchor) return [];
-    const a = bufferToFloat32(anchor.embedding);
-    const dim = a.length;
     const scored = rows
       .filter((r) => r.id !== saveId)
-      .map((row) => ({
-        id: row.id,
-        score: cosineSim(a, bufferToFloat32(row.embedding), dim),
-      }))
+      .map(({ id, vec }) => ({ id, score: dotSim(anchor.vec, vec) }))
       // 0.30 cutoff — below that the suggestions read as random,
       // and the calling UI is happier rendering nothing than a row
       // of unrelated thumbs.

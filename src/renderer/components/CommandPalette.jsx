@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
+import { Eclipse } from 'lucide-react';
 import styles from './CommandPalette.module.css';
 import { CollectionIcon } from './Sidebar.jsx';
 import { resolveAsset } from '../lib/asset.js';
@@ -34,22 +35,50 @@ function CommandIcon() {
   );
 }
 
-// Infinite-canvas glyph for spaces/boards.
+// Spaces glyph — the same Eclipse mark the Spaces tab uses, so the
+// two surfaces read as the same thing.
 function SpaceIcon() {
+  return <Eclipse size={14} strokeWidth={1.6} aria-hidden="true" />;
+}
+
+// Source marks — the same X and Instagram glyphs the Saved-view toggle
+// uses, so a captured post reads as a post rather than a plain save.
+function XMark({ size = 11 }) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="2" y="2" width="12" height="12" rx="2" />
-      <rect x="5" y="5" width="3.5" height="3.5" rx="0.8" />
-      <path d="M10.5 10.5h.01" />
+    <svg viewBox="0 0 1200 1227" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M714 519L1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z" />
+    </svg>
+  );
+}
+function InstagramMark({ size = 12 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="20" height="20" x="2" y="2" rx="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
     </svg>
   );
 }
 
+// A captured social post carries tweet_meta (or an x/instagram source).
+// Returns the source-aware kind label + glyph, or a plain "Save".
+function saveKind(s) {
+  let hasMeta = false;
+  try { hasMeta = !!(s.tweet_meta && JSON.parse(s.tweet_meta)); } catch { /* malformed → treat as none */ }
+  const url = s.source_url || '';
+  const isSocial = hasMeta
+    || s.source === 'instagram'
+    || /(?:x\.com|twitter\.com|instagram\.com)/i.test(url);
+  if (!isSocial) return { label: 'Save', glyph: null };
+  if (s.source === 'instagram' || /instagram\.com/i.test(url)) {
+    return { label: 'Instagram', glyph: <InstagramMark /> };
+  }
+  return { label: 'Post', glyph: <XMark /> };
+}
+
 const SEARCH_DEBOUNCE = 80;
 const PER_GROUP = 6;
-// The empty state doubles as a command menu; cap so the panel opens
-// compact and typing narrows from there.
-const EMPTY_STATE_COMMANDS = 9;
 
 function matchScore(label, keywords, q) {
   const l = String(label).toLowerCase();
@@ -78,6 +107,7 @@ export default function CommandPalette({
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const [saveResults, setSaveResults] = useState([]);
+  const [recentSaves, setRecentSaves] = useState([]);
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const pickedRef = useRef(false);
@@ -86,7 +116,8 @@ export default function CommandPalette({
   const commandsOnly = query.startsWith('>');
   const q = (commandsOnly ? query.slice(1) : query).trim().toLowerCase();
 
-  // Reset state on open / close.
+  // Reset state on open / close, and pull the recently-viewed strip
+  // shown on the empty (home) state.
   useEffect(() => {
     if (open) {
       setQuery('');
@@ -94,6 +125,9 @@ export default function CommandPalette({
       setSaveResults([]);
       pickedRef.current = false;
       requestAnimationFrame(() => inputRef.current?.focus());
+      window.moodmark.saves.recentlyViewed?.(12)
+        .then((rows) => setRecentSaves(rows || []))
+        .catch(() => setRecentSaves([]));
     }
   }, [open]);
 
@@ -117,8 +151,10 @@ export default function CommandPalette({
 
   const commandResults = useMemo(() => {
     if (!q) {
-      // Empty query: the palette opens as a command menu.
-      return commands.slice(0, commandsOnly ? commands.length : EMPTY_STATE_COMMANDS);
+      // Empty query: the palette opens as a full command menu. The
+      // results area is height-capped in CSS, so the whole list is
+      // present but scrolls within the default panel height.
+      return commands;
     }
     return commands
       .map((c) => ({ c, score: matchScore(c.label, c.keywords, q) }))
@@ -134,6 +170,14 @@ export default function CommandPalette({
       .filter((c) => c.name.toLowerCase().includes(q))
       .slice(0, PER_GROUP);
   }, [q, commandsOnly, collections]);
+
+  // Parent name for a child collection, so results can read "in ⟨Parent⟩"
+  // instead of a bare "Collection" and children aren't mistaken for
+  // top-level ones.
+  const parentNameOf = useMemo(() => {
+    const byId = new Map(collections.map((c) => [c.id, c.name]));
+    return (c) => (c.parent_id ? byId.get(c.parent_id) : null);
+  }, [collections]);
 
   const tagResults = useMemo(() => {
     if (!q || commandsOnly) return [];
@@ -236,6 +280,31 @@ export default function CommandPalette({
 
         {(items.length > 0) ? (
           <div className={styles.results} ref={listRef}>
+            {/* Recently viewed — a visual jump-back strip on the empty
+                (home) state only. Mouse-clickable; not part of the
+                arrow-key flow (which stays on the command/result list). */}
+            {!q && recentSaves.length > 0 && (
+              <div className={styles.group}>
+                <div className={styles.groupLabel}>Recently viewed</div>
+                <div className={styles.recentStrip}>
+                  {recentSaves.map((s) => {
+                    const src = resolveAsset(s, 'thumb');
+                    return (
+                      <button
+                        key={`r:${s.id}`}
+                        type="button"
+                        className={styles.recentTile}
+                        title={s.title || 'Untitled'}
+                        onPointerDown={(e) => { e.preventDefault(); pick({ type: 'save', record: s }); }}
+                        onClick={() => pick({ type: 'save', record: s })}
+                      >
+                        {src && <img src={src} alt={s.title || ''} draggable={false} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {commandResults.length > 0 && (
               <div className={styles.group}>
                 <div className={styles.groupLabel}>Commands</div>
@@ -257,11 +326,12 @@ export default function CommandPalette({
                 <div className={styles.groupLabel}>Collections</div>
                 {bucketResults.map((b) => {
                   const idx = nextIdx();
+                  const parent = parentNameOf(b);
                   return (
                     <button key={`b:${b.id}`} {...rowProps(idx, { type: 'bucket', record: b })}>
                       <span className={styles.rowIcon}><CollectionIcon /></span>
                       <span className={styles.rowLabel}>{b.name}</span>
-                      <span className={styles.rowKind}>Collection</span>
+                      <span className={styles.rowKind}>{parent ? `in ${parent}` : 'Collection'}</span>
                     </button>
                   );
                 })}
@@ -314,7 +384,15 @@ export default function CommandPalette({
                       <span className={styles.rowLabel}>
                         {s.title || <span className={styles.rowUntitled}>Untitled</span>}
                       </span>
-                      <span className={styles.rowKind}>Save</span>
+                      {(() => {
+                        const kind = saveKind(s);
+                        return (
+                          <span className={styles.rowKind}>
+                            {kind.glyph && <span className={styles.rowKindGlyph}>{kind.glyph}</span>}
+                            {kind.label}
+                          </span>
+                        );
+                      })()}
                     </button>
                   );
                 })}

@@ -223,6 +223,12 @@ export default function FeaturedBuckets({
 
   if (!collections || collections.length === 0) return null;
 
+  // Featured cards are top-level collections only — children surface in
+  // their parent's rail, never as sibling cards here. Callers already
+  // pass a filtered list, but guard internally so a future caller
+  // handing over the raw list can't leak children onto this row.
+  const topLevel = collections.filter((c) => !c.parent_id);
+
   return (
     <>
       {/* Cards row — normal flow, scrolls with content. */}
@@ -259,7 +265,7 @@ export default function FeaturedBuckets({
               </span>
             </div>
           )}
-          {collections.map((c) => {
+          {topLevel.map((c) => {
             const isRenaming = renamingId === c.id;
             return (
               <div

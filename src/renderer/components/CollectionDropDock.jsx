@@ -35,6 +35,11 @@ export default function CollectionDropDock({
   const [dropTargetId, setDropTargetId] = useState(null);
   if (!collections || collections.length === 0) return null;
 
+  // Top-level collections only — child collections aren't offered here.
+  // Filing into a nested collection is done from its own grid or the
+  // card menu; the edge dock stays a flat list of the top level.
+  const topLevel = collections.filter((c) => !c.parent_id);
+
   const visible = scrolled || dragging;
   const expanded = dragging || hoverExpand;
 
@@ -84,6 +89,61 @@ export default function CollectionDropDock({
     onDismiss?.();
   }
 
+  function renderRow(c) {
+    const thumbs = Array.isArray(c.thumbs) ? c.thumbs.slice(0, 4) : [];
+    // Already contains every dragged save → not a valid drop; mark it
+    // and refuse the drop instead of silently adding a dupe.
+    const already = !!(inCollectionIds && inCollectionIds.has(c.id));
+    const isTarget = !already && dropTargetId === c.id;
+    return (
+      <div
+        key={c.id}
+        role="button"
+        tabIndex={0}
+        className={[
+          styles.row,
+          already && styles.rowIn,
+          isTarget && styles.rowTarget,
+        ].filter(Boolean).join(' ')}
+        onClick={() => handleRowClick(c.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleRowClick(c.id);
+          }
+        }}
+        onDragOver={already ? undefined : (e) => handleRowDragOver(e, c.id)}
+        onDragLeave={already ? undefined : handleRowDragLeave}
+        onDrop={already ? undefined : (e) => handleRowDrop(e, c.id)}
+        title={already ? `${c.name} — already in this collection · click to open` : `${c.name} — click to open or drop here`}
+      >
+        <span className={styles.fan} aria-hidden="true">
+          {thumbs.length > 0 ? (
+            thumbs.map((t, i) => (
+              <img key={`${i}-${t}`} src={fileUrl(t)} alt="" draggable={false} />
+            ))
+          ) : (
+            <span className={styles.fanEmpty} />
+          )}
+        </span>
+        <span className={styles.rowMeta}>
+          <span className={styles.rowName}>{c.name}</span>
+          {already ? (
+            <span className={styles.rowIn_badge} title="Already added">
+              <CheckGlyph />
+            </span>
+          ) : isTarget ? (
+            // Drag-over only (isTarget is set by dragOver, never by
+            // passive mouse hover) — previews the result of the drop.
+            <span className={styles.rowAdd} aria-hidden="true">+1</span>
+          ) : (
+            <span className={styles.rowCount}>{(c.save_count ?? 0).toLocaleString()}</span>
+          )}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={[
@@ -103,60 +163,7 @@ export default function CollectionDropDock({
             of space above the deck and throw off the vertical balance. */}
         {expanded && <span className={styles.listLabel}>Collections</span>}
         <div className={styles.rows}>
-          {collections.map((c) => {
-            const thumbs = Array.isArray(c.thumbs) ? c.thumbs.slice(0, 4) : [];
-            // Already contains every dragged save → not a valid drop;
-            // mark it and refuse the drop instead of silently adding a dupe.
-            const already = !!(inCollectionIds && inCollectionIds.has(c.id));
-            const isTarget = !already && dropTargetId === c.id;
-            return (
-              <div
-                key={c.id}
-                role="button"
-                tabIndex={0}
-                className={[
-                  styles.row,
-                  already && styles.rowIn,
-                  isTarget && styles.rowTarget,
-                ].filter(Boolean).join(' ')}
-                onClick={() => handleRowClick(c.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleRowClick(c.id);
-                  }
-                }}
-                onDragOver={already ? undefined : (e) => handleRowDragOver(e, c.id)}
-                onDragLeave={already ? undefined : handleRowDragLeave}
-                onDrop={already ? undefined : (e) => handleRowDrop(e, c.id)}
-                title={already ? `${c.name} — already in this collection · click to open` : `${c.name} — click to open or drop here`}
-              >
-                <span className={styles.fan} aria-hidden="true">
-                  {thumbs.length > 0 ? (
-                    thumbs.map((t, i) => (
-                      <img key={`${i}-${t}`} src={fileUrl(t)} alt="" draggable={false} />
-                    ))
-                  ) : (
-                    <span className={styles.fanEmpty} />
-                  )}
-                </span>
-                <span className={styles.rowMeta}>
-                  <span className={styles.rowName}>{c.name}</span>
-                  {already ? (
-                    <span className={styles.rowIn_badge} title="Already added">
-                      <CheckGlyph />
-                    </span>
-                  ) : isTarget ? (
-                    // Drag-over only (isTarget is set by dragOver, never by
-                    // passive mouse hover) — previews the result of the drop.
-                    <span className={styles.rowAdd} aria-hidden="true">+1</span>
-                  ) : (
-                    <span className={styles.rowCount}>{(c.save_count ?? 0).toLocaleString()}</span>
-                  )}
-                </span>
-              </div>
-            );
-          })}
+          {topLevel.map((c) => renderRow(c))}
         </div>
       </div>
     </div>

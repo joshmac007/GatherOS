@@ -2,6 +2,10 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import styles from './ContextMenu.module.css';
 
+// Horizontal offset between a menu and its flyout — enough to clear the
+// parent menu's padding + border and still leave a couple px of gap.
+const FLYOUT_GAP = 8;
+
 function ChevronRightIcon() {
   return (
     <svg width="6" height="10" viewBox="0 0 6 10" aria-hidden="true">
@@ -13,26 +17,28 @@ function ChevronRightIcon() {
 export default function ContextMenu({ x, y, items, onClose, className }) {
   const ref = useRef(null);
   const submenuRef = useRef(null);
-  // Index of the submenu item whose children are currently inline-
-  // expanded. Used by the "Add to Bucket" picker to surface nested
-  // child buckets only when the user hovers their parent.
-  const [hoveredSubIdx, setHoveredSubIdx] = useState(null);
+  const childMenuRef = useRef(null);
   const [pos, setPos] = useState({ x, y, ready: false });
   // The currently-open submenu, including its anchor coords (in
   // viewport space — we portal it to body so backdrop-filter isn't
   // suppressed by the parent menu's stacking context).
   const [openSubmenu, setOpenSubmenu] = useState(null); // { idx, x, y } | null
+  // Third-level flyout: the submenu row whose children are cascaded
+  // out beside the submenu (a collection with child collections in
+  // the "Add to collection" picker). Same anchor shape as openSubmenu.
+  const [openChildMenu, setOpenChildMenu] = useState(null); // { idx, x, y } | null
   // Reset whenever the active submenu changes — opening a different
-  // submenu shouldn't carry a stale expanded child block over.
+  // submenu shouldn't carry a stale child flyout over.
   useEffect(() => {
-    setHoveredSubIdx(null);
+    setOpenChildMenu(null);
   }, [openSubmenu?.idx]);
 
   useEffect(() => {
     function onMouseDown(e) {
       const insideMenu = ref.current && ref.current.contains(e.target);
       const insideSubmenu = submenuRef.current && submenuRef.current.contains(e.target);
-      if (!insideMenu && !insideSubmenu) onClose();
+      const insideChildMenu = childMenuRef.current && childMenuRef.current.contains(e.target);
+      if (!insideMenu && !insideSubmenu && !insideChildMenu) onClose();
     }
     function onKeyDown(e) {
       if (e.key === 'Escape') onClose();
@@ -76,7 +82,7 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
     let changed = false;
     if (sx + rect.width > window.innerWidth - margin) {
       // Flip to the left of the parent item.
-      sx = Math.max(margin, openSubmenu.parentLeft - rect.width - 4);
+      sx = Math.max(margin, openSubmenu.parentLeft - rect.width - FLYOUT_GAP);
       changed = true;
     }
     if (sy + rect.height > window.innerHeight - margin) {
@@ -89,19 +95,50 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSubmenu?.idx]);
 
-  function openSubmenuFor(idx, target) {
+  // Same clamp for the third-level flyout.
+  useLayoutEffect(() => {
+    if (!openChildMenu || !childMenuRef.current) return;
+    const rect = childMenuRef.current.getBoundingClientRect();
+    const margin = 8;
+    let { x: cx, y: cy } = openChildMenu;
+    let changed = false;
+    if (cx + rect.width > window.innerWidth - margin) {
+      cx = Math.max(margin, openChildMenu.parentLeft - rect.width - FLYOUT_GAP);
+      changed = true;
+    }
+    if (cy + rect.height > window.innerHeight - margin) {
+      cy = Math.max(margin, window.innerHeight - rect.height - margin);
+      changed = true;
+    }
+    if (changed) setOpenChildMenu((s) => (s ? { ...s, x: cx, y: cy } : s));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openChildMenu?.idx]);
+
+  function anchorBeside(idx, target) {
     const r = target.getBoundingClientRect();
-    setOpenSubmenu({
+    return {
       idx,
-      x: r.right + 4,
+      // The row sits ~5px inside the menu's outer edge (4px padding +
+      // 1px border), so offset past that plus a couple px of visible
+      // breathing room between the two menus.
+      x: r.right + FLYOUT_GAP,
       y: r.top - 4,
       parentLeft: r.left,
-    });
+    };
   }
 
   const hasIcons = items.some((it) => it && it.icon);
   const activeSub = openSubmenu ? items[openSubmenu.idx] : null;
-  const subHasIcons = activeSub?.submenu?.some((s) => s && s.icon);
+  // A flyout is fed by either `submenu` (a pure grouping parent, not
+  // clickable) or `children` (a clickable parent that also reveals its
+  // nested items on hover — used by the multi-select collection picker
+  // where the collections themselves are the top level).
+  const subItems = activeSub ? (activeSub.submenu || activeSub.children || []) : [];
+  const subHasIcons = subItems.some((s) => s && s.icon);
+  const activeChild = activeSub && openChildMenu
+    ? subItems[openChildMenu.idx]
+    : null;
+  const childHasIcons = activeChild?.children?.some((c) => c && c.icon);
 
   return (
     <>
@@ -127,14 +164,18 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
             if (item.type === 'header') {
               return <div key={i} className={styles.header}>{item.label}</div>;
             }
+            // `submenu` = pure grouping parent (not clickable);
+            // `children` = clickable parent that also reveals a flyout.
             const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
-            const isOpen = hasSubmenu && openSubmenu?.idx === i;
+            const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+            const hasFlyout = hasSubmenu || hasChildren;
+            const isOpen = hasFlyout && openSubmenu?.idx === i;
             return (
               <div
                 key={i}
                 className={styles.itemContainer}
                 onMouseEnter={(e) => {
-                  if (hasSubmenu) openSubmenuFor(i, e.currentTarget);
+                  if (hasFlyout) setOpenSubmenu(anchorBeside(i, e.currentTarget));
                   else setOpenSubmenu(null);
                 }}
               >
@@ -145,8 +186,8 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
                     isOpen && styles.itemActive,
                   ].filter(Boolean).join(' ')}
                   onClick={() => {
-                    if (hasSubmenu) return; // submenu items handle their own clicks
-                    item.onClick();
+                    if (hasSubmenu) return; // pure grouping parent — no action
+                    item.onClick?.();
                     onClose();
                   }}
                 >
@@ -154,7 +195,7 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
                     <span className={styles.itemIcon}>{item.icon || null}</span>
                   )}
                   <span className={styles.itemLabel}>{item.label}</span>
-                  {hasSubmenu && (
+                  {hasFlyout && (
                     <span className={styles.itemChevron}><ChevronRightIcon /></span>
                   )}
                 </button>
@@ -179,49 +220,75 @@ export default function ContextMenu({ x, y, items, onClose, className }) {
             left: openSubmenu.x,
           }}
         >
-          {activeSub.submenu.flatMap((sub, j) => {
+          {subItems.map((sub, j) => {
             if (sub.type === 'separator') {
-              return [<div key={j} className={styles.separator} />];
+              return <div key={j} className={styles.separator} />;
             }
             if (sub.type === 'header') {
-              return [<div key={j} className={styles.header}>{sub.label}</div>];
+              return <div key={j} className={styles.header}>{sub.label}</div>;
             }
+            // A submenu row with `children` cascades a third-level
+            // flyout on hover (child collections under a parent in
+            // the "Add to collection" picker). Clicking the row still
+            // acts on the parent itself.
             const hasChildren = Array.isArray(sub.children) && sub.children.length > 0;
-            const expanded = hasChildren && hoveredSubIdx === j;
-            const rendered = [
+            const isChildOpen = hasChildren && openChildMenu?.idx === j;
+            return (
               <button
                 key={j}
-                className={[styles.item, sub.danger && styles.danger]
-                  .filter(Boolean)
-                  .join(' ')}
-                onMouseEnter={() => setHoveredSubIdx(j)}
+                className={[
+                  styles.item,
+                  sub.danger && styles.danger,
+                  isChildOpen && styles.itemActive,
+                ].filter(Boolean).join(' ')}
+                onMouseEnter={(e) => {
+                  if (hasChildren) setOpenChildMenu(anchorBeside(j, e.currentTarget));
+                  else setOpenChildMenu(null);
+                }}
                 onClick={() => { sub.onClick(); onClose(); }}
               >
                 {subHasIcons && (
                   <span className={styles.itemIcon}>{sub.icon || null}</span>
                 )}
                 <span className={styles.itemLabel}>{sub.label}</span>
-              </button>,
-            ];
-            if (expanded) {
-              for (let k = 0; k < sub.children.length; k++) {
-                const child = sub.children[k];
-                rendered.push(
-                  <button
-                    key={`${j}-${k}`}
-                    className={[styles.item, styles.itemIndent].join(' ')}
-                    onClick={() => { child.onClick(); onClose(); }}
-                  >
-                    {subHasIcons && (
-                      <span className={styles.itemIcon}>{child.icon || null}</span>
-                    )}
-                    <span className={styles.itemLabel}>{child.label}</span>
-                  </button>,
-                );
-              }
-            }
-            return rendered;
+                {hasChildren && (
+                  <span className={styles.itemChevron}><ChevronRightIcon /></span>
+                )}
+              </button>
+            );
           })}
+        </div>,
+        document.body,
+      )}
+
+      {activeChild?.children?.length > 0 && ReactDOM.createPortal(
+        <div
+          ref={childMenuRef}
+          className={[
+            styles.submenu,
+            childHasIcons && styles.menuWithIcons,
+            className,
+          ].filter(Boolean).join(' ')}
+          style={{
+            position: 'fixed',
+            top: openChildMenu.y,
+            left: openChildMenu.x,
+          }}
+        >
+          {activeChild.children.map((child, k) => (
+            <button
+              key={k}
+              className={[styles.item, child.danger && styles.danger]
+                .filter(Boolean)
+                .join(' ')}
+              onClick={() => { child.onClick(); onClose(); }}
+            >
+              {childHasIcons && (
+                <span className={styles.itemIcon}>{child.icon || null}</span>
+              )}
+              <span className={styles.itemLabel}>{child.label}</span>
+            </button>
+          ))}
         </div>,
         document.body,
       )}
