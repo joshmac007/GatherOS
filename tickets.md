@@ -98,7 +98,7 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** Assign Codex-only weighted memberships.
 
-- [ ] Local embedding path produces the same membership shape as the Codex-only path.
-- [ ] Category centroids can be computed and compared against save embeddings.
-- [ ] If local embeddings fail, app falls back to Codex-only scoring or pending state.
-- [ ] No OpenAI Platform API key is required.
+- [x] Local embedding path produces the same membership shape as the Codex-only path.
+- [x] Category centroids can be computed and compared against save embeddings.
+- [x] If local embeddings fail, app falls back to Codex-only scoring or pending state.
+- [x] No OpenAI Platform API key is required.
