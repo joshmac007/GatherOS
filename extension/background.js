@@ -727,6 +727,7 @@ async function syncBookmarkToGather(b, { force = false } = {}) {
       imageUrls: Array.isArray(b.imageUrls) ? b.imageUrls : [],
       videoUrl: b.videoUrl || null,
       posterUrl: b.posterUrl || '',
+      tweetCreatedAt: Number.isFinite(Number(b.tweetCreatedAt)) ? Number(b.tweetCreatedAt) : null,
       quoted: b.quoted || null,
     },
   };
@@ -938,6 +939,9 @@ function pollExtractTweetCore(result) {
     authorAvatarUrl: avatarUrl,
     caption: legacy.full_text || '',
     imageUrls,
+    tweetCreatedAt: Number.isFinite(Date.parse(legacy.created_at || ''))
+      ? Date.parse(legacy.created_at)
+      : null,
   };
 }
 
@@ -1028,6 +1032,9 @@ function pollParseTweetForBookmark(result) {
     imageUrls,
     videoUrl,
     posterUrl,
+    tweetCreatedAt: Number.isFinite(Date.parse(legacy.created_at || ''))
+      ? Date.parse(legacy.created_at)
+      : null,
     media: pollBuildMediaList(legacy),
     quoted: pollExtractTweetCore(t.quoted_status_result && t.quoted_status_result.result),
   };
