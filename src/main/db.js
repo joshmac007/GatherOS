@@ -80,6 +80,88 @@ CREATE TABLE IF NOT EXISTS dismissed_tweets (
   dismissed_at  INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS smart_categories (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  description         TEXT,
+  status              TEXT NOT NULL DEFAULT 'candidate',
+  parent_id           TEXT REFERENCES smart_categories(id) ON DELETE SET NULL,
+  centroid_embedding  BLOB,
+  visibility_score    REAL NOT NULL DEFAULT 0,
+  member_count        INTEGER NOT NULL DEFAULT 0,
+  created_at          INTEGER NOT NULL,
+  updated_at          INTEGER NOT NULL,
+  last_changed_at     INTEGER,
+  change_kind         TEXT,
+  frozen_name         INTEGER NOT NULL DEFAULT 0,
+  CHECK (status IN ('candidate', 'visible', 'hidden', 'archived')),
+  CHECK (change_kind IS NULL OR change_kind IN ('created', 'renamed', 'merged', 'split')),
+  CHECK (frozen_name IN (0, 1))
+);
+
+CREATE INDEX IF NOT EXISTS idx_smart_categories_status
+  ON smart_categories(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_smart_categories_parent_id
+  ON smart_categories(parent_id);
+
+CREATE TABLE IF NOT EXISTS smart_category_aliases (
+  id           TEXT PRIMARY KEY,
+  category_id  TEXT NOT NULL REFERENCES smart_categories(id) ON DELETE CASCADE,
+  alias        TEXT NOT NULL,
+  source       TEXT NOT NULL DEFAULT 'model_synonym',
+  created_at   INTEGER NOT NULL,
+  UNIQUE(category_id, alias)
+);
+
+CREATE INDEX IF NOT EXISTS idx_smart_category_aliases_alias
+  ON smart_category_aliases(alias);
+
+CREATE TABLE IF NOT EXISTS smart_category_members (
+  category_id  TEXT NOT NULL REFERENCES smart_categories(id) ON DELETE CASCADE,
+  save_id      TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
+  weight       REAL NOT NULL,
+  evidence     TEXT,
+  assigned_at  INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  PRIMARY KEY (category_id, save_id),
+  CHECK (weight >= 0 AND weight <= 1)
+);
+
+CREATE INDEX IF NOT EXISTS idx_smart_category_members_save
+  ON smart_category_members(save_id, weight DESC);
+CREATE INDEX IF NOT EXISTS idx_smart_category_members_category_weight
+  ON smart_category_members(category_id, weight DESC);
+
+CREATE TABLE IF NOT EXISTS save_topic_profiles (
+  save_id       TEXT PRIMARY KEY REFERENCES saves(id) ON DELETE CASCADE,
+  concepts      TEXT NOT NULL DEFAULT '[]',
+  content_type  TEXT,
+  intent_guess  TEXT,
+  summary       TEXT,
+  embedding     BLOB,
+  confidence    REAL NOT NULL DEFAULT 0,
+  updated_at    INTEGER NOT NULL,
+  CHECK (confidence >= 0 AND confidence <= 1)
+);
+
+CREATE TABLE IF NOT EXISTS smart_category_runs (
+  id                TEXT PRIMARY KEY,
+  run_type          TEXT NOT NULL,
+  started_at        INTEGER NOT NULL,
+  finished_at       INTEGER,
+  input_save_count  INTEGER NOT NULL DEFAULT 0,
+  created_count     INTEGER NOT NULL DEFAULT 0,
+  renamed_count     INTEGER NOT NULL DEFAULT 0,
+  merged_count      INTEGER NOT NULL DEFAULT 0,
+  split_count       INTEGER NOT NULL DEFAULT 0,
+  failed_count      INTEGER NOT NULL DEFAULT 0,
+  provider          TEXT,
+  error             TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_smart_category_runs_started
+  ON smart_category_runs(started_at DESC);
+
 `;
 
 function safeJsonExpr(col) {
@@ -414,6 +496,90 @@ const MIGRATIONS = [
   // "Recently viewed" strip ordered by when each save was opened.
   (database) => {
     addColumnIfMissing(database, 'saves', 'viewed_at', 'INTEGER');
+  },
+  // Smart categories foundation: internal learned category lenses,
+  // aliases, topic profiles, weighted memberships, and run history.
+  // Purely additive; no existing library queries read these tables yet.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS smart_categories (
+        id                  TEXT PRIMARY KEY,
+        name                TEXT NOT NULL,
+        description         TEXT,
+        status              TEXT NOT NULL DEFAULT 'candidate',
+        parent_id           TEXT REFERENCES smart_categories(id) ON DELETE SET NULL,
+        centroid_embedding  BLOB,
+        visibility_score    REAL NOT NULL DEFAULT 0,
+        member_count        INTEGER NOT NULL DEFAULT 0,
+        created_at          INTEGER NOT NULL,
+        updated_at          INTEGER NOT NULL,
+        last_changed_at     INTEGER,
+        change_kind         TEXT,
+        frozen_name         INTEGER NOT NULL DEFAULT 0,
+        CHECK (status IN ('candidate', 'visible', 'hidden', 'archived')),
+        CHECK (change_kind IS NULL OR change_kind IN ('created', 'renamed', 'merged', 'split')),
+        CHECK (frozen_name IN (0, 1))
+      );
+      CREATE INDEX IF NOT EXISTS idx_smart_categories_status
+        ON smart_categories(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_smart_categories_parent_id
+        ON smart_categories(parent_id);
+
+      CREATE TABLE IF NOT EXISTS smart_category_aliases (
+        id           TEXT PRIMARY KEY,
+        category_id  TEXT NOT NULL REFERENCES smart_categories(id) ON DELETE CASCADE,
+        alias        TEXT NOT NULL,
+        source       TEXT NOT NULL DEFAULT 'model_synonym',
+        created_at   INTEGER NOT NULL,
+        UNIQUE(category_id, alias)
+      );
+      CREATE INDEX IF NOT EXISTS idx_smart_category_aliases_alias
+        ON smart_category_aliases(alias);
+
+      CREATE TABLE IF NOT EXISTS smart_category_members (
+        category_id  TEXT NOT NULL REFERENCES smart_categories(id) ON DELETE CASCADE,
+        save_id      TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
+        weight       REAL NOT NULL,
+        evidence     TEXT,
+        assigned_at  INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL,
+        PRIMARY KEY (category_id, save_id),
+        CHECK (weight >= 0 AND weight <= 1)
+      );
+      CREATE INDEX IF NOT EXISTS idx_smart_category_members_save
+        ON smart_category_members(save_id, weight DESC);
+      CREATE INDEX IF NOT EXISTS idx_smart_category_members_category_weight
+        ON smart_category_members(category_id, weight DESC);
+
+      CREATE TABLE IF NOT EXISTS save_topic_profiles (
+        save_id       TEXT PRIMARY KEY REFERENCES saves(id) ON DELETE CASCADE,
+        concepts      TEXT NOT NULL DEFAULT '[]',
+        content_type  TEXT,
+        intent_guess  TEXT,
+        summary       TEXT,
+        embedding     BLOB,
+        confidence    REAL NOT NULL DEFAULT 0,
+        updated_at    INTEGER NOT NULL,
+        CHECK (confidence >= 0 AND confidence <= 1)
+      );
+
+      CREATE TABLE IF NOT EXISTS smart_category_runs (
+        id                TEXT PRIMARY KEY,
+        run_type          TEXT NOT NULL,
+        started_at        INTEGER NOT NULL,
+        finished_at       INTEGER,
+        input_save_count  INTEGER NOT NULL DEFAULT 0,
+        created_count     INTEGER NOT NULL DEFAULT 0,
+        renamed_count     INTEGER NOT NULL DEFAULT 0,
+        merged_count      INTEGER NOT NULL DEFAULT 0,
+        split_count       INTEGER NOT NULL DEFAULT 0,
+        failed_count      INTEGER NOT NULL DEFAULT 0,
+        provider          TEXT,
+        error             TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_smart_category_runs_started
+        ON smart_category_runs(started_at DESC);
+    `);
   },
 ];
 
@@ -1335,6 +1501,352 @@ function getSaveEmbeddingsCached() {
   return embeddingCache;
 }
 
+// ── Smart categories ─────────────────────────────────────────────
+// Internal classifier-owned lenses. These helpers deliberately do not
+// touch tags, folders, boards, search, or import behavior.
+
+const SMART_CATEGORY_STATUSES = new Set(['candidate', 'visible', 'hidden', 'archived']);
+const SMART_CATEGORY_CHANGE_KINDS = new Set(['created', 'renamed', 'merged', 'split']);
+
+function clampUnit(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+
+function jsonString(value, fallback) {
+  if (value == null) return fallback;
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function parseJsonField(value, fallback) {
+  if (!value) return fallback;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function normalizeSmartCategory(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    frozen_name: !!row.frozen_name,
+  };
+}
+
+function normalizeTopicProfile(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    concepts: parseJsonField(row.concepts, []),
+  };
+}
+
+function normalizeMembership(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    evidence: parseJsonField(row.evidence, row.evidence || null),
+  };
+}
+
+function createSmartCategory({
+  id,
+  name,
+  description,
+  status = 'candidate',
+  parentId = null,
+  centroidEmbedding = null,
+  visibilityScore = 0,
+  memberCount = 0,
+  createdAt,
+  updatedAt,
+  lastChangedAt,
+  changeKind = 'created',
+  frozenName = false,
+} = {}) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return { ok: false, reason: 'missing-name' };
+  if (!SMART_CATEGORY_STATUSES.has(status)) return { ok: false, reason: 'invalid-status' };
+  if (changeKind != null && !SMART_CATEGORY_CHANGE_KINDS.has(changeKind)) {
+    return { ok: false, reason: 'invalid-change-kind' };
+  }
+  const now = Date.now();
+  const record = {
+    id: id || crypto.randomUUID(),
+    name: trimmed,
+    description: description || null,
+    status,
+    parent_id: parentId || null,
+    centroid_embedding: centroidEmbedding || null,
+    visibility_score: clampUnit(visibilityScore),
+    member_count: Math.max(0, Number(memberCount) || 0),
+    created_at: Number.isFinite(createdAt) ? createdAt : now,
+    updated_at: Number.isFinite(updatedAt) ? updatedAt : now,
+    last_changed_at: Number.isFinite(lastChangedAt) ? lastChangedAt : now,
+    change_kind: changeKind || null,
+    frozen_name: frozenName ? 1 : 0,
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_categories
+      (id, name, description, status, parent_id, centroid_embedding,
+       visibility_score, member_count, created_at, updated_at,
+       last_changed_at, change_kind, frozen_name)
+    VALUES
+      (@id, @name, @description, @status, @parent_id, @centroid_embedding,
+       @visibility_score, @member_count, @created_at, @updated_at,
+       @last_changed_at, @change_kind, @frozen_name)
+  `).run(record);
+  return { ok: true, category: normalizeSmartCategory(record) };
+}
+
+function getSmartCategory(id) {
+  return normalizeSmartCategory(
+    getDatabase().prepare('SELECT * FROM smart_categories WHERE id = ?').get(id),
+  );
+}
+
+function listSmartCategories({ status = null, includeArchived = false } = {}) {
+  const params = [];
+  const where = [];
+  if (status) {
+    where.push('status = ?');
+    params.push(status);
+  } else if (!includeArchived) {
+    where.push("status != 'archived'");
+  }
+  const sql = `SELECT * FROM smart_categories${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY frozen_name DESC, visibility_score DESC, updated_at DESC`;
+  return getDatabase().prepare(sql).all(...params).map(normalizeSmartCategory);
+}
+
+function setSmartCategoryStatus(id, status) {
+  if (!id || !SMART_CATEGORY_STATUSES.has(status)) return { ok: false };
+  const now = Date.now();
+  const { changes } = getDatabase()
+    .prepare('UPDATE smart_categories SET status = ?, updated_at = ? WHERE id = ?')
+    .run(status, now, id);
+  return { ok: changes > 0 };
+}
+
+function hideSmartCategory(id) {
+  return setSmartCategoryStatus(id, 'hidden');
+}
+
+function archiveSmartCategory(id) {
+  return setSmartCategoryStatus(id, 'archived');
+}
+
+function pinSmartCategory(id, pinned = true) {
+  if (!id) return { ok: false };
+  const now = Date.now();
+  const { changes } = getDatabase()
+    .prepare('UPDATE smart_categories SET frozen_name = ?, updated_at = ? WHERE id = ?')
+    .run(pinned ? 1 : 0, now, id);
+  return { ok: changes > 0 };
+}
+
+function upsertSmartCategoryAlias({
+  id,
+  categoryId,
+  alias,
+  source = 'model_synonym',
+  createdAt,
+} = {}) {
+  const trimmed = (alias || '').trim();
+  if (!categoryId || !trimmed) return { ok: false };
+  const record = {
+    id: id || crypto.randomUUID(),
+    category_id: categoryId,
+    alias: trimmed,
+    source,
+    created_at: Number.isFinite(createdAt) ? createdAt : Date.now(),
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_category_aliases (id, category_id, alias, source, created_at)
+    VALUES (@id, @category_id, @alias, @source, @created_at)
+    ON CONFLICT(category_id, alias) DO UPDATE SET source = excluded.source
+  `).run(record);
+  return { ok: true, alias: record };
+}
+
+function getSmartCategoryAliases(categoryId) {
+  return getDatabase()
+    .prepare('SELECT * FROM smart_category_aliases WHERE category_id = ? ORDER BY alias ASC')
+    .all(categoryId);
+}
+
+function findSmartCategoryAliases(alias) {
+  const q = (alias || '').trim();
+  if (!q) return [];
+  return getDatabase()
+    .prepare(`
+      SELECT a.*, c.name AS category_name, c.status AS category_status
+      FROM smart_category_aliases a
+      JOIN smart_categories c ON c.id = a.category_id
+      WHERE LOWER(a.alias) = LOWER(?)
+      ORDER BY c.updated_at DESC
+    `)
+    .all(q);
+}
+
+function upsertSaveTopicProfile({
+  saveId,
+  concepts = [],
+  contentType = null,
+  intentGuess = null,
+  summary = null,
+  embedding = null,
+  confidence = 0,
+  updatedAt,
+} = {}) {
+  if (!saveId) return { ok: false };
+  const record = {
+    save_id: saveId,
+    concepts: jsonString(Array.isArray(concepts) ? concepts : [], '[]'),
+    content_type: contentType || null,
+    intent_guess: intentGuess || null,
+    summary: summary || null,
+    embedding: embedding || null,
+    confidence: clampUnit(confidence),
+    updated_at: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
+  };
+  getDatabase().prepare(`
+    INSERT INTO save_topic_profiles
+      (save_id, concepts, content_type, intent_guess, summary, embedding, confidence, updated_at)
+    VALUES
+      (@save_id, @concepts, @content_type, @intent_guess, @summary, @embedding, @confidence, @updated_at)
+    ON CONFLICT(save_id) DO UPDATE SET
+      concepts = excluded.concepts,
+      content_type = excluded.content_type,
+      intent_guess = excluded.intent_guess,
+      summary = excluded.summary,
+      embedding = excluded.embedding,
+      confidence = excluded.confidence,
+      updated_at = excluded.updated_at
+  `).run(record);
+  return { ok: true, profile: normalizeTopicProfile(record) };
+}
+
+function getSaveTopicProfile(saveId) {
+  return normalizeTopicProfile(
+    getDatabase().prepare('SELECT * FROM save_topic_profiles WHERE save_id = ?').get(saveId),
+  );
+}
+
+function upsertSmartCategoryMembership({
+  categoryId,
+  saveId,
+  weight,
+  evidence = null,
+  assignedAt,
+  updatedAt,
+} = {}) {
+  if (!categoryId || !saveId) return { ok: false };
+  const now = Date.now();
+  const record = {
+    category_id: categoryId,
+    save_id: saveId,
+    weight: clampUnit(weight),
+    evidence: jsonString(evidence, null),
+    assigned_at: Number.isFinite(assignedAt) ? assignedAt : now,
+    updated_at: Number.isFinite(updatedAt) ? updatedAt : now,
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_category_members
+      (category_id, save_id, weight, evidence, assigned_at, updated_at)
+    VALUES
+      (@category_id, @save_id, @weight, @evidence, @assigned_at, @updated_at)
+    ON CONFLICT(category_id, save_id) DO UPDATE SET
+      weight = excluded.weight,
+      evidence = excluded.evidence,
+      updated_at = excluded.updated_at
+  `).run(record);
+  getDatabase().prepare(`
+    UPDATE smart_categories
+       SET member_count = (
+         SELECT COUNT(*) FROM smart_category_members
+         WHERE category_id = ? AND weight >= 0.45
+       ),
+       updated_at = ?
+     WHERE id = ?
+  `).run(categoryId, now, categoryId);
+  return { ok: true, membership: normalizeMembership(record) };
+}
+
+function getSmartCategoryMembers(categoryId, { minWeight = 0 } = {}) {
+  return getDatabase()
+    .prepare(`
+      SELECT m.*, s.created_at AS save_created_at
+      FROM smart_category_members m
+      JOIN saves s ON s.id = m.save_id
+      WHERE m.category_id = ? AND m.weight >= ? AND s.deleted_at IS NULL
+      ORDER BY m.weight DESC, s.created_at DESC
+    `)
+    .all(categoryId, clampUnit(minWeight))
+    .map(normalizeMembership);
+}
+
+function getSmartCategoriesForSave(saveId, { minWeight = 0 } = {}) {
+  return getDatabase()
+    .prepare(`
+      SELECT m.*, c.name, c.status
+      FROM smart_category_members m
+      JOIN smart_categories c ON c.id = m.category_id
+      WHERE m.save_id = ? AND m.weight >= ?
+      ORDER BY m.weight DESC, c.name ASC
+    `)
+    .all(saveId, clampUnit(minWeight))
+    .map(normalizeMembership);
+}
+
+function recordSmartCategoryRun({
+  id,
+  runType,
+  startedAt,
+  finishedAt = null,
+  inputSaveCount = 0,
+  createdCount = 0,
+  renamedCount = 0,
+  mergedCount = 0,
+  splitCount = 0,
+  failedCount = 0,
+  provider = null,
+  error = null,
+} = {}) {
+  if (!runType) return { ok: false, reason: 'missing-run-type' };
+  const record = {
+    id: id || crypto.randomUUID(),
+    run_type: runType,
+    started_at: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    finished_at: Number.isFinite(finishedAt) ? finishedAt : null,
+    input_save_count: Math.max(0, Number(inputSaveCount) || 0),
+    created_count: Math.max(0, Number(createdCount) || 0),
+    renamed_count: Math.max(0, Number(renamedCount) || 0),
+    merged_count: Math.max(0, Number(mergedCount) || 0),
+    split_count: Math.max(0, Number(splitCount) || 0),
+    failed_count: Math.max(0, Number(failedCount) || 0),
+    provider,
+    error,
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_category_runs
+      (id, run_type, started_at, finished_at, input_save_count,
+       created_count, renamed_count, merged_count, split_count,
+       failed_count, provider, error)
+    VALUES
+      (@id, @run_type, @started_at, @finished_at, @input_save_count,
+       @created_count, @renamed_count, @merged_count, @split_count,
+       @failed_count, @provider, @error)
+  `).run(record);
+  return { ok: true, run: record };
+}
+
+function listSmartCategoryRuns({ limit = 20 } = {}) {
+  const n = Math.max(1, Math.min(100, Number(limit) || 20));
+  return getDatabase()
+    .prepare('SELECT * FROM smart_category_runs ORDER BY started_at DESC LIMIT ?')
+    .all(n);
+}
+
 function getSavesByIds(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const placeholders = ids.map(() => '?').join(',');
@@ -1982,6 +2494,23 @@ module.exports = {
   getUnindexedSaves,
   getUnindexedCount,
   filterByColor,
+  createSmartCategory,
+  getSmartCategory,
+  listSmartCategories,
+  setSmartCategoryStatus,
+  hideSmartCategory,
+  archiveSmartCategory,
+  pinSmartCategory,
+  upsertSmartCategoryAlias,
+  getSmartCategoryAliases,
+  findSmartCategoryAliases,
+  upsertSaveTopicProfile,
+  getSaveTopicProfile,
+  upsertSmartCategoryMembership,
+  getSmartCategoryMembers,
+  getSmartCategoriesForSave,
+  recordSmartCategoryRun,
+  listSmartCategoryRuns,
   getAllCollections,
   getAllCollectionsWithThumbs,
   getCollectionsForSave,

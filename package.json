@@ -20,7 +20,7 @@
     "build:mac:x64": "vite build && electron-builder --mac --x64",
     "prerelease": "node -e \"console.log('GatherLocal public release check skipped: publishing is disabled for local builds.')\"",
     "smoke-test": "node scripts/smoke-test.js",
-    "test:ai": "node --test test/*.test.js",
+    "test:ai": "ELECTRON_RUN_AS_NODE=1 electron --test test/*.test.js",
     "pack:extension": "node scripts/pack-extension.js",
     "pack:starter": "ELECTRON_RUN_AS_NODE=1 electron scripts/build-starter-pack.js",
     "release": "rm -rf dist/build && mkdir -p dist && touch dist/.metadata_never_index && vite build && electron-builder --publish never && node scripts/smoke-test.js",
