@@ -322,3 +322,136 @@ test('pending smart category saves include live rows without topic profiles or m
     ['save-new-unprofiled', 'save-new-profiled'],
   );
 }));
+
+test('search expands matching smart category aliases after direct save matches', withTempDb((db) => {
+  db.initDatabase();
+  db.insertSave({
+    id: 'save-direct',
+    filePath: '/tmp/direct.png',
+    thumbPath: '/tmp/direct-thumb.png',
+    title: 'AI design checklist',
+    createdAt: 1000,
+  });
+  db.insertSave({
+    id: 'save-category-high',
+    filePath: '/tmp/category-high.png',
+    thumbPath: '/tmp/category-high-thumb.png',
+    title: 'Campaign storyboard',
+    createdAt: 3000,
+  });
+  db.insertSave({
+    id: 'save-category-low',
+    filePath: '/tmp/category-low.png',
+    thumbPath: '/tmp/category-low-thumb.png',
+    title: 'Loose reference',
+    createdAt: 4000,
+  });
+  db.createSmartCategory({
+    id: 'cat-visual-generation',
+    name: 'Visual generation tools',
+    status: 'visible',
+    visibilityScore: 0.9,
+  });
+  db.upsertSmartCategoryAlias({
+    categoryId: 'cat-visual-generation',
+    alias: 'AI design',
+    source: 'search_synonym',
+  });
+  db.upsertSmartCategoryMembership({
+    categoryId: 'cat-visual-generation',
+    saveId: 'save-category-high',
+    weight: 0.95,
+  });
+  db.upsertSmartCategoryMembership({
+    categoryId: 'cat-visual-generation',
+    saveId: 'save-category-low',
+    weight: 0.62,
+  });
+
+  assert.deepEqual(
+    db.getAllSaves({ search: 'AI design' }).map((save) => save.id),
+    ['save-direct', 'save-category-high'],
+  );
+}));
+
+test('search uses old category names stored as aliases', withTempDb((db) => {
+  db.initDatabase();
+  db.insertSave({
+    id: 'save-old-name-match',
+    filePath: '/tmp/old-name.png',
+    thumbPath: '/tmp/old-name-thumb.png',
+    title: 'Storyboard set',
+    createdAt: 1000,
+  });
+  db.createSmartCategory({
+    id: 'cat-renamed',
+    name: 'Visual generation tools',
+    status: 'visible',
+    visibilityScore: 0.9,
+  });
+  db.upsertSmartCategoryAlias({
+    categoryId: 'cat-renamed',
+    alias: 'AI tools',
+    source: 'old_name',
+  });
+  db.upsertSmartCategoryMembership({
+    categoryId: 'cat-renamed',
+    saveId: 'save-old-name-match',
+    weight: 0.88,
+  });
+
+  assert.deepEqual(
+    db.getAllSaves({ search: 'AI tools' }).map((save) => save.id),
+    ['save-old-name-match'],
+  );
+  assert.deepEqual(
+    db.getAllSaves({ search: 'visual generation' }).map((save) => save.id),
+    ['save-old-name-match'],
+  );
+}));
+
+test('structural filters constrain smart category search expansion', withTempDb((db) => {
+  db.initDatabase();
+  db.insertSave({
+    id: 'save-in-bucket',
+    filePath: '/tmp/in-bucket.png',
+    thumbPath: '/tmp/in-bucket-thumb.png',
+    title: 'Storyboard in bucket',
+    createdAt: 1000,
+  });
+  db.insertSave({
+    id: 'save-outside-bucket',
+    filePath: '/tmp/outside-bucket.png',
+    thumbPath: '/tmp/outside-bucket-thumb.png',
+    title: 'Storyboard outside bucket',
+    createdAt: 2000,
+  });
+  const collection = db.createCollection({ name: 'References', color: '#007aff' });
+  db.addSaveToCollection({ collectionId: collection.id, saveId: 'save-in-bucket' });
+  db.createSmartCategory({
+    id: 'cat-generation',
+    name: 'Visual generation tools',
+    status: 'visible',
+    visibilityScore: 0.9,
+  });
+  db.upsertSmartCategoryAlias({
+    categoryId: 'cat-generation',
+    alias: 'generative design',
+    source: 'search_synonym',
+  });
+  db.upsertSmartCategoryMembership({
+    categoryId: 'cat-generation',
+    saveId: 'save-in-bucket',
+    weight: 0.9,
+  });
+  db.upsertSmartCategoryMembership({
+    categoryId: 'cat-generation',
+    saveId: 'save-outside-bucket',
+    weight: 0.95,
+  });
+
+  assert.deepEqual(
+    db.getAllSaves({ search: 'generative design bucket:references' }).map((save) => save.id),
+    ['save-in-bucket'],
+  );
+}));

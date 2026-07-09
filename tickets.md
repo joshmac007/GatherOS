@@ -65,10 +65,10 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** Show smart categories as quiet navigation.
 
-- [ ] Searching an old or alternate category name finds the matching smart category.
-- [ ] Category-expanded saves appear after direct save/title/tag/OCR matches.
-- [ ] Alias search works after a category rename.
-- [ ] Structural filters continue to constrain expanded category results.
+- [x] Searching an old or alternate category name finds the matching smart category.
+- [x] Category-expanded saves appear after direct save/title/tag/OCR matches.
+- [x] Alias search works after a category rename.
+- [x] Structural filters continue to constrain expanded category results.
 
 ## Add stability controls and recent-change indicator
 

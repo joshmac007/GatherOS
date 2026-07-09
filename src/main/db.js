@@ -992,6 +992,97 @@ function ftsPrefixQuery(text) {
   return terms.map((t) => `"${t}"*`).join(' ');
 }
 
+function smartCategorySearchTokens(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function smartCategoryLabelMatchesSearch(label, queryTokens) {
+  const labelTokens = smartCategorySearchTokens(label);
+  if (!labelTokens.length || !queryTokens.length) return false;
+  if (queryTokens.length > 1 && labelTokens.join(' ').includes(queryTokens.join(' '))) {
+    return true;
+  }
+  return queryTokens.every((queryToken) => (
+    labelTokens.some((labelToken) => (
+      labelToken === queryToken
+      || (queryToken.length >= 3 && labelToken.startsWith(queryToken))
+    ))
+  ));
+}
+
+function getSmartCategorySearchCategoryIds(text) {
+  const queryTokens = smartCategorySearchTokens(text);
+  if (!queryTokens.length) return [];
+  const rows = getDatabase()
+    .prepare(`
+      SELECT c.id, c.name, a.alias
+      FROM smart_categories c
+      LEFT JOIN smart_category_aliases a ON a.category_id = c.id
+      WHERE c.status = 'visible'
+      ORDER BY c.updated_at DESC
+    `)
+    .all();
+  const labelsById = new Map();
+  for (const row of rows) {
+    if (!labelsById.has(row.id)) labelsById.set(row.id, []);
+    labelsById.get(row.id).push(row.name);
+    if (row.alias) labelsById.get(row.id).push(row.alias);
+  }
+  return [...labelsById.entries()]
+    .filter(([, labels]) => (
+      labels.some((label) => smartCategoryLabelMatchesSearch(label, queryTokens))
+    ))
+    .map(([id]) => id);
+}
+
+function getSmartCategorySearchExpandedSaves({
+  text,
+  baseConditions,
+  baseParams,
+  sort,
+} = {}) {
+  const categoryIds = getSmartCategorySearchCategoryIds(text);
+  if (!categoryIds.length) return [];
+  const categoryPlaceholders = categoryIds.map(() => '?').join(', ');
+  const baseWhere = baseConditions.length ? ` WHERE ${baseConditions.join(' AND ')}` : '';
+  const recency = sort === 'oldest' ? 's.created_at ASC' : 's.created_at DESC';
+  const selectColumns = SAVE_LIST_COLUMNS
+    .split(', ')
+    .map((column) => `s.${column}`)
+    .join(', ');
+  return getDatabase()
+    .prepare(`
+      SELECT ${selectColumns},
+             MAX(m.weight) AS smart_category_search_weight
+      FROM smart_category_members m
+      JOIN saves s
+        ON s.id = m.save_id
+      WHERE m.category_id IN (${categoryPlaceholders})
+        AND m.weight >= ?
+        AND s.id IN (SELECT id FROM saves${baseWhere})
+      GROUP BY s.id
+      ORDER BY smart_category_search_weight DESC, ${recency}
+    `)
+    .all(...categoryIds, SMART_CATEGORY_PRIMARY_WEIGHT, ...baseParams);
+}
+
+function appendSmartCategorySearchRows(directRows, expandedRows) {
+  if (!expandedRows.length) return directRows;
+  const seen = new Set(directRows.map((row) => row.id));
+  const merged = directRows.slice();
+  for (const row of expandedRows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    merged.push(row);
+  }
+  return merged;
+}
+
 function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorHex = null, view = 'all', _noFts = false } = {}) {
   const db = getDatabase();
   const conditions = [];
@@ -1092,6 +1183,9 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
     params.push(parsed.after);
   }
 
+  const baseConditions = conditions.slice();
+  const baseParams = params.slice();
+
   if (text) {
     // Indexed FTS5 match over title / ocr_text / tweet text (the old
     // LIKE pass full-scanned the table and json_extract-parsed
@@ -1162,6 +1256,17 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
       return getAllSaves({ search, sort, collectionId, colorHex, view, _noFts: true });
     }
     throw err;
+  }
+  if (text) {
+    rows = appendSmartCategorySearchRows(
+      rows,
+      getSmartCategorySearchExpandedSaves({
+        text,
+        baseConditions,
+        baseParams,
+        sort,
+      }),
+    );
   }
   // Color filter: requested hex matched against each save's stored
   // palette in LAB space. Done in JS because SQLite doesn't have the
