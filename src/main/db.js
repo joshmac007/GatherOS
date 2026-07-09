@@ -156,7 +156,8 @@ CREATE TABLE IF NOT EXISTS smart_category_runs (
   split_count       INTEGER NOT NULL DEFAULT 0,
   failed_count      INTEGER NOT NULL DEFAULT 0,
   provider          TEXT,
-  error             TEXT
+  error             TEXT,
+  metadata          TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_smart_category_runs_started
@@ -575,11 +576,17 @@ const MIGRATIONS = [
         split_count       INTEGER NOT NULL DEFAULT 0,
         failed_count      INTEGER NOT NULL DEFAULT 0,
         provider          TEXT,
-        error             TEXT
+        error             TEXT,
+        metadata          TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_smart_category_runs_started
         ON smart_category_runs(started_at DESC);
     `);
+  },
+  // Smart category taxonomy refresh metadata. Deferred merge/split proposals
+  // are recorded here until assignment behavior is stable enough to apply them.
+  (database) => {
+    addColumnIfMissing(database, 'smart_category_runs', 'metadata', 'TEXT');
   },
 ];
 
@@ -1895,6 +1902,40 @@ function upsertSmartCategoryAlias({
   return { ok: true, alias: record };
 }
 
+function applySmartCategoryTaxonomyChanges({ renames = [], aliases = [], changedAt } = {}) {
+  const at = Number.isFinite(changedAt) ? changedAt : Date.now();
+  let renamedCount = 0;
+  let aliasCount = 0;
+  const tx = getDatabase().transaction(() => {
+    for (const rename of Array.isArray(renames) ? renames : []) {
+      const result = renameSmartCategory({
+        id: rename.id,
+        name: rename.name,
+        automatic: rename.automatic !== false,
+        changedAt: Number.isFinite(rename.changedAt) ? rename.changedAt : at,
+      });
+      if (!result?.ok) throw new Error(result?.reason || 'rename-failed');
+      if (result.renamed !== false) renamedCount += 1;
+    }
+    for (const alias of Array.isArray(aliases) ? aliases : []) {
+      const result = upsertSmartCategoryAlias({
+        categoryId: alias.categoryId,
+        alias: alias.alias,
+        source: alias.source || 'model_synonym',
+        createdAt: Number.isFinite(alias.createdAt) ? alias.createdAt : at,
+      });
+      if (!result?.ok) throw new Error(result?.reason || 'alias-failed');
+      aliasCount += 1;
+    }
+  });
+  try {
+    tx();
+  } catch (err) {
+    return { ok: false, reason: err?.message || 'taxonomy-apply-failed' };
+  }
+  return { ok: true, renamedCount, aliasCount };
+}
+
 function getSmartCategoryAliases(categoryId) {
   return getDatabase()
     .prepare('SELECT * FROM smart_category_aliases WHERE category_id = ? ORDER BY alias ASC')
@@ -2060,6 +2101,7 @@ function recordSmartCategoryRun({
   failedCount = 0,
   provider = null,
   error = null,
+  metadata = null,
 } = {}) {
   if (!runType) return { ok: false, reason: 'missing-run-type' };
   const record = {
@@ -2075,16 +2117,17 @@ function recordSmartCategoryRun({
     failed_count: Math.max(0, Number(failedCount) || 0),
     provider,
     error,
+    metadata: jsonString(metadata, null),
   };
   getDatabase().prepare(`
     INSERT INTO smart_category_runs
       (id, run_type, started_at, finished_at, input_save_count,
        created_count, renamed_count, merged_count, split_count,
-       failed_count, provider, error)
+       failed_count, provider, error, metadata)
     VALUES
       (@id, @run_type, @started_at, @finished_at, @input_save_count,
        @created_count, @renamed_count, @merged_count, @split_count,
-       @failed_count, @provider, @error)
+       @failed_count, @provider, @error, @metadata)
   `).run(record);
   return { ok: true, run: record };
 }
@@ -2778,6 +2821,7 @@ module.exports = {
   pinSmartCategory,
   renameSmartCategory,
   upsertSmartCategoryAlias,
+  applySmartCategoryTaxonomyChanges,
   getSmartCategoryAliases,
   findSmartCategoryAliases,
   upsertSaveTopicProfile,

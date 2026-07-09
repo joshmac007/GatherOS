@@ -49,6 +49,16 @@ async function generateSmartCategoryMemberships(input) {
   return active.generateSmartCategoryMemberships(input);
 }
 
+async function generateSmartCategoryTaxonomyRefresh(input) {
+  const active = getProvider();
+  if (typeof active.generateSmartCategoryTaxonomyRefresh !== 'function') {
+    const err = new Error('Active AI provider does not support smart category taxonomy refresh.');
+    err.code = 'taxonomy_refresh_unavailable';
+    throw err;
+  }
+  return active.generateSmartCategoryTaxonomyRefresh(input);
+}
+
 async function embedText(text) {
   return getProvider().embedText(text);
 }
@@ -68,6 +78,7 @@ module.exports = {
   generateImagePrompt,
   generateSaveTopicProfile,
   generateSmartCategoryMemberships,
+  generateSmartCategoryTaxonomyRefresh,
   generateImage,
   embedText,
   getUsage,

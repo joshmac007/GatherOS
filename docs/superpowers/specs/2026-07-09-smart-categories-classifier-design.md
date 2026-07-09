@@ -139,6 +139,7 @@ This is internal fuel. It should not appear as user-facing tags.
 - `failed_count`
 - `provider`
 - `error`
+- `metadata`: optional JSON for deferred taxonomy proposals and skipped changes
 
 This supports debugging, throttling, and future settings UI.
 

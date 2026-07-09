@@ -7,6 +7,7 @@ const {
   noteSmartCategoryActivity,
   getSmartCategoryRefreshDecision,
   runIncrementalSmartCategoryRefresh,
+  createBackgroundSmartCategoryRefresh,
 } = require('../src/main/smart-category-refresh');
 
 test('refresh policy waits for quiet capture, search, edit, modal, and drag windows', () => {
@@ -156,4 +157,73 @@ test('incremental refresh assigns existing categories and records failures and d
   assert.equal(runs[0].inputSaveCount, 3);
   assert.equal(runs[0].failedCount, 0);
   assert.equal(runs[0].error, 'deferred-active-interaction');
+});
+
+test('background refresh marks taxonomy requested for manual or 150 pending saves', async () => {
+  const calls = [];
+  const refresh = createBackgroundSmartCategoryRefresh({
+    getPendingSmartCategorySaves: () => Array.from({ length: 16 }, (_, i) => ({ id: `save-${i}` })),
+    listSmartCategories: () => [{ id: 'cat-ai', status: 'visible', name: 'AI tools' }],
+    hasProvider: () => true,
+    runRefresh: async (payload) => {
+      calls.push({
+        manual: payload.manual,
+        taxonomyRequested: payload.taxonomyRequested,
+      });
+      return { ok: true };
+    },
+    now: () => 1_000_000,
+    setTimer: () => 1,
+    clearTimer: () => {},
+    config: {
+      ...DEFAULT_SMART_CATEGORY_REFRESH_CONFIG,
+      pendingSaveThreshold: 1,
+      taxonomyPendingSaveThreshold: 150,
+    },
+  });
+
+  refresh.state.pendingSaveCount = 151;
+  await refresh.maybeRun();
+  refresh.state.manualRequested = true;
+  await refresh.maybeRun();
+
+  assert.deepEqual(calls, [
+    { manual: false, taxonomyRequested: true },
+    { manual: true, taxonomyRequested: true },
+  ]);
+});
+
+test('background refresh requests taxonomy after 14 days with 50 pending saves', async () => {
+  const calls = [];
+  let lastTaxonomyAt = 0;
+  const now = 20 * 24 * 60 * 60 * 1000;
+  const refresh = createBackgroundSmartCategoryRefresh({
+    getPendingSmartCategorySaves: () => Array.from({ length: 50 }, (_, i) => ({ id: `save-${i}` })),
+    listSmartCategories: () => [{ id: 'cat-ai', status: 'visible', name: 'AI tools' }],
+    getLastTaxonomyRefreshAt: () => lastTaxonomyAt,
+    hasProvider: () => true,
+    runRefresh: async (payload) => {
+      calls.push(payload.taxonomyRequested);
+      return { ok: true };
+    },
+    now: () => now,
+    setTimer: () => 1,
+    clearTimer: () => {},
+    config: {
+      ...DEFAULT_SMART_CATEGORY_REFRESH_CONFIG,
+      pendingSaveThreshold: 1,
+      taxonomyPendingSaveThreshold: 150,
+      taxonomyIntervalPendingSaveThreshold: 50,
+      taxonomyIntervalMs: 14 * 24 * 60 * 60 * 1000,
+    },
+  });
+
+  lastTaxonomyAt = 5 * 24 * 60 * 60 * 1000;
+  await refresh.maybeRun();
+  refresh.state.lastRunFinishedAt = 0;
+  refresh.state.lastTaxonomyRefreshAt = 0;
+  lastTaxonomyAt = 10 * 24 * 60 * 60 * 1000;
+  await refresh.maybeRun();
+
+  assert.deepEqual(calls, [true, false]);
 });

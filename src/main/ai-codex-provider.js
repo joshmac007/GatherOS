@@ -225,6 +225,57 @@ function createCodexProvider(config) {
         `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
       );
     },
+    async generateSmartCategoryTaxonomyRefresh(input) {
+      return codexJson(
+        config,
+        null,
+        'Review existing smart categories for a personal visual/reference library.\n\n' +
+        'Return JSON only:\n' +
+        '{\n' +
+        '  "renames": [\n' +
+        '    {\n' +
+        '      "category_id": "cat_123",\n' +
+        '      "new_name": "2-4 word category name",\n' +
+        '      "old_name_alias": "previous name",\n' +
+        '      "confidence": 0.0,\n' +
+        '      "reason": "specific evidence from category meaning"\n' +
+        '    }\n' +
+        '  ],\n' +
+        '  "aliases": [\n' +
+        '    {\n' +
+        '      "category_id": "cat_123",\n' +
+        '      "alias": "search phrase",\n' +
+        '      "confidence": 0.0,\n' +
+        '      "reason": "why this helps search"\n' +
+        '    }\n' +
+        '  ],\n' +
+        '  "merges": [\n' +
+        '    {\n' +
+        '      "category_ids": ["cat_123", "cat_456"],\n' +
+        '      "proposed_name": "merged category name",\n' +
+        '      "confidence": 0.0,\n' +
+        '      "reason": "strong repeated overlap evidence"\n' +
+        '    }\n' +
+        '  ],\n' +
+        '  "splits": [\n' +
+        '    {\n' +
+        '      "category_id": "cat_123",\n' +
+        '      "proposed_names": ["child topic one", "child topic two"],\n' +
+        '      "confidence": 0.0,\n' +
+        '      "reason": "strong repeated subcluster evidence"\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n\n' +
+        'Rules:\n' +
+        '- Be conservative.\n' +
+        '- Prefer aliases over renames unless the current name is clearly stale.\n' +
+        '- Never rename for casing, punctuation, pluralization, word order, or other cosmetic cleanup.\n' +
+        '- Do not propose a rename for frozen_name categories.\n' +
+        '- Do not merge/split without strong repeated evidence.\n' +
+        '- Merge/split proposals are advisory only; application code will defer them.\n\n' +
+        `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
+      );
+    },
     async embedText() {
       const err = new Error('Codex provider does not expose embeddings. Use GATHERLOCAL_AI_PROVIDER=local with a local embedding model.');
       err.code = 'embeddings_unavailable';

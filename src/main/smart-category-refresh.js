@@ -3,6 +3,9 @@ const DEFAULT_SMART_CATEGORY_REFRESH_CONFIG = {
   quietWindowMs: 3 * 60 * 1000,
   batchSize: 8,
   minRunIntervalMs: 60 * 1000,
+  taxonomyPendingSaveThreshold: 150,
+  taxonomyIntervalMs: 14 * 24 * 60 * 60 * 1000,
+  taxonomyIntervalPendingSaveThreshold: 50,
 };
 
 const QUIET_ACTIVITY_KINDS = new Set(['capture', 'import', 'search', 'edit']);
@@ -16,6 +19,7 @@ function createSmartCategoryRefreshState({ now = Date.now } = {}) {
     running: false,
     pendingSaveCount: 0,
     manualRequested: false,
+    lastTaxonomyRefreshAt: 0,
     createdAt: now(),
   };
 }
@@ -195,6 +199,7 @@ async function runIncrementalSmartCategoryRefresh({
 function createBackgroundSmartCategoryRefresh({
   getPendingSmartCategorySaves,
   listSmartCategories,
+  getLastTaxonomyRefreshAt,
   hasProvider,
   runRefresh,
   now = Date.now,
@@ -221,8 +226,29 @@ function createBackgroundSmartCategoryRefresh({
     const categories = typeof listSmartCategories === 'function' ? listSmartCategories() : [];
     const hasUsableProvider = typeof hasProvider === 'function' ? hasProvider() : !!hasProvider;
     const activeCategoryCount = categories.filter((c) => c.status === 'visible' || c.status === 'candidate').length;
-    const pendingCount = pending.length || state.pendingSaveCount;
+    const pendingCount = Math.max(pending.length, state.pendingSaveCount);
     const manual = state.manualRequested;
+    const taxonomyThreshold = Math.max(
+      1,
+      Number(config.taxonomyPendingSaveThreshold) || DEFAULT_SMART_CATEGORY_REFRESH_CONFIG.taxonomyPendingSaveThreshold,
+    );
+    const taxonomyInterval = Math.max(
+      1,
+      Number(config.taxonomyIntervalMs) || DEFAULT_SMART_CATEGORY_REFRESH_CONFIG.taxonomyIntervalMs,
+    );
+    const taxonomyIntervalPendingThreshold = Math.max(
+      1,
+      Number(config.taxonomyIntervalPendingSaveThreshold)
+        || DEFAULT_SMART_CATEGORY_REFRESH_CONFIG.taxonomyIntervalPendingSaveThreshold,
+    );
+    const storedLastTaxonomyAt = typeof getLastTaxonomyRefreshAt === 'function'
+      ? Number(getLastTaxonomyRefreshAt()) || 0
+      : 0;
+    const lastTaxonomyAt = Math.max(Number(state.lastTaxonomyRefreshAt) || 0, storedLastTaxonomyAt);
+    const taxonomyIntervalDue = !lastTaxonomyAt || now() - lastTaxonomyAt >= taxonomyInterval;
+    const taxonomyRequested = manual
+      || pendingCount >= taxonomyThreshold
+      || (pendingCount >= taxonomyIntervalPendingThreshold && taxonomyIntervalDue);
     const blockers = activeQuietBlockers(state, now(), config);
     const threshold = Math.max(1, Number(config.pendingSaveThreshold) || DEFAULT_SMART_CATEGORY_REFRESH_CONFIG.pendingSaveThreshold);
     if (hasUsableProvider && activeCategoryCount === 0 && blockers.length === 0 && (manual || pendingCount >= threshold)) {
@@ -232,9 +258,12 @@ function createBackgroundSmartCategoryRefresh({
         const result = await runRefresh({
           pendingSaves: pending,
           categories,
+          manual,
+          taxonomyRequested,
           shouldContinue: () => activeQuietBlockers(state, now(), config).length === 0,
         });
         state.lastRunFinishedAt = now();
+        if (taxonomyRequested) state.lastTaxonomyRefreshAt = state.lastRunFinishedAt;
         state.pendingSaveCount = 0;
         return result;
       } finally {
@@ -261,9 +290,12 @@ function createBackgroundSmartCategoryRefresh({
       const result = await runRefresh({
         pendingSaves: pending,
         categories,
+        manual,
+        taxonomyRequested,
         shouldContinue: () => activeQuietBlockers(state, now(), config).length === 0,
       });
       state.lastRunFinishedAt = now();
+      if (taxonomyRequested) state.lastTaxonomyRefreshAt = state.lastRunFinishedAt;
       state.pendingSaveCount = 0;
       return result;
     } finally {

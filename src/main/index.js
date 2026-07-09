@@ -58,6 +58,7 @@ const {
   initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
   upsertSaveTopicProfile, getSaveTopicProfile, listSmartCategories, getSmartCategoryAliases,
   upsertSmartCategoryMembership, recordSmartCategoryRun, getPendingSmartCategorySaves,
+  applySmartCategoryTaxonomyChanges, listSmartCategoryRuns,
 } = require('./db');
 const { getPref } = require('./settings');
 const {
@@ -66,9 +67,11 @@ const {
   embedText,
   generateSaveTopicProfile,
   generateSmartCategoryMemberships,
+  generateSmartCategoryTaxonomyRefresh,
 } = require('./openai');
 const { createSaveTopicProfile } = require('./save-topic-profiles');
 const { assignSaveToExistingSmartCategories } = require('./smart-category-memberships');
+const { runSmartCategoryTaxonomyRefresh } = require('./smart-category-taxonomy-refresh');
 const {
   createBackgroundSmartCategoryRefresh,
   runIncrementalSmartCategoryRefresh,
@@ -185,6 +188,13 @@ const DEV_URL = 'http://localhost:5173';
 let mainWindow = null;
 let tray = null;
 let smartCategoryRefresh = null;
+
+function withSmartCategoryAliases(categories = []) {
+  return (Array.isArray(categories) ? categories : []).map((category) => ({
+    ...category,
+    aliases: getSmartCategoryAliases(category.id).map((alias) => alias.alias),
+  }));
+}
 
 // macOS Dock-drop queue. The 'open-file' event can fire BEFORE app
 // is ready (e.g. when the user drags an image onto a non-running
@@ -1100,9 +1110,14 @@ app.whenReady().then(() => {
   smartCategoryRefresh = createBackgroundSmartCategoryRefresh({
     getPendingSmartCategorySaves,
     listSmartCategories,
+    getLastTaxonomyRefreshAt: () => {
+      const run = listSmartCategoryRuns({ limit: 100 })
+        .find((row) => row.run_type === 'taxonomy_refresh');
+      return Number(run?.finished_at || run?.started_at) || 0;
+    },
     hasProvider: hasAiSession,
-    runRefresh: ({ pendingSaves, categories, shouldContinue }) =>
-      runIncrementalSmartCategoryRefresh({
+    runRefresh: async ({ pendingSaves, categories, shouldContinue, taxonomyRequested }) => {
+      const incrementalResult = await runIncrementalSmartCategoryRefresh({
         pendingSaves,
         categories,
         hasProvider: hasAiSession(),
@@ -1121,7 +1136,20 @@ app.whenReady().then(() => {
         assignSaveToExistingSmartCategories,
         shouldContinue,
         recordSmartCategoryRun,
-      }),
+      });
+      if (!taxonomyRequested || !shouldContinue?.()) return incrementalResult;
+      const taxonomyResult = await runSmartCategoryTaxonomyRefresh({
+        categories: withSmartCategoryAliases(listSmartCategories()),
+        providerName: 'codex',
+        provider: { generateSmartCategoryTaxonomyRefresh },
+        storage: {
+          applySmartCategoryTaxonomyChanges,
+          recordSmartCategoryRun,
+        },
+        runType: 'taxonomy_refresh',
+      });
+      return { ...incrementalResult, taxonomy: taxonomyResult };
+    },
   });
   // Decide the local no-account trial start on first launch (idempotent;
   // also done lazily inside getEntitlement). MUST run after initDatabase

@@ -65,7 +65,7 @@ test('migration adds smart category foundation tables to upgraded databases', wi
     DROP TABLE IF EXISTS save_topic_profiles;
     DROP TABLE IF EXISTS smart_category_runs;
     DROP TABLE IF EXISTS smart_categories;
-    PRAGMA user_version = ${targetVersion - 1};
+    PRAGMA user_version = ${targetVersion - 2};
   `);
   raw.close();
 
@@ -149,8 +149,16 @@ test('smart categories support internal controls, aliases, topic profiles, membe
     inputSaveCount: 1,
     createdCount: 1,
     provider: 'codex',
+    metadata: {
+      deferred_merges: [{ category_ids: ['cat-ai', 'cat-design'], proposed_name: 'Creative systems' }],
+      deferred_splits: [],
+    },
   }).ok, true);
   assert.equal(db.listSmartCategoryRuns()[0].id, 'run-1');
+  assert.deepEqual(
+    JSON.parse(db.listSmartCategoryRuns()[0].metadata).deferred_merges[0].category_ids,
+    ['cat-ai', 'cat-design'],
+  );
 }));
 
 test('smart category foundation does not change existing library queries', withTempDb((db) => {
@@ -288,6 +296,37 @@ test('pinned smart category names reject automatic renames', withTempDb((db) => 
 
   assert.equal(skipped.ok, false);
   assert.equal(skipped.reason, 'name-frozen');
+  assert.equal(db.getSmartCategory('cat-ai').name, 'AI tools');
+  assert.deepEqual(db.getSmartCategoryAliases('cat-ai'), []);
+}));
+
+test('taxonomy apply rolls back all rename and alias changes when one change fails', withTempDb((db) => {
+  db.initDatabase();
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI tools',
+    status: 'visible',
+  });
+  db.createSmartCategory({
+    id: 'cat-pinned',
+    name: 'Pinned name',
+    status: 'visible',
+    frozenName: true,
+  });
+
+  const result = db.applySmartCategoryTaxonomyChanges({
+    renames: [
+      { id: 'cat-ai', name: 'AI workflow tools', automatic: true, changedAt: 5000 },
+      { id: 'cat-pinned', name: 'Pinned workflows', automatic: true, changedAt: 5000 },
+    ],
+    aliases: [
+      { categoryId: 'cat-ai', alias: 'AI systems', source: 'model_synonym', createdAt: 5000 },
+    ],
+    changedAt: 5000,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'name-frozen');
   assert.equal(db.getSmartCategory('cat-ai').name, 'AI tools');
   assert.deepEqual(db.getSmartCategoryAliases('cat-ai'), []);
 }));

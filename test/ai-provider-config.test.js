@@ -56,3 +56,13 @@ test('Codex provider includes smart category membership scoring contract', () =>
   assert.match(source, /Use 0\.45-0\.74 for secondary fit/);
   assert.match(source, /Below 0\.45 omit/);
 });
+
+test('Codex provider includes conservative taxonomy refresh contract', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('../src/main/ai-codex-provider'), 'utf8');
+
+  assert.match(source, /generateSmartCategoryTaxonomyRefresh/);
+  assert.match(source, /Prefer aliases over renames/);
+  assert.match(source, /Never rename for casing, punctuation, pluralization/);
+  assert.match(source, /Merge\/split proposals are advisory only/);
+});

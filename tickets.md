@@ -87,10 +87,10 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** Add stability controls and recent-change indicator; Run background smart category refresh.
 
-- [ ] Cosmetic renames are rejected.
-- [ ] Rename proposals obey cooldowns and pinned-name rules.
-- [ ] Failed or invalid refresh output keeps the previous taxonomy intact.
-- [ ] Merge/split proposals are recorded or deferred until assignment behavior is stable.
+- [x] Cosmetic renames are rejected.
+- [x] Rename proposals obey cooldowns and pinned-name rules.
+- [x] Failed or invalid refresh output keeps the previous taxonomy intact.
+- [x] Merge/split proposals are recorded or deferred until assignment behavior is stable.
 
 ## Use local embeddings for faster smart category scoring
 
