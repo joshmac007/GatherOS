@@ -55,11 +55,20 @@ app.on('second-instance', (_event, argv) => {
 });
 
 const {
-  initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave, upsertSaveTopicProfile,
+  initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
+  upsertSaveTopicProfile, listSmartCategories, getSmartCategoryAliases,
+  upsertSmartCategoryMembership,
 } = require('./db');
 const { getPref } = require('./settings');
-const { hasSession: hasAiSession, analyzeImage, embedText, generateSaveTopicProfile } = require('./openai');
+const {
+  hasSession: hasAiSession,
+  analyzeImage,
+  embedText,
+  generateSaveTopicProfile,
+  generateSmartCategoryMemberships,
+} = require('./openai');
 const { createSaveTopicProfile } = require('./save-topic-profiles');
+const { assignSaveToExistingSmartCategories } = require('./smart-category-memberships');
 const licensing = require('./licensing');
 const { URL_SCHEME: LICENSE_URL_SCHEME } = require('../shared/licensing-config');
 
@@ -134,6 +143,18 @@ async function maybeCreateTopicProfile(record) {
   });
   if (!result?.ok) {
     console.warn('[smart-categories] topic profile skipped for save', record.id, result?.reason || 'unknown');
+    return result;
+  }
+  const membershipResult = await assignSaveToExistingSmartCategories({
+    saveId: record.id,
+    profile: result.profile,
+    provider: { generateSmartCategoryMemberships },
+    listSmartCategories,
+    getSmartCategoryAliases,
+    upsertSmartCategoryMembership,
+  });
+  if (!membershipResult?.ok) {
+    console.warn('[smart-categories] membership assignment skipped for save', record.id, membershipResult?.reason || 'unknown');
   }
   return result;
 }

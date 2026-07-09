@@ -39,6 +39,16 @@ async function generateSaveTopicProfile(input, options = {}) {
   return getProvider().generateSaveTopicProfile(input, options);
 }
 
+async function generateSmartCategoryMemberships(input) {
+  const active = getProvider();
+  if (typeof active.generateSmartCategoryMemberships !== 'function') {
+    const err = new Error('Active AI provider does not support smart category membership scoring.');
+    err.code = 'membership_scoring_unavailable';
+    throw err;
+  }
+  return active.generateSmartCategoryMemberships(input);
+}
+
 async function embedText(text) {
   return getProvider().embedText(text);
 }
@@ -57,6 +67,7 @@ module.exports = {
   analyzeImage,
   generateImagePrompt,
   generateSaveTopicProfile,
+  generateSmartCategoryMemberships,
   generateImage,
   embedText,
   getUsage,

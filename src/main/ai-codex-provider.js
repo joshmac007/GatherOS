@@ -199,6 +199,32 @@ function createCodexProvider(config) {
         `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
       );
     },
+    async generateSmartCategoryMemberships(input) {
+      return codexJson(
+        config,
+        null,
+        'Given one save topic profile and candidate smart categories, assign weighted memberships.\n\n' +
+        'Return JSON only:\n' +
+        '{\n' +
+        '  "memberships": [\n' +
+        '    {\n' +
+        '      "category_id": "cat_123",\n' +
+        '      "weight": 0.0,\n' +
+        '      "evidence": "short reason"\n' +
+        '    }\n' +
+        '  ],\n' +
+        '  "needs_new_category": true,\n' +
+        '  "new_category_hint": "short topic label or null"\n' +
+        '}\n\n' +
+        'Rules:\n' +
+        '- A save may belong to multiple categories.\n' +
+        '- Use 0.75+ for strong primary fit.\n' +
+        '- Use 0.45-0.74 for secondary fit.\n' +
+        '- Below 0.45 omit.\n' +
+        '- Do not force a category if evidence is weak.\n\n' +
+        `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
+      );
+    },
     async embedText() {
       const err = new Error('Codex provider does not expose embeddings. Use GATHERLOCAL_AI_PROVIDER=local with a local embedding model.');
       err.code = 'embeddings_unavailable';

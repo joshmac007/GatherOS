@@ -13,7 +13,8 @@ const {
   listBoards, listBoardsWithThumbs, getBoard, createBoard, renameBoard, deleteBoard, reorderBoards,
   getBoardItems, getBoardPreviewSaves, getBoardSaveIds, getBoardsForSave,
   upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
-  upsertSaveTopicProfile,
+  upsertSaveTopicProfile, listSmartCategories, getSmartCategoryAliases,
+  upsertSmartCategoryMembership,
 } = require('./db');
 const {
   deleteImageFiles,
@@ -44,11 +45,13 @@ const {
   analyzeImage,
   embedText,
   generateSaveTopicProfile,
+  generateSmartCategoryMemberships,
   generateImagePrompt,
   generateImage,
   getUsage: getAiUsage,
 } = require('./openai');
 const { createSaveTopicProfile } = require('./save-topic-profiles');
+const { assignSaveToExistingSmartCategories } = require('./smart-category-memberships');
 const { detectColorName } = require('./colorNames');
 const { canCreateSave } = require('./entitlement');
 const { notifyNeedsUpgrade } = require('./notify');
@@ -1134,6 +1137,18 @@ function registerIpcHandlers() {
         });
         if (!profileResult?.ok) {
           console.warn('[smart-categories] topic profile skipped for save', row.id, profileResult?.reason || 'unknown');
+        } else {
+          const membershipResult = await assignSaveToExistingSmartCategories({
+            saveId: row.id,
+            profile: profileResult.profile,
+            provider: { generateSmartCategoryMemberships },
+            listSmartCategories,
+            getSmartCategoryAliases,
+            upsertSmartCategoryMembership,
+          });
+          if (!membershipResult?.ok) {
+            console.warn('[smart-categories] membership assignment skipped for save', row.id, membershipResult?.reason || 'unknown');
+          }
         }
         processed += 1;
       } catch (err) {

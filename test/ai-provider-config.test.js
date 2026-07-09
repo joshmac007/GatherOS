@@ -45,3 +45,14 @@ test('Codex provider uses app-server read-only sandbox spelling', () => {
   assert.match(source, /sandbox:\s*'read-only'/);
   assert.doesNotMatch(source, /sandbox:\s*'readOnly'/);
 });
+
+test('Codex provider includes smart category membership scoring contract', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('../src/main/ai-codex-provider'), 'utf8');
+
+  assert.match(source, /generateSmartCategoryMemberships/);
+  assert.match(source, /Given one save topic profile and candidate smart categories/);
+  assert.match(source, /Use 0\.75\+ for strong primary fit/);
+  assert.match(source, /Use 0\.45-0\.74 for secondary fit/);
+  assert.match(source, /Below 0\.45 omit/);
+});
