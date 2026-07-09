@@ -32,11 +32,25 @@ The classifier should learn category names and subtopics from the user's actual 
 GatherLocal already has:
 
 - X bookmark import, where X saves currently receive a generic `bookmark` tag.
-- AI indexing on save, including image analysis, title/description/OCR fields, and embeddings.
+- AI indexing on save, including image analysis, title/description/OCR fields, and embeddings when the active provider supports them.
 - Search that combines structured filters, semantic embeddings, literal text matches, tag matches, and color matches.
 - Manual per-save tags and collection membership.
 
 Smart categories should build on these pieces rather than introduce a separate source of truth for save content.
+
+The current default AI path is the Codex provider, which starts `codex app-server` locally and uses the user's signed-in Codex/ChatGPT session. This path can analyze images and return JSON, but it does not expose raw embedding vectors. The implementation must therefore support a Codex-only classifier path and optionally use a local embedding provider when one is configured.
+
+```text
+Codex-only mode:
+  Codex vision/topic profile
+  Codex JSON membership scoring
+  Codex category naming/refresh
+
+Codex + local embeddings mode:
+  Codex vision/topic profile
+  local embedding vectors for clustering/scoring
+  Codex category naming/refresh
+```
 
 ## Core concept
 
@@ -127,6 +141,198 @@ This is internal fuel. It should not appear as user-facing tags.
 - `error`
 
 This supports debugging, throttling, and future settings UI.
+
+## AI execution plan
+
+AI should be used for understanding and naming. Deterministic application code should control persistence, thresholds, churn guardrails, and UI visibility.
+
+### Codex subscription path
+
+The app should reuse the existing Codex provider pattern:
+
+```text
+GatherLocal
+  spawn "codex app-server"
+    |
+    initialize JSON-RPC
+    |
+    thread/start
+      approvalPolicy: never
+      sandbox: read-only
+      serviceName: gatherlocal
+    |
+    turn/start
+      text prompt
+      optional localImage path
+    |
+    Codex returns streamed text
+    |
+    app parses JSON
+```
+
+The user must already be signed in to Codex. The Codex path must not require an OpenAI Platform API key.
+
+### Embedding path
+
+The Codex provider should not be treated as an embedding provider. If embeddings are needed, use the local provider or another explicit embedding provider. If no embedding provider is available, fall back to Codex JSON membership scoring against a bounded list of candidate categories.
+
+```text
+With embeddings:
+  compare save vectors to smart category centroids
+  use Codex only for topic profiles, naming, aliases, and refresh proposals
+
+Without embeddings:
+  ask Codex to score one save against candidate categories
+  keep candidate list small
+  batch work during idle windows
+```
+
+## Prompt contracts
+
+All prompts must return JSON only. The app should validate every response before writing to SQLite. Invalid JSON, missing required fields, or out-of-range scores fail the run without changing existing categories.
+
+### Save topic profile prompt
+
+Purpose: convert one save into internal classifier fuel.
+
+```text
+You are categorizing one saved item for a personal visual/reference library.
+
+Return JSON only:
+{
+  "summary": "one concrete sentence",
+  "concepts": ["3-8 normalized concepts"],
+  "content_type": "tweet|product-screenshot|article|diagram|moodboard|code|other",
+  "intent": "tool-reference|tutorial|inspiration|opinion|research|quote|other",
+  "visible_text": "important OCR text or empty",
+  "confidence": 0.0
+}
+
+Use all supplied evidence. If image evidence conflicts with tweet text,
+prefer the image for visual/content category. Avoid generic concepts like
+"design", "image", "post", "tool" unless qualified.
+```
+
+Inputs:
+
+```json
+{
+  "tweetText": "",
+  "quotedTweetText": "",
+  "author": "",
+  "sourceUrl": "",
+  "manualTags": [],
+  "existingTitle": null
+}
+```
+
+If the save has an image, attach the local image path as Codex `localImage`.
+
+### Membership scoring prompt
+
+Purpose: assign one save to zero or more existing smart categories when embeddings are unavailable or when a semantic tie needs clarification.
+
+```text
+Given one save topic profile and candidate smart categories, assign weighted memberships.
+
+Return JSON only:
+{
+  "memberships": [
+    {
+      "category_id": "cat_123",
+      "weight": 0.0,
+      "evidence": "short reason"
+    }
+  ],
+  "needs_new_category": true,
+  "new_category_hint": "short topic label or null"
+}
+
+Rules:
+- A save may belong to multiple categories.
+- Use 0.75+ for strong primary fit.
+- Use 0.45-0.74 for secondary fit.
+- Below 0.45 omit.
+- Do not force a category if evidence is weak.
+```
+
+Inputs should include the save topic profile and a bounded candidate category list:
+
+```json
+{
+  "save": {
+    "summary": "",
+    "concepts": [],
+    "content_type": "",
+    "intent": ""
+  },
+  "candidate_categories": [
+    {
+      "id": "cat_123",
+      "name": "AI workflow tools",
+      "description": "Tools and examples for automating tasks across apps",
+      "aliases": ["AI automation", "workflow ops"]
+    }
+  ]
+}
+```
+
+### Cluster naming prompt
+
+Purpose: name a new candidate cluster from multiple representative saves.
+
+```text
+Name this cluster for sidebar navigation.
+
+Return JSON only:
+{
+  "name": "2-4 word category name",
+  "description": "one sentence meaning",
+  "aliases": ["search synonym 1", "search synonym 2"],
+  "visibility": "candidate|visible",
+  "confidence": 0.0
+}
+
+Rules:
+- Name from repeated meaning across saves.
+- Avoid vague names: tools, ideas, design, inspiration.
+- Prefer names that survive future saves.
+- Use aliases for broader terms users may search.
+```
+
+Inputs should include 5-12 representative save summaries when available.
+
+### Taxonomy refresh prompt
+
+Purpose: propose conservative rename, alias, merge, and split changes.
+
+```text
+Review existing smart categories and recent save profiles.
+
+Return JSON only:
+{
+  "renames": [
+    {
+      "category_id": "cat_123",
+      "new_name": "...",
+      "old_name_alias": "...",
+      "confidence": 0.0,
+      "reason": "..."
+    }
+  ],
+  "merges": [],
+  "splits": [],
+  "aliases": []
+}
+
+Rules:
+- Be conservative.
+- Prefer aliases over renames unless name is clearly stale.
+- Never rename if improvement is cosmetic.
+- Do not merge/split without strong repeated evidence.
+```
+
+Application guardrails still decide whether proposals apply.
 
 ## Evidence bundle per save
 
@@ -402,6 +608,8 @@ Visible categories require:
 
 - If AI provider unavailable: mark smart categorization as pending and retry later.
 - If image analysis fails: classify from available evidence only if confidence is high enough; otherwise leave pending.
+- If Codex is available but embeddings are unavailable: use Codex-only membership scoring rather than blocking categorization.
+- If neither Codex nor an embedding provider is available: keep smart category work pending.
 - If taxonomy refresh fails midway: keep previous taxonomy and write failed run metadata.
 - If model returns invalid JSON: reject run output, keep old state, record error.
 - If a proposed merge/split/rename conflicts with frozen user choice: skip that change.
@@ -444,6 +652,8 @@ Classifier fixtures:
 
 - weak X bookmark with image-only meaning categorizes from vision/OCR evidence
 - one save can receive multiple category memberships
+- Codex-only path assigns memberships without embeddings
+- local-embedding path assigns memberships through vector similarity
 - repeated refresh preserves stable category ID
 - low-confidence clusters remain hidden candidates
 - category rename creates alias and recent-change metadata
@@ -475,10 +685,12 @@ These defaults should be treated as starting values and tuned with fixtures and 
 ## Recommended first implementation slice
 
 1. Add schema and storage APIs for smart categories, aliases, topic profiles, memberships, and runs.
-2. Add deterministic classifier scaffolding that can assign saves to fixture categories using existing embeddings.
+2. Add Codex JSON helpers for topic profile, membership scoring, cluster naming, and taxonomy refresh prompts.
 3. Add background opportunity scheduler with no model calls yet.
-4. Add minimal Smart categories navigation and category result view.
-5. Add model-backed topic profiling and category naming.
-6. Add taxonomy refresh guardrails for rename/alias first; defer merge/split until assignments are stable.
+4. Add deterministic classifier scaffolding that can persist topic profiles and memberships from fixture JSON.
+5. Add Codex-only membership assignment for new saves.
+6. Add minimal Smart categories navigation and category result view.
+7. Add optional local-embedding clustering when `GATHERLOCAL_AI_PROVIDER=local` exposes embeddings.
+8. Add taxonomy refresh guardrails for rename/alias first; defer merge/split until assignments are stable.
 
 This sequence proves the product behavior before allowing the classifier to rewrite taxonomy structure.
