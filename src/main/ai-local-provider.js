@@ -67,6 +67,20 @@ async function visionJson(config, filePath, system, user, maxTokens) {
   return extractJsonObject(content);
 }
 
+async function textJson(config, system, user, maxTokens) {
+  const data = await postJson(config, '/chat/completions', {
+    model: config.chatModel,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: maxTokens,
+  });
+  const content = data.choices?.[0]?.message?.content;
+  return extractJsonObject(content);
+}
+
 function createLocalProvider(config) {
   return {
     name: 'local',
@@ -113,6 +127,16 @@ function createLocalProvider(config) {
       return typeof parsed.prompt === 'string'
         ? parsed.prompt.trim().replace(/^["'`]+|["'`]+$/g, '') || null
         : null;
+    },
+    async generateSaveTopicProfile(input, { imagePath = null } = {}) {
+      const system =
+        'You are categorizing one saved item for a personal visual/reference library.\n\n' +
+        'Return JSON only: {"summary":"one concrete sentence","concepts":["3-8 normalized concepts"],"content_type":"tweet|product-screenshot|article|diagram|moodboard|code|other","intent":"tool-reference|tutorial|inspiration|opinion|research|quote|other","visible_text":"important OCR text or empty","confidence":0.0}.\n\n' +
+        'Use all supplied evidence. If image evidence conflicts with tweet text, prefer the image for visual/content category. Avoid generic concepts like "design", "image", "post", "tool" unless qualified.';
+      const user = `Inputs:\n${JSON.stringify(input || {}, null, 2)}`;
+      return imagePath
+        ? visionJson(config, imagePath, system, user, 700)
+        : textJson(config, system, user, 700);
     },
     async embedText(text) {
       const input = (text || '').trim();

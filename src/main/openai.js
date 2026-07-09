@@ -35,6 +35,10 @@ async function generateImagePrompt(filePath) {
   return getProvider().generateImagePrompt(filePath);
 }
 
+async function generateSaveTopicProfile(input, options = {}) {
+  return getProvider().generateSaveTopicProfile(input, options);
+}
+
 async function embedText(text) {
   return getProvider().embedText(text);
 }
@@ -52,6 +56,7 @@ module.exports = {
   autoTagImage,
   analyzeImage,
   generateImagePrompt,
+  generateSaveTopicProfile,
   generateImage,
   embedText,
   getUsage,

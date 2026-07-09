@@ -21,10 +21,10 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** Add smart category foundation.
 
-- [ ] Weak X bookmarks with image-only meaning produce useful concepts, summaries, content type, intent, and confidence.
-- [ ] The app attaches image evidence when present and uses text-only evidence when image evidence is unavailable.
-- [ ] Invalid or incomplete Codex JSON fails safely without changing category state.
-- [ ] Topic profiles are internal classifier fuel, not user-facing tags.
+- [x] Weak X bookmarks with image-only meaning produce useful concepts, summaries, content type, intent, and confidence.
+- [x] The app attaches image evidence when present and uses text-only evidence when image evidence is unavailable.
+- [x] Invalid or incomplete Codex JSON fails safely without changing category state.
+- [x] Topic profiles are internal classifier fuel, not user-facing tags.
 
 ## Assign Codex-only weighted memberships
 

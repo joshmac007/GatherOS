@@ -13,6 +13,7 @@ const {
   listBoards, listBoardsWithThumbs, getBoard, createBoard, renameBoard, deleteBoard, reorderBoards,
   getBoardItems, getBoardPreviewSaves, getBoardSaveIds, getBoardsForSave,
   upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
+  upsertSaveTopicProfile,
 } = require('./db');
 const {
   deleteImageFiles,
@@ -42,10 +43,12 @@ const {
   autoTagImage,
   analyzeImage,
   embedText,
+  generateSaveTopicProfile,
   generateImagePrompt,
   generateImage,
   getUsage: getAiUsage,
 } = require('./openai');
+const { createSaveTopicProfile } = require('./save-topic-profiles');
 const { detectColorName } = require('./colorNames');
 const { canCreateSave } = require('./entitlement');
 const { notifyNeedsUpgrade } = require('./notify');
@@ -1121,6 +1124,16 @@ function registerIpcHandlers() {
           updateSave(updates);
           const updated = getSave(row.id);
           event.sender.send('save:updated', updated);
+        }
+
+        const profileResult = await createSaveTopicProfile({
+          save: getSave(row.id) || row,
+          manualTags: getTagsForSave(row.id),
+          provider: { generateSaveTopicProfile },
+          upsertSaveTopicProfile,
+        });
+        if (!profileResult?.ok) {
+          console.warn('[smart-categories] topic profile skipped for save', row.id, profileResult?.reason || 'unknown');
         }
         processed += 1;
       } catch (err) {

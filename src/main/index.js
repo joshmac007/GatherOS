@@ -55,10 +55,11 @@ app.on('second-instance', (_event, argv) => {
 });
 
 const {
-  initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
+  initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave, upsertSaveTopicProfile,
 } = require('./db');
 const { getPref } = require('./settings');
-const { hasSession: hasAiSession, analyzeImage, embedText } = require('./openai');
+const { hasSession: hasAiSession, analyzeImage, embedText, generateSaveTopicProfile } = require('./openai');
+const { createSaveTopicProfile } = require('./save-topic-profiles');
 const licensing = require('./licensing');
 const { URL_SCHEME: LICENSE_URL_SCHEME } = require('../shared/licensing-config');
 
@@ -120,6 +121,21 @@ function drainLicenseTokenQueue() {
 // Float32Array <-> Buffer plumbing for storing embeddings as SQLite BLOBs.
 function vectorToBuffer(arr) {
   return Buffer.from(new Float32Array(arr).buffer);
+}
+
+async function maybeCreateTopicProfile(record) {
+  const save = getSave(record.id) || record;
+  const manualTags = getTagsForSave(record.id);
+  const result = await createSaveTopicProfile({
+    save,
+    manualTags,
+    provider: { generateSaveTopicProfile },
+    upsertSaveTopicProfile,
+  });
+  if (!result?.ok) {
+    console.warn('[smart-categories] topic profile skipped for save', record.id, result?.reason || 'unknown');
+  }
+  return result;
 }
 const { ensureStorageDirs, saveImageFromFile } = require('./storage');
 const { registerIpcHandlers } = require('./ipc');
@@ -524,7 +540,8 @@ async function maybeAIIndexInBackground(record) {
 
   const wantName = getPref('autoNameOnSave', true) && !(record.title && record.title.trim());
   const wantSemantic = getPref('semanticSearch', true);
-  if (!wantName && !wantSemantic) return;
+  const wantTopicProfile = true;
+  if (!wantName && !wantSemantic && !wantTopicProfile) return;
 
   // Tell the renderer this save is being processed so the UI can show
   // a loading indicator. Mirrored on completion / failure in the
@@ -534,7 +551,12 @@ async function maybeAIIndexInBackground(record) {
   }
 
   try {
-    const { title, description, text } = await analyzeImage(record.file_path);
+    let title = '';
+    let description = '';
+    let text = '';
+    if (wantName || wantSemantic) {
+      ({ title, description, text } = await analyzeImage(record.file_path));
+    }
 
     const updates = { id: record.id };
     // Re-fetch before writing the AI title — the user may have typed
@@ -575,6 +597,10 @@ async function maybeAIIndexInBackground(record) {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('save:updated', updated);
       }
+    }
+
+    if (wantTopicProfile) {
+      await maybeCreateTopicProfile(record);
     }
   } catch (err) {
     console.error('AI index failed:', err.message);

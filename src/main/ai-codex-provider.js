@@ -181,6 +181,24 @@ function createCodexProvider(config) {
         ? parsed.prompt.trim().replace(/^["'`]+|["'`]+$/g, '') || null
         : null;
     },
+    async generateSaveTopicProfile(input, { imagePath = null } = {}) {
+      return codexJson(
+        config,
+        imagePath,
+        'You are categorizing one saved item for a personal visual/reference library.\n\n' +
+        'Return JSON only:\n' +
+        '{\n' +
+        '  "summary": "one concrete sentence",\n' +
+        '  "concepts": ["3-8 normalized concepts"],\n' +
+        '  "content_type": "tweet|product-screenshot|article|diagram|moodboard|code|other",\n' +
+        '  "intent": "tool-reference|tutorial|inspiration|opinion|research|quote|other",\n' +
+        '  "visible_text": "important OCR text or empty",\n' +
+        '  "confidence": 0.0\n' +
+        '}\n\n' +
+        'Use all supplied evidence. If image evidence conflicts with tweet text, prefer the image for visual/content category. Avoid generic concepts like "design", "image", "post", "tool" unless qualified.\n\n' +
+        `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
+      );
+    },
     async embedText() {
       const err = new Error('Codex provider does not expose embeddings. Use GATHERLOCAL_AI_PROVIDER=local with a local embedding model.');
       err.code = 'embeddings_unavailable';
