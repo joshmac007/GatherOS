@@ -4,6 +4,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const Database = require('better-sqlite3');
+const {
+  vectorToBuffer,
+  bufferToVector,
+} = require('../src/main/smart-category-vectors');
 
 function loadDb(userData) {
   const electronPath = require.resolve('electron');
@@ -159,6 +163,57 @@ test('smart categories support internal controls, aliases, topic profiles, membe
     JSON.parse(db.listSmartCategoryRuns()[0].metadata).deferred_merges[0].category_ids,
     ['cat-ai', 'cat-design'],
   );
+}));
+
+test('category centroids can be stored and member topic embeddings can be read', withTempDb((db) => {
+  db.initDatabase();
+  db.insertSave({
+    id: 'save-ai-1',
+    filePath: '/tmp/ai-1.png',
+    thumbPath: '/tmp/ai-1-thumb.png',
+    title: 'AI concept one',
+    createdAt: 1000,
+  });
+  db.insertSave({
+    id: 'save-ai-2',
+    filePath: '/tmp/ai-2.png',
+    thumbPath: '/tmp/ai-2-thumb.png',
+    title: 'AI concept two',
+    createdAt: 1100,
+  });
+  db.createSmartCategory({ id: 'cat-ai', name: 'AI image generation', status: 'visible' });
+  db.upsertSaveTopicProfile({
+    saveId: 'save-ai-1',
+    summary: 'AI image concept board.',
+    concepts: ['ai image generation'],
+    embedding: vectorToBuffer([1, 0, 0]),
+  });
+  db.upsertSaveTopicProfile({
+    saveId: 'save-ai-2',
+    summary: 'Related ad workflow.',
+    concepts: ['ad creative workflows'],
+    embedding: vectorToBuffer([0.8, 0.6, 0]),
+  });
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: 'save-ai-1', weight: 0.9 });
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: 'save-ai-2', weight: 0.7 });
+
+  const rows = db.getSmartCategoryMemberTopicEmbeddings('cat-ai');
+  assert.deepEqual(rows.map((row) => row.save_id), ['save-ai-1', 'save-ai-2']);
+  assert.deepEqual(Array.from(bufferToVector(rows[0].embedding)), [1, 0, 0]);
+
+  const updated = db.updateSmartCategoryCentroidEmbedding({
+    categoryId: 'cat-ai',
+    centroidEmbedding: vectorToBuffer([0.9, 0.3, 0]),
+    updatedAt: 2000,
+  });
+  assert.equal(updated.ok, true);
+  const category = db.getSmartCategory('cat-ai');
+  assert.deepEqual(Array.from(bufferToVector(category.centroid_embedding)), [
+    0.8999999761581421,
+    0.30000001192092896,
+    0,
+  ]);
+  assert.equal(category.updated_at, 2000);
 }));
 
 test('smart category foundation does not change existing library queries', withTempDb((db) => {

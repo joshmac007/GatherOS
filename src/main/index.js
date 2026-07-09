@@ -58,6 +58,7 @@ const {
   initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
   upsertSaveTopicProfile, getSaveTopicProfile, listSmartCategories, getSmartCategoryAliases,
   upsertSmartCategoryMembership, recordSmartCategoryRun, getPendingSmartCategorySaves,
+  getSmartCategoryMemberTopicEmbeddings, updateSmartCategoryCentroidEmbedding,
   applySmartCategoryTaxonomyChanges, listSmartCategoryRuns,
 } = require('./db');
 const { getPref } = require('./settings');
@@ -155,10 +156,13 @@ async function maybeCreateTopicProfile(record) {
   const membershipResult = await assignSaveToExistingSmartCategories({
     saveId: record.id,
     profile: result.profile,
-    provider: { generateSmartCategoryMemberships },
+    provider: { embedText, generateSmartCategoryMemberships },
     listSmartCategories,
     getSmartCategoryAliases,
+    upsertSaveTopicProfile,
     upsertSmartCategoryMembership,
+    getSmartCategoryMemberTopicEmbeddings,
+    updateSmartCategoryCentroidEmbedding,
   });
   if (!membershipResult?.ok) {
     console.warn('[smart-categories] membership assignment skipped for save', record.id, membershipResult?.reason || 'unknown');
@@ -1122,12 +1126,14 @@ app.whenReady().then(() => {
         categories,
         hasProvider: hasAiSession(),
         providerName: 'codex',
-        provider: { generateSaveTopicProfile, generateSmartCategoryMemberships },
+        provider: { generateSaveTopicProfile, embedText, generateSmartCategoryMemberships },
         storage: {
           upsertSaveTopicProfile,
           listSmartCategories,
           getSmartCategoryAliases,
           upsertSmartCategoryMembership,
+          getSmartCategoryMemberTopicEmbeddings,
+          updateSmartCategoryCentroidEmbedding,
         },
         getSave,
         getTagsForSave,

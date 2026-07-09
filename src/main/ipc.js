@@ -16,6 +16,7 @@ const {
   upsertSaveTopicProfile, listSmartCategories, listNavigableSmartCategories,
   hideSmartCategory, pinSmartCategory,
   getSmartCategoryAliases, getSmartCategorySaves, upsertSmartCategoryMembership,
+  getSmartCategoryMemberTopicEmbeddings, updateSmartCategoryCentroidEmbedding,
 } = require('./db');
 const {
   deleteImageFiles,
@@ -1176,10 +1177,13 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
           const membershipResult = await assignSaveToExistingSmartCategories({
             saveId: row.id,
             profile: profileResult.profile,
-            provider: { generateSmartCategoryMemberships },
+            provider: { embedText, generateSmartCategoryMemberships },
             listSmartCategories,
             getSmartCategoryAliases,
+            upsertSaveTopicProfile,
             upsertSmartCategoryMembership,
+            getSmartCategoryMemberTopicEmbeddings,
+            updateSmartCategoryCentroidEmbedding,
           });
           if (!membershipResult?.ok) {
             console.warn('[smart-categories] membership assignment skipped for save', row.id, membershipResult?.reason || 'unknown');

@@ -1719,6 +1719,19 @@ function getSmartCategory(id) {
   );
 }
 
+function updateSmartCategoryCentroidEmbedding({
+  categoryId,
+  centroidEmbedding = null,
+  updatedAt,
+} = {}) {
+  if (!categoryId || !centroidEmbedding) return { ok: false, reason: 'missing-centroid' };
+  const at = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+  const { changes } = getDatabase()
+    .prepare('UPDATE smart_categories SET centroid_embedding = ?, updated_at = ? WHERE id = ?')
+    .run(centroidEmbedding, at, categoryId);
+  return { ok: changes > 0, reason: changes > 0 ? null : 'not-found' };
+}
+
 function listSmartCategories({ status = null, includeArchived = false } = {}) {
   const params = [];
   const where = [];
@@ -2051,6 +2064,25 @@ function getSmartCategoryMembers(categoryId, { minWeight = 0 } = {}) {
     `)
     .all(categoryId, clampUnit(minWeight))
     .map(normalizeMembership);
+}
+
+function getSmartCategoryMemberTopicEmbeddings(categoryId, { minWeight = 0.45 } = {}) {
+  if (!categoryId) return [];
+  return getDatabase()
+    .prepare(`
+      SELECT m.save_id, p.embedding, m.weight
+        FROM smart_category_members m
+        JOIN save_topic_profiles p
+          ON p.save_id = m.save_id
+         AND p.embedding IS NOT NULL
+        JOIN saves s
+          ON s.id = m.save_id
+         AND s.deleted_at IS NULL
+       WHERE m.category_id = ?
+         AND m.weight >= ?
+       ORDER BY m.weight DESC, s.created_at DESC
+    `)
+    .all(categoryId, clampUnit(minWeight));
 }
 
 function getSmartCategorySaves(categoryId, { minWeight = SMART_CATEGORY_PRIMARY_WEIGHT } = {}) {
@@ -2812,6 +2844,7 @@ module.exports = {
   filterByColor,
   createSmartCategory,
   getSmartCategory,
+  updateSmartCategoryCentroidEmbedding,
   listSmartCategories,
   listNavigableSmartCategories,
   setSmartCategoryStatus,
@@ -2828,6 +2861,7 @@ module.exports = {
   getSaveTopicProfile,
   upsertSmartCategoryMembership,
   getSmartCategoryMembers,
+  getSmartCategoryMemberTopicEmbeddings,
   getSmartCategorySaves,
   getSmartCategoriesForSave,
   recordSmartCategoryRun,

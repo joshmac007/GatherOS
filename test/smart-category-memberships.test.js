@@ -5,6 +5,11 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  vectorToBuffer,
+  bufferToVector,
+} = require('../src/main/smart-category-vectors');
+
+const {
   PRIMARY_MEMBERSHIP_THRESHOLD,
   SECONDARY_MEMBERSHIP_THRESHOLD,
   buildMembershipScoringInput,
@@ -201,6 +206,165 @@ test('assigns one save to multiple weighted categories and stores compact eviden
     strength: 'secondary',
     reason: 'Ad campaign ideation is a secondary use.',
   });
+}));
+
+test('uses local embeddings to assign weighted memberships without Codex scoring', withTempDb(async (db) => {
+  const save = db.insertSave({
+    id: 'save-local',
+    filePath: '/tmp/local.png',
+    thumbPath: '/tmp/local-thumb.png',
+    title: 'AI ad concept',
+    createdAt: 1000,
+  });
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI image generation',
+    status: 'visible',
+    centroidEmbedding: vectorToBuffer([1, 0, 0]),
+  });
+  db.createSmartCategory({
+    id: 'cat-ads',
+    name: 'Ad creative workflows',
+    status: 'visible',
+    centroidEmbedding: vectorToBuffer([0.6, 0.8, 0]),
+  });
+  db.createSmartCategory({
+    id: 'cat-marketing',
+    name: 'Marketing systems',
+    status: 'visible',
+    centroidEmbedding: vectorToBuffer([0, 0, 1]),
+  });
+
+  const result = await assignSmartCategoryMemberships({
+    saveId: save.id,
+    profile: profile({ save_id: save.id, embedding: null }),
+    candidateCategories: db.listSmartCategories(),
+    provider: {
+      async embedText(input) {
+        assert.match(input, /AI image tooling/);
+        return [1, 0, 0];
+      },
+      async generateSmartCategoryMemberships() {
+        throw new Error('Codex scoring should not run when local centroids score the save');
+      },
+    },
+    upsertSaveTopicProfile: db.upsertSaveTopicProfile,
+    upsertSmartCategoryMembership: db.upsertSmartCategoryMembership,
+    getSmartCategoryMemberTopicEmbeddings: db.getSmartCategoryMemberTopicEmbeddings,
+    updateSmartCategoryCentroidEmbedding: db.updateSmartCategoryCentroidEmbedding,
+    now: () => 2500,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'local-embeddings');
+  assert.equal(result.assignedCount, 2);
+  assert.deepEqual(result.memberships.map((m) => [m.categoryId, m.weight, m.strength]), [
+    ['cat-ai', 1, 'primary'],
+    ['cat-ads', 0.6, 'secondary'],
+  ]);
+
+  const memberships = db.getSmartCategoriesForSave(save.id);
+  assert.deepEqual(memberships.map((m) => [m.category_id, m.weight]), [
+    ['cat-ai', 1],
+    ['cat-ads', 0.6],
+  ]);
+  assert.equal(memberships[0].evidence.source, 'local-embedding-membership');
+  assert.equal(memberships[0].evidence.strength, 'primary');
+  assert.equal(memberships[1].evidence.strength, 'secondary');
+  assert.deepEqual(Array.from(bufferToVector(db.getSaveTopicProfile(save.id).embedding)), [1, 0, 0]);
+}));
+
+test('falls back to Codex membership scoring when local embeddings fail', withTempDb(async (db) => {
+  const save = db.insertSave({
+    id: 'save-fallback',
+    filePath: '/tmp/fallback.png',
+    thumbPath: '/tmp/fallback-thumb.png',
+    title: 'Fallback save',
+    createdAt: 1000,
+  });
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI image generation',
+    status: 'visible',
+    centroidEmbedding: vectorToBuffer([1, 0, 0]),
+  });
+
+  const result = await assignSmartCategoryMemberships({
+    saveId: save.id,
+    profile: profile({ save_id: save.id }),
+    candidateCategories: [db.getSmartCategory('cat-ai')],
+    provider: {
+      async embedText() {
+        const err = new Error('local server unavailable');
+        err.code = 'local_ai_error';
+        throw err;
+      },
+      async generateSmartCategoryMemberships() {
+        return {
+          memberships: [
+            { category_id: 'cat-ai', weight: 0.82, evidence: 'Codex fallback fit.' },
+          ],
+          needs_new_category: false,
+          new_category_hint: null,
+        };
+      },
+    },
+    upsertSmartCategoryMembership: db.upsertSmartCategoryMembership,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'codex-membership');
+  assert.equal(result.assignedCount, 1);
+  assert.deepEqual(db.getSmartCategoriesForSave(save.id)[0].evidence, {
+    source: 'codex-membership',
+    strength: 'primary',
+    reason: 'Codex fallback fit.',
+  });
+}));
+
+test('Codex fallback bootstraps topic embeddings and centroids for later local scoring', withTempDb(async (db) => {
+  const save = db.insertSave({
+    id: 'save-bootstrap',
+    filePath: '/tmp/bootstrap.png',
+    thumbPath: '/tmp/bootstrap-thumb.png',
+    title: 'Bootstrap save',
+    createdAt: 1000,
+  });
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI image generation',
+    status: 'visible',
+  });
+
+  const result = await assignSmartCategoryMemberships({
+    saveId: save.id,
+    profile: profile({ save_id: save.id, embedding: null }),
+    candidateCategories: [db.getSmartCategory('cat-ai')],
+    provider: {
+      async embedText() {
+        return [1, 0, 0];
+      },
+      async generateSmartCategoryMemberships() {
+        return {
+          memberships: [
+            { category_id: 'cat-ai', weight: 0.86, evidence: 'Codex assignment seeds centroid.' },
+          ],
+          needs_new_category: false,
+          new_category_hint: null,
+        };
+      },
+    },
+    upsertSaveTopicProfile: db.upsertSaveTopicProfile,
+    upsertSmartCategoryMembership: db.upsertSmartCategoryMembership,
+    getSmartCategoryMemberTopicEmbeddings: db.getSmartCategoryMemberTopicEmbeddings,
+    updateSmartCategoryCentroidEmbedding: db.updateSmartCategoryCentroidEmbedding,
+    now: () => 3000,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'codex-membership');
+  assert.deepEqual(Array.from(bufferToVector(db.getSaveTopicProfile(save.id).embedding)), [1, 0, 0]);
+  assert.deepEqual(Array.from(bufferToVector(db.getSmartCategory('cat-ai').centroid_embedding)), [1, 0, 0]);
 }));
 
 test('low-confidence saves remain unassigned instead of being forced into categories', withTempDb(async (db) => {

@@ -13,10 +13,18 @@ function createProvider() {
 }
 
 let provider = null;
+let localEmbeddingProvider = null;
 
 function getProvider() {
   if (!provider) provider = createProvider();
   return provider;
+}
+
+function getLocalEmbeddingProvider() {
+  if (!localEmbeddingProvider) {
+    localEmbeddingProvider = createLocalProvider(readAiConfig().local);
+  }
+  return localEmbeddingProvider;
 }
 
 function hasSession() {
@@ -60,7 +68,13 @@ async function generateSmartCategoryTaxonomyRefresh(input) {
 }
 
 async function embedText(text) {
-  return getProvider().embedText(text);
+  const active = getProvider();
+  try {
+    return await active.embedText(text);
+  } catch (err) {
+    if (err?.code !== 'embeddings_unavailable') throw err;
+  }
+  return getLocalEmbeddingProvider().embedText(text);
 }
 
 async function generateImage(prompt, options = {}) {

@@ -180,7 +180,10 @@ async function runIncrementalSmartCategoryRefresh({
         provider,
         listSmartCategories: storage.listSmartCategories,
         getSmartCategoryAliases: storage.getSmartCategoryAliases,
+        upsertSaveTopicProfile: storage.upsertSaveTopicProfile,
         upsertSmartCategoryMembership: storage.upsertSmartCategoryMembership,
+        getSmartCategoryMemberTopicEmbeddings: storage.getSmartCategoryMemberTopicEmbeddings,
+        updateSmartCategoryCentroidEmbedding: storage.updateSmartCategoryCentroidEmbedding,
       });
       if (!membershipResult?.ok) {
         failedCount += 1;
