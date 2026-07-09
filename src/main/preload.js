@@ -143,6 +143,10 @@ contextBridge.exposeInMainWorld('moodmark', {
     delete: (id) => ipcRenderer.invoke('tags:delete', id),
     deleteUnused: () => ipcRenderer.invoke('tags:delete-unused'),
   },
+  smartCategories: {
+    listNav: () => ipcRenderer.invoke('smart-categories:list-nav'),
+    getSaves: (payload) => ipcRenderer.invoke('smart-categories:get-saves', payload ?? {}),
+  },
   db: {
     integrity: () => ipcRenderer.invoke('db:integrity'),
   },

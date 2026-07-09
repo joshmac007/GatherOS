@@ -1507,6 +1507,8 @@ function getSaveEmbeddingsCached() {
 
 const SMART_CATEGORY_STATUSES = new Set(['candidate', 'visible', 'hidden', 'archived']);
 const SMART_CATEGORY_CHANGE_KINDS = new Set(['created', 'renamed', 'merged', 'split']);
+const SMART_CATEGORY_PRIMARY_WEIGHT = 0.75;
+const SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS = 5;
 
 function clampUnit(value, fallback = 0) {
   const n = Number(value);
@@ -1616,6 +1618,39 @@ function listSmartCategories({ status = null, includeArchived = false } = {}) {
   const sql = `SELECT * FROM smart_categories${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
     ORDER BY frozen_name DESC, visibility_score DESC, updated_at DESC`;
   return getDatabase().prepare(sql).all(...params).map(normalizeSmartCategory);
+}
+
+function listNavigableSmartCategories({
+  minPrimaryMembers = SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS,
+  minVisibilityScore = 0,
+} = {}) {
+  const minMembers = Math.max(1, Number(minPrimaryMembers) || SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS);
+  const minScore = clampUnit(minVisibilityScore, 0);
+  return getDatabase()
+    .prepare(`
+      SELECT c.*,
+             COUNT(m.save_id) AS primary_member_count
+        FROM smart_categories c
+        JOIN smart_category_members m
+          ON m.category_id = c.id
+         AND m.weight >= ?
+        JOIN saves s
+          ON s.id = m.save_id
+         AND s.deleted_at IS NULL
+       WHERE c.status = 'visible'
+         AND c.visibility_score > ?
+       GROUP BY c.id
+      HAVING primary_member_count >= ?
+       ORDER BY c.frozen_name DESC,
+                c.visibility_score DESC,
+                primary_member_count DESC,
+                c.updated_at DESC
+    `)
+    .all(SMART_CATEGORY_PRIMARY_WEIGHT, minScore, minMembers)
+    .map((row) => ({
+      ...normalizeSmartCategory(row),
+      primary_member_count: Number(row.primary_member_count) || 0,
+    }));
 }
 
 function setSmartCategoryStatus(id, status) {
@@ -1783,6 +1818,28 @@ function getSmartCategoryMembers(categoryId, { minWeight = 0 } = {}) {
     `)
     .all(categoryId, clampUnit(minWeight))
     .map(normalizeMembership);
+}
+
+function getSmartCategorySaves(categoryId, { minWeight = SMART_CATEGORY_PRIMARY_WEIGHT } = {}) {
+  if (!categoryId) return [];
+  return getDatabase()
+    .prepare(`
+      SELECT ${SAVE_LIST_COLUMNS.split(', ').map((column) => `s.${column}`).join(', ')},
+             m.weight AS smart_category_weight,
+             m.evidence AS smart_category_evidence,
+             m.updated_at AS smart_category_updated_at
+        FROM smart_category_members m
+        JOIN smart_categories c
+          ON c.id = m.category_id
+         AND c.status = 'visible'
+        JOIN saves s
+          ON s.id = m.save_id
+         AND s.deleted_at IS NULL
+       WHERE m.category_id = ?
+         AND m.weight >= ?
+       ORDER BY m.weight DESC, s.created_at DESC
+    `)
+    .all(categoryId, clampUnit(minWeight));
 }
 
 function getSmartCategoriesForSave(saveId, { minWeight = 0 } = {}) {
@@ -2497,6 +2554,7 @@ module.exports = {
   createSmartCategory,
   getSmartCategory,
   listSmartCategories,
+  listNavigableSmartCategories,
   setSmartCategoryStatus,
   hideSmartCategory,
   archiveSmartCategory,
@@ -2508,6 +2566,7 @@ module.exports = {
   getSaveTopicProfile,
   upsertSmartCategoryMembership,
   getSmartCategoryMembers,
+  getSmartCategorySaves,
   getSmartCategoriesForSave,
   recordSmartCategoryRun,
   listSmartCategoryRuns,

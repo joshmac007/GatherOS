@@ -20,6 +20,13 @@
   display: flex;
   align-items: flex-end;
   gap: 28px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.left::-webkit-scrollbar {
+  display: none;
 }
 
 /* When the left cluster is rendering the folder-view title +
@@ -267,6 +274,34 @@
 
 .chipActive .chipBadge {
   color: var(--text-secondary);
+}
+
+.smartCategoryGroup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 16px;
+  min-width: 0;
+  padding-left: 4px;
+}
+
+.smartCategoryGroup::before {
+  content: '';
+  width: 1px;
+  height: 16px;
+  align-self: center;
+  background: var(--border-subtle);
+  margin-right: 4px;
+  flex: 0 0 auto;
+}
+
+.smartCategoryChip {
+  max-width: 220px;
+  gap: 5px;
+}
+
+.smartCategoryChip .chipLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Zoom slider ────────────────────────────────────────────────── */

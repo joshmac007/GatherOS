@@ -13,8 +13,8 @@ const {
   listBoards, listBoardsWithThumbs, getBoard, createBoard, renameBoard, deleteBoard, reorderBoards,
   getBoardItems, getBoardPreviewSaves, getBoardSaveIds, getBoardsForSave,
   upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
-  upsertSaveTopicProfile, listSmartCategories, getSmartCategoryAliases,
-  upsertSmartCategoryMembership,
+  upsertSaveTopicProfile, listSmartCategories, listNavigableSmartCategories,
+  getSmartCategoryAliases, getSmartCategorySaves, upsertSmartCategoryMembership,
 } = require('./db');
 const {
   deleteImageFiles,
@@ -309,6 +309,21 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('saves:counts', () => getSmartViewCounts());
+
+  ipcMain.handle('smart-categories:list-nav', () => listNavigableSmartCategories());
+
+  ipcMain.handle('smart-categories:get-saves', async (_e, opts = {}) => {
+    const categoryId = typeof opts?.categoryId === 'string' ? opts.categoryId : null;
+    if (!categoryId) return [];
+    const rows = getSmartCategorySaves(categoryId);
+    const rawSearch = (opts.search || '').trim();
+    const colorHex = opts.colorHex || null;
+    if (!rawSearch && !colorHex) return rows;
+    const allowed = new Set(
+      getAllSaves({ search: rawSearch, colorHex, view: 'all' }).map((save) => save.id),
+    );
+    return rows.filter((save) => allowed.has(save.id));
+  });
 
   // Open the OS file manager with the save's file selected. Returns
   // { ok: false } when the path is missing or can't be resolved so the

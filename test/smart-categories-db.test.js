@@ -177,3 +177,111 @@ test('smart category foundation does not change existing library queries', withT
   assert.equal(db.getAllCollections()[0].save_count, 1);
   assert.deepEqual(db.getTagsForSave(save.id).map((tag) => tag.name), ['bookmark']);
 }));
+
+test('smart category navigation only lists useful visible categories', withTempDb((db) => {
+  db.initDatabase();
+  for (let i = 1; i <= 6; i += 1) {
+    db.insertSave({
+      id: `save-ai-${i}`,
+      filePath: `/tmp/ai-${i}.png`,
+      thumbPath: `/tmp/ai-${i}-thumb.png`,
+      title: `AI workflow ${i}`,
+      createdAt: 1000 + i,
+    });
+  }
+  for (let i = 1; i <= 5; i += 1) {
+    db.insertSave({
+      id: `save-hidden-${i}`,
+      filePath: `/tmp/hidden-${i}.png`,
+      thumbPath: `/tmp/hidden-${i}-thumb.png`,
+      title: `Hidden workflow ${i}`,
+      createdAt: 2000 + i,
+    });
+  }
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI workflow tools',
+    status: 'visible',
+    visibilityScore: 0.8,
+  });
+  db.createSmartCategory({
+    id: 'cat-small',
+    name: 'Small cluster',
+    status: 'visible',
+    visibilityScore: 0.9,
+  });
+  db.createSmartCategory({
+    id: 'cat-candidate',
+    name: 'Candidate cluster',
+    status: 'candidate',
+    visibilityScore: 0.95,
+  });
+  db.createSmartCategory({
+    id: 'cat-hidden',
+    name: 'Hidden cluster',
+    status: 'hidden',
+    visibilityScore: 0.95,
+  });
+  for (let i = 1; i <= 5; i += 1) {
+    db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: `save-ai-${i}`, weight: 0.8 });
+    db.upsertSmartCategoryMembership({ categoryId: 'cat-hidden', saveId: `save-hidden-${i}`, weight: 0.9 });
+  }
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: 'save-ai-6', weight: 0.6 });
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-small', saveId: 'save-ai-1', weight: 0.91 });
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-candidate', saveId: 'save-ai-2', weight: 0.91 });
+
+  assert.deepEqual(
+    db.listNavigableSmartCategories().map((category) => [
+      category.id,
+      category.member_count,
+      category.primary_member_count,
+    ]),
+    [['cat-ai', 6, 5]],
+  );
+}));
+
+test('smart category saves default to primary members ranked by strength then recency', withTempDb((db) => {
+  db.initDatabase();
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI workflow tools',
+    status: 'visible',
+    visibilityScore: 0.8,
+  });
+  db.insertSave({
+    id: 'save-older-strong',
+    filePath: '/tmp/older.png',
+    thumbPath: '/tmp/older-thumb.png',
+    title: 'Older strong',
+    createdAt: 1000,
+  });
+  db.insertSave({
+    id: 'save-newer-strong',
+    filePath: '/tmp/newer.png',
+    thumbPath: '/tmp/newer-thumb.png',
+    title: 'Newer strong',
+    createdAt: 2000,
+  });
+  db.insertSave({
+    id: 'save-secondary',
+    filePath: '/tmp/secondary.png',
+    thumbPath: '/tmp/secondary-thumb.png',
+    title: 'Secondary',
+    createdAt: 3000,
+  });
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: 'save-older-strong', weight: 0.9 });
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: 'save-newer-strong', weight: 0.9 });
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: 'save-secondary', weight: 0.6 });
+
+  assert.deepEqual(
+    db.getSmartCategorySaves('cat-ai').map((save) => [save.id, save.smart_category_weight]),
+    [
+      ['save-newer-strong', 0.9],
+      ['save-older-strong', 0.9],
+    ],
+  );
+  assert.deepEqual(
+    db.getSmartCategorySaves('cat-ai', { minWeight: 0.45 }).map((save) => save.id),
+    ['save-newer-strong', 'save-older-strong', 'save-secondary'],
+  );
+}));

@@ -375,7 +375,9 @@ export default function App({ entitlement } = {}) {
     } catch {}
   }, [shuffleAts]);
   const viewKey = (v) =>
-    v && v.type === 'collection' ? `collection:${v.id}` : v?.type || 'all';
+    v && (v.type === 'collection' || v.type === 'smartCategory')
+      ? `${v.type}:${v.id}`
+      : v?.type || 'all';
   const shuffleSeed = shuffleSeeds.get(viewKey(view)) || null;
   const shuffleAt = shuffleAts.get(viewKey(view)) || 0;
   const handleShuffleView = useCallback((targetView) => {
@@ -384,9 +386,7 @@ export default function App({ entitlement } = {}) {
       setView(targetView);
       setFocusedId(null);
     }
-    const key = targetView
-      ? (target.type === 'collection' ? `collection:${target.id}` : target.type)
-      : viewKey(view);
+    const key = targetView ? viewKey(target) : viewKey(view);
     const previous = shuffleSeeds.get(key) || null;
     const previousAt = shuffleAts.get(key) || 0;
     // Math.random() yields [0,1) and we want a 32-bit-ish int seed.
@@ -896,18 +896,21 @@ export default function App({ entitlement } = {}) {
 
   // Collections state
   const [collections, setCollections] = useState([]);
+  const [smartCategories, setSmartCategories] = useState([]);
   // Counts that drive the sidebar's smart-view badges (All / Unsorted /
   // Trash). Refreshed alongside collections.
   const [smartCounts, setSmartCounts] = useState({ all: 0, unsorted: 0, trash: 0, bookmarks: 0, onThisDay: 0 });
 
   const loadCollections = useCallback(async () => {
-    const [cols, counts] = await Promise.all([
+    const [cols, counts, smartCategoryRows] = await Promise.all([
       // Pulls thumbs in the same query so the Folders-mode tile
       // grid can render its stack-fans without a per-tile round-trip.
       window.moodmark.collections.getAllWithThumbs(),
       window.moodmark.saves.counts(),
+      window.moodmark.smartCategories?.listNav?.() ?? [],
     ]);
     setCollections(cols);
+    setSmartCategories(Array.isArray(smartCategoryRows) ? smartCategoryRows : []);
     setSmartCounts(counts && typeof counts === 'object'
       ? counts
       : { all: 0, unsorted: 0, trash: 0, bookmarks: 0, onThisDay: 0 });
@@ -3788,11 +3791,14 @@ export default function App({ entitlement } = {}) {
                   || (appMode === 'folders' && view.type === 'collection')) && (
                   <SmartChipRail
                     activeViewType={
-                      ['all', 'unsorted', 'bookmarks', 'trash'].includes(view.type)
+                      view.type === 'smartCategory'
+                        ? `smartCategory:${view.id}`
+                        : ['all', 'unsorted', 'bookmarks', 'trash'].includes(view.type)
                         ? view.type
                         : 'all'
                     }
                     counts={smartCounts}
+                    smartCategories={smartCategories}
                     onPick={(v) => handleViewChange(v)}
                     tweetTypeFilter={tweetTypeFilter}
                     tweetTypeCounts={tweetTypeCounts}

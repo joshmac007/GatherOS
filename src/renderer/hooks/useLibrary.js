@@ -53,6 +53,12 @@ export function useLibrary() {
         // Find-similar query bypasses search / view / color and just
         // returns the ranked similar set straight from the backend.
         data = await window.moodmark.saves.findSimilar(similarTo.id, 60);
+      } else if (view.type === 'smartCategory' && view.id) {
+        data = await window.moodmark.smartCategories.getSaves({
+          categoryId: view.id,
+          search: debouncedSearch,
+          colorHex: colorFilter || undefined,
+        });
       } else {
         const backendView = ['unsorted', 'trash', 'bookmarks'].includes(view.type)
           ? view.type

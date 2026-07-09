@@ -3,6 +3,7 @@ import {
   ChevronLeft, Grid2x2, Square, Images, Inbox, Trash2,
   Clock, History, Eye,
   Type, Image as ImageIcon, Film, Bookmark,
+  Tags,
 } from 'lucide-react';
 import styles from './SmartChipRail.module.css';
 import Dropdown from './Dropdown.jsx';
@@ -95,6 +96,7 @@ export default function SmartChipRail({
   onSortChange,
   columns,
   onColumnsChange,
+  smartCategories = [],
   // When the user drills into a folder, the rail's left cluster
   // swaps the All/Unsorted/Trash chips for a back button + folder
   // title. Sort + zoom on the right stay regardless.
@@ -223,24 +225,52 @@ export default function SmartChipRail({
             />
           </>
         ) : (
-          CHIPS.map(({ id, label, Icon }) => {
-            const isActive = activeViewType === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className={`${styles.chip} ${isActive ? styles.chipActive : ''}`}
-                onClick={() => onPick({ type: id })}
-              >
-                <span className={styles.chipIcon} aria-hidden="true">
-                  <Icon size={17} strokeWidth={1.8} />
-                </span>
-                <span className={styles.chipLabel}>{label}</span>
-              </button>
-            );
-          })
+          <>
+            {CHIPS.map(({ id, label, Icon }) => {
+              const isActive = activeViewType === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`${styles.chip} ${isActive ? styles.chipActive : ''}`}
+                  onClick={() => onPick({ type: id })}
+                >
+                  <span className={styles.chipIcon} aria-hidden="true">
+                    <Icon size={17} strokeWidth={1.8} />
+                  </span>
+                  <span className={styles.chipLabel}>{label}</span>
+                </button>
+              );
+            })}
+            {smartCategories.length > 0 && (
+              <span className={styles.smartCategoryGroup} aria-label="Smart categories">
+                {smartCategories.map((category) => {
+                  const isActive = activeViewType === `smartCategory:${category.id}`;
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      className={`${styles.chip} ${styles.smartCategoryChip} ${isActive ? styles.chipActive : ''}`}
+                      onClick={() => onPick({ type: 'smartCategory', id: category.id })}
+                      title={category.description || category.name}
+                    >
+                      <span className={styles.chipIcon} aria-hidden="true">
+                        <Tags size={16} strokeWidth={1.8} />
+                      </span>
+                      <span className={styles.chipLabel}>{category.name}</span>
+                      <span className={styles.chipBadge}>
+                        {category.primary_member_count ?? category.member_count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </span>
+            )}
+          </>
         )}
       </div>
       <div className={styles.right}>

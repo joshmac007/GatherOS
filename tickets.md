@@ -43,10 +43,10 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** Assign Codex-only weighted memberships.
 
-- [ ] Only visible categories that meet usefulness thresholds appear in navigation.
-- [ ] Category views rank saves by membership strength and recency.
-- [ ] Secondary memberships do not clutter the main category grid by default.
-- [ ] Hidden and candidate categories stay out of normal navigation.
+- [x] Only visible categories that meet usefulness thresholds appear in navigation.
+- [x] Category views rank saves by membership strength and recency.
+- [x] Secondary memberships do not clutter the main category grid by default.
+- [x] Hidden and candidate categories stay out of normal navigation.
 
 ## Run background smart category refresh
 
