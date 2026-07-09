@@ -32,10 +32,10 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** Create save topic profiles with Codex.
 
-- [ ] One save can belong to multiple categories with different weights.
-- [ ] Strong, secondary, and low-confidence memberships follow the spec thresholds.
-- [ ] Low-confidence saves remain unassigned or candidate-only instead of being forced into categories.
-- [ ] Membership evidence is stored compactly for later inspection/debugging.
+- [x] One save can belong to multiple categories with different weights.
+- [x] Strong, secondary, and low-confidence memberships follow the spec thresholds.
+- [x] Low-confidence saves remain unassigned or candidate-only instead of being forced into categories.
+- [x] Membership evidence is stored compactly for later inspection/debugging.
 
 ## Show smart categories as quiet navigation
 
