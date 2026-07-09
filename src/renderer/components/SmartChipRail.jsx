@@ -114,6 +114,7 @@ export default function SmartChipRail({
   // Each change drops the title straight into rename mode so the user
   // can name the new collection without an extra click.
   autoRenameSignal = 0,
+  onSmartCategoryContextMenu = null,
 }) {
   // Inline rename state for the collection title. Click → enter
   // edit mode; Enter / blur commits; Escape cancels.
@@ -248,6 +249,9 @@ export default function SmartChipRail({
               <span className={styles.smartCategoryGroup} aria-label="Smart categories">
                 {smartCategories.map((category) => {
                   const isActive = activeViewType === `smartCategory:${category.id}`;
+                  const hint = category.recent_change && category.recent_change_note
+                    ? category.recent_change_note
+                    : category.description || category.name;
                   return (
                     <button
                       key={category.id}
@@ -256,12 +260,26 @@ export default function SmartChipRail({
                       aria-selected={isActive}
                       className={`${styles.chip} ${styles.smartCategoryChip} ${isActive ? styles.chipActive : ''}`}
                       onClick={() => onPick({ type: 'smartCategory', id: category.id })}
-                      title={category.description || category.name}
+                      onContextMenu={(e) => {
+                        if (!onSmartCategoryContextMenu) return;
+                        e.preventDefault();
+                        onSmartCategoryContextMenu(category, e.clientX, e.clientY);
+                      }}
+                      title={hint}
                     >
                       <span className={styles.chipIcon} aria-hidden="true">
                         <Tags size={16} strokeWidth={1.8} />
                       </span>
                       <span className={styles.chipLabel}>{category.name}</span>
+                      {category.recent_change && (
+                        <span
+                          className={styles.recentChange}
+                          title={category.recent_change_note || 'Changed recently'}
+                          aria-label={category.recent_change_note || 'Changed recently'}
+                        >
+                          <History size={12} strokeWidth={1.8} aria-hidden="true" />
+                        </span>
+                      )}
                       <span className={styles.chipBadge}>
                         {category.primary_member_count ?? category.member_count}
                       </span>

@@ -146,6 +146,8 @@ contextBridge.exposeInMainWorld('moodmark', {
   smartCategories: {
     listNav: () => ipcRenderer.invoke('smart-categories:list-nav'),
     getSaves: (payload) => ipcRenderer.invoke('smart-categories:get-saves', payload ?? {}),
+    hide: (id) => ipcRenderer.invoke('smart-categories:hide', id),
+    pin: (payload) => ipcRenderer.invoke('smart-categories:pin', payload ?? {}),
     refresh: () => ipcRenderer.invoke('smart-categories:refresh'),
     noteActivity: (payload) => ipcRenderer.send('smart-categories:activity', payload ?? {}),
   },

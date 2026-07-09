@@ -76,10 +76,10 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** Show smart categories as quiet navigation.
 
-- [ ] Renames create aliases and recent-change metadata.
-- [ ] Pinned category names do not auto-rename.
-- [ ] Hidden categories do not reappear unless explicitly restored or rebuilt.
-- [ ] Recently changed categories show a small history/info indicator only during the configured window.
+- [x] Renames create aliases and recent-change metadata.
+- [x] Pinned category names do not auto-rename.
+- [x] Hidden categories do not reappear unless explicitly restored or rebuilt.
+- [x] Recently changed categories show a small history/info indicator only during the configured window.
 
 ## Add conservative taxonomy refresh
 

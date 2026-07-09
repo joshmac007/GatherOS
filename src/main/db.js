@@ -1614,6 +1614,7 @@ const SMART_CATEGORY_STATUSES = new Set(['candidate', 'visible', 'hidden', 'arch
 const SMART_CATEGORY_CHANGE_KINDS = new Set(['created', 'renamed', 'merged', 'split']);
 const SMART_CATEGORY_PRIMARY_WEIGHT = 0.75;
 const SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS = 5;
+const SMART_CATEGORY_RECENT_CHANGE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 function clampUnit(value, fallback = 0) {
   const n = Number(value);
@@ -1728,9 +1729,13 @@ function listSmartCategories({ status = null, includeArchived = false } = {}) {
 function listNavigableSmartCategories({
   minPrimaryMembers = SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS,
   minVisibilityScore = 0,
+  recentChangeWindowMs = SMART_CATEGORY_RECENT_CHANGE_WINDOW_MS,
+  now = Date.now(),
 } = {}) {
   const minMembers = Math.max(1, Number(minPrimaryMembers) || SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS);
   const minScore = clampUnit(minVisibilityScore, 0);
+  const at = Number.isFinite(now) ? now : Date.now();
+  const changeWindow = Math.max(0, Number(recentChangeWindowMs) || 0);
   return getDatabase()
     .prepare(`
       SELECT c.*,
@@ -1752,14 +1757,49 @@ function listNavigableSmartCategories({
                 c.updated_at DESC
     `)
     .all(SMART_CATEGORY_PRIMARY_WEIGHT, minScore, minMembers)
-    .map((row) => ({
-      ...normalizeSmartCategory(row),
-      primary_member_count: Number(row.primary_member_count) || 0,
-    }));
+    .map((row) => {
+      const category = normalizeSmartCategory(row);
+      const changedAt = Number(category.last_changed_at) || 0;
+      const recent = category.change_kind === 'renamed'
+        && changedAt > 0
+        && at >= changedAt
+        && at - changedAt <= changeWindow;
+      let note = null;
+      if (recent) {
+        const oldName = getDatabase()
+          .prepare(`
+            SELECT alias FROM smart_category_aliases
+            WHERE category_id = ? AND source = 'old_name'
+            ORDER BY created_at DESC
+            LIMIT 1
+          `)
+          .get(category.id)?.alias;
+        note = oldName
+          ? `Renamed from "${oldName}". Old name still works in search.`
+          : 'Renamed recently. Old names still work in search.';
+      }
+      return {
+        ...category,
+        primary_member_count: Number(row.primary_member_count) || 0,
+        recent_change: recent,
+        recent_change_kind: recent ? category.change_kind : null,
+        recent_change_note: note,
+      };
+    });
 }
 
-function setSmartCategoryStatus(id, status) {
+function setSmartCategoryStatus(id, status, { restoreHidden = false, rebuild = false } = {}) {
   if (!id || !SMART_CATEGORY_STATUSES.has(status)) return { ok: false };
+  const current = getSmartCategory(id);
+  if (!current) return { ok: false, reason: 'not-found' };
+  if (
+    current.status === 'hidden'
+    && (status === 'visible' || status === 'candidate')
+    && !restoreHidden
+    && !rebuild
+  ) {
+    return { ok: false, reason: 'hidden-requires-restore' };
+  }
   const now = Date.now();
   const { changes } = getDatabase()
     .prepare('UPDATE smart_categories SET status = ?, updated_at = ? WHERE id = ?')
@@ -1775,6 +1815,10 @@ function archiveSmartCategory(id) {
   return setSmartCategoryStatus(id, 'archived');
 }
 
+function restoreSmartCategory(id, { status = 'visible' } = {}) {
+  return setSmartCategoryStatus(id, status, { restoreHidden: true });
+}
+
 function pinSmartCategory(id, pinned = true) {
   if (!id) return { ok: false };
   const now = Date.now();
@@ -1782,6 +1826,47 @@ function pinSmartCategory(id, pinned = true) {
     .prepare('UPDATE smart_categories SET frozen_name = ?, updated_at = ? WHERE id = ?')
     .run(pinned ? 1 : 0, now, id);
   return { ok: changes > 0 };
+}
+
+function renameSmartCategory({
+  id,
+  name,
+  automatic = true,
+  changedAt,
+} = {}) {
+  const trimmed = (name || '').trim();
+  if (!id) return { ok: false, reason: 'missing-id' };
+  if (!trimmed) return { ok: false, reason: 'missing-name' };
+  const current = getSmartCategory(id);
+  if (!current) return { ok: false, reason: 'not-found' };
+  if (current.frozen_name && automatic) {
+    return { ok: false, reason: 'name-frozen' };
+  }
+  if (current.name === trimmed) {
+    return { ok: true, renamed: false, category: current };
+  }
+
+  const at = Number.isFinite(changedAt) ? changedAt : Date.now();
+  const tx = getDatabase().transaction(() => {
+    upsertSmartCategoryAlias({
+      categoryId: id,
+      alias: current.name,
+      source: 'old_name',
+      createdAt: at,
+    });
+    getDatabase()
+      .prepare(`
+        UPDATE smart_categories
+           SET name = ?,
+               updated_at = ?,
+               last_changed_at = ?,
+               change_kind = 'renamed'
+         WHERE id = ?
+      `)
+      .run(trimmed, at, at, id);
+  });
+  tx();
+  return { ok: true, renamed: true, category: getSmartCategory(id) };
 }
 
 function upsertSmartCategoryAlias({
@@ -1803,7 +1888,9 @@ function upsertSmartCategoryAlias({
   getDatabase().prepare(`
     INSERT INTO smart_category_aliases (id, category_id, alias, source, created_at)
     VALUES (@id, @category_id, @alias, @source, @created_at)
-    ON CONFLICT(category_id, alias) DO UPDATE SET source = excluded.source
+    ON CONFLICT(category_id, alias) DO UPDATE SET
+      source = excluded.source,
+      created_at = excluded.created_at
   `).run(record);
   return { ok: true, alias: record };
 }
@@ -2687,7 +2774,9 @@ module.exports = {
   setSmartCategoryStatus,
   hideSmartCategory,
   archiveSmartCategory,
+  restoreSmartCategory,
   pinSmartCategory,
+  renameSmartCategory,
   upsertSmartCategoryAlias,
   getSmartCategoryAliases,
   findSmartCategoryAliases,

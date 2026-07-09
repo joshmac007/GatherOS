@@ -89,6 +89,8 @@ import {
   HardDrive,
   Database,
   Info,
+  Pin,
+  EyeOff,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -1233,6 +1235,47 @@ export default function App({ entitlement } = {}) {
 
   // Card context menu
   const [cardCtx, setCardCtx] = useState(null); // { saveId, x, y, items }
+  const [smartCategoryCtx, setSmartCategoryCtx] = useState(null); // { x, y, items }
+  const handleSmartCategoryContextMenu = useCallback((category, x, y) => {
+    if (!category?.id) return;
+    const pinned = !!category.frozen_name;
+    setSmartCategoryCtx({
+      x,
+      y,
+      items: [
+        { type: 'header', label: category.name },
+        {
+          label: pinned ? 'Unpin category name' : 'Pin category name',
+          icon: <Pin size={14} strokeWidth={1.7} aria-hidden="true" />,
+          onClick: async () => {
+            const res = await window.moodmark.smartCategories?.pin?.({
+              id: category.id,
+              pinned: !pinned,
+            });
+            if (!res?.ok) return;
+            await loadCollections();
+            showActionToast({
+              message: pinned ? 'Category name can refresh again' : 'Category name pinned',
+              durationMs: 1800,
+            });
+          },
+        },
+        {
+          label: 'Hide category',
+          icon: <EyeOff size={14} strokeWidth={1.7} aria-hidden="true" />,
+          onClick: async () => {
+            const res = await window.moodmark.smartCategories?.hide?.(category.id);
+            if (!res?.ok) return;
+            if (view.type === 'smartCategory' && view.id === category.id) {
+              setView({ type: 'all' });
+            }
+            await loadCollections();
+            showActionToast({ message: 'Category hidden', durationMs: 1800 });
+          },
+        },
+      ],
+    });
+  }, [loadCollections, setView, showActionToast, view]);
   // Bulk "Add to Collection" picker, anchored above the selection bar.
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
   const [bulkTagPicker, setBulkTagPicker] = useState(null); // { x, y } | null
@@ -3858,6 +3901,7 @@ export default function App({ entitlement } = {}) {
                     }
                     counts={smartCounts}
                     smartCategories={smartCategories}
+                    onSmartCategoryContextMenu={handleSmartCategoryContextMenu}
                     onPick={(v) => handleViewChange(v)}
                     tweetTypeFilter={tweetTypeFilter}
                     tweetTypeCounts={tweetTypeCounts}
@@ -4276,6 +4320,15 @@ export default function App({ entitlement } = {}) {
           y={cardCtx.y}
           items={cardCtx.items}
           onClose={() => setCardCtx(null)}
+        />
+      )}
+
+      {smartCategoryCtx && (
+        <ContextMenu
+          x={smartCategoryCtx.x}
+          y={smartCategoryCtx.y}
+          items={smartCategoryCtx.items}
+          onClose={() => setSmartCategoryCtx(null)}
         />
       )}
 

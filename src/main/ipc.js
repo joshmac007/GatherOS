@@ -14,6 +14,7 @@ const {
   getBoardItems, getBoardPreviewSaves, getBoardSaveIds, getBoardsForSave,
   upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
   upsertSaveTopicProfile, listSmartCategories, listNavigableSmartCategories,
+  hideSmartCategory, pinSmartCategory,
   getSmartCategoryAliases, getSmartCategorySaves, upsertSmartCategoryMembership,
 } = require('./db');
 const {
@@ -311,6 +312,13 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
   ipcMain.handle('saves:counts', () => getSmartViewCounts());
 
   ipcMain.handle('smart-categories:list-nav', () => listNavigableSmartCategories());
+
+  ipcMain.handle('smart-categories:hide', (_e, id) => hideSmartCategory(id));
+
+  ipcMain.handle('smart-categories:pin', (_e, payload = {}) => {
+    const id = typeof payload?.id === 'string' ? payload.id : null;
+    return pinSmartCategory(id, payload?.pinned !== false);
+  });
 
   ipcMain.handle('smart-categories:refresh', () => (
     smartCategoryRefresh?.requestRefresh?.() || { ok: false, reason: 'refresh-unavailable' }

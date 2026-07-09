@@ -240,6 +240,120 @@ test('smart category navigation only lists useful visible categories', withTempD
   );
 }));
 
+test('smart category rename preserves old names as aliases and recent metadata', withTempDb((db) => {
+  db.initDatabase();
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI tools',
+    status: 'visible',
+    visibilityScore: 0.9,
+    createdAt: 1000,
+    updatedAt: 1000,
+    lastChangedAt: 1000,
+    changeKind: null,
+  });
+
+  const renamed = db.renameSmartCategory({
+    id: 'cat-ai',
+    name: 'AI workflow tools',
+    changedAt: 5000,
+  });
+  assert.equal(renamed.ok, true);
+  assert.equal(renamed.renamed, true);
+
+  const category = db.getSmartCategory('cat-ai');
+  assert.equal(category.name, 'AI workflow tools');
+  assert.equal(category.last_changed_at, 5000);
+  assert.equal(category.change_kind, 'renamed');
+  assert.deepEqual(
+    db.getSmartCategoryAliases('cat-ai').map((alias) => [alias.alias, alias.source]),
+    [['AI tools', 'old_name']],
+  );
+}));
+
+test('pinned smart category names reject automatic renames', withTempDb((db) => {
+  db.initDatabase();
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI tools',
+    status: 'visible',
+    frozenName: true,
+  });
+
+  const skipped = db.renameSmartCategory({
+    id: 'cat-ai',
+    name: 'AI workflow tools',
+    automatic: true,
+  });
+
+  assert.equal(skipped.ok, false);
+  assert.equal(skipped.reason, 'name-frozen');
+  assert.equal(db.getSmartCategory('cat-ai').name, 'AI tools');
+  assert.deepEqual(db.getSmartCategoryAliases('cat-ai'), []);
+}));
+
+test('hidden smart categories require explicit restore before becoming visible', withTempDb((db) => {
+  db.initDatabase();
+  db.createSmartCategory({
+    id: 'cat-hidden',
+    name: 'Hidden cluster',
+    status: 'hidden',
+  });
+
+  const implicit = db.setSmartCategoryStatus('cat-hidden', 'visible');
+  assert.equal(implicit.ok, false);
+  assert.equal(implicit.reason, 'hidden-requires-restore');
+  assert.equal(db.getSmartCategory('cat-hidden').status, 'hidden');
+
+  const restored = db.restoreSmartCategory('cat-hidden');
+  assert.equal(restored.ok, true);
+  assert.equal(db.getSmartCategory('cat-hidden').status, 'visible');
+}));
+
+test('smart category nav exposes recent rename only inside configured window', withTempDb((db) => {
+  db.initDatabase();
+  db.createSmartCategory({
+    id: 'cat-ai',
+    name: 'AI workflow tools',
+    status: 'visible',
+    visibilityScore: 0.9,
+    createdAt: 1000,
+    updatedAt: 1000,
+    lastChangedAt: 1000,
+    changeKind: null,
+  });
+  for (let i = 1; i <= 5; i += 1) {
+    db.insertSave({
+      id: `save-ai-${i}`,
+      filePath: `/tmp/recent-${i}.png`,
+      thumbPath: `/tmp/recent-${i}-thumb.png`,
+      title: `AI workflow ${i}`,
+      createdAt: 2000 + i,
+    });
+    db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: `save-ai-${i}`, weight: 0.85 });
+  }
+  db.renameSmartCategory({
+    id: 'cat-ai',
+    name: 'AI workflow systems',
+    changedAt: 10_000,
+  });
+
+  const recent = db.listNavigableSmartCategories({
+    now: 12_000,
+    recentChangeWindowMs: 5_000,
+  })[0];
+  assert.equal(recent.recent_change, true);
+  assert.equal(recent.recent_change_kind, 'renamed');
+  assert.equal(recent.recent_change_note, 'Renamed from "AI workflow tools". Old name still works in search.');
+
+  const stale = db.listNavigableSmartCategories({
+    now: 20_001,
+    recentChangeWindowMs: 5_000,
+  })[0];
+  assert.equal(stale.recent_change, false);
+  assert.equal(stale.recent_change_note, null);
+}));
+
 test('smart category saves default to primary members ranked by strength then recency', withTempDb((db) => {
   db.initDatabase();
   db.createSmartCategory({
