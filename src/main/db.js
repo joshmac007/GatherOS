@@ -1904,6 +1904,30 @@ function listSmartCategoryRuns({ limit = 20 } = {}) {
     .all(n);
 }
 
+function getPendingSmartCategorySaves({ limit = 50 } = {}) {
+  const n = Math.max(1, Math.min(500, Number(limit) || 50));
+  return getDatabase()
+    .prepare(`
+      SELECT ${SAVE_LIST_COLUMNS.split(', ').map((column) => `s.${column}`).join(', ')}
+        FROM saves s
+        LEFT JOIN save_topic_profiles p ON p.save_id = s.id
+       WHERE s.deleted_at IS NULL
+         AND (
+           p.save_id IS NULL
+           OR NOT EXISTS (
+             SELECT 1
+               FROM smart_category_members m
+               JOIN smart_categories c ON c.id = m.category_id
+              WHERE m.save_id = s.id
+                AND c.status IN ('visible', 'candidate')
+           )
+         )
+       ORDER BY s.created_at DESC
+       LIMIT ?
+    `)
+    .all(n);
+}
+
 function getSavesByIds(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const placeholders = ids.map(() => '?').join(',');
@@ -2570,6 +2594,7 @@ module.exports = {
   getSmartCategoriesForSave,
   recordSmartCategoryRun,
   listSmartCategoryRuns,
+  getPendingSmartCategorySaves,
   getAllCollections,
   getAllCollectionsWithThumbs,
   getCollectionsForSave,

@@ -56,8 +56,8 @@ app.on('second-instance', (_event, argv) => {
 
 const {
   initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
-  upsertSaveTopicProfile, listSmartCategories, getSmartCategoryAliases,
-  upsertSmartCategoryMembership,
+  upsertSaveTopicProfile, getSaveTopicProfile, listSmartCategories, getSmartCategoryAliases,
+  upsertSmartCategoryMembership, recordSmartCategoryRun, getPendingSmartCategorySaves,
 } = require('./db');
 const { getPref } = require('./settings');
 const {
@@ -69,6 +69,10 @@ const {
 } = require('./openai');
 const { createSaveTopicProfile } = require('./save-topic-profiles');
 const { assignSaveToExistingSmartCategories } = require('./smart-category-memberships');
+const {
+  createBackgroundSmartCategoryRefresh,
+  runIncrementalSmartCategoryRefresh,
+} = require('./smart-category-refresh');
 const licensing = require('./licensing');
 const { URL_SCHEME: LICENSE_URL_SCHEME } = require('../shared/licensing-config');
 
@@ -180,6 +184,7 @@ const DEV_URL = 'http://localhost:5173';
 
 let mainWindow = null;
 let tray = null;
+let smartCategoryRefresh = null;
 
 // macOS Dock-drop queue. The 'open-file' event can fire BEFORE app
 // is ready (e.g. when the user drags an image onto a non-running
@@ -476,6 +481,8 @@ function notifySaved(record) {
   catch (err) { console.error('[gatheros] rebuildTrayMenu failed:', err); }
   try { maybeAIIndexInBackground(record); }
   catch (err) { console.error('[gatheros] AI index failed:', err); }
+  try { smartCategoryRefresh?.noteActivity({ kind: 'capture' }); }
+  catch (err) { console.error('[smart-categories] refresh schedule failed:', err?.message || err); }
 }
 
 // Quiet, batched save path for X bookmark syncs. Scrolling the
@@ -515,6 +522,8 @@ function notifyBookmarkSaved(record) {
   // Keep search working — embeddings still index in the background.
   try { maybeAIIndexInBackground(record); }
   catch (err) { console.error('[gatheros] AI index failed:', err); }
+  try { smartCategoryRefresh?.noteActivity({ kind: 'import' }); }
+  catch (err) { console.error('[smart-categories] refresh schedule failed:', err?.message || err); }
   if (bookmarkBatchCount === 0) bookmarkBatchStartedAt = Date.now();
   bookmarkBatchCount += 1;
   // Flush after 1.5s of quiet, OR force one every ~5s during a long
@@ -1088,6 +1097,32 @@ app.whenReady().then(() => {
   libraryRegistry.bootstrap();
   ensureStorageDirs();
   initDatabase();
+  smartCategoryRefresh = createBackgroundSmartCategoryRefresh({
+    getPendingSmartCategorySaves,
+    listSmartCategories,
+    hasProvider: hasAiSession,
+    runRefresh: ({ pendingSaves, categories, shouldContinue }) =>
+      runIncrementalSmartCategoryRefresh({
+        pendingSaves,
+        categories,
+        hasProvider: hasAiSession(),
+        providerName: 'codex',
+        provider: { generateSaveTopicProfile, generateSmartCategoryMemberships },
+        storage: {
+          upsertSaveTopicProfile,
+          listSmartCategories,
+          getSmartCategoryAliases,
+          upsertSmartCategoryMembership,
+        },
+        getSave,
+        getTagsForSave,
+        getSaveTopicProfile,
+        createSaveTopicProfile,
+        assignSaveToExistingSmartCategories,
+        shouldContinue,
+        recordSmartCategoryRun,
+      }),
+  });
   // Decide the local no-account trial start on first launch (idempotent;
   // also done lazily inside getEntitlement). MUST run after initDatabase
   // so isNewInstall() can read the real library count — otherwise an
@@ -1095,7 +1130,7 @@ app.whenReady().then(() => {
   // as a fresh install and wrongly handed a 14-day trial.
   try { require('./entitlement').ensureTrialDecided(); }
   catch (err) { console.warn('[gatheros] trial init failed:', err?.message || err); }
-  registerIpcHandlers();
+  registerIpcHandlers({ smartCategoryRefresh });
   createMainWindow();
   // Apply the macOS application menu now that mainWindow exists so
   // the menu can target webContents.send() at the right window.

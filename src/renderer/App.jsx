@@ -800,6 +800,39 @@ export default function App({ entitlement } = {}) {
   // Imperative handles for the global keyboard shortcuts.
   const searchInputRef = useRef(null);
 
+  useEffect(() => {
+    const note = (payload) => window.moodmark?.smartCategories?.noteActivity?.(payload);
+    const isTypingTarget = (el) => {
+      if (!el) return false;
+      return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+    };
+    const onInput = (event) => {
+      if (!isTypingTarget(event.target)) return;
+      const kind = event.target === searchInputRef.current || event.target?.type === 'search'
+        ? 'search'
+        : 'edit';
+      note({ kind });
+    };
+    const onDragStart = () => note({ kind: 'dragDrop', active: true });
+    const onDragOver = () => note({ kind: 'dragDrop', active: true });
+    const onDragEnd = () => note({ kind: 'dragDrop', active: false });
+
+    document.addEventListener('input', onInput, true);
+    document.addEventListener('change', onInput, true);
+    document.addEventListener('dragstart', onDragStart, true);
+    document.addEventListener('dragover', onDragOver, true);
+    document.addEventListener('dragend', onDragEnd, true);
+    document.addEventListener('drop', onDragEnd, true);
+    return () => {
+      document.removeEventListener('input', onInput, true);
+      document.removeEventListener('change', onInput, true);
+      document.removeEventListener('dragstart', onDragStart, true);
+      document.removeEventListener('dragover', onDragOver, true);
+      document.removeEventListener('dragend', onDragEnd, true);
+      document.removeEventListener('drop', onDragEnd, true);
+    };
+  }, []);
+
   // Blur the search field whenever the user clicks anywhere outside
   // it — clears the focus ring so the bar reads as inactive once the
   // user's attention moves on. mousedown rather than click so the
@@ -1210,6 +1243,31 @@ export default function App({ entitlement } = {}) {
   // user wants the result auto-opened in focus view; the modal
   // collects prompt + aspect, then calls handleGenerateVariant.
   const [variantOptions, setVariantOptions] = useState(null);
+
+  useEffect(() => {
+    const modalActive = !!(
+      settingsOpen
+      || aiUnlockedOpen
+      || saveUrlOpen
+      || whatsNewNotes
+      || shortcutsOpen
+      || upgradeOpen
+      || quickSwitcherOpen
+      || rediscoverOpen
+      || variantOptions
+    );
+    window.moodmark?.smartCategories?.noteActivity?.({ kind: 'modal', active: modalActive });
+  }, [
+    settingsOpen,
+    aiUnlockedOpen,
+    saveUrlOpen,
+    whatsNewNotes,
+    shortcutsOpen,
+    upgradeOpen,
+    quickSwitcherOpen,
+    rediscoverOpen,
+    variantOptions,
+  ]);
 
   const handleGenerateVariant = useCallback(async (saveId, opts = {}) => {
     if (proLocked) { requestUpgrade('ai'); return; }
@@ -3554,6 +3612,7 @@ export default function App({ entitlement } = {}) {
       { id: 'open-trash', label: 'Open trash', keywords: 'deleted bin', Icon: () => <Trash2 {...ICON} />, run: () => { handleModeChange('library'); handleViewChange({ type: 'trash' }); } },
       { id: 'shortcuts', label: 'Keyboard shortcuts', hint: '⌘/', keywords: 'keys help hotkeys', Icon: () => <Keyboard {...ICON} />, run: () => setShortcutsOpen(true) },
       { id: 'whats-new', label: "What's new", keywords: 'release notes changelog version', Icon: () => <Sparkles {...ICON} />, run: () => handleOpenReleaseNotes() },
+      { id: 'refresh-smart-categories', label: 'Refresh smart categories', keywords: 'classify organize categories topics', Icon: () => <RefreshCw {...ICON} />, run: () => window.moodmark.smartCategories?.refresh?.() },
       { id: 'export-library', label: 'Export library as zip', keywords: 'backup download archive', Icon: () => <Archive {...ICON} />, run: () => window.moodmark.library?.exportZip?.() },
       { id: 'snapshot-library', label: 'Back up library now', keywords: 'snapshot data safety', Icon: () => <Save {...ICON} />, run: () => window.moodmark.backup?.snapshot?.() },
       { id: 'settings', label: 'Open settings', hint: '⌘,', keywords: 'preferences options', Icon: () => <Settings {...ICON} />, run: () => setSettingsOpen(true) },

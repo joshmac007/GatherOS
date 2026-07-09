@@ -285,3 +285,40 @@ test('smart category saves default to primary members ranked by strength then re
     ['save-newer-strong', 'save-older-strong', 'save-secondary'],
   );
 }));
+
+test('pending smart category saves include live rows without topic profiles or memberships', withTempDb((db) => {
+  db.initDatabase();
+  db.createSmartCategory({ id: 'cat-ai', name: 'AI workflow tools', status: 'visible' });
+  for (const id of ['save-new-profiled', 'save-new-unprofiled', 'save-done', 'save-trash']) {
+    db.insertSave({
+      id,
+      filePath: `/tmp/${id}.png`,
+      thumbPath: `/tmp/${id}-thumb.png`,
+      title: id,
+      createdAt: id === 'save-new-unprofiled' ? 4000 : id === 'save-new-profiled' ? 3000 : 2000,
+    });
+  }
+  db.upsertSaveTopicProfile({
+    saveId: 'save-new-profiled',
+    concepts: ['ai workflow tools', 'automation', 'reference'],
+    contentType: 'tweet',
+    intentGuess: 'reference',
+    summary: 'Profile exists but no category membership exists.',
+    confidence: 0.8,
+  });
+  db.upsertSaveTopicProfile({
+    saveId: 'save-done',
+    concepts: ['ai workflow tools', 'automation', 'reference'],
+    contentType: 'tweet',
+    intentGuess: 'reference',
+    summary: 'Already assigned.',
+    confidence: 0.8,
+  });
+  db.upsertSmartCategoryMembership({ categoryId: 'cat-ai', saveId: 'save-done', weight: 0.85 });
+  db.deleteSave('save-trash');
+
+  assert.deepEqual(
+    db.getPendingSmartCategorySaves({ limit: 10 }).map((save) => save.id),
+    ['save-new-unprofiled', 'save-new-profiled'],
+  );
+}));

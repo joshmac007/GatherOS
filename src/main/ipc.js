@@ -106,7 +106,7 @@ async function embedQueryCached(queryText) {
   return vec;
 }
 
-function registerIpcHandlers() {
+function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
   // Merges saves whose extracted palette is perceptually similar to a
   // named color in the query (e.g. "orange", "navy") into the existing
   // result set. Same view filters (collection/explicit colorHex) get
@@ -311,6 +311,18 @@ function registerIpcHandlers() {
   ipcMain.handle('saves:counts', () => getSmartViewCounts());
 
   ipcMain.handle('smart-categories:list-nav', () => listNavigableSmartCategories());
+
+  ipcMain.handle('smart-categories:refresh', () => (
+    smartCategoryRefresh?.requestRefresh?.() || { ok: false, reason: 'refresh-unavailable' }
+  ));
+
+  ipcMain.on('smart-categories:activity', (_event, payload = {}) => {
+    if (!payload || typeof payload.kind !== 'string') return;
+    smartCategoryRefresh?.noteActivity?.({
+      kind: payload.kind,
+      active: payload.active,
+    });
+  });
 
   ipcMain.handle('smart-categories:get-saves', async (_e, opts = {}) => {
     const categoryId = typeof opts?.categoryId === 'string' ? opts.categoryId : null;
