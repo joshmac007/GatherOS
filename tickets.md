@@ -10,10 +10,10 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] Smart categories can be created, read, hidden, pinned, and archived internally.
-- [ ] Smart category aliases and weighted memberships can be stored and queried.
-- [ ] Existing tags, folders, boards, search, and X import behavior remain unchanged.
-- [ ] Migration is covered by database tests.
+- [x] Smart categories can be created, read, hidden, pinned, and archived internally.
+- [x] Smart category aliases and weighted memberships can be stored and queried.
+- [x] Existing tags, folders, boards, search, and X import behavior remain unchanged.
+- [x] Migration is covered by database tests.
 
 ## Create save topic profiles with Codex
 
