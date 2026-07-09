@@ -54,10 +54,10 @@ Work the **frontier**: any ticket whose blockers are all done.
 
 **Blocked by:** Show smart categories as quiet navigation.
 
-- [ ] Refresh waits for capture/import, search typing, detail editing, modal, and drag/drop quiet.
-- [ ] Refresh starts after the configured pending-save threshold or explicit user action.
-- [ ] Work pauses or defers when the user resumes active interaction.
-- [ ] Refresh run metadata records success, failure, counts, and timing.
+- [x] Refresh waits for capture/import, search typing, detail editing, modal, and drag/drop quiet.
+- [x] Refresh starts after the configured pending-save threshold or explicit user action.
+- [x] Work pauses or defers when the user resumes active interaction.
+- [x] Refresh run metadata records success, failure, counts, and timing.
 
 ## Add alias-powered smart category search
 
