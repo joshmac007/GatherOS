@@ -70,6 +70,7 @@ import { extractDropImageUrls } from './lib/dropUrls.js';
 import { fileUrl } from './lib/fileUrl.js';
 import { flyToCollection } from './lib/flyToCollection.js';
 import { seededShuffle } from './lib/shuffle.js';
+import { getSaveSortDate } from './lib/saveSortDate.mjs';
 import { tweetTypeOf } from './lib/tweetType.js';
 import { configureSaveSound, DEFAULT_SAVE_SOUND, playEmptyTrashSound } from './lib/sounds.js';
 import OnboardingOverlay from './onboarding/OnboardingOverlay.jsx';
@@ -2098,6 +2099,8 @@ export default function App({ entitlement } = {}) {
   // seed is null this is a no-op; the same seed always produces the
   // same permutation so the order stays stable across re-renders.
   const displaySaves = useMemo(() => {
+    const useTweetDateForXBookmarks = prefs.sortXBookmarksByTweetDate === true
+      && (view.type === 'all' || view.type === 'bookmarks');
     if (shuffleSeed) {
       // Pull saves added AFTER the shuffle to the top in newest-first
       // order so freshly-dropped images always show at position #1.
@@ -2112,15 +2115,19 @@ export default function App({ entitlement } = {}) {
       fresh.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
       return [...fresh, ...seededShuffle(settled, shuffleSeed)];
     }
-    if (sortMode === 'recent') return saves;
+    if (sortMode === 'recent' && !useTweetDateForXBookmarks) return saves;
     // Clone before sorting so the underlying saves array (memoized
     // higher up) isn't mutated.
     const sorted = saves.slice();
-    if (sortMode === 'oldest') {
-      sorted.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+    if (sortMode === 'recent' || sortMode === 'oldest') {
+      const dir = sortMode === 'oldest' ? 1 : -1;
+      sorted.sort((a, b) => (
+        getSaveSortDate(a, useTweetDateForXBookmarks)
+        - getSaveSortDate(b, useTweetDateForXBookmarks)
+      ) * dir);
     }
     return sorted;
-  }, [saves, shuffleSeed, shuffleAt, sortMode]);
+  }, [saves, shuffleSeed, shuffleAt, sortMode, prefs.sortXBookmarksByTweetDate, view.type]);
 
   const visibleSaves = useMemo(() => {
     let base = displaySaves;
