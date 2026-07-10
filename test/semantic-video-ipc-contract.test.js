@@ -458,6 +458,8 @@ test('preload exposes exact semantic and video APIs and allowed events', () => {
   assert.doesNotMatch(runtime, /emit\(['"]semantic-index:health['"]/);
   assert.match(runtime, /emit\(['"]semantic-index:status['"]/);
   assert.match(app, /on\?\.\(['"]semantic-index:status['"],\s*refreshSemanticStatus\)/);
+  assert.match(app, /subscribeSemanticNotices\(window\.moodmark/);
+  assert.match(app, /showActionToast\(\{ message, durationMs: 4200 \}\)/);
 });
 
 test('ipc removes legacy embedding consumers and guards image-only AI for video', () => {

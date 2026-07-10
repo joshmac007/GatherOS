@@ -135,6 +135,38 @@ test('reports resolved semantic action failures and exact method availability', 
   );
 });
 
+test('maps semantic notice messages and subscribes through one nonblocking notice seam', () => {
+  const {
+    semanticNoticeMessage,
+    subscribeSemanticNotices,
+  } = loadSemanticIndexSettings();
+  let noticeHandler = null;
+  let unsubscribed = false;
+  const messages = [];
+  const moodmark = {
+    on(event, handler) {
+      assert.equal(event, 'semantic-index:notice');
+      noticeHandler = handler;
+      return () => { unsubscribed = true; };
+    },
+  };
+
+  const unsubscribe = subscribeSemanticNotices(moodmark, (message) => messages.push(message));
+  noticeHandler({ type: 'paused' });
+  noticeHandler({ type: 'rebuild-complete' });
+  noticeHandler({ type: 'paused', message: 'Custom pause message' });
+  noticeHandler({ type: 'unknown' });
+
+  assert.deepEqual(messages, [
+    'Semantic indexing paused. Check Settings for details.',
+    'Semantic index rebuild complete.',
+    'Custom pause message',
+  ]);
+  assert.equal(semanticNoticeMessage('  Ready  '), 'Ready');
+  unsubscribe();
+  assert.equal(unsubscribed, true);
+});
+
 test('semantic action claim synchronously blocks rapid duplicate actions', () => {
   const { claimSemanticAction } = loadSemanticIndexSettings();
   const busyRef = { current: false };

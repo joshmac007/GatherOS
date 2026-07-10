@@ -303,6 +303,7 @@ test('runtime-wide Ollama failure pauses queue and uses capped durable retry', a
     ['ollama_unavailable', 2, false],
   ]) {
     const fixture = makeRepository();
+    const notices = [];
     const unavailable = Object.assign(new Error(code), {
       code,
     });
@@ -313,6 +314,7 @@ test('runtime-wide Ollama failure pauses queue and uses capped durable retry', a
         health: async () => { throw unavailable; },
         embed: async () => { throw new Error('must not embed'); },
       },
+      notify: (event, payload) => notices.push({ event, payload }),
       now: () => 1_000,
       maxAttempts: 3,
       baseRetryMs: 100,
@@ -328,6 +330,10 @@ test('runtime-wide Ollama failure pauses queue and uses capped durable retry', a
     assert.equal(fixture.calls.failed[0].retryable, retryable);
     assert.equal(fixture.calls.failed[0].retryAt, retryable ? 1_100 : undefined);
     assert.equal(fixture.calls.paused[0].reason, code);
+    const pauseNotice = notices.find(({ event }) => event === 'semantic-index:notice');
+    assert.equal(pauseNotice.payload.type, 'paused');
+    assert.match(pauseNotice.payload.message, /^Semantic indexing paused because /);
+    assert.doesNotMatch(pauseNotice.payload.message, /ollama_(unavailable|model_missing)/);
   }
 });
 

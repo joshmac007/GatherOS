@@ -20,6 +20,35 @@ const SEMANTIC_EVENTS = [
   'semantic-index:notice',
 ];
 
+const SEMANTIC_NOTICE_FALLBACKS = {
+  paused: 'Semantic indexing paused. Check Settings for details.',
+  'rebuild-complete': 'Semantic index rebuild complete.',
+};
+
+export function semanticNoticeMessage(payload) {
+  if (typeof payload === 'string') return payload.trim() || null;
+  if (!payload || typeof payload !== 'object') return null;
+  const supplied = [payload.message, payload.notice]
+    .find((value) => typeof value === 'string' && value.trim());
+  return supplied?.trim() || SEMANTIC_NOTICE_FALLBACKS[payload.type] || null;
+}
+
+export function subscribeSemanticNotices(moodmark, onNotice) {
+  if (typeof moodmark?.on !== 'function' || typeof onNotice !== 'function') return () => {};
+  let unsubscribe;
+  try {
+    unsubscribe = moodmark.on('semantic-index:notice', (payload) => {
+      const message = semanticNoticeMessage(payload);
+      if (message) onNotice(message, payload);
+    });
+  } catch {
+    return () => {};
+  }
+  return () => {
+    try { unsubscribe?.(); } catch { /* best-effort event cleanup */ }
+  };
+}
+
 function asCount(value) {
   const count = Number(value);
   return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
@@ -313,11 +342,7 @@ export default function SemanticIndexSettings() {
         return moodmark.on(eventName, (payload) => {
           if (!controller.isActive()) return;
           if (eventName === 'semantic-index:notice') {
-            setNotice(
-              typeof payload === 'string'
-                ? payload
-                : payload?.message || payload?.notice || null,
-            );
+            setNotice(semanticNoticeMessage(payload));
           }
           controller.scheduleRefresh();
         });

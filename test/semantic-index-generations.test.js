@@ -169,6 +169,7 @@ test('explicit rebuild creates isolated generation and enqueues every canonical 
 
 test('rebuild activation is delegated to repository only after final completed save', async () => {
   const fixture = makeRepository();
+  const notices = [];
   const index = createSemanticIndex({
     repository: fixture.repository,
     ollama: {
@@ -178,6 +179,7 @@ test('rebuild activation is delegated to repository only after final completed s
     },
     now: () => 30,
     randomUUID: () => 'gen-complete',
+    notify: (event, payload) => notices.push({ event, payload }),
   });
   index.startRebuild();
   const rebuildLane = index.createLanes()[1];
@@ -191,6 +193,17 @@ test('rebuild activation is delegated to repository only after final completed s
   assert.equal(fixture.state.building_generation_id, null);
   assert.equal(fixture.calls.completed.length, 2);
   assert.equal('activate' in fixture.calls.completed[0], false);
+  assert.deepEqual(
+    notices.filter(({ event }) => event === 'semantic-index:notice'),
+    [{
+      event: 'semantic-index:notice',
+      payload: {
+        type: 'rebuild-complete',
+        generationId: 'gen-complete',
+        message: 'Semantic index rebuild complete.',
+      },
+    }],
+  );
 });
 
 test('save mutation reopens completed building job before generation can activate', async () => {

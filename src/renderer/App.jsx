@@ -11,6 +11,7 @@ import BulkTagPicker from './components/BulkTagPicker.jsx';
 import MoodboardPreview from './components/MoodboardPreview.jsx';
 import RediscoverMode from './components/RediscoverMode.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
+import { subscribeSemanticNotices } from './components/SemanticIndexSettings.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import SaveUrlModal from './components/SaveUrlModal.jsx';
 import PasteToSavePrompt from './components/PasteToSavePrompt.jsx';
@@ -1149,6 +1150,12 @@ export default function App({ entitlement } = {}) {
       showActionToast({ message, durationMs: bad > 0 ? 5200 : 2600 });
     });
   }, [reload, showActionToast]);
+
+  // Semantic indexing stays background-only. Only unexpected pauses and
+  // completed rebuilds reach library UI through this small, expiring toast.
+  useEffect(() => subscribeSemanticNotices(window.moodmark, (message) => {
+    showActionToast({ message, durationMs: 4200 });
+  }), [showActionToast]);
 
   // Generic error line from fire-and-forget main-process paths (dock
   // drops, extension saves) — plus a renderer-local CustomEvent variant

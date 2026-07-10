@@ -22,6 +22,13 @@ function errorMessage(error) {
   return typeof error?.message === 'string' && error.message ? error.message : String(error);
 }
 
+function runtimePauseMessage(code, model) {
+  if (code === 'ollama_model_missing') {
+    return `Semantic indexing paused because Ollama model "${model}" is not installed.`;
+  }
+  return 'Semantic indexing paused because Ollama is unavailable.';
+}
+
 function decodeStoredVector(value, dimension) {
   if (!Number.isInteger(dimension) || dimension < 1) {
     throw new Error('Stored semantic vector dimension is invalid');
@@ -272,7 +279,7 @@ function createSemanticIndex({
       emit('semantic-index:notice', {
         type: 'paused',
         reason: code,
-        message: errorMessage(error),
+        message: runtimePauseMessage(code, ollama.model),
         setupAction: error?.setupAction || null,
       });
     }
@@ -303,7 +310,11 @@ function createSemanticIndex({
     const snapshot = emitStatus();
     emit('semantic-index:progress', snapshot);
     if (job.kind === 'rebuild' && !snapshot.building_generation_id) {
-      emit('semantic-index:notice', { type: 'rebuild-complete', generationId: job.generation_id });
+      emit('semantic-index:notice', {
+        type: 'rebuild-complete',
+        generationId: job.generation_id,
+        message: 'Semantic index rebuild complete.',
+      });
     }
     return stored;
   }
