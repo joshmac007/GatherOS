@@ -22,6 +22,7 @@ const HOST = '127.0.0.1';
 const MAX_BODY = 2 * 1024 * 1024;
 
 let server = null;
+let backgroundSaveRouter = null;
 let cachedToken = null;
 
 // --- Sync ordering ------------------------------------------------------
@@ -76,6 +77,14 @@ function sendJson(res, status, body) {
     'Content-Length': Buffer.byteLength(json),
   });
   res.end(json);
+}
+
+async function completeSavedResponse({ res, record, notify, routeSave = backgroundSaveRouter } = {}) {
+  if (!record?.id) throw new Error('saved record id required');
+  if (typeof routeSave === 'function') await routeSave(record);
+  if (typeof notify === 'function') notify(record);
+  sendJson(res, 200, { ok: true, id: record.id });
+  return { ok: true, id: record.id };
 }
 
 function readJsonBody(req) {
@@ -305,8 +314,7 @@ async function handleSave(req, res) {
         createdAt: nextSyncCreatedAt(),
       });
       attachTags(tweetRecord.id);
-      notifyNew(tweetRecord);
-      sendJson(res, 200, { ok: true, id: tweetRecord.id });
+      await completeSavedResponse({ res, record: tweetRecord, notify: notifyNew });
       return;
     }
 
@@ -328,8 +336,7 @@ async function handleSave(req, res) {
         title: pageTitle || captured.title || null,
         kind: 'url',
       });
-      notifySaved(urlRecord);
-      sendJson(res, 200, { ok: true, id: urlRecord.id });
+      await completeSavedResponse({ res, record: urlRecord, notify: notifySaved });
       return;
     }
 
@@ -374,8 +381,7 @@ async function handleSave(req, res) {
       createdAt: tweetMeta ? nextSyncCreatedAt() : undefined,
     });
     attachTags(record.id);
-    notifyNew(record);
-    sendJson(res, 200, { ok: true, id: record.id });
+    await completeSavedResponse({ res, record, notify: notifyNew });
   } catch (err) {
     console.error('[ext-server] /save failed:', err?.message || err);
     // Surface the failure in the app, not just the extension response.
@@ -390,7 +396,8 @@ async function handleSave(req, res) {
   }
 }
 
-function start() {
+function start({ routeSave } = {}) {
+  backgroundSaveRouter = typeof routeSave === 'function' ? routeSave : null;
   if (server) return;
   // Trigger the token init now so the renderer's first prefs read
   // already sees it.
@@ -430,9 +437,10 @@ function start() {
 }
 
 function stop() {
+  backgroundSaveRouter = null;
   if (!server) return;
   server.close();
   server = null;
 }
 
-module.exports = { start, stop, getOrCreateToken, PORT };
+module.exports = { start, stop, getOrCreateToken, completeSavedResponse, PORT };

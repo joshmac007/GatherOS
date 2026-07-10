@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const { isVideoSave } = require('./video-semantic-workflows');
 
 const CONTENT_TYPES = new Set([
   'tweet',
@@ -44,7 +45,12 @@ function buildSaveTopicEvidence(save, manualTags = []) {
   const authorHandle = cleanString(tweetMeta.authorHandle || tweetMeta.handle, 80);
   const author = [authorName, authorHandle].filter(Boolean).join(' ');
   const imagePath = cleanString(save?.file_path, 2000);
-  const hasImageEvidence = !!(imagePath && fs.existsSync(imagePath) && save?.kind !== 'url');
+  const hasImageEvidence = !!(
+    imagePath
+    && fs.existsSync(imagePath)
+    && save?.kind !== 'url'
+    && !isVideoSave(save)
+  );
 
   return {
     promptInput: {
@@ -129,8 +135,53 @@ async function createSaveTopicProfile({
   });
 }
 
+async function enrichSaveTopicProfile({
+  record,
+  getSave,
+  getTagsForSave,
+  topicProvider,
+  upsertSaveTopicProfile,
+  assignMemberships,
+  membershipProvider,
+  listSmartCategories,
+  getSmartCategoryAliases,
+  upsertSmartCategoryMembership,
+  getSemanticIndexState,
+  getSemanticVector,
+  getActiveSemanticVectors,
+  getSmartCategoryMembers,
+  now = Date.now,
+} = {}) {
+  const save = typeof getSave === 'function' ? getSave(record?.id) || record : record;
+  const manualTags = typeof getTagsForSave === 'function' ? getTagsForSave(record?.id) : [];
+  const result = await createSaveTopicProfile({
+    save,
+    manualTags,
+    provider: topicProvider,
+    upsertSaveTopicProfile,
+    now,
+  });
+  if (!result?.ok || typeof assignMemberships !== 'function') return result;
+
+  const membership = await assignMemberships({
+    saveId: record.id,
+    profile: result.profile,
+    provider: membershipProvider,
+    listSmartCategories,
+    getSmartCategoryAliases,
+    upsertSmartCategoryMembership,
+    getSemanticIndexState,
+    getSemanticVector,
+    getActiveSemanticVectors,
+    getSmartCategoryMembers,
+    now,
+  });
+  return { ...result, membership };
+}
+
 module.exports = {
   buildSaveTopicEvidence,
   validateSaveTopicProfile,
   createSaveTopicProfile,
+  enrichSaveTopicProfile,
 };

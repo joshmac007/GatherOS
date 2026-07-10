@@ -54,24 +54,35 @@ app.on('second-instance', (_event, argv) => {
   }
 });
 
+const databaseRepository = require('./db');
 const {
   initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
   upsertSaveTopicProfile, getSaveTopicProfile, listSmartCategories, getSmartCategoryAliases,
   upsertSmartCategoryMembership, recordSmartCategoryRun, getPendingSmartCategorySaves,
-  getSmartCategoryMemberTopicEmbeddings, updateSmartCategoryCentroidEmbedding,
+  getSemanticIndexState, getSemanticVector, getActiveSemanticVectors, getSmartCategoryMembers,
   applySmartCategoryTaxonomyChanges, listSmartCategoryRuns,
-} = require('./db');
+} = databaseRepository;
 const { getPref } = require('./settings');
 const {
   hasSession: hasAiSession,
+  hasCodexSession,
   analyzeImage,
-  embedText,
   generateSaveTopicProfile,
   generateSmartCategoryMemberships,
   generateSmartCategoryTaxonomyRefresh,
+  generateVideoTagSuggestions,
 } = require('./openai');
-const { createSaveTopicProfile } = require('./save-topic-profiles');
+const { createSaveTopicProfile, enrichSaveTopicProfile } = require('./save-topic-profiles');
 const { assignSaveToExistingSmartCategories } = require('./smart-category-memberships');
+const { readAiConfig } = require('./ai-provider-config');
+const { createOllamaEmbedClient } = require('./ollama-embed-client');
+const { createDefaultVideoFrameExtractor } = require('./video-frame-extractor');
+const { cleanupDerivedVideoCache } = require('./video-analysis');
+const {
+  createVideoSemanticWorkflows,
+  cleanupPurgedSaveDerived,
+  shouldUseImageAi,
+} = require('./video-semantic-workflows');
 const { runSmartCategoryTaxonomyRefresh } = require('./smart-category-taxonomy-refresh');
 const {
   createBackgroundSmartCategoryRefresh,
@@ -135,35 +146,28 @@ function drainLicenseTokenQueue() {
   }
 }
 
-// Float32Array <-> Buffer plumbing for storing embeddings as SQLite BLOBs.
-function vectorToBuffer(arr) {
-  return Buffer.from(new Float32Array(arr).buffer);
-}
-
 async function maybeCreateTopicProfile(record) {
-  const save = getSave(record.id) || record;
-  const manualTags = getTagsForSave(record.id);
-  const result = await createSaveTopicProfile({
-    save,
-    manualTags,
-    provider: { generateSaveTopicProfile },
+  const result = await enrichSaveTopicProfile({
+    record,
+    getSave,
+    getTagsForSave,
+    topicProvider: { generateSaveTopicProfile },
     upsertSaveTopicProfile,
+    assignMemberships: assignSaveToExistingSmartCategories,
+    membershipProvider: { generateSmartCategoryMemberships },
+    listSmartCategories,
+    getSmartCategoryAliases,
+    upsertSmartCategoryMembership,
+    getSemanticIndexState,
+    getSemanticVector,
+    getActiveSemanticVectors,
+    getSmartCategoryMembers,
   });
   if (!result?.ok) {
     console.warn('[smart-categories] topic profile skipped for save', record.id, result?.reason || 'unknown');
     return result;
   }
-  const membershipResult = await assignSaveToExistingSmartCategories({
-    saveId: record.id,
-    profile: result.profile,
-    provider: { embedText, generateSmartCategoryMemberships },
-    listSmartCategories,
-    getSmartCategoryAliases,
-    upsertSaveTopicProfile,
-    upsertSmartCategoryMembership,
-    getSmartCategoryMemberTopicEmbeddings,
-    updateSmartCategoryCentroidEmbedding,
-  });
+  const membershipResult = result.membership;
   if (!membershipResult?.ok) {
     console.warn('[smart-categories] membership assignment skipped for save', record.id, membershipResult?.reason || 'unknown');
   }
@@ -192,6 +196,33 @@ const DEV_URL = 'http://localhost:5173';
 let mainWindow = null;
 let tray = null;
 let smartCategoryRefresh = null;
+let backgroundRuntime = null;
+
+function sendBackgroundEvent(event, payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(event, payload);
+}
+
+function activeVideoDerivedDirectory() {
+  return path.join(libraryRegistry.getActiveLibraryRoot(), 'derived', 'video-analysis');
+}
+
+async function cleanupSaveVideoDerived(directory, saveId) {
+  return cleanupDerivedVideoCache({ directory, saveId });
+}
+
+async function cleanupAllVideoDerived(directory) {
+  await fs.promises.rm(directory, { recursive: true, force: true });
+}
+
+function routeNewSaveToBackground(record) {
+  const work = backgroundRuntime?.routeSave(record);
+  work?.catch?.((error) => {
+    if (error?.code !== 'library_epoch_stale') {
+      console.error('[background] save routing failed:', error?.message || error);
+    }
+  });
+}
 
 function withSmartCategoryAliases(categories = []) {
   return (Array.isArray(categories) ? categories : []).map((category) => ({
@@ -493,6 +524,7 @@ function notifySaved(record) {
   catch (err) { console.error('[gatheros] showToast failed:', err); }
   try { rebuildTrayMenu(); }
   catch (err) { console.error('[gatheros] rebuildTrayMenu failed:', err); }
+  routeNewSaveToBackground(record);
   try { maybeAIIndexInBackground(record); }
   catch (err) { console.error('[gatheros] AI index failed:', err); }
   try { smartCategoryRefresh?.noteActivity({ kind: 'capture' }); }
@@ -534,6 +566,7 @@ function notifyBookmarkFailed() {
 
 function notifyBookmarkSaved(record) {
   // Keep search working — embeddings still index in the background.
+  routeNewSaveToBackground(record);
   try { maybeAIIndexInBackground(record); }
   catch (err) { console.error('[gatheros] AI index failed:', err); }
   try { smartCategoryRefresh?.noteActivity({ kind: 'import' }); }
@@ -573,11 +606,13 @@ function notifyNeedsUpgrade(context) {
   }
 }
 
-// One vision call yields title + description. The description (plus
-// title and any tags) feeds a single embedding call. Whichever fields
-// the user opted into get persisted; the rest are skipped to save cost.
+// One image-only vision call yields title + description + OCR. Persisted
+// changes then coalesce through the dedicated Ollama semantic queue.
 async function maybeAIIndexInBackground(record) {
   if (!record?.id || !record.file_path) return;
+  // MP4/video bytes never enter image-only Codex stages. Their dedicated
+  // workflow extracts bounded frames/contact sheets before any provider call.
+  if (!shouldUseImageAi(record)) return;
   // No license session = paywall is in front of the user; AI features
   // would 401 at the proxy anyway, so skip the round-trip.
   if (!hasAiSession()) return;
@@ -618,23 +653,6 @@ async function maybeAIIndexInBackground(record) {
     // sweep doesn't keep retrying the same row forever.
     updates.ocrText = text || '';
 
-    if (wantSemantic) {
-      const tags = getTagsForSave(record.id).map((t) => t.name).join(', ');
-      // Cap the OCR slice so a text-heavy screenshot doesn't dilute
-      // the embedding. 300 chars ≈ ~75 tokens, plenty to surface key
-      // headlines / labels semantically.
-      const ocrSnippet = text ? text.slice(0, 300) : '';
-      const embedSource = [title, description, ocrSnippet, tags].filter(Boolean).join('. ');
-      if (embedSource) {
-        try {
-          const vec = await embedText(embedSource);
-          updates.embedding = vectorToBuffer(vec);
-        } catch (err) {
-          console.error('Embed failed:', err.message);
-        }
-      }
-    }
-
     if (Object.keys(updates).length > 1) {
       updateSave(updates);
       const updated = getSave(record.id);
@@ -649,6 +667,12 @@ async function maybeAIIndexInBackground(record) {
   } catch (err) {
     console.error('AI index failed:', err.message);
   } finally {
+    const current = getSave(record.id) || record;
+    backgroundRuntime?.routeSave(current, { changed: true }).catch((error) => {
+      if (error?.code !== 'library_epoch_stale') {
+        console.error('[semantic-index] changed-save enqueue failed:', error?.message || error);
+      }
+    });
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('save:indexing-end', record.id);
     }
@@ -993,36 +1017,36 @@ ipcMain.handle('library:rename', (_e, payload = {}) => {
   return libraryRegistry.renameLibrary(payload.id, payload.name);
 });
 
-ipcMain.handle('library:delete', (_e, id) => {
-  const result = libraryRegistry.deleteLibrary(id);
-  if (!result.ok) return result;
-  if (result.wasActive) {
-    // The DB handle was open against the now-deleted folder. Reopen
-    // against the auto-promoted active library and notify the
-    // renderer so it can clear its view + refetch.
-    reopenDatabase();
-    if (mainWindow && !mainWindow.isDestroyed()) {
+ipcMain.handle('library:delete', async (_e, id) => {
+  const activeId = libraryRegistry.getActiveLibrary()?.id;
+  if (id !== activeId || !backgroundRuntime) return libraryRegistry.deleteLibrary(id);
+  return backgroundRuntime.rebind(async () => {
+    closeDatabase();
+    const result = libraryRegistry.deleteLibrary(id);
+    initDatabase();
+    ensureStorageDirs();
+    if (result.ok && result.wasActive && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('library:switched', { activeId: result.newActiveId });
     }
-  }
-  return result;
+    return result;
+  });
 });
 
-ipcMain.handle('library:switch', (_e, id) => {
-  const result = libraryRegistry.setActiveLibrary(id);
-  if (!result.ok) return result;
-  // Closing + reopening the DB picks up the new active path.
-  reopenDatabase();
-  // Make sure the now-active library has its images/ + thumbs/ dirs.
-  // Dirs are derived per-call, but they still have to exist before the
-  // first save writes into them — older libraries (or any created
-  // before this guard) may be missing them.
-  ensureStorageDirs();
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('library:switched', { activeId: id });
-  }
-  rebuildTrayMenu();
-  return { ok: true };
+ipcMain.handle('library:switch', async (_e, id) => {
+  const switchLibrary = () => {
+    const result = libraryRegistry.setActiveLibrary(id);
+    if (!result.ok) return result;
+    // Closing + reopening picks up the new active path only after all
+    // old-epoch background work has stopped.
+    reopenDatabase();
+    ensureStorageDirs();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('library:switched', { activeId: id });
+    }
+    rebuildTrayMenu();
+    return { ok: true };
+  };
+  return backgroundRuntime ? backgroundRuntime.rebind(switchLibrary) : switchLibrary();
 });
 
 // Strip framing-block headers from every response served to the
@@ -1111,6 +1135,19 @@ app.whenReady().then(() => {
   libraryRegistry.bootstrap();
   ensureStorageDirs();
   initDatabase();
+  const aiConfig = readAiConfig();
+  backgroundRuntime = createVideoSemanticWorkflows({
+    repository: databaseRepository,
+    ollama: createOllamaEmbedClient(aiConfig.ollama),
+    codex: { hasCodexSession, generateVideoTagSuggestions },
+    frameExtractor: createDefaultVideoFrameExtractor(),
+    notify: sendBackgroundEvent,
+    getDerivedDirectory: activeVideoDerivedDirectory,
+    cleanupDerivedSave: cleanupSaveVideoDerived,
+    cleanupDerivedAll: cleanupAllVideoDerived,
+    restoreBackupImpl: (snapshotPath) => require('./backup').restoreFromSnapshot(snapshotPath),
+  });
+  backgroundRuntime.start();
   smartCategoryRefresh = createBackgroundSmartCategoryRefresh({
     getPendingSmartCategorySaves,
     listSmartCategories,
@@ -1126,20 +1163,24 @@ app.whenReady().then(() => {
         categories,
         hasProvider: hasAiSession(),
         providerName: 'codex',
-        provider: { generateSaveTopicProfile, embedText, generateSmartCategoryMemberships },
+        provider: { generateSaveTopicProfile, generateSmartCategoryMemberships },
         storage: {
           upsertSaveTopicProfile,
           listSmartCategories,
           getSmartCategoryAliases,
           upsertSmartCategoryMembership,
-          getSmartCategoryMemberTopicEmbeddings,
-          updateSmartCategoryCentroidEmbedding,
         },
         getSave,
         getTagsForSave,
         getSaveTopicProfile,
         createSaveTopicProfile,
-        assignSaveToExistingSmartCategories,
+        assignSaveToExistingSmartCategories: (input) => assignSaveToExistingSmartCategories({
+          ...input,
+          getSemanticIndexState,
+          getSemanticVector,
+          getActiveSemanticVectors,
+          getSmartCategoryMembers,
+        }),
         shouldContinue,
         recordSmartCategoryRun,
       });
@@ -1164,7 +1205,15 @@ app.whenReady().then(() => {
   // as a fresh install and wrongly handed a 14-day trial.
   try { require('./entitlement').ensureTrialDecided(); }
   catch (err) { console.warn('[gatheros] trial init failed:', err?.message || err); }
-  registerIpcHandlers({ smartCategoryRefresh });
+  registerIpcHandlers({
+    smartCategoryRefresh,
+    semanticIndex: backgroundRuntime.getSemanticIndex(),
+    semanticSearch: backgroundRuntime.getSemanticSearch(),
+    backgroundRuntime,
+    cleanupDerivedCache: ({ saveId, all } = {}) => (
+      all ? backgroundRuntime.cleanupAllDerived() : backgroundRuntime.cleanupSaveDerived(saveId)
+    ),
+  });
   createMainWindow();
   // Apply the macOS application menu now that mainWindow exists so
   // the menu can target webContents.send() at the right window.
@@ -1172,7 +1221,9 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(buildAppMenu({ getMainWindow: () => mainWindow }));
   createTray();
   registerCaptureHotkey();
-  extensionServer.start();
+  extensionServer.start({
+    routeSave: (record) => backgroundRuntime.routeSave(record),
+  });
   // Drop the native-messaging host manifest into every Chromium-
   // family browser's user dir so the extension can connect without
   // the user ever touching the filesystem.
@@ -1206,6 +1257,13 @@ app.whenReady().then(() => {
       if (result?.ok && result.ids.length > 0) {
         console.log(`[trash] auto-purged ${result.ids.length} saves older than ${rawDays}d`);
         for (const f of result.files) deleteImageFiles(f.filePath, f.thumbPath);
+        cleanupPurgedSaveDerived({
+          saveIds: result.ids,
+          cleanupSaveDerived: (saveId) => backgroundRuntime.cleanupSaveDerived(saveId),
+          onError: (error, saveId) => {
+            console.warn(`[trash] derived cleanup failed for ${saveId}:`, error?.message || error);
+          },
+        });
       }
     }
   } catch (err) {
@@ -1272,8 +1330,23 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => app.quit());
 }
 
-app.on('before-quit', () => {
-  destroyToastWindow();
+let backgroundDrainedForQuit = false;
+let backgroundQuitDrain = null;
+app.on('before-quit', (event) => {
+  if (!backgroundRuntime || backgroundDrainedForQuit) {
+    destroyToastWindow();
+    return;
+  }
+  event.preventDefault();
+  extensionServer.stop();
+  if (backgroundQuitDrain) return;
+  backgroundQuitDrain = backgroundRuntime.stopAndDrain()
+    .catch((error) => console.error('[background] quit drain failed:', error?.message || error))
+    .finally(() => {
+      backgroundDrainedForQuit = true;
+      destroyToastWindow();
+      app.quit();
+    });
 });
 
 app.on('will-quit', () => {

@@ -155,10 +155,12 @@ test('same fingerprint is coalesced and retryable failures wait for capped backo
   assert.equal(failed.retry_count, 1);
   assert.equal(failed.error, 'Codex response was not valid JSON');
   assert.equal(failed.available_at, 40 + (15 * 60 * 1000));
+  assert.equal(db.getNextVideoAnalysisReadyAt(), failed.available_at);
   assert.equal(db.claimVideoAnalysis(failed.available_at - 1), undefined);
   const retry = db.claimVideoAnalysis(failed.available_at);
   assert.equal(retry.id, claimed.id);
   assert.equal(retry.retry_count, 1);
+  assert.equal(db.getNextVideoAnalysisReadyAt(), null);
   assert.deepEqual(db.getTagsForSave('video-save').map((tag) => tag.name), ['existing']);
   assert.deepEqual(db.listVideoTagSuggestions('video-save'), []);
 }));

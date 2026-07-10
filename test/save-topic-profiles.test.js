@@ -7,8 +7,10 @@ const path = require('node:path');
 const {
   buildSaveTopicEvidence,
   createSaveTopicProfile,
+  enrichSaveTopicProfile,
   validateSaveTopicProfile,
 } = require('../src/main/save-topic-profiles');
+const { assignSaveToExistingSmartCategories } = require('../src/main/smart-category-memberships');
 
 function loadDb(userData) {
   const electronPath = require.resolve('electron');
@@ -57,6 +59,58 @@ function validProfile(overrides = {}) {
     ...overrides,
   };
 }
+
+function floatBuffer(values) {
+  return Buffer.from(new Float32Array(values).buffer);
+}
+
+test('enrichment entrypoint uses active semantic vectors without Codex membership or embedText', async () => {
+  let codexMembershipCalls = 0;
+  const memberships = [];
+  const result = await enrichSaveTopicProfile({
+    record: { id: 'save-target', title: 'Target' },
+    getSave: () => ({ id: 'save-target', title: 'Target' }),
+    getTagsForSave: () => [],
+    topicProvider: { generateSaveTopicProfile: async () => validProfile() },
+    upsertSaveTopicProfile: (profile) => ({
+      ok: true,
+      profile: { save_id: profile.saveId, concepts: profile.concepts, summary: profile.summary },
+    }),
+    assignMemberships: assignSaveToExistingSmartCategories,
+    membershipProvider: {
+      generateSmartCategoryMemberships: async () => {
+        codexMembershipCalls += 1;
+        throw new Error('Codex membership should not run');
+      },
+    },
+    listSmartCategories: () => [{ id: 'cat-a', name: 'Aviation', status: 'visible' }],
+    getSmartCategoryAliases: () => [],
+    upsertSmartCategoryMembership: (membership) => memberships.push(membership),
+    getSemanticIndexState: () => ({ active_generation_id: 'gen-active' }),
+    getSemanticVector: () => ({
+      generation_id: 'gen-active', save_id: 'save-target', model: 'embeddinggemma', dimension: 2,
+      source_hash: 'target-hash', vector: floatBuffer([1, 0]),
+    }),
+    getActiveSemanticVectors: () => [
+      {
+        generation_id: 'gen-active', save_id: 'save-target', model: 'embeddinggemma', dimension: 2,
+        source_hash: 'target-hash', vector: floatBuffer([1, 0]),
+      },
+      {
+        generation_id: 'gen-active', save_id: 'save-member', model: 'embeddinggemma', dimension: 2,
+        source_hash: 'member-hash', vector: floatBuffer([1, 0]),
+      },
+    ],
+    getSmartCategoryMembers: () => [{ save_id: 'save-member', weight: 1 }],
+    now: () => 2000,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.membership.provider, 'ollama-semantic-index');
+  assert.equal(codexMembershipCalls, 0);
+  assert.equal(memberships.length, 1);
+  assert.equal(memberships[0].categoryId, 'cat-a');
+});
 
 test('builds image-backed topic profile evidence for weak X bookmarks', withTempDb(async (db, userData) => {
   const imagePath = path.join(userData, 'bookmark.png');

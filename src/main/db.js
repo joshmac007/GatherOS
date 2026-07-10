@@ -3183,6 +3183,15 @@ function claimVideoAnalysis(now = Date.now()) {
   return claim();
 }
 
+function getNextVideoAnalysisReadyAt() {
+  const row = getDatabase().prepare(`
+    SELECT MIN(available_at) AS ready_at
+      FROM video_analysis_jobs
+     WHERE state = 'pending'
+  `).get();
+  return Number.isFinite(row?.ready_at) ? row.ready_at : null;
+}
+
 function normalizeTagName(name) {
   return (name || '').trim().toLowerCase().replace(/^#+/, '');
 }
@@ -3873,6 +3882,7 @@ module.exports = {
   // Video analysis
   enqueueVideoAnalysis,
   claimVideoAnalysis,
+  getNextVideoAnalysisReadyAt,
   completeVideoAnalysis,
   failVideoAnalysis,
   recoverSemanticIndexJobs,
