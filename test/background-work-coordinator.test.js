@@ -82,6 +82,38 @@ test('skips a blocked lane without blocking ready lower-priority work', async ()
   assert.deepEqual(order, ['semantic']);
 });
 
+test('reports a rejected lane job and continues to lower-priority ready work', async () => {
+  const order = [];
+  const errors = [];
+  const timers = [];
+  const failure = new Error('Codex unavailable');
+  const video = createLane('video', ['video'], order, {
+    run: async () => { throw failure; },
+    nextReadyAt: () => 100,
+  });
+  const semantic = createLane('semantic', ['semantic'], order);
+  const coordinator = createBackgroundWorkCoordinator({
+    lanes: [video, semantic],
+    isForegroundBusy: () => false,
+    now: () => 0,
+    setTimer: (callback, delay) => {
+      timers.push({ callback, delay });
+      return timers.length;
+    },
+    onError: (error, context) => errors.push({ error, context }),
+  });
+
+  coordinator.start();
+  await coordinator.whenIdle();
+
+  assert.deepEqual(order, ['semantic']);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].error, failure);
+  assert.equal(errors[0].context.lane, video);
+  assert.equal(errors[0].context.job, 'video');
+  assert.equal(timers[0].delay, 100);
+});
+
 test('defers claims while foreground work is busy and noteActivity wakes it', async () => {
   const order = [];
   let foregroundBusy = true;
@@ -102,39 +134,66 @@ test('defers claims while foreground work is busy and noteActivity wakes it', as
   assert.deepEqual(order, ['video']);
 });
 
-test('schedules a wake for the earliest lane backoff', async () => {
+test('reschedules an earlier lane deadline and ignores the stale timer callback', async () => {
   const order = [];
   const timers = [];
+  const cleared = [];
   let currentTime = 10;
-  let available = true;
-  const lane = createLane('video', [], order, {
-    claimReady: (time) => {
-      if (!available || time < 50) return null;
-      available = false;
-      return 'video';
+  let firstReadyAt = 100;
+  let secondReadyAt = 200;
+  let secondAvailable = true;
+  let claimCount = 0;
+  const firstLane = createLane('video', [], order, {
+    claimReady: () => {
+      claimCount += 1;
+      return null;
     },
-    nextReadyAt: () => (available ? 50 : null),
+    nextReadyAt: () => firstReadyAt,
+  });
+  const secondLane = createLane('semantic', [], order, {
+    claimReady: (time) => {
+      claimCount += 1;
+      if (!secondAvailable || time < secondReadyAt) return null;
+      secondAvailable = false;
+      return 'semantic';
+    },
+    nextReadyAt: () => (secondAvailable ? secondReadyAt : null),
   });
   const coordinator = createBackgroundWorkCoordinator({
-    lanes: [lane],
+    lanes: [firstLane, secondLane],
     isForegroundBusy: () => false,
     now: () => currentTime,
     setTimer: (callback, delay) => {
-      timers.push({ callback, delay });
-      return timers.length;
+      const handle = timers.length + 1;
+      timers.push({ callback, delay, handle });
+      return handle;
     },
+    clearTimer: (handle) => cleared.push(handle),
   });
 
   coordinator.start();
   await coordinator.whenIdle();
 
   assert.equal(timers.length, 1);
-  assert.equal(timers[0].delay, 40);
-  currentTime = 50;
+  assert.equal(timers[0].delay, 90);
+  secondReadyAt = 50;
+  coordinator.wake();
+  await coordinator.whenIdle();
+  assert.deepEqual(cleared, [1]);
+  assert.equal(timers[1].delay, 40);
+
+  const claimsBeforeStaleCallback = claimCount;
   timers[0].callback();
   await coordinator.whenIdle();
+  assert.equal(claimCount, claimsBeforeStaleCallback);
 
-  assert.deepEqual(order, ['video']);
+  currentTime = 50;
+  firstReadyAt = 100;
+  timers[1].callback();
+  await coordinator.whenIdle();
+
+  assert.deepEqual(cleared, [1, 2]);
+  assert.deepEqual(order, ['semantic']);
 });
 
 test('stop prevents new claims and whenIdle waits for the active job', async () => {
@@ -171,11 +230,16 @@ test('stop prevents new claims and whenIdle waits for the active job', async () 
   assert.deepEqual(lane.queue, ['video-2']);
 });
 
-test('stop invalidates a pending backoff timer', async () => {
+test('stop clears a pending backoff timer and prevents claim re-entry', async () => {
   const order = [];
   let timerCallback;
+  let claimCount = 0;
+  const cleared = [];
   const lane = createLane('video', [], order, {
-    claimReady: () => null,
+    claimReady: () => {
+      claimCount += 1;
+      return null;
+    },
     nextReadyAt: () => 100,
   });
   const coordinator = createBackgroundWorkCoordinator({
@@ -186,13 +250,17 @@ test('stop invalidates a pending backoff timer', async () => {
       timerCallback = callback;
       return 1;
     },
+    clearTimer: (handle) => cleared.push(handle),
   });
 
   coordinator.start();
   await coordinator.whenIdle();
+  const claimsBeforeStop = claimCount;
   coordinator.stop();
   timerCallback();
   await coordinator.whenIdle();
 
+  assert.deepEqual(cleared, [1]);
+  assert.equal(claimCount, claimsBeforeStop);
   assert.deepEqual(order, []);
 });

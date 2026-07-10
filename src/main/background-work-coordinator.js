@@ -3,6 +3,8 @@ function createBackgroundWorkCoordinator({
   isForegroundBusy,
   now = Date.now,
   setTimer = setTimeout,
+  clearTimer = clearTimeout,
+  onError = () => {},
 }) {
   const orderedLanes = [...lanes];
   const idleWaiters = [];
@@ -10,6 +12,8 @@ function createBackgroundWorkCoordinator({
   let running = false;
   let wakeRequested = false;
   let timerDueAt = null;
+  let timerHandle;
+  let hasTimer = false;
   let timerVersion = 0;
 
   const resolveIdle = () => {
@@ -17,7 +21,10 @@ function createBackgroundWorkCoordinator({
     for (const resolve of idleWaiters.splice(0)) resolve();
   };
 
-  const invalidateTimer = () => {
+  const cancelTimer = () => {
+    if (hasTimer) clearTimer(timerHandle);
+    hasTimer = false;
+    timerHandle = undefined;
     timerDueAt = null;
     timerVersion += 1;
   };
@@ -31,19 +38,20 @@ function createBackgroundWorkCoordinator({
     }
 
     if (nextTime === null) {
-      invalidateTimer();
+      cancelTimer();
       return;
     }
     if (timerDueAt !== null && timerDueAt <= nextTime) return;
 
+    cancelTimer();
     timerDueAt = nextTime;
-    timerVersion += 1;
     const version = timerVersion;
-    setTimer(() => {
+    timerHandle = setTimer(() => {
       if (!started || version !== timerVersion) return;
-      timerDueAt = null;
+      cancelTimer();
       wake();
     }, Math.max(0, nextTime - currentTime));
+    hasTimer = true;
   };
 
   const drain = async () => {
@@ -67,7 +75,11 @@ function createBackgroundWorkCoordinator({
           break;
         }
 
-        await claimed.lane.run(claimed.job);
+        try {
+          await claimed.lane.run(claimed.job);
+        } catch (error) {
+          onError(error, claimed);
+        }
         if (started) wakeRequested = true;
       }
     } finally {
@@ -80,7 +92,7 @@ function createBackgroundWorkCoordinator({
   const run = () => {
     if (!started || running) return;
     running = true;
-    drain().catch(() => {});
+    drain().catch((error) => onError(error, { phase: 'coordinator' }));
   };
 
   function wake() {
@@ -100,7 +112,7 @@ function createBackgroundWorkCoordinator({
     stop() {
       started = false;
       wakeRequested = false;
-      invalidateTimer();
+      cancelTimer();
       resolveIdle();
     },
     whenIdle() {
