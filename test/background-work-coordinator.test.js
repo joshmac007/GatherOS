@@ -114,6 +114,55 @@ test('reports a rejected lane job and continues to lower-priority ready work', a
   assert.equal(timers[0].delay, 100);
 });
 
+test('logs rejected lane jobs when no custom error reporter is provided', async () => {
+  const order = [];
+  const logs = [];
+  const failure = new Error('Ollama unavailable');
+  const video = createLane('video', ['video'], order, {
+    run: async () => { throw failure; },
+  });
+  const semantic = createLane('semantic', ['semantic'], order);
+  const coordinator = createBackgroundWorkCoordinator({
+    lanes: [video, semantic],
+    isForegroundBusy: () => false,
+    logger: { error: (...args) => logs.push(args) },
+  });
+
+  coordinator.start();
+  await coordinator.whenIdle();
+
+  assert.deepEqual(order, ['semantic']);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0][1], failure);
+  assert.equal(logs[0][2].lane, video);
+});
+
+test('falls back to logging when a custom error reporter throws', async () => {
+  const order = [];
+  const logs = [];
+  const failure = new Error('Codex unavailable');
+  const reporterFailure = new Error('Reporter unavailable');
+  const video = createLane('video', ['video'], order, {
+    run: async () => { throw failure; },
+  });
+  const semantic = createLane('semantic', ['semantic'], order);
+  const coordinator = createBackgroundWorkCoordinator({
+    lanes: [video, semantic],
+    isForegroundBusy: () => false,
+    onError: () => { throw reporterFailure; },
+    logger: { error: (...args) => logs.push(args) },
+  });
+
+  coordinator.start();
+  await coordinator.whenIdle();
+
+  assert.deepEqual(order, ['semantic']);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0][1], reporterFailure);
+  assert.equal(logs[0][2].originalError, failure);
+  assert.equal(logs[0][2].context.lane, video);
+});
+
 test('defers claims while foreground work is busy and noteActivity wakes it', async () => {
   const order = [];
   let foregroundBusy = true;

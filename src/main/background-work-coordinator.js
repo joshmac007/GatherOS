@@ -4,7 +4,8 @@ function createBackgroundWorkCoordinator({
   now = Date.now,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
-  onError = () => {},
+  onError,
+  logger = console,
 }) {
   const orderedLanes = [...lanes];
   const idleWaiters = [];
@@ -15,6 +16,34 @@ function createBackgroundWorkCoordinator({
   let timerHandle;
   let hasTimer = false;
   let timerVersion = 0;
+
+  const logError = (...args) => {
+    try {
+      const result = logger?.error?.(...args);
+      result?.catch?.(() => {});
+    } catch {}
+  };
+
+  const reportError = (error, context) => {
+    if (typeof onError !== 'function') {
+      logError('Background work failed', error, context);
+      return;
+    }
+    try {
+      const result = onError(error, context);
+      result?.catch?.((reporterError) => {
+        logError('Background work error reporter failed', reporterError, {
+          originalError: error,
+          context,
+        });
+      });
+    } catch (reporterError) {
+      logError('Background work error reporter failed', reporterError, {
+        originalError: error,
+        context,
+      });
+    }
+  };
 
   const resolveIdle = () => {
     if (running || wakeRequested) return;
@@ -78,7 +107,7 @@ function createBackgroundWorkCoordinator({
         try {
           await claimed.lane.run(claimed.job);
         } catch (error) {
-          onError(error, claimed);
+          reportError(error, claimed);
         }
         if (started) wakeRequested = true;
       }
@@ -92,7 +121,7 @@ function createBackgroundWorkCoordinator({
   const run = () => {
     if (!started || running) return;
     running = true;
-    drain().catch((error) => onError(error, { phase: 'coordinator' }));
+    drain().catch((error) => reportError(error, { phase: 'coordinator' }));
   };
 
   function wake() {
