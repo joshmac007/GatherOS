@@ -15,7 +15,7 @@ function functionModule(overrides = {}) {
   });
 }
 
-function loadIpc({ db = {}, settings = {} } = {}) {
+function loadIpc({ db = {}, settings = {}, notify = {}, storage = {}, windows = [] } = {}) {
   const handlers = new Map();
   const listeners = new Map();
   const electron = {
@@ -26,7 +26,7 @@ function loadIpc({ db = {}, settings = {} } = {}) {
     shell: functionModule(),
     dialog: functionModule(),
     BrowserWindow: {
-      getAllWindows: () => [],
+      getAllWindows: () => windows,
       fromWebContents: () => null,
     },
     nativeImage: functionModule({ createEmpty: () => ({}) }),
@@ -38,6 +38,8 @@ function loadIpc({ db = {}, settings = {} } = {}) {
     './db': functionModule(db),
     './settings': functionModule({ getPref: () => true, ...settings }),
     './openai': functionModule({ hasSession: () => false }),
+    './notify': functionModule(notify),
+    './storage': functionModule(storage),
   };
   const originalLoad = Module._load;
   Module._load = function patchedLoad(request, parent, isMain) {
@@ -172,6 +174,96 @@ test('video accept enqueues semantic work once while dismiss never enqueues', as
   assert.equal((await handlers.get('video-analysis:dismiss-all')(sent.event, 'video-save')).dismissed, 2);
   assert.equal(enqueued, 1);
   assert.equal(sent.events.every(([channel]) => channel === 'video-analysis:updated'), true);
+});
+
+test('canonical save and tag mutations enqueue incremental semantic work after success', async () => {
+  const enqueued = [];
+  const { registerIpcHandlers, handlers } = loadIpc({
+    db: {
+      updateSave: ({ id }) => ({ ok: id !== 'failed' }),
+      addTagToSave: ({ saveId }) => ({ ok: saveId !== 'failed' }),
+      removeTagFromSave: ({ saveId }) => ({ ok: saveId !== 'failed' }),
+    },
+  });
+  registerIpcHandlers({
+    semanticIndex: {
+      status: () => ({}),
+      queue: () => [],
+      enqueue: (saveId) => { enqueued.push(saveId); return { ok: true }; },
+    },
+  });
+
+  await handlers.get('saves:update')(null, { id: 'save-a', title: 'Updated' });
+  await handlers.get('tags:add-to-save')(null, { saveId: 'save-a', name: 'aviation' });
+  await handlers.get('tags:remove-from-save')(null, { saveId: 'save-a', tagId: 'tag-a' });
+  await handlers.get('saves:update')(null, { id: 'failed', title: 'No write' });
+  await handlers.get('tags:add-to-save')(null, { saveId: 'failed', name: 'no write' });
+  await handlers.get('tags:remove-from-save')(null, { saveId: 'failed', tagId: 'tag-a' });
+
+  assert.deepEqual(enqueued, ['save-a', 'save-a', 'save-a']);
+});
+
+test('permanent delete reports success and broadcasts when derived cleanup fails', async () => {
+  const broadcasts = [];
+  let trayRefreshes = 0;
+  const { registerIpcHandlers, handlers } = loadIpc({
+    db: {
+      permanentlyDeleteSave: () => ({
+        ok: true,
+        filePath: '/tmp/image.png',
+        thumbPath: '/tmp/thumb.png',
+      }),
+    },
+    notify: { refreshTray: () => { trayRefreshes += 1; } },
+    storage: { deleteImageFiles: () => undefined },
+    windows: [{ webContents: { send: (...args) => broadcasts.push(args) } }],
+  });
+  registerIpcHandlers({
+    backgroundRuntime: {
+      cleanupSaveDerived: async () => { throw new Error('cache unavailable'); },
+    },
+  });
+
+  const result = await handlers.get('saves:permanent-delete')(null, 'save-a');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.cleanupWarning?.reason, 'derived-cleanup-failed');
+  assert.deepEqual(broadcasts, [['save:deleted', { ids: ['save-a'] }]]);
+  assert.equal(trayRefreshes, 1);
+});
+
+test('empty trash reports deleted count and broadcasts when derived cleanup fails', async () => {
+  const broadcasts = [];
+  let trayRefreshes = 0;
+  const { registerIpcHandlers, handlers } = loadIpc({
+    db: {
+      emptyTrash: () => ({
+        ok: true,
+        ids: ['save-a', 'save-b'],
+        files: [
+          { filePath: '/tmp/a.png', thumbPath: '/tmp/a-thumb.png' },
+          { filePath: '/tmp/b.png', thumbPath: '/tmp/b-thumb.png' },
+        ],
+      }),
+    },
+    notify: { refreshTray: () => { trayRefreshes += 1; } },
+    storage: { deleteImageFiles: () => undefined },
+    windows: [{ webContents: { send: (...args) => broadcasts.push(args) } }],
+  });
+  registerIpcHandlers({
+    backgroundRuntime: {
+      cleanupSaveDerived: async () => { throw new Error('cache unavailable'); },
+    },
+  });
+
+  const result = await handlers.get('saves:empty-trash')();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.count, 2);
+  assert.equal(result.cleanupWarning?.reason, 'derived-cleanup-failed');
+  assert.equal(result.cleanupWarning?.count, 2);
+  assert.deepEqual(broadcasts, [['save:deleted', { ids: ['save-a', 'save-b'] }]]);
+  assert.equal(trayRefreshes, 1);
 });
 
 test('preload exposes exact semantic and video APIs and allowed events', () => {

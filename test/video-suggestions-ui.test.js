@@ -28,6 +28,37 @@ function loadVideoSuggestions() {
   return module.exports;
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((next) => { resolve = next; });
+  return { promise, resolve };
+}
+
+test('request guard rejects late A response after B becomes current', async () => {
+  const { createVideoSnapshotRequestGuard } = loadVideoSuggestions();
+  const guard = createVideoSnapshotRequestGuard();
+  const requests = { a: deferred(), b: deferred() };
+  const applied = [];
+
+  async function load(saveId) {
+    const generation = guard.begin(saveId);
+    const snapshot = await requests[saveId].promise;
+    if (guard.isCurrent(saveId, generation)) applied.push(snapshot);
+  }
+
+  guard.activate('a');
+  const loadA = load('a');
+  guard.deactivate();
+  guard.activate('b');
+  const loadB = load('b');
+  requests.b.resolve({ saveId: 'b' });
+  await loadB;
+  requests.a.resolve({ saveId: 'a' });
+  await loadA;
+
+  assert.deepEqual(applied, [{ saveId: 'b' }]);
+});
+
 test('derives analyzing states for queued and running video jobs', () => {
   const { deriveVideoSuggestionView } = loadVideoSuggestions();
   for (const state of ['pending', 'queued', 'running']) {
@@ -101,4 +132,3 @@ test('detail panel mounts video suggestions and hides image-only actions for vid
   assert.match(detail, /!isVideo\s*&&[\s\S]*Generate prompt/);
   assert.match(detail, /!isVideo\s*&&[\s\S]*Auto-tag/);
 });
-

@@ -96,6 +96,23 @@ function registerIpcHandlers({
       await cleanupDerivedCache({ all: true });
     }
   }
+
+  async function cleanupSaveDerivedBestEffort(saveId) {
+    try {
+      await cleanupSaveDerived(saveId);
+      return null;
+    } catch (error) {
+      return {
+        reason: 'derived-cleanup-failed',
+        detail: error?.message || String(error),
+      };
+    }
+  }
+
+  function enqueueAfterCanonicalMutation(result, saveId) {
+    if (result?.ok && saveId) semanticIndex?.enqueue?.(saveId);
+    return result;
+  }
   // Merges saves whose extracted palette is perceptually similar to a
   // named color in the query (e.g. "orange", "navy") into the existing
   // result set. Same view filters (collection/explicit colorHex) get
@@ -203,24 +220,36 @@ function registerIpcHandlers({
   // Hard delete from Trash: also removes the underlying image + thumb.
   ipcMain.handle('saves:permanent-delete', async (_e, id) => {
     const result = permanentlyDeleteSave(id);
+    let cleanupWarning = null;
     if (result.ok) {
       deleteImageFiles(result.filePath, result.thumbPath);
-      await cleanupSaveDerived(id);
+      cleanupWarning = await cleanupSaveDerivedBestEffort(id);
       broadcastSavesDeleted([id]);
     }
     refreshTray();
-    return result;
+    return cleanupWarning ? { ...result, cleanupWarning } : result;
   });
 
   ipcMain.handle('saves:empty-trash', async () => {
     const result = emptyTrash();
+    let cleanupFailures = [];
     if (result.ok) {
       for (const f of result.files) deleteImageFiles(f.filePath, f.thumbPath);
-      await Promise.all((result.ids || []).map((id) => cleanupSaveDerived(id)));
+      const cleanupResults = await Promise.all(
+        (result.ids || []).map((id) => cleanupSaveDerivedBestEffort(id)),
+      );
+      cleanupFailures = cleanupResults.filter(Boolean);
       if (result.ids?.length) broadcastSavesDeleted(result.ids);
     }
     refreshTray();
-    return { ok: true, count: result.files.length };
+    const response = { ok: true, count: result.files.length };
+    if (cleanupFailures.length > 0) {
+      response.cleanupWarning = {
+        reason: 'derived-cleanup-failed',
+        count: cleanupFailures.length,
+      };
+    }
+    return response;
   });
 
   ipcMain.handle('saves:counts', () => getSmartViewCounts());
@@ -291,7 +320,9 @@ function registerIpcHandlers({
     return result.response === 1;
   });
 
-  ipcMain.handle('saves:update', (_e, payload) => updateSave(payload));
+  ipcMain.handle('saves:update', (_e, payload) => (
+    enqueueAfterCanonicalMutation(updateSave(payload), payload?.id)
+  ));
 
   ipcMain.handle('saves:drop-file', async (_e, filePath) => {
     if (blockNewSave('save')) return { needsUpgrade: true };
@@ -505,8 +536,12 @@ function registerIpcHandlers({
 
   ipcMain.handle('tags:get-all', () => getAllTags());
   ipcMain.handle('tags:get-for-save', (_e, saveId) => getTagsForSave(saveId));
-  ipcMain.handle('tags:add-to-save', (_e, payload) => addTagToSave(payload));
-  ipcMain.handle('tags:remove-from-save', (_e, payload) => removeTagFromSave(payload));
+  ipcMain.handle('tags:add-to-save', (_e, payload) => (
+    enqueueAfterCanonicalMutation(addTagToSave(payload), payload?.saveId)
+  ));
+  ipcMain.handle('tags:remove-from-save', (_e, payload) => (
+    enqueueAfterCanonicalMutation(removeTagFromSave(payload), payload?.saveId)
+  ));
   ipcMain.handle('tags:rename', (_e, payload) => {
     const { renameTag } = require('./db');
     return renameTag(payload);

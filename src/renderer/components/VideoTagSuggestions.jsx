@@ -21,6 +21,35 @@ function evidenceLabel(value) {
   return null;
 }
 
+export function createVideoSnapshotRequestGuard() {
+  let generation = 0;
+  let mounted = false;
+  let activeSaveId = null;
+
+  return {
+    activate(saveId) {
+      mounted = true;
+      activeSaveId = saveId;
+      generation += 1;
+    },
+    begin(saveId) {
+      if (!mounted || saveId !== activeSaveId) return null;
+      generation += 1;
+      return generation;
+    },
+    isCurrent(saveId, requestGeneration) {
+      return mounted
+        && saveId === activeSaveId
+        && requestGeneration === generation;
+    },
+    deactivate() {
+      mounted = false;
+      activeSaveId = null;
+      generation += 1;
+    },
+  };
+}
+
 export function deriveVideoSuggestionView(snapshot) {
   const analysis = snapshot?.analysis || null;
   const state = String(analysis?.state || '').toLowerCase();
@@ -51,33 +80,46 @@ export default function VideoTagSuggestions({ saveId, onAccepted }) {
   const [snapshot, setSnapshot] = React.useState(null);
   const [busy, setBusy] = React.useState(null);
   const [error, setError] = React.useState(null);
+  const requestGuardRef = React.useRef(null);
+  if (!requestGuardRef.current) {
+    requestGuardRef.current = createVideoSnapshotRequestGuard();
+  }
 
   const refresh = React.useCallback(async () => {
+    const guard = requestGuardRef.current;
+    const requestGeneration = guard.begin(saveId);
+    if (requestGeneration == null) return false;
     const api = window.moodmark?.videoAnalysis;
     if (!saveId || typeof api?.getForSave !== 'function') {
-      setSnapshot(null);
-      return;
+      if (guard.isCurrent(saveId, requestGeneration)) setSnapshot(null);
+      return false;
     }
     try {
-      setSnapshot(await api.getForSave(saveId));
+      const nextSnapshot = await api.getForSave(saveId);
+      if (!guard.isCurrent(saveId, requestGeneration)) return false;
+      setSnapshot(nextSnapshot);
       setError(null);
+      return true;
     } catch (nextError) {
+      if (!guard.isCurrent(saveId, requestGeneration)) return false;
       setError(nextError?.message || 'Could not load video suggestions');
+      return false;
     }
   }, [saveId]);
 
   React.useEffect(() => {
-    let active = true;
-    const load = async () => { if (active) await refresh(); };
+    const guard = requestGuardRef.current;
+    guard.activate(saveId);
+    const load = async () => { await refresh(); };
     load();
     let unsubscribe = null;
     try {
       unsubscribe = window.moodmark?.on?.('video-analysis:updated', (payload) => {
-        if (active && payload?.saveId === saveId) load();
+        if (payload?.saveId === saveId) load();
       });
     } catch {}
     return () => {
-      active = false;
+      guard.deactivate();
       if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, [refresh, saveId]);
@@ -171,4 +213,3 @@ export default function VideoTagSuggestions({ saveId, onAccepted }) {
     </section>
   );
 }
-
