@@ -25,6 +25,7 @@ import { confirm } from '../lib/confirm.js';
 import { fileUrl } from '../lib/fileUrl.js';
 import AcknowledgmentsModal from './AcknowledgmentsModal.jsx';
 import PrivacyModal from './PrivacyModal.jsx';
+import SemanticIndexSettings from './SemanticIndexSettings.jsx';
 import {
   SAVE_SOUNDS, DEFAULT_SAVE_SOUND, previewSaveSound, configureSaveSound,
 } from '../lib/sounds.js';
@@ -894,8 +895,6 @@ export default function SettingsModal({
   const [hasAi, setHasAi] = useState(false);
   const [usage, setUsage] = useState(null);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, theme: 'light' });
-  const [unindexed, setUnindexed] = useState(0);
-  const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
   const [exportState, setExportState] = useState({ running: false, message: null });
   const [wipeState, setWipeState] = useState({ running: false, message: null });
   const [snapshots, setSnapshots] = useState([]);
@@ -974,8 +973,7 @@ export default function SettingsModal({
       window.moodmark.ai.hasSession(),
       window.moodmark.ai.usage(),
       window.moodmark.settings.getPrefs(),
-      window.moodmark.ai.unindexedCount(),
-    ]).then(([sessionExists, u, p, count]) => {
+    ]).then(([sessionExists, u, p]) => {
       if (cancelled) return;
       setHasAi(!!sessionExists);
       // Mirror up to App.jsx so AI buttons in DetailPanel etc. light
@@ -984,7 +982,6 @@ export default function SettingsModal({
       onConfiguredChange?.(!!sessionExists);
       setUsage(u && u.ok ? u : null);
       setPrefs(p);
-      setUnindexed(count || 0);
     });
     // Stale transient feedback (the "Erased X saves" / "Exported to
     // …" / etc. lines) shouldn't survive a close + reopen — reset
@@ -993,27 +990,6 @@ export default function SettingsModal({
     setWipeState({ running: false, message: null });
     return () => { cancelled = true; };
   }, [open]);
-
-  // Progress stream from main while ai:reindex-library runs.
-  useEffect(() => {
-    if (!open) return;
-    return window.moodmark.on('ai:reindex-progress', ({ processed, total }) => {
-      setReindexState((s) => ({ ...s, processed, total }));
-    });
-  }, [open]);
-
-  async function handleReindex() {
-    if (reindexState.running || unindexed === 0) return;
-    setReindexState({ running: true, processed: 0, total: unindexed });
-    const result = await window.moodmark.ai.reindexLibrary();
-    setReindexState({
-      running: false,
-      processed: result?.processed || 0,
-      total: result?.total || 0,
-    });
-    const fresh = await window.moodmark.ai.unindexedCount();
-    setUnindexed(fresh || 0);
-  }
 
   async function togglePref(name) {
     const next = !prefs[name];
@@ -1562,15 +1538,14 @@ export default function SettingsModal({
           {activePage === 'ai' && (
             <div className={styles.page}>
               <p className={styles.sectionHint}>
-                Auto-tagging, auto-titles, and image-prompt generation run
-                through Codex subscription auth or a local model server. Semantic
-                search needs a local embedding model such as nomic-embed-text.
+                Auto-tagging, auto-titles, and image-prompt generation use
+                Codex subscription auth. Semantic search uses Ollama locally.
               </p>
 
               {!hasAi && (
                 <div className={styles.statusRow}>
                   <span className={`${styles.status} ${styles.statusMuted}`}>
-                    Sign in to unlock AI features
+                    Sign in to use Codex features
                   </span>
                 </div>
               )}
@@ -1606,35 +1581,8 @@ export default function SettingsModal({
                 />
               </div>
 
-              {hasAi && (unindexed > 0 || reindexState.running) && (
-                <div className={styles.reindexBox}>
-                  <div className={styles.reindexCopy}>
-                    {reindexState.running ? (
-                      <>
-                        <strong>Indexing {reindexState.processed} of {reindexState.total}…</strong>
-                        <span className={styles.toggleSub}>
-                          Each save runs one vision call plus one embedding. You can keep using the app.
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <strong>{unindexed} {unindexed === 1 ? 'save needs' : 'saves need'} indexing</strong>
-                        <span className={styles.toggleSub}>
-                          Older saves won't appear in semantic results until they're processed.
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className={`${styles.btn} ${styles.btnPrimary}`}
-                    onClick={handleReindex}
-                    disabled={reindexState.running || unindexed === 0}
-                  >
-                    {reindexState.running ? 'Indexing…' : 'Index now'}
-                  </button>
-                </div>
-              )}
+              <div className={styles.divider} />
+              <SemanticIndexSettings />
             </div>
           )}
 

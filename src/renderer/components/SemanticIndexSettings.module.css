@@ -1,0 +1,316 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.headingRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.heading {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.hint {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.health {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--hover-bg-soft);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.healthConnected {
+  color: var(--success, #277a4b);
+}
+
+.statusCard {
+  padding: 14px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 20px;
+  margin: 0 0 15px;
+}
+
+.statusGrid > div {
+  min-width: 0;
+}
+
+.statusGrid dt,
+.progressHeader span:first-child,
+.current > span,
+.installNote > span {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.statusGrid dd {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progressHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.progressTrack {
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--hover-bg);
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-primary);
+  transition: width var(--dur-quick) ease;
+}
+
+.current,
+.installNote {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.current strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warning,
+.error,
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--warning, #8a5b12);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.installNote code {
+  padding: 3px 6px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--hover-bg-soft);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  user-select: all;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.button,
+.textButton,
+.queueToggle {
+  border: 0;
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-control);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.button:disabled,
+.textButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.textButton {
+  padding: 5px 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.textButton:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.empty,
+.error,
+.notice {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.empty {
+  color: var(--text-tertiary);
+}
+
+.error {
+  color: var(--danger, #a43b3b);
+}
+
+.notice {
+  color: var(--text-secondary);
+}
+
+.queueSection {
+  border-top: 0.5px solid var(--border-subtle);
+  padding-top: 8px;
+}
+
+.queueToggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+.queueToggle:hover {
+  color: var(--text-primary);
+}
+
+.queueToggle span {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.queueList {
+  display: flex;
+  flex-direction: column;
+  margin-top: 5px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.queueRow {
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.queueRow:last-child {
+  border-bottom: 0;
+}
+
+.queueRowTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.queueRowTop strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.stateFailed,
+.failure {
+  color: var(--danger, #a43b3b);
+}
+
+.queueMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.failure {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+  .headingRow {
+    align-items: flex-start;
+  }
+
+  .statusGrid {
+    grid-template-columns: 1fr;
+  }
+}
