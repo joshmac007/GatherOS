@@ -798,6 +798,27 @@ export default function App({ entitlement } = {}) {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, semanticSearch: true });
+  const [semanticStatus, setSemanticStatus] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    const refreshSemanticStatus = async () => {
+      try {
+        const status = await window.moodmark?.semanticIndex?.status?.();
+        if (active) setSemanticStatus(status || null);
+      } catch {
+        if (active) setSemanticStatus(null);
+      }
+    };
+    refreshSemanticStatus();
+    const offStatus = window.moodmark?.on?.('semantic-index:status', refreshSemanticStatus);
+    const offProgress = window.moodmark?.on?.('semantic-index:progress', refreshSemanticStatus);
+    return () => {
+      active = false;
+      try { offStatus?.(); } catch {}
+      try { offProgress?.(); } catch {}
+    };
+  }, []);
 
   // Imperative handles for the global keyboard shortcuts.
   const searchInputRef = useRef(null);
@@ -884,11 +905,11 @@ export default function App({ entitlement } = {}) {
   // every walkthrough end so the library reflects the result of
   // the 'fresh' choice (or just a fresh install on first launch).
   const prevOnboardingActive = useRef(false);
-  // True when both the toggle is on AND the user is signed-in to a
-  // license session — search will route through embeddings rather
-  // than LIKE. Locked in the free tier (semantic search is pro); the
-  // app falls back to plain LIKE search, which still works fine.
-  const semanticSearchActive = aiConfigured && !!prefs.semanticSearch && !proLocked;
+  // Semantic availability comes from the active Ollama generation,
+  // independently from Codex subscription session state.
+  const semanticSearchActive = !!prefs.semanticSearch
+    && !!semanticStatus?.searchReady
+    && !proLocked;
 
   // Set of save ids the main process is currently AI-indexing. Driven
   // by save:indexing-start / save:indexing-end events. DetailPanel

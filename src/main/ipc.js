@@ -5,18 +5,19 @@ const { spawn } = require('node:child_process');
 const {
   getAllSaves, getSave, deleteSave, restoreSave, permanentlyDeleteSave,
   emptyTrash, wipeLibrary, updateSave, insertSave,
-  getSaveEmbeddingsCached, getSavesByIds, getUnindexedSaves, getUnindexedCount, getSmartViewCounts,
-  filterByColor, findSimilarByPalette,
+  getSmartViewCounts,
+  filterByColor,
   getAllCollections, getAllCollectionsWithThumbs, getCollectionsForSave, getCollectionsContainingAll, createCollection, renameCollection, setCollectionParent,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
   getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
   listBoards, listBoardsWithThumbs, getBoard, createBoard, renameBoard, deleteBoard, reorderBoards,
   getBoardItems, getBoardPreviewSaves, getBoardSaveIds, getBoardsForSave,
   upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
-  upsertSaveTopicProfile, listSmartCategories, listNavigableSmartCategories,
+  listNavigableSmartCategories,
   hideSmartCategory, pinSmartCategory,
-  getSmartCategoryAliases, getSmartCategorySaves, upsertSmartCategoryMembership,
-  getSmartCategoryMemberTopicEmbeddings, updateSmartCategoryCentroidEmbedding,
+  getSmartCategorySaves,
+  getVideoAnalysis, listVideoTagSuggestions,
+  acceptVideoTagSuggestion, dismissVideoTagSuggestion,
 } = require('./db');
 const {
   deleteImageFiles,
@@ -44,16 +45,10 @@ const { unwrapSearchEngineUrl } = require('../shared/unwrapSearchUrl');
 const {
   hasSession: hasAiSession,
   autoTagImage,
-  analyzeImage,
-  embedText,
-  generateSaveTopicProfile,
-  generateSmartCategoryMemberships,
   generateImagePrompt,
   generateImage,
   getUsage: getAiUsage,
 } = require('./openai');
-const { createSaveTopicProfile } = require('./save-topic-profiles');
-const { assignSaveToExistingSmartCategories } = require('./smart-category-memberships');
 const { detectColorName } = require('./colorNames');
 const { canCreateSave } = require('./entitlement');
 const { notifyNeedsUpgrade } = require('./notify');
@@ -70,45 +65,37 @@ function blockNewSave(source) {
 
 let aiVariantBusy = false;
 
-// Dot product over pre-normalized vectors (the embedding cache stores
-// unit vectors) — equivalent to cosine at half the arithmetic.
-function dotSim(a, b) {
-  const len = Math.min(a.length, b.length);
-  let dot = 0;
-  for (let i = 0; i < len; i += 1) dot += a[i] * b[i];
-  return dot;
+function isVideoSave(save) {
+  return save?.kind === 'video' || /\.mp4$/i.test(save?.file_path || '');
 }
 
-// LRU-ish cache for embedding the current search query. Each
-// keystroke goes through saves:get-all and the renderer's 180ms
-// debouncer doesn't dedupe across backspace-retype or revisited
-// queries — paying $0.0001 + ~150ms per repeat is wasteful when
-// the vector is deterministic. Cap of 50 keeps memory negligible
-// (~300KB for 50 × 1536 × 4 bytes) and the eviction insertion-order
-// keeps recent queries warm without explicit LRU bookkeeping.
-const QUERY_EMBEDDING_CACHE = new Map();
-const QUERY_EMBEDDING_CACHE_MAX = 50;
-
-async function embedQueryCached(queryText) {
-  const key = (queryText || '').trim().toLowerCase();
-  if (!key) throw new Error('Cannot embed empty text');
-  if (QUERY_EMBEDDING_CACHE.has(key)) {
-    // Refresh recency by re-inserting (Map iteration order = insertion).
-    const cached = QUERY_EMBEDDING_CACHE.get(key);
-    QUERY_EMBEDDING_CACHE.delete(key);
-    QUERY_EMBEDDING_CACHE.set(key, cached);
-    return cached;
+function registerIpcHandlers({
+  smartCategoryRefresh = null,
+  semanticIndex = null,
+  semanticSearch = null,
+  backgroundRuntime = null,
+  cleanupDerivedCache = null,
+} = {}) {
+  async function cleanupSaveDerived(saveId) {
+    if (!saveId) return;
+    if (typeof backgroundRuntime?.cleanupSaveDerived === 'function') {
+      await backgroundRuntime.cleanupSaveDerived(saveId);
+      return;
+    }
+    if (typeof cleanupDerivedCache === 'function') {
+      await cleanupDerivedCache({ saveId });
+    }
   }
-  const vec = await embedText(queryText);
-  QUERY_EMBEDDING_CACHE.set(key, vec);
-  if (QUERY_EMBEDDING_CACHE.size > QUERY_EMBEDDING_CACHE_MAX) {
-    const oldest = QUERY_EMBEDDING_CACHE.keys().next().value;
-    QUERY_EMBEDDING_CACHE.delete(oldest);
-  }
-  return vec;
-}
 
-function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
+  async function cleanupAllDerived() {
+    if (typeof backgroundRuntime?.cleanupAllDerived === 'function') {
+      await backgroundRuntime.cleanupAllDerived();
+      return;
+    }
+    if (typeof cleanupDerivedCache === 'function') {
+      await cleanupDerivedCache({ all: true });
+    }
+  }
   // Merges saves whose extracted palette is perceptually similar to a
   // named color in the query (e.g. "orange", "navy") into the existing
   // result set. Same view filters (collection/explicit colorHex) get
@@ -150,7 +137,6 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
 
   ipcMain.handle('saves:get-all', async (_e, opts = {}) => {
     const semanticEnabled = settings.getPref('semanticSearch', true);
-    const haveAi = hasAiSession();
     const rawSearch = (opts.search || '').trim();
 
     // Pull out any tag:/bucket:/color:/before: etc. filters so the
@@ -162,88 +148,13 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
     const parsed = parseSearchQuery(rawSearch);
     const queryText = parsed.text;
 
-    // Falls back to the regular LIKE path if semantic search isn't
-    // configured, isn't on, or there's no actual free text to embed
-    // (a query of just `tag:foo` doesn't need embeddings).
-    if (!semanticEnabled || !haveAi || !queryText) {
+    if (!semanticEnabled || !queryText || typeof semanticSearch?.search !== 'function') {
       return mergeColorNameMatches(getAllSaves(opts), opts, queryText);
     }
 
     try {
-      // Single embedding call drives the cosine ranker. Query
-      // expansion + LLM rerank were tried but each added 500-1500 ms
-      // of latency to a search bar that needs to feel near-instant.
-      // The hybrid LIKE pass below is the recall safety net for
-      // narrow queries; threshold + relative cap below is the
-      // precision filter.
-      const queryVec = await embedQueryCached(queryText);
-      // Normalize the query once; cached doc vectors are pre-normalized,
-      // so scoring is a plain dot product.
-      const queryF32 = new Float32Array(queryVec);
-      let qn = 0;
-      for (let i = 0; i < queryF32.length; i += 1) qn += queryF32[i] * queryF32[i];
-      qn = Math.sqrt(qn) || 1;
-      for (let i = 0; i < queryF32.length; i += 1) queryF32[i] /= qn;
-
-      // Cosine threshold tuned for text-embedding-3-small over the
-      // analyzeImage description format. Below ~0.26 reads as noise;
-      // the hybrid LIKE pass over title + tags catches literal keyword
-      // matches as a safety net.
-      const MIN_SCORE = 0.26;
-      // Tighter relative cap so marginal matches don't ride along with
-      // a strong top result. With ~rich descriptions the model groups
-      // many images at moderate similarity, and 0.55 was lenient
-      // enough to drag most of them in. 0.72 keeps only the genuinely
-      // close cluster around the top.
-      const RELATIVE_CUTOFF = 0.72;
-
-      const scored = getSaveEmbeddingsCached()
-        .map(({ id, vec }) => ({ id, score: dotSim(queryF32, vec) }))
-        .filter((r) => r.score >= MIN_SCORE)
-        .sort((a, b) => b.score - a.score);
-
-      let candidates = [];
-      if (scored.length > 0) {
-        const relativeFloor = scored[0].score * RELATIVE_CUTOFF;
-        const ranked = scored.filter((r) => r.score >= relativeFloor);
-        const topIds = ranked.slice(0, 80).map((r) => r.id);
-        candidates = getSavesByIds(topIds);
-        const orderById = new Map(topIds.map((id, i) => [id, i]));
-        candidates.sort((a, b) => orderById.get(a.id) - orderById.get(b.id));
-      }
-
-      // Hybrid pass: also pull the substring-LIKE matches against
-      // title / ai_description / tag names. This catches the mountain
-      // vs mountains case where a single character shifts the cosine
-      // just under the threshold but the word actually appears in the
-      // description. Semantic results lead, then any LIKE-only matches
-      // append in their natural recency order.
-      const likeMatches = getAllSaves(opts);
-      const seen = new Set(candidates.map((s) => s.id));
-      const merged = [...candidates];
-      for (const s of likeMatches) {
-        if (!seen.has(s.id)) {
-          merged.push(s);
-          seen.add(s.id);
-        }
-      }
-
-      // Constrain semantic candidates to the structurally-filtered
-      // set (view / collection / tag: / bucket: / is:untagged /
-      // before: / after:). LIKE matches already obey these because
-      // getAllSaves ran with the full opts. The structural set is
-      // the same opts but with the free text stripped — text
-      // matching is what the embeddings do.
-      const structuralTokens = (rawSearch.match(/(\w+:"[^"]*"|\w+:\S+|\S+)/g) || [])
-        .filter((t) => /^\w+:/.test(t))
-        .join(' ');
-      const structuralOpts = { ...opts, search: structuralTokens };
-      const structuralIds = new Set(getAllSaves(structuralOpts).map((s) => s.id));
-      let filtered = merged.filter((s) => structuralIds.has(s.id));
-      if (parsed.colorHex || opts.colorHex) {
-        filtered = filterByColor(filtered, parsed.colorHex || opts.colorHex);
-      }
-      return mergeColorNameMatches(filtered, opts, queryText);
+      const result = await semanticSearch.search(rawSearch, opts);
+      return mergeColorNameMatches(result?.results || [], opts, queryText);
     } catch (err) {
       console.error('Semantic search failed, falling back to LIKE:', err.message);
       return mergeColorNameMatches(getAllSaves(opts), opts, queryText);
@@ -290,20 +201,22 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
   });
 
   // Hard delete from Trash: also removes the underlying image + thumb.
-  ipcMain.handle('saves:permanent-delete', (_e, id) => {
+  ipcMain.handle('saves:permanent-delete', async (_e, id) => {
     const result = permanentlyDeleteSave(id);
     if (result.ok) {
       deleteImageFiles(result.filePath, result.thumbPath);
+      await cleanupSaveDerived(id);
       broadcastSavesDeleted([id]);
     }
     refreshTray();
     return result;
   });
 
-  ipcMain.handle('saves:empty-trash', () => {
+  ipcMain.handle('saves:empty-trash', async () => {
     const result = emptyTrash();
     if (result.ok) {
       for (const f of result.files) deleteImageFiles(f.filePath, f.thumbPath);
+      await Promise.all((result.ids || []).map((id) => cleanupSaveDerived(id)));
       if (result.ids?.length) broadcastSavesDeleted(result.ids);
     }
     refreshTray();
@@ -837,23 +750,11 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
     const { snapshotLibraryDb } = require('./backup');
     return snapshotLibraryDb();
   });
-  ipcMain.handle('backup:restore', (_e, snapshotPath) => {
-    const { restoreFromSnapshot } = require('./backup');
-    const result = restoreFromSnapshot(snapshotPath);
-    if (result?.ok) {
-      // Same renderer-refresh handshake we use for library:switch —
-      // every cached collection / save needs to refetch from the
-      // rolled-back DB.
-      try {
-        const { BrowserWindow } = require('electron');
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('library:switched', { reason: 'restore' });
-          }
-        }
-      } catch {}
+  ipcMain.handle('backup:restore', async (_e, snapshotPath) => {
+    if (typeof backgroundRuntime?.restoreBackup !== 'function') {
+      return { ok: false, reason: 'runtime-unavailable' };
     }
-    return result;
+    return backgroundRuntime.restoreBackup(snapshotPath);
   });
 
   // Full library backup as a single .zip — includes the SQLite DB,
@@ -930,6 +831,7 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
     if (dlg.response !== 1) return { ok: false, canceled: true };
     const result = wipeLibrary();
     for (const f of result.files) deleteImageFiles(f.filePath, f.thumbPath);
+    await cleanupAllDerived();
     return { ok: true, removed: result.files.length };
   });
 
@@ -1054,72 +956,143 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
     }
   });
 
-  // ── AI: auto-tag a save ─────────────────────────────────────────────────
-  ipcMain.handle('ai:unindexed-count', () => getUnindexedCount());
+  // ── Semantic index and search ────────────────────────────────────────────
+  function semanticStatusSnapshot() {
+    const snapshot = typeof semanticIndex?.status === 'function' ? semanticIndex.status() : {};
+    let health = {};
+    try {
+      const cached = backgroundRuntime?.getSemanticHealth?.();
+      if (cached && typeof cached === 'object' && typeof cached.then !== 'function') health = cached;
+    } catch {}
+    const healthStatus = health.status || null;
+    const connected = typeof health.connected === 'boolean'
+      ? health.connected
+      : health.ok === true || healthStatus === 'connected' || healthStatus === 'model-missing';
+    const modelInstalled = typeof health.modelInstalled === 'boolean'
+      ? health.modelInstalled
+      : healthStatus === 'connected'
+        ? true
+        : healthStatus === 'model-missing'
+          ? false
+          : null;
+    return { ...snapshot, ...health, connected, modelInstalled };
+  }
 
-  // Returns up to `limit` saves visually most similar to `saveId`,
-  // ranked by cosine over their existing embeddings. No-op (returns
-  // []) if the anchor itself isn't indexed yet — calling code can
-  // skip rendering the section in that case. Trashed saves are
-  // filtered out so the user doesn't get suggestions from the bin.
-  // Right-click "Find similar" — works without Platform API keys. Tries
-  // local embedding cosine similarity first when both the anchor and at
-  // least one other save have embeddings; otherwise falls back to
-  // palette ΔE distance over the swatches we already extract on save.
-  // Returns full save records sorted by similarity, anchor excluded.
-  ipcMain.handle('saves:find-similar', (_e, saveId, limit = 24) => {
-    if (!saveId) return [];
-    const cap = Math.max(1, Math.min(Number(limit) || 24, 60));
+  ipcMain.handle('semantic-index:status', () => semanticStatusSnapshot());
+  ipcMain.handle('semantic-index:queue', () => {
+    if (typeof semanticIndex?.queue !== 'function') return [];
+    const status = semanticStatusSnapshot();
+    const generationIds = new Set([
+      status.active_generation_id,
+      status.building_generation_id,
+    ].filter(Boolean));
+    return semanticIndex.queue()
+      .filter((job) => generationIds.has(job.generation_id))
+      .map((job) => ({
+        ...job,
+        domain: 'semantic-index',
+        title: getSave(job.save_id)?.title || 'Untitled save',
+      }));
+  });
+  ipcMain.handle('semantic-index:pause', () => (
+    semanticIndex?.pause?.() || { ok: false, reason: 'semantic-index-unavailable' }
+  ));
+  ipcMain.handle('semantic-index:resume', () => (
+    semanticIndex?.resume?.() || { ok: false, reason: 'semantic-index-unavailable' }
+  ));
+  ipcMain.handle('semantic-index:retry-failed', (_event, ids) => (
+    semanticIndex?.retryFailed?.(Array.isArray(ids) ? ids : [])
+      || { ok: false, reason: 'semantic-index-unavailable' }
+  ));
+  ipcMain.handle('semantic-index:dismiss-failed', (_event, ids) => (
+    semanticIndex?.dismissFailed?.(Array.isArray(ids) ? ids : [])
+      || { ok: false, reason: 'semantic-index-unavailable' }
+  ));
+  ipcMain.handle('semantic-index:start-rebuild', () => (
+    semanticIndex?.startRebuild?.() || { ok: false, reason: 'semantic-index-unavailable' }
+  ));
+  ipcMain.handle('semantic-index:cancel-rebuild', () => (
+    semanticIndex?.cancelRebuild?.() || { ok: false, reason: 'semantic-index-unavailable' }
+  ));
 
-    const rows = getSaveEmbeddingsCached();
-    const anchor = rows.find((r) => r.id === saveId);
-    if (anchor && rows.length >= 2) {
-      const scored = rows
-        .filter((r) => r.id !== saveId)
-        .map(({ id, vec }) => ({ id, score: dotSim(anchor.vec, vec) }))
-        .filter((r) => r.score >= 0.30)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, cap);
-      if (scored.length > 0) {
-        const ids = scored.map((s) => s.id);
-        const records = getSavesByIds(ids).filter((r) => !r.deleted_at);
-        const orderById = new Map(ids.map((id, i) => [id, i]));
-        records.sort((a, b) => orderById.get(a.id) - orderById.get(b.id));
-        return records;
-      }
+  ipcMain.handle('saves:find-similar', async (_event, saveId, limit = 24) => {
+    if (!saveId || typeof semanticSearch?.findSimilar !== 'function') return [];
+    const result = await semanticSearch.findSimilar(saveId, { limit });
+    return result?.results || [];
+  });
+  ipcMain.handle('ai:similar-saves', async (_event, saveId, limit = 5) => {
+    if (!saveId || typeof semanticSearch?.findSimilar !== 'function') return [];
+    const result = await semanticSearch.findSimilar(saveId, { limit });
+    return result?.results || [];
+  });
+  ipcMain.handle('ai:unindexed-count', () => {
+    const status = semanticStatusSnapshot();
+    return Math.max(0, (Number(status.total) || 0) - (Number(status.indexed) || 0));
+  });
+  ipcMain.handle('ai:reindex-library', () => (
+    semanticIndex?.startRebuild?.() || { ok: false, reason: 'semantic-index-unavailable' }
+  ));
+
+  // ── Video analysis suggestions ──────────────────────────────────────────
+  function videoSnapshot(saveId) {
+    if (!saveId) return { analysis: null, suggestions: [] };
+    return {
+      analysis: getVideoAnalysis(saveId) || null,
+      suggestions: listVideoTagSuggestions(saveId) || [],
+    };
+  }
+
+  function broadcastVideoUpdated(event, saveId) {
+    if (!saveId) return;
+    try { event?.sender?.send('video-analysis:updated', { saveId }); } catch {}
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win?.webContents === event?.sender || win?.isDestroyed?.()) continue;
+      try { win.webContents.send('video-analysis:updated', { saveId }); } catch {}
     }
+  }
 
-    // Embedding path empty (no key, no anchor embedding, or below
-    // the relevance cutoff) — fall back to the palette path.
-    return findSimilarByPalette(saveId, cap);
+  ipcMain.handle('video-analysis:get-for-save', (_event, saveId) => videoSnapshot(saveId));
+  ipcMain.handle('video-analysis:accept', async (event, input) => {
+    const suggestionId = typeof input === 'string' ? input : input?.suggestionId;
+    const result = acceptVideoTagSuggestion({ suggestionId });
+    if (result?.ok) {
+      semanticIndex?.enqueue?.(result.saveId);
+      broadcastVideoUpdated(event, result.saveId);
+    }
+    return result;
+  });
+  ipcMain.handle('video-analysis:dismiss', async (event, input) => {
+    const suggestionId = typeof input === 'string' ? input : input?.suggestionId;
+    const result = dismissVideoTagSuggestion({ suggestionId });
+    if (result?.ok) broadcastVideoUpdated(event, result.saveId);
+    return result;
+  });
+  ipcMain.handle('video-analysis:accept-all', async (event, saveId) => {
+    const unresolved = (listVideoTagSuggestions(saveId) || [])
+      .filter((suggestion) => suggestion.state === 'suggested');
+    let accepted = 0;
+    for (const suggestion of unresolved) {
+      const result = acceptVideoTagSuggestion({ suggestionId: suggestion.id });
+      if (result?.ok) accepted += 1;
+    }
+    if (accepted > 0) {
+      semanticIndex?.enqueue?.(saveId);
+      broadcastVideoUpdated(event, saveId);
+    }
+    return { ok: true, accepted };
+  });
+  ipcMain.handle('video-analysis:dismiss-all', async (event, saveId) => {
+    const unresolved = (listVideoTagSuggestions(saveId) || [])
+      .filter((suggestion) => suggestion.state === 'suggested');
+    let dismissed = 0;
+    for (const suggestion of unresolved) {
+      const result = dismissVideoTagSuggestion({ suggestionId: suggestion.id });
+      if (result?.ok) dismissed += 1;
+    }
+    if (dismissed > 0) broadcastVideoUpdated(event, saveId);
+    return { ok: true, dismissed };
   });
 
-  ipcMain.handle('ai:similar-saves', (_e, saveId, limit = 5) => {
-    if (!saveId) return [];
-    const rows = getSaveEmbeddingsCached();
-    const anchor = rows.find((r) => r.id === saveId);
-    if (!anchor) return [];
-    const scored = rows
-      .filter((r) => r.id !== saveId)
-      .map(({ id, vec }) => ({ id, score: dotSim(anchor.vec, vec) }))
-      // 0.30 cutoff — below that the suggestions read as random,
-      // and the calling UI is happier rendering nothing than a row
-      // of unrelated thumbs.
-      .filter((r) => r.score >= 0.30)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, Math.max(1, Math.min(limit, 12)));
-    if (scored.length === 0) return [];
-    const ids = scored.map((s) => s.id);
-    const records = getSavesByIds(ids).filter((r) => !r.deleted_at);
-    const orderById = new Map(ids.map((id, i) => [id, i]));
-    records.sort((a, b) => orderById.get(a.id) - orderById.get(b.id));
-    return records;
-  });
-
-  // Backfill: process every save that has no embedding yet through the
-  // analyze + embed pipeline. Emits ai:reindex-progress events so the
-  // UI can show "Indexing N of M" in real time. Sequential to keep
-  // memory bounded and to be polite to the API.
   // Settings → Storage. Usage readout + the opt-in reclaim sweep.
   ipcMain.handle('storage:get-usage', () => getStorageUsage());
   ipcMain.handle('storage:reclaim', async (event) =>
@@ -1131,80 +1104,6 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
     }),
   );
 
-  ipcMain.handle('ai:reindex-library', async (event) => {
-    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
-    const targets = getUnindexedSaves();
-    const total = targets.length;
-
-    let processed = 0;
-    let failed = 0;
-    for (let i = 0; i < targets.length; i += 1) {
-      const row = targets[i];
-      event.sender.send('save:indexing-start', row.id);
-      try {
-        const { title, description, text } = await analyzeImage(row.file_path);
-        const updates = { id: row.id };
-        if (description) updates.aiDescription = description;
-        // Always set ocr_text (empty string for no text) so the
-        // unindexed sweep stops picking the row up.
-        updates.ocrText = text || '';
-        // Don't overwrite a title the user already supplied.
-        if (title && !row.title) updates.title = title;
-
-        const tags = getTagsForSave(row.id).map((t) => t.name).join(', ');
-        const ocrSnippet = text ? text.slice(0, 300) : '';
-        const embedSource = [title, description, ocrSnippet, tags].filter(Boolean).join('. ');
-        if (embedSource) {
-          const vec = await embedText(embedSource);
-          updates.embedding = Buffer.from(new Float32Array(vec).buffer);
-        }
-
-        if (Object.keys(updates).length > 1) {
-          updateSave(updates);
-          const updated = getSave(row.id);
-          event.sender.send('save:updated', updated);
-        }
-
-        const profileResult = await createSaveTopicProfile({
-          save: getSave(row.id) || row,
-          manualTags: getTagsForSave(row.id),
-          provider: { generateSaveTopicProfile },
-          upsertSaveTopicProfile,
-        });
-        if (!profileResult?.ok) {
-          console.warn('[smart-categories] topic profile skipped for save', row.id, profileResult?.reason || 'unknown');
-        } else {
-          const membershipResult = await assignSaveToExistingSmartCategories({
-            saveId: row.id,
-            profile: profileResult.profile,
-            provider: { embedText, generateSmartCategoryMemberships },
-            listSmartCategories,
-            getSmartCategoryAliases,
-            upsertSaveTopicProfile,
-            upsertSmartCategoryMembership,
-            getSmartCategoryMemberTopicEmbeddings,
-            updateSmartCategoryCentroidEmbedding,
-          });
-          if (!membershipResult?.ok) {
-            console.warn('[smart-categories] membership assignment skipped for save', row.id, membershipResult?.reason || 'unknown');
-          }
-        }
-        processed += 1;
-      } catch (err) {
-        console.error('Reindex failed for save', row.id, '-', err.message);
-        failed += 1;
-      } finally {
-        event.sender.send('save:indexing-end', row.id);
-      }
-      event.sender.send('ai:reindex-progress', {
-        processed: i + 1,
-        total,
-        failed,
-      });
-    }
-    return { ok: true, processed, failed, total };
-  });
-
   // Generate an image-generation prompt (Midjourney / DALL-E / SD)
   // that recreates the focused save. Persists onto saves.ai_prompt and
   // emits save:updated so the renderer's local copy patches in place.
@@ -1213,6 +1112,7 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
     if (!hasAiSession()) return { ok: false, reason: 'no-session' };
     const save = getSave(saveId);
     if (!save) return { ok: false, reason: 'save-not-found' };
+    if (isVideoSave(save)) return { ok: false, reason: 'image-ai-unavailable-for-video' };
 
     event.sender.send('save:indexing-start', saveId);
     try {
@@ -1249,6 +1149,7 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
     }
     const save = getSave(saveId);
     if (!save) return { ok: false, reason: 'save-not-found' };
+    if (isVideoSave(save)) return { ok: false, reason: 'image-ai-unavailable-for-video' };
 
     aiVariantBusy = true;
     event.sender.send('save:indexing-start', saveId);
@@ -1339,6 +1240,7 @@ function registerIpcHandlers({ smartCategoryRefresh = null } = {}) {
     if (!hasAiSession()) return { ok: false, reason: 'no-session' };
     const save = getSave(saveId);
     if (!save) return { ok: false, reason: 'save-not-found' };
+    if (isVideoSave(save)) return { ok: false, reason: 'image-ai-unavailable-for-video' };
     try {
       const tags = await autoTagImage(save.file_path);
       // Persist via the existing tag pipeline so dedupe + creation
