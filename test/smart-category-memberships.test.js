@@ -6,13 +6,13 @@ const path = require('node:path');
 
 const {
   vectorToBuffer,
-  bufferToVector,
 } = require('../src/main/smart-category-vectors');
 
 const {
   PRIMARY_MEMBERSHIP_THRESHOLD,
   SECONDARY_MEMBERSHIP_THRESHOLD,
   buildMembershipScoringInput,
+  computeSemanticCategoryCentroid,
   validateSmartCategoryMemberships,
   assignSmartCategoryMemberships,
 } = require('../src/main/smart-category-memberships');
@@ -208,73 +208,120 @@ test('assigns one save to multiple weighted categories and stores compact eviden
   });
 }));
 
-test('uses local embeddings to assign weighted memberships without Codex scoring', withTempDb(async (db) => {
-  const save = db.insertSave({
-    id: 'save-local',
-    filePath: '/tmp/local.png',
-    thumbPath: '/tmp/local-thumb.png',
-    title: 'AI ad concept',
-    createdAt: 1000,
-  });
-  db.createSmartCategory({
-    id: 'cat-ai',
-    name: 'AI image generation',
-    status: 'visible',
-    centroidEmbedding: vectorToBuffer([1, 0, 0]),
-  });
-  db.createSmartCategory({
-    id: 'cat-ads',
-    name: 'Ad creative workflows',
-    status: 'visible',
-    centroidEmbedding: vectorToBuffer([0.6, 0.8, 0]),
-  });
-  db.createSmartCategory({
-    id: 'cat-marketing',
-    name: 'Marketing systems',
-    status: 'visible',
-    centroidEmbedding: vectorToBuffer([0, 0, 1]),
+test('computes deterministic category centroid identity from matching active-generation members', () => {
+  const identity = {
+    generationId: 'gen-active',
+    model: 'embeddinggemma',
+    dimension: 3,
+  };
+  const rows = [
+    {
+      save_id: 'save-b',
+      weight: 0.7,
+      generation_id: 'gen-active',
+      model: 'embeddinggemma',
+      dimension: 3,
+      source_hash: 'hash-b',
+      vector: vectorToBuffer([0.6, 0.8, 0]),
+    },
+    {
+      save_id: 'save-a',
+      weight: 0.9,
+      generation_id: 'gen-active',
+      model: 'embeddinggemma',
+      dimension: 3,
+      source_hash: 'hash-a',
+      vector: vectorToBuffer([1, 0, 0]),
+    },
+    {
+      save_id: 'wrong-model',
+      weight: 1,
+      generation_id: 'gen-active',
+      model: 'other-model',
+      dimension: 3,
+      source_hash: 'wrong-model-hash',
+      vector: vectorToBuffer([0, 0, 1]),
+    },
+  ];
+
+  const first = computeSemanticCategoryCentroid({ categoryId: 'cat-ai', identity, members: rows });
+  const reordered = computeSemanticCategoryCentroid({
+    categoryId: 'cat-ai',
+    identity,
+    members: [rows[1], rows[0], rows[2]],
   });
 
-  const result = await assignSmartCategoryMemberships({
-    saveId: save.id,
-    profile: profile({ save_id: save.id, embedding: null }),
-    candidateCategories: db.listSmartCategories(),
-    provider: {
-      async embedText(input) {
-        assert.match(input, /AI image tooling/);
-        return [1, 0, 0];
-      },
-      async generateSmartCategoryMemberships() {
-        throw new Error('Codex scoring should not run when local centroids score the save');
-      },
+  assert.equal(first.ok, true);
+  assert.deepEqual(first.identity, {
+    generationId: 'gen-active',
+    model: 'embeddinggemma',
+    dimension: 3,
+    sourceHash: reordered.identity.sourceHash,
+  });
+  assert.deepEqual(Array.from(first.vector), Array.from(reordered.vector));
+  assert.equal(first.memberCount, 2);
+});
+
+test('uses active semantic generation vectors without calling Codex scoring or embedding', async () => {
+  const activeVectors = [
+    {
+      save_id: 'member-ai', generation_id: 'gen-active', model: 'embeddinggemma', dimension: 3,
+      source_hash: 'hash-ai', vector: vectorToBuffer([1, 0, 0]),
     },
-    upsertSaveTopicProfile: db.upsertSaveTopicProfile,
-    upsertSmartCategoryMembership: db.upsertSmartCategoryMembership,
-    getSmartCategoryMemberTopicEmbeddings: db.getSmartCategoryMemberTopicEmbeddings,
-    updateSmartCategoryCentroidEmbedding: db.updateSmartCategoryCentroidEmbedding,
+    {
+      save_id: 'member-ads', generation_id: 'gen-active', model: 'embeddinggemma', dimension: 3,
+      source_hash: 'hash-ads', vector: vectorToBuffer([0.6, 0.8, 0]),
+    },
+    {
+      save_id: 'member-marketing', generation_id: 'gen-active', model: 'embeddinggemma', dimension: 3,
+      source_hash: 'hash-marketing', vector: vectorToBuffer([0, 0, 1]),
+    },
+  ];
+  const membersByCategory = {
+    'cat-ai': [{ save_id: 'member-ai', weight: 0.9 }],
+    'cat-ads': [{ save_id: 'member-ads', weight: 0.8 }],
+    'cat-marketing': [{ save_id: 'member-marketing', weight: 0.7 }],
+  };
+  const stored = [];
+  let embedCalls = 0;
+  let codexCalls = 0;
+
+  const result = await assignSmartCategoryMemberships({
+    saveId: 'save-local',
+    profile: profile({ save_id: 'save-local', embedding: vectorToBuffer([0, 0, 1]) }),
+    candidateCategories: candidates(),
+    provider: {
+      async embedText() { embedCalls += 1; throw new Error('must not be called'); },
+      async generateSmartCategoryMemberships() { codexCalls += 1; throw new Error('must not be called'); },
+    },
+    getSemanticIndexState: () => ({ active_generation_id: 'gen-active' }),
+    getSemanticVector: () => ({
+      save_id: 'save-local', generation_id: 'gen-active', model: 'embeddinggemma', dimension: 3,
+      source_hash: 'hash-target', vector: vectorToBuffer([1, 0, 0]),
+    }),
+    getActiveSemanticVectors: () => activeVectors,
+    getSmartCategoryMembers: (categoryId) => membersByCategory[categoryId] || [],
+    upsertSmartCategoryMembership: (entry) => { stored.push(entry); return { ok: true }; },
     now: () => 2500,
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.provider, 'local-embeddings');
+  assert.equal(result.provider, 'ollama-semantic-index');
   assert.equal(result.assignedCount, 2);
+  assert.equal(embedCalls, 0);
+  assert.equal(codexCalls, 0);
   assert.deepEqual(result.memberships.map((m) => [m.categoryId, m.weight, m.strength]), [
     ['cat-ai', 1, 'primary'],
     ['cat-ads', 0.6, 'secondary'],
   ]);
+  assert.equal(stored[0].evidence.source, 'ollama-semantic-membership');
+  assert.equal(stored[0].evidence.generationId, 'gen-active');
+  assert.equal(stored[0].evidence.model, 'embeddinggemma');
+  assert.equal(stored[0].evidence.dimension, 3);
+  assert.match(stored[0].evidence.centroidSourceHash, /^[a-f0-9]{64}$/);
+});
 
-  const memberships = db.getSmartCategoriesForSave(save.id);
-  assert.deepEqual(memberships.map((m) => [m.category_id, m.weight]), [
-    ['cat-ai', 1],
-    ['cat-ads', 0.6],
-  ]);
-  assert.equal(memberships[0].evidence.source, 'local-embedding-membership');
-  assert.equal(memberships[0].evidence.strength, 'primary');
-  assert.equal(memberships[1].evidence.strength, 'secondary');
-  assert.deepEqual(Array.from(bufferToVector(db.getSaveTopicProfile(save.id).embedding)), [1, 0, 0]);
-}));
-
-test('falls back to Codex membership scoring when local embeddings fail', withTempDb(async (db) => {
+test('never compares mismatched vector identities and falls back to Codex membership scoring', withTempDb(async (db) => {
   const save = db.insertSave({
     id: 'save-fallback',
     filePath: '/tmp/fallback.png',
@@ -286,20 +333,16 @@ test('falls back to Codex membership scoring when local embeddings fail', withTe
     id: 'cat-ai',
     name: 'AI image generation',
     status: 'visible',
-    centroidEmbedding: vectorToBuffer([1, 0, 0]),
   });
 
+  let codexCalls = 0;
   const result = await assignSmartCategoryMemberships({
     saveId: save.id,
     profile: profile({ save_id: save.id }),
     candidateCategories: [db.getSmartCategory('cat-ai')],
     provider: {
-      async embedText() {
-        const err = new Error('local server unavailable');
-        err.code = 'local_ai_error';
-        throw err;
-      },
       async generateSmartCategoryMemberships() {
+        codexCalls += 1;
         return {
           memberships: [
             { category_id: 'cat-ai', weight: 0.82, evidence: 'Codex fallback fit.' },
@@ -309,11 +352,22 @@ test('falls back to Codex membership scoring when local embeddings fail', withTe
         };
       },
     },
+    getSemanticIndexState: () => ({ active_generation_id: 'gen-active' }),
+    getSemanticVector: () => ({
+      save_id: save.id, generation_id: 'gen-active', model: 'embeddinggemma', dimension: 3,
+      source_hash: 'target-hash', vector: vectorToBuffer([1, 0, 0]),
+    }),
+    getActiveSemanticVectors: () => [{
+      save_id: 'member-old', generation_id: 'gen-old', model: 'embeddinggemma', dimension: 3,
+      source_hash: 'old-hash', vector: vectorToBuffer([1, 0, 0]),
+    }],
+    getSmartCategoryMembers: () => [{ save_id: 'member-old', weight: 0.9 }],
     upsertSmartCategoryMembership: db.upsertSmartCategoryMembership,
   });
 
   assert.equal(result.ok, true);
   assert.equal(result.provider, 'codex-membership');
+  assert.equal(codexCalls, 1);
   assert.equal(result.assignedCount, 1);
   assert.deepEqual(db.getSmartCategoriesForSave(save.id)[0].evidence, {
     source: 'codex-membership',
@@ -322,7 +376,7 @@ test('falls back to Codex membership scoring when local embeddings fail', withTe
   });
 }));
 
-test('Codex fallback bootstraps topic embeddings and centroids for later local scoring', withTempDb(async (db) => {
+test('Codex fallback never creates vectors or legacy centroids', withTempDb(async (db) => {
   const save = db.insertSave({
     id: 'save-bootstrap',
     filePath: '/tmp/bootstrap.png',
@@ -338,12 +392,9 @@ test('Codex fallback bootstraps topic embeddings and centroids for later local s
 
   const result = await assignSmartCategoryMemberships({
     saveId: save.id,
-    profile: profile({ save_id: save.id, embedding: null }),
+    profile: profile({ save_id: save.id, embedding: vectorToBuffer([1, 0, 0]) }),
     candidateCategories: [db.getSmartCategory('cat-ai')],
     provider: {
-      async embedText() {
-        return [1, 0, 0];
-      },
       async generateSmartCategoryMemberships() {
         return {
           memberships: [
@@ -354,18 +405,22 @@ test('Codex fallback bootstraps topic embeddings and centroids for later local s
         };
       },
     },
-    upsertSaveTopicProfile: db.upsertSaveTopicProfile,
     upsertSmartCategoryMembership: db.upsertSmartCategoryMembership,
-    getSmartCategoryMemberTopicEmbeddings: db.getSmartCategoryMemberTopicEmbeddings,
-    updateSmartCategoryCentroidEmbedding: db.updateSmartCategoryCentroidEmbedding,
     now: () => 3000,
   });
 
   assert.equal(result.ok, true);
   assert.equal(result.provider, 'codex-membership');
-  assert.deepEqual(Array.from(bufferToVector(db.getSaveTopicProfile(save.id).embedding)), [1, 0, 0]);
-  assert.deepEqual(Array.from(bufferToVector(db.getSmartCategory('cat-ai').centroid_embedding)), [1, 0, 0]);
+  assert.equal(db.getSaveTopicProfile(save.id), null);
+  assert.equal(db.getSmartCategory('cat-ai').centroid_embedding, null);
 }));
+
+test('smart category membership module contains no generic embedText path', () => {
+  const source = fs.readFileSync(require.resolve('../src/main/smart-category-memberships'), 'utf8');
+  assert.doesNotMatch(source, /embedText/);
+  assert.doesNotMatch(source, /getSmartCategoryMemberTopicEmbeddings/);
+  assert.doesNotMatch(source, /centroid_embedding/);
+});
 
 test('low-confidence saves remain unassigned instead of being forced into categories', withTempDb(async (db) => {
   const save = db.insertSave({

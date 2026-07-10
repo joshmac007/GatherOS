@@ -1,8 +1,9 @@
+const crypto = require('node:crypto');
+
 const PRIMARY_MEMBERSHIP_THRESHOLD = 0.75;
 const SECONDARY_MEMBERSHIP_THRESHOLD = 0.45;
 
 const {
-  vectorToBuffer,
   normalizeVector,
   cosineSimilarity,
   meanEmbedding,
@@ -58,150 +59,86 @@ function roundWeight(value) {
   return Math.round(clampWeight(value) * 1000) / 1000;
 }
 
-function buildTopicEmbeddingText(profile) {
-  const summary = cleanString(profile?.summary, 800);
-  const concepts = normalizeConcepts(profile?.concepts).join(', ');
-  const contentType = cleanString(profile?.content_type || profile?.contentType, 80);
-  const intent = cleanString(profile?.intent_guess || profile?.intent, 80);
-  return [
-    summary && `Summary: ${summary}`,
-    concepts && `Concepts: ${concepts}`,
-    contentType && `Content type: ${contentType}`,
-    intent && `Intent: ${intent}`,
-  ].filter(Boolean).join('\n');
-}
-
-function profileToUpsertPayload({ saveId, profile, embedding, updatedAt }) {
-  return {
-    saveId,
-    concepts: normalizeConcepts(profile?.concepts),
-    contentType: cleanString(profile?.content_type || profile?.contentType, 80) || null,
-    intentGuess: cleanString(profile?.intent_guess || profile?.intent, 80) || null,
-    summary: cleanString(profile?.summary, 800) || null,
-    embedding,
-    confidence: Number.isFinite(Number(profile?.confidence)) ? Number(profile.confidence) : 0,
-    updatedAt,
-  };
-}
-
-async function ensureProfileEmbedding({
-  saveId,
-  profile,
-  provider,
-  upsertSaveTopicProfile,
-  now,
-} = {}) {
-  const existing = normalizeVector(profile?.embedding);
-  if (existing) return { ok: true, vector: existing, persisted: false };
-  if (typeof provider?.embedText !== 'function') {
-    return { ok: false, reason: 'local-embeddings-unavailable' };
-  }
-
-  const text = buildTopicEmbeddingText(profile);
-  if (!text) return { ok: false, reason: 'empty-embedding-input' };
-
-  let vector;
-  try {
-    vector = normalizeVector(await provider.embedText(text));
-  } catch (err) {
-    return { ok: false, reason: err?.code || 'local-embedding-error', detail: err?.message || String(err) };
-  }
-  if (!vector) return { ok: false, reason: 'invalid-local-embedding' };
-
-  const buffer = vectorToBuffer(vector);
-  if (typeof upsertSaveTopicProfile === 'function') {
-    const at = typeof now === 'function' ? now() : Date.now();
-    upsertSaveTopicProfile(profileToUpsertPayload({
-      saveId,
-      profile,
-      embedding: buffer,
-      updatedAt: at,
-    }));
-  }
-
-  return { ok: true, vector, buffer, persisted: typeof upsertSaveTopicProfile === 'function' };
-}
-
-function computeCategoryCentroid(category, { getSmartCategoryMemberTopicEmbeddings, updateSmartCategoryCentroidEmbedding, now } = {}) {
-  const existing = normalizeVector(category?.centroid_embedding);
-  if (existing) return { ok: true, vector: existing, category };
+function semanticIdentity(row, activeGenerationId) {
+  const generationId = cleanString(row?.generation_id, 160);
+  const model = cleanString(row?.model, 160);
+  const dimension = Number(row?.dimension);
   if (
-    typeof getSmartCategoryMemberTopicEmbeddings !== 'function'
-    || typeof updateSmartCategoryCentroidEmbedding !== 'function'
+    !activeGenerationId
+    || generationId !== activeGenerationId
+    || !model
+    || !Number.isInteger(dimension)
+    || dimension < 1
   ) {
-    return { ok: false, reason: 'missing-centroid-storage' };
+    return null;
+  }
+  const vector = normalizeVector(row?.vector);
+  if (!vector || vector.length !== dimension) return null;
+  for (let i = 0; i < vector.length; i += 1) {
+    if (!Number.isFinite(vector[i])) return null;
+  }
+  return { generationId, model, dimension, vector };
+}
+
+function matchesSemanticIdentity(row, identity) {
+  return row?.generation_id === identity?.generationId
+    && row?.model === identity?.model
+    && row?.dimension === identity?.dimension;
+}
+
+function computeSemanticCategoryCentroid({ categoryId, identity, members = [] } = {}) {
+  if (!categoryId || !identity?.generationId || !identity?.model || !identity?.dimension) {
+    return { ok: false, reason: 'missing-semantic-identity' };
   }
 
-  const rows = getSmartCategoryMemberTopicEmbeddings(category.id);
-  const centroid = meanEmbedding(rows.map((row) => row.embedding));
-  if (!centroid) return { ok: false, reason: 'missing-centroid' };
+  const bySave = new Map();
+  for (const row of members) {
+    const saveId = cleanString(row?.save_id, 160);
+    const sourceHash = cleanString(row?.source_hash, 160);
+    if (!saveId || !sourceHash || !matchesSemanticIdentity(row, identity)) continue;
+    const vector = normalizeVector(row.vector);
+    if (!vector || vector.length !== identity.dimension) continue;
+    let valid = true;
+    for (let i = 0; i < vector.length; i += 1) {
+      if (!Number.isFinite(vector[i])) { valid = false; break; }
+    }
+    if (!valid) continue;
+    bySave.set(saveId, {
+      saveId,
+      sourceHash,
+      weight: roundWeight(row.weight),
+      vector,
+    });
+  }
 
-  const buffer = vectorToBuffer(centroid);
-  updateSmartCategoryCentroidEmbedding({
-    categoryId: category.id,
-    centroidEmbedding: buffer,
-    updatedAt: typeof now === 'function' ? now() : Date.now(),
-  });
+  const accepted = [...bySave.values()].sort((a, b) => a.saveId.localeCompare(b.saveId));
+  const centroid = meanEmbedding(accepted.map((row) => row.vector));
+  if (!centroid || centroid.length !== identity.dimension) {
+    return { ok: false, reason: 'no-active-member-vectors' };
+  }
+  const sourceHash = crypto.createHash('sha256').update(JSON.stringify({
+    categoryId,
+    generationId: identity.generationId,
+    model: identity.model,
+    dimension: identity.dimension,
+    members: accepted.map((row) => ({
+      saveId: row.saveId,
+      weight: row.weight,
+      sourceHash: row.sourceHash,
+    })),
+  })).digest('hex');
+
   return {
     ok: true,
     vector: centroid,
-    category: { ...category, centroid_embedding: buffer },
+    memberCount: accepted.length,
+    identity: {
+      generationId: identity.generationId,
+      model: identity.model,
+      dimension: identity.dimension,
+      sourceHash,
+    },
   };
-}
-
-function updateCentroidAfterAssignment(categoryId, {
-  getSmartCategoryMemberTopicEmbeddings,
-  updateSmartCategoryCentroidEmbedding,
-  now,
-} = {}) {
-  if (
-    typeof getSmartCategoryMemberTopicEmbeddings !== 'function'
-    || typeof updateSmartCategoryCentroidEmbedding !== 'function'
-  ) {
-    return { ok: false, reason: 'missing-centroid-storage' };
-  }
-  const rows = getSmartCategoryMemberTopicEmbeddings(categoryId);
-  const centroid = meanEmbedding(rows.map((row) => row.embedding));
-  if (!centroid) return { ok: false, reason: 'missing-centroid' };
-  return updateSmartCategoryCentroidEmbedding({
-    categoryId,
-    centroidEmbedding: vectorToBuffer(centroid),
-    updatedAt: typeof now === 'function' ? now() : Date.now(),
-  });
-}
-
-async function bootstrapCentroidsFromCodexAssignments({
-  saveId,
-  profile,
-  provider,
-  memberships = [],
-  upsertSaveTopicProfile,
-  getSmartCategoryMemberTopicEmbeddings,
-  updateSmartCategoryCentroidEmbedding,
-  now,
-} = {}) {
-  if (!memberships.length || typeof provider?.embedText !== 'function') return;
-  if (
-    typeof getSmartCategoryMemberTopicEmbeddings !== 'function'
-    || typeof updateSmartCategoryCentroidEmbedding !== 'function'
-  ) {
-    return;
-  }
-  const embedded = await ensureProfileEmbedding({
-    saveId,
-    profile,
-    provider,
-    upsertSaveTopicProfile,
-    now,
-  });
-  if (!embedded.ok) return;
-  for (const membership of memberships) {
-    updateCentroidAfterAssignment(membership.categoryId, {
-      getSmartCategoryMemberTopicEmbeddings,
-      updateSmartCategoryCentroidEmbedding,
-      now,
-    });
-  }
 }
 
 function validateSmartCategoryMemberships(parsed, { candidateCategories = [] } = {}) {
@@ -254,65 +191,80 @@ function validateSmartCategoryMemberships(parsed, { candidateCategories = [] } =
   };
 }
 
-async function assignSmartCategoryMembershipsWithLocalEmbeddings({
+async function assignSmartCategoryMembershipsWithSemanticIndex({
   saveId,
-  profile,
   candidateCategories = [],
-  provider,
-  upsertSaveTopicProfile,
   upsertSmartCategoryMembership,
-  getSmartCategoryMemberTopicEmbeddings,
-  updateSmartCategoryCentroidEmbedding,
+  getSemanticIndexState,
+  getSemanticVector,
+  getActiveSemanticVectors,
+  getSmartCategoryMembers,
   now = Date.now,
 } = {}) {
-  if (typeof provider?.embedText !== 'function') {
-    return { ok: false, reason: 'local-embeddings-unavailable' };
+  if (
+    typeof getSemanticIndexState !== 'function'
+    || typeof getSemanticVector !== 'function'
+    || typeof getActiveSemanticVectors !== 'function'
+    || typeof getSmartCategoryMembers !== 'function'
+  ) {
+    return { ok: false, reason: 'semantic-index-unavailable' };
   }
 
-  const input = buildMembershipScoringInput(profile, candidateCategories);
+  const input = buildMembershipScoringInput({}, candidateCategories);
   if (input.candidate_categories.length === 0) {
-    return { ok: true, provider: 'local-embeddings', assignedCount: 0, memberships: [] };
+    return { ok: true, provider: 'ollama-semantic-index', assignedCount: 0, memberships: [] };
   }
 
+  const activeGenerationId = cleanString(getSemanticIndexState()?.active_generation_id, 160);
+  const target = semanticIdentity(getSemanticVector(saveId), activeGenerationId);
+  if (!target) return { ok: false, reason: 'active-semantic-vector-unavailable' };
+  const identity = {
+    generationId: target.generationId,
+    model: target.model,
+    dimension: target.dimension,
+  };
+  const activeBySave = new Map(
+    getActiveSemanticVectors()
+      .filter((row) => matchesSemanticIdentity(row, identity))
+      .map((row) => [row.save_id, row]),
+  );
   const candidateById = new Map(input.candidate_categories.map((category) => [category.id, category]));
   const scorableCategories = [];
   for (const category of candidateCategories) {
     const normalized = candidateById.get(cleanString(category?.id, 120));
     if (!normalized) continue;
-    const centroid = computeCategoryCentroid(category, {
-      getSmartCategoryMemberTopicEmbeddings,
-      updateSmartCategoryCentroidEmbedding,
-      now,
+    const members = getSmartCategoryMembers(category.id, {
+      minWeight: SECONDARY_MEMBERSHIP_THRESHOLD,
+    }).filter((member) => member.save_id !== saveId).map((member) => ({
+      ...activeBySave.get(member.save_id),
+      weight: member.weight,
+    }));
+    const centroid = computeSemanticCategoryCentroid({
+      categoryId: category.id,
+      identity,
+      members,
     });
     if (!centroid.ok) continue;
     scorableCategories.push({ normalized, centroid });
   }
 
-  if (scorableCategories.length === 0) return { ok: false, reason: 'no-local-centroids' };
-
-  const profileEmbedding = await ensureProfileEmbedding({
-    saveId,
-    profile,
-    provider,
-    upsertSaveTopicProfile,
-    now,
-  });
-  if (!profileEmbedding.ok) return profileEmbedding;
+  if (scorableCategories.length === 0) return { ok: false, reason: 'no-active-semantic-centroids' };
 
   const scored = [];
   for (const { normalized, centroid } of scorableCategories) {
-    const score = cosineSimilarity(profileEmbedding.vector, centroid.vector);
+    const score = cosineSimilarity(target.vector, centroid.vector);
     if (score == null) continue;
     const weight = roundWeight(score);
     if (weight < SECONDARY_MEMBERSHIP_THRESHOLD) continue;
     scored.push({
       category_id: normalized.id,
       weight,
-      evidence: `Local embedding cosine similarity ${weight.toFixed(3)} to category centroid.`,
+      evidence: `Ollama semantic cosine similarity ${weight.toFixed(3)} to active-generation category centroid.`,
+      centroidIdentity: centroid.identity,
     });
   }
 
-  if (scored.length === 0) return { ok: false, reason: 'no-local-centroid-matches' };
+  if (scored.length === 0) return { ok: false, reason: 'no-active-semantic-centroid-matches' };
 
   const validation = validateSmartCategoryMemberships({ memberships: scored }, {
     candidateCategories: input.candidate_categories,
@@ -321,29 +273,29 @@ async function assignSmartCategoryMembershipsWithLocalEmbeddings({
 
   const assignedAt = now();
   for (const membership of validation.memberships) {
+    const scoredMembership = scored.find((item) => item.category_id === membership.categoryId);
     upsertSmartCategoryMembership({
       categoryId: membership.categoryId,
       saveId,
       weight: membership.weight,
       evidence: {
-        source: 'local-embedding-membership',
+        source: 'ollama-semantic-membership',
         strength: membership.strength,
         similarity: membership.weight,
         reason: membership.evidence,
+        generationId: identity.generationId,
+        model: identity.model,
+        dimension: identity.dimension,
+        centroidSourceHash: scoredMembership?.centroidIdentity?.sourceHash || null,
       },
       assignedAt,
       updatedAt: assignedAt,
-    });
-    updateCentroidAfterAssignment(membership.categoryId, {
-      getSmartCategoryMemberTopicEmbeddings,
-      updateSmartCategoryCentroidEmbedding,
-      now,
     });
   }
 
   return {
     ok: true,
-    provider: 'local-embeddings',
+    provider: 'ollama-semantic-index',
     assignedCount: validation.memberships.length,
     memberships: validation.memberships,
     needsNewCategory: false,
@@ -356,10 +308,11 @@ async function assignSmartCategoryMemberships({
   profile,
   candidateCategories = [],
   provider,
-  upsertSaveTopicProfile,
   upsertSmartCategoryMembership,
-  getSmartCategoryMemberTopicEmbeddings,
-  updateSmartCategoryCentroidEmbedding,
+  getSemanticIndexState,
+  getSemanticVector,
+  getActiveSemanticVectors,
+  getSmartCategoryMembers,
   now = Date.now,
 } = {}) {
   if (!saveId) return { ok: false, reason: 'missing-save' };
@@ -373,38 +326,28 @@ async function assignSmartCategoryMemberships({
     return { ok: true, assignedCount: 0, needsNewCategory: false, newCategoryHint: null };
   }
 
-  let localResult = null;
-  if (typeof provider?.embedText === 'function') {
-    localResult = await assignSmartCategoryMembershipsWithLocalEmbeddings({
-      saveId,
-      profile,
-      candidateCategories,
-      provider,
-      upsertSaveTopicProfile,
-      upsertSmartCategoryMembership,
-      getSmartCategoryMemberTopicEmbeddings,
-      updateSmartCategoryCentroidEmbedding,
-      now,
-    });
-    if (localResult?.ok) return localResult;
-  }
+  const semanticResult = await assignSmartCategoryMembershipsWithSemanticIndex({
+    saveId,
+    candidateCategories,
+    upsertSmartCategoryMembership,
+    getSemanticIndexState,
+    getSemanticVector,
+    getActiveSemanticVectors,
+    getSmartCategoryMembers,
+    now,
+  });
+  if (semanticResult?.ok) return semanticResult;
 
   if (!provider?.generateSmartCategoryMemberships) {
-    if (localResult) {
-      return {
-        ok: true,
-        provider: 'local-embeddings',
-        assignedCount: 0,
-        memberships: [],
-        deferred: true,
-        reason: localResult.reason || 'local-embedding-pending',
-      };
-    }
-    return { ok: false, reason: 'unsupported-provider' };
+    return {
+      ok: true,
+      provider: 'ollama-semantic-index',
+      assignedCount: 0,
+      memberships: [],
+      deferred: true,
+      reason: semanticResult?.reason || 'semantic-index-pending',
+    };
   }
-  const shouldBootstrapCodexCentroids = !localResult
-    || localResult.reason === 'no-local-centroids'
-    || localResult.reason === 'no-local-centroid-matches';
 
   let parsed;
   try {
@@ -433,19 +376,6 @@ async function assignSmartCategoryMemberships({
       updatedAt: assignedAt,
     });
   }
-  if (shouldBootstrapCodexCentroids) {
-    await bootstrapCentroidsFromCodexAssignments({
-      saveId,
-      profile,
-      provider,
-      memberships: validation.memberships,
-      upsertSaveTopicProfile,
-      getSmartCategoryMemberTopicEmbeddings,
-      updateSmartCategoryCentroidEmbedding,
-      now,
-    });
-  }
-
   return {
     ok: true,
     provider: 'codex-membership',
@@ -462,10 +392,11 @@ async function assignSaveToExistingSmartCategories({
   provider,
   listSmartCategories,
   getSmartCategoryAliases,
-  upsertSaveTopicProfile,
   upsertSmartCategoryMembership,
-  getSmartCategoryMemberTopicEmbeddings,
-  updateSmartCategoryCentroidEmbedding,
+  getSemanticIndexState,
+  getSemanticVector,
+  getActiveSemanticVectors,
+  getSmartCategoryMembers,
   now = Date.now,
 } = {}) {
   if (typeof listSmartCategories !== 'function') {
@@ -485,10 +416,11 @@ async function assignSaveToExistingSmartCategories({
     profile,
     candidateCategories: categories,
     provider,
-    upsertSaveTopicProfile,
     upsertSmartCategoryMembership,
-    getSmartCategoryMemberTopicEmbeddings,
-    updateSmartCategoryCentroidEmbedding,
+    getSemanticIndexState,
+    getSemanticVector,
+    getActiveSemanticVectors,
+    getSmartCategoryMembers,
     now,
   });
 }
@@ -496,9 +428,9 @@ async function assignSaveToExistingSmartCategories({
 module.exports = {
   PRIMARY_MEMBERSHIP_THRESHOLD,
   SECONDARY_MEMBERSHIP_THRESHOLD,
-  buildTopicEmbeddingText,
   buildMembershipScoringInput,
-  assignSmartCategoryMembershipsWithLocalEmbeddings,
+  computeSemanticCategoryCentroid,
+  assignSmartCategoryMembershipsWithSemanticIndex,
   validateSmartCategoryMemberships,
   assignSmartCategoryMemberships,
   assignSaveToExistingSmartCategories,
