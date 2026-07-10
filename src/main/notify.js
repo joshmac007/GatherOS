@@ -19,8 +19,8 @@ function setBookmarkNotifier(fn) {
   bookmarkNotifier = typeof fn === 'function' ? fn : () => {};
 }
 
-function notifyBookmarkSaved(record) {
-  bookmarkNotifier(record);
+function notifyBookmarkSaved(record, options) {
+  bookmarkNotifier(record, options);
 }
 
 // A bookmark that arrived from the extension but failed to persist.
@@ -56,8 +56,8 @@ function setNeedsUpgradeNotifier(fn) {
   needsUpgradeNotifier = typeof fn === 'function' ? fn : () => {};
 }
 
-function notifySaved(record) {
-  savedNotifier(record);
+function notifySaved(record, options) {
+  savedNotifier(record, options);
 }
 
 function notifyDuplicate(existing) {

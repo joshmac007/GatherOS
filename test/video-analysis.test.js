@@ -542,3 +542,32 @@ test('malformed provider output remains retryable and never persists completion'
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('generic Codex request failure is typed retryable and never persists completion', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-video-codex-failure-'));
+  const posterPath = path.join(directory, 'poster.jpg');
+  await sharp({ create: { width: 20, height: 20, channels: 3, background: '#333333' } }).jpeg().toFile(posterPath);
+  try {
+    let completions = 0;
+    const save = saveFixture({ thumb_path: posterPath });
+    const service = createVideoAnalysisService({
+      repository: { completeVideoAnalysis() { completions += 1; } },
+      frameExtractor: { async extract() { throw new Error('poster fallback'); } },
+      codex: { async generateVideoTagSuggestions() { throw new Error('newer CLI required'); } },
+      derivedDir: directory,
+    });
+
+    await assert.rejects(service.run({
+      job: { id: 'codex-failure-job', fingerprint: fingerprintForSave(save), prompt_version: 1 },
+      save,
+    }), (error) => {
+      assert.equal(error.code, 'codex_video_unavailable');
+      assert.equal(error.retryable, true);
+      assert.equal(error.message, 'newer CLI required');
+      return true;
+    });
+    assert.equal(completions, 0);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

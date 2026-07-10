@@ -35,6 +35,16 @@ class VideoSuggestionValidationError extends Error {
   }
 }
 
+class CodexVideoUnavailableError extends Error {
+  constructor(error) {
+    super(error?.message || 'Dedicated Codex video suggestion provider is unavailable', { cause: error });
+    this.name = 'CodexVideoUnavailableError';
+    this.code = 'codex_video_unavailable';
+    this.retryable = true;
+    if (error?.code) this.providerCode = error.code;
+  }
+}
+
 function invalidSuggestions(field, reason) {
   throw new VideoSuggestionValidationError(field, reason);
 }
@@ -416,17 +426,21 @@ function createVideoAnalysisService({
       });
       return { status: 'unavailable', fingerprint: job.fingerprint, suggestions: [] };
     }
-    if (!codex?.generateVideoTagSuggestions) {
-      throw new Error('Dedicated Codex video suggestion provider is unavailable');
-    }
+    if (!codex?.generateVideoTagSuggestions) throw new CodexVideoUnavailableError();
 
-    const raw = await codex.generateVideoTagSuggestions({
-      duration,
-      timestamps,
-      evidenceMode,
-      context,
-      promptVersion: job.prompt_version ?? promptVersion,
-    }, { imagePath });
+    let raw;
+    try {
+      raw = await codex.generateVideoTagSuggestions({
+        duration,
+        timestamps,
+        evidenceMode,
+        context,
+        promptVersion: job.prompt_version ?? promptVersion,
+      }, { imagePath });
+    } catch (error) {
+      if (error?.code === 'invalid_video_suggestions') throw error;
+      throw new CodexVideoUnavailableError(error);
+    }
     const suggestions = validateVideoTagSuggestions(raw, { acceptedTags, evidenceMode });
     repository?.completeVideoAnalysis?.({
       id: job.id,

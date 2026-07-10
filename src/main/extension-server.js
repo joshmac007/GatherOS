@@ -79,12 +79,33 @@ function sendJson(res, status, body) {
   res.end(json);
 }
 
-async function completeSavedResponse({ res, record, notify, routeSave = backgroundSaveRouter } = {}) {
+async function completeSavedResponse({
+  res,
+  record,
+  notify,
+  routeSave = backgroundSaveRouter,
+  duplicate = false,
+} = {}) {
   if (!record?.id) throw new Error('saved record id required');
-  if (typeof routeSave === 'function') await routeSave(record);
-  if (typeof notify === 'function') notify(record);
-  sendJson(res, 200, { ok: true, id: record.id });
-  return { ok: true, id: record.id };
+  let background = null;
+  if (typeof routeSave === 'function') {
+    try {
+      const routed = await routeSave(record, { duplicate });
+      const warning = routed?.semanticWarning?.detail
+        || (routed?.ok === false ? routed.reason || 'Background routing unavailable' : null);
+      if (warning) background = { ok: false, warning };
+    } catch (error) {
+      background = { ok: false, warning: error?.message || String(error) };
+    }
+  }
+  if (typeof notify === 'function') {
+    try { notify(record, { backgroundRouted: true }); } catch { /* saved response is authoritative */ }
+  }
+  const body = { ok: true, id: record.id };
+  if (duplicate) body.duplicate = true;
+  if (background) body.background = background;
+  sendJson(res, 200, body);
+  return body;
 }
 
 function readJsonBody(req) {
@@ -295,8 +316,12 @@ async function handleSave(req, res) {
       const { captureTweetCard } = require('./tweetCardCapture');
       const captured = await captureTweetCard(tweetMeta);
       if (captured.duplicateOf) {
-        notifyDuplicate(captured.existing);
-        sendJson(res, 200, { ok: true, duplicate: true, id: captured.existing.id });
+        await completeSavedResponse({
+          res,
+          record: captured.existing,
+          notify: notifyDuplicate,
+          duplicate: true,
+        });
         return;
       }
       const tweetRecord = insertSave({
@@ -325,8 +350,12 @@ async function handleSave(req, res) {
       const { captureUrl } = require('./urlCapture');
       const captured = await captureUrl(pageUrl);
       if (captured.duplicateOf) {
-        notifyDuplicate(captured.existing);
-        sendJson(res, 200, { ok: true, duplicate: true, id: captured.existing.id });
+        await completeSavedResponse({
+          res,
+          record: captured.existing,
+          notify: notifyDuplicate,
+          duplicate: true,
+        });
         return;
       }
       const pageTitle = typeof body?.pageTitle === 'string' ? body.pageTitle.trim() : '';
@@ -348,8 +377,12 @@ async function handleSave(req, res) {
       ? await saveVideoFromUrl(videoUrl, posterUrl || null)
       : await saveImageFromUrl(imageUrl);
     if (mediaData.duplicateOf) {
-      notifyDuplicate(mediaData.existing);
-      sendJson(res, 200, { ok: true, duplicate: true, id: mediaData.existing.id });
+      await completeSavedResponse({
+        res,
+        record: mediaData.existing,
+        notify: notifyDuplicate,
+        duplicate: true,
+      });
       return;
     }
     // pageUrl (parsed above) preserves the page the user was browsing

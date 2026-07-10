@@ -13,6 +13,9 @@ const {
 const { createBackgroundWorkCoordinator } = require('../src/main/background-work-coordinator');
 const { buildSaveTopicEvidence } = require('../src/main/save-topic-profiles');
 const { completeSavedResponse } = require('../src/main/extension-server');
+const { createForegroundActivityTracker } = require('../src/main/foreground-activity');
+const { createSaveBackgroundRouter } = require('../src/main/save-background-router');
+const saveNotifications = require('../src/main/notify');
 
 function deferred() {
   let resolve;
@@ -89,6 +92,7 @@ function createHarness({
   const createSemanticIndexService = ({ coordinator }) => ({
     enqueue(saveId) {
       if (semanticEnqueueError) throw semanticEnqueueError;
+      order.push('semantic-persist');
       incrementalQueue.push({ id: `semantic-${saveId}`, save_id: saveId });
       coordinator.wake();
       return { ok: true };
@@ -113,6 +117,7 @@ function createHarness({
   const createVideoAnalysisService = ({ repository: boundRepository }) => ({
     async prepare({ save }) {
       if (videoPrepareError) throw videoPrepareError;
+      order.push('video-persist');
       const job = {
         id: `video-${save.id}`,
         save_id: save.id,
@@ -185,9 +190,26 @@ test('one coordinator runs video, incremental semantic, then rebuild with global
   harness.runtime.noteActivity();
   await harness.runtime.whenIdle();
 
-  assert.deepEqual(harness.order, ['video', 'semantic-incremental', 'semantic-rebuild']);
+  assert.deepEqual(harness.order, [
+    'video-persist', 'semantic-persist', 'video', 'semantic-incremental', 'semantic-rebuild',
+  ]);
   assert.equal(harness.maxConcurrent, 1);
   assert.equal(harness.recovery.length, 1);
+});
+
+test('production-ready routing persists video before semantic wake and runs video first', async () => {
+  const harness = createHarness();
+  const save = { id: 'ready-video', kind: 'video', file_path: '/tmp/ready.mp4' };
+  harness.saves.set(save.id, save);
+  harness.runtime.start();
+
+  await harness.runtime.routeSave(save);
+  await harness.runtime.whenIdle();
+
+  assert.deepEqual(harness.order, [
+    'video-persist', 'semantic-persist', 'video', 'semantic-incremental',
+  ]);
+  assert.equal(harness.events.some(({ event }) => event === 'video-analysis:updated'), true);
 });
 
 test('Codex outage fails video domain without blocking semantic work', async () => {
@@ -201,25 +223,20 @@ test('Codex outage fails video domain without blocking semantic work', async () 
   harness.runtime.noteActivity();
   await harness.runtime.whenIdle();
 
-  assert.deepEqual(harness.order, ['semantic-incremental']);
+  assert.deepEqual(harness.order, ['video-persist', 'semantic-persist', 'semantic-incremental']);
   assert.equal(harness.failures.length, 1);
   assert.equal(harness.failures[0].retryable, true);
   assert.match(harness.failures[0].error, /Codex session/i);
+  assert.equal(harness.events.some(({ event }) => event === 'video-analysis:updated'), true);
 });
 
-test('new save routes once while duplicate does not enqueue semantic or video work', async () => {
+test('duplicate routing retries missing durable semantic and video work', async () => {
   const harness = createHarness({ foregroundBusy: true });
   const save = { id: 'new-video', kind: 'video', file_path: '/tmp/new.mp4' };
   harness.saves.set(save.id, save);
   harness.runtime.start();
 
-  assert.deepEqual(await harness.runtime.routeSave(save, { duplicate: true }), {
-    ok: true, skipped: 'duplicate',
-  });
-  assert.equal(harness.videoQueue.length, 0);
-  assert.equal(harness.incrementalQueue.length, 0);
-
-  const routed = await harness.runtime.routeSave(save);
+  const routed = await harness.runtime.routeSave(save, { duplicate: true });
   assert.equal(routed.ok, true);
   assert.equal(harness.videoQueue.length, 1);
   assert.equal(harness.incrementalQueue.length, 1);
@@ -239,7 +256,7 @@ test('new save routing warns instead of rejecting after semantic enqueue failure
   assert.equal(result.semanticWarning?.reason, 'semantic-enqueue-failed');
 });
 
-test('extension success response waits until durable background routing completes', async () => {
+test('extension success response waits once and marks notification as already routed', async () => {
   const gate = deferred();
   const order = [];
   let responseBody = null;
@@ -250,7 +267,7 @@ test('extension success response waits until durable background routing complete
   const completing = completeSavedResponse({
     res: response,
     record: { id: 'extension-video', kind: 'video' },
-    notify: () => order.push('notify'),
+    notify: (_record, options) => order.push(['notify', options]),
     routeSave: async () => { await gate.promise; order.push('route'); },
   });
   await Promise.resolve();
@@ -259,8 +276,123 @@ test('extension success response waits until durable background routing complete
   gate.resolve();
   await completing;
 
-  assert.deepEqual(order, ['route', 'notify', 'response']);
+  assert.deepEqual(order, [
+    'route',
+    ['notify', { backgroundRouted: true }],
+    'response',
+  ]);
   assert.deepEqual(responseBody, { ok: true, id: 'extension-video' });
+});
+
+test('extension reports saved with background warning after durable routing failure', async () => {
+  let responseBody = null;
+  let notified = 0;
+  const response = {
+    writeHead(status) { assert.equal(status, 200); },
+    end(body) { responseBody = JSON.parse(body); },
+  };
+
+  await completeSavedResponse({
+    res: response,
+    record: { id: 'saved-before-background-failure', kind: 'video' },
+    duplicate: true,
+    notify: (_record, options) => {
+      notified += 1;
+      assert.deepEqual(options, { backgroundRouted: true });
+    },
+    routeSave: async (_record, options) => {
+      assert.deepEqual(options, { duplicate: true });
+      throw new Error('queue locked');
+    },
+  });
+
+  assert.equal(notified, 1);
+  assert.deepEqual(responseBody, {
+    ok: true,
+    id: 'saved-before-background-failure',
+    duplicate: true,
+    background: { ok: false, warning: 'queue locked' },
+  });
+});
+
+test('foreground activity defers ready work and wakes once the quiet window ends', () => {
+  let timestamp = 1_000;
+  const timers = [];
+  let idleCalls = 0;
+  const tracker = createForegroundActivityTracker({
+    quietMs: 500,
+    now: () => timestamp,
+    setTimer: (callback, delay) => {
+      const handle = { callback, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    clearTimer: () => {},
+    onIdle: () => { idleCalls += 1; },
+  });
+
+  tracker.noteActivity({ kind: 'interactive-ui' });
+  assert.equal(tracker.isBusy(), true);
+  assert.equal(timers.at(-1).delay, 500);
+  timestamp = 1_500;
+  timers.at(-1).callback();
+  assert.equal(tracker.isBusy(), false);
+  assert.equal(idleCalls, 1);
+});
+
+test('save router enriches images before one route, routes video immediately, and honors routed notifications', async () => {
+  const order = [];
+  const records = new Map([
+    ['image-save', { id: 'image-save', kind: 'image', file_path: '/tmp/image.png' }],
+    ['video-save', { id: 'video-save', kind: 'video', file_path: '/tmp/video.mp4' }],
+  ]);
+  const router = createSaveBackgroundRouter({
+    backgroundRuntime: {
+      async routeSave(record, options) {
+        order.push(['route', record.id, options]);
+        return { ok: true };
+      },
+    },
+    getSave: (id) => records.get(id),
+    enrichImageSave: async (record) => order.push(['enrich', record.id]),
+    noteActivity: (payload) => order.push(['activity', payload.kind]),
+  });
+
+  await router.route(records.get('image-save'));
+  await router.route(records.get('video-save'));
+  assert.equal(router.notify(records.get('video-save'), { backgroundRouted: true }), null);
+  await router.route(records.get('image-save'), { duplicate: true });
+
+  assert.deepEqual(order, [
+    ['activity', 'save'],
+    ['enrich', 'image-save'],
+    ['route', 'image-save', { duplicate: false, changed: true }],
+    ['activity', 'save'],
+    ['route', 'video-save', { duplicate: false, changed: false }],
+    ['activity', 'duplicate'],
+    ['route', 'image-save', { duplicate: true, changed: false }],
+  ]);
+
+  const indexSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'index.js'), 'utf8');
+  assert.match(indexSource, /isForegroundBusy: \(\) => foregroundActivity\.isBusy\(\)/);
+  assert.match(indexSource, /function notifySaved\(record, options = \{\}\)[\s\S]*routeNewSaveToBackground\(record, options\)/);
+});
+
+test('shared save notifiers preserve already-routed options', () => {
+  const calls = [];
+  saveNotifications.setSaveNotifier((record, options) => calls.push(['save', record.id, options]));
+  saveNotifications.setBookmarkNotifier((record, options) => calls.push(['bookmark', record.id, options]));
+  try {
+    saveNotifications.notifySaved({ id: 'save-1' }, { backgroundRouted: true });
+    saveNotifications.notifyBookmarkSaved({ id: 'save-2' }, { backgroundRouted: true });
+  } finally {
+    saveNotifications.setSaveNotifier(null);
+    saveNotifications.setBookmarkNotifier(null);
+  }
+  assert.deepEqual(calls, [
+    ['save', 'save-1', { backgroundRouted: true }],
+    ['bookmark', 'save-2', { backgroundRouted: true }],
+  ]);
 });
 
 test('video routing rejects when its durable queue write fails', async () => {
@@ -271,7 +403,7 @@ test('video routing rejects when its durable queue write fails', async () => {
   harness.runtime.start();
 
   await assert.rejects(harness.runtime.routeSave(save), error);
-  assert.equal(harness.events.some(({ event }) => event === 'video-analysis:status'), true);
+  assert.equal(harness.events.some(({ event }) => event === 'video-analysis:updated'), true);
 });
 
 test('automatic trash purge attempts derived cleanup for every purged save', async () => {

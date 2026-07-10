@@ -83,6 +83,8 @@ const {
   cleanupPurgedSaveDerived,
   shouldUseImageAi,
 } = require('./video-semantic-workflows');
+const { createForegroundActivityTracker } = require('./foreground-activity');
+const { createSaveBackgroundRouter } = require('./save-background-router');
 const { runSmartCategoryTaxonomyRefresh } = require('./smart-category-taxonomy-refresh');
 const {
   createBackgroundSmartCategoryRefresh,
@@ -197,6 +199,8 @@ let mainWindow = null;
 let tray = null;
 let smartCategoryRefresh = null;
 let backgroundRuntime = null;
+let foregroundActivity = null;
+let saveBackgroundRouter = null;
 
 function sendBackgroundEvent(event, payload) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -215,13 +219,8 @@ async function cleanupAllVideoDerived(directory) {
   await fs.promises.rm(directory, { recursive: true, force: true });
 }
 
-function routeNewSaveToBackground(record) {
-  const work = backgroundRuntime?.routeSave(record);
-  work?.catch?.((error) => {
-    if (error?.code !== 'library_epoch_stale') {
-      console.error('[background] save routing failed:', error?.message || error);
-    }
-  });
+function routeNewSaveToBackground(record, options) {
+  return saveBackgroundRouter?.notify(record, options) || null;
 }
 
 function withSmartCategoryAliases(categories = []) {
@@ -511,7 +510,7 @@ function registerMoodmarkFileProtocol() {
   });
 }
 
-function notifySaved(record) {
+function notifySaved(record, options = {}) {
   // Each side-effect is isolated: a failure in showToast (creating
   // a new BrowserWindow during cold launch is the most common
   // crasher) shouldn't take out the IPC notify or tray rebuild.
@@ -524,9 +523,7 @@ function notifySaved(record) {
   catch (err) { console.error('[gatheros] showToast failed:', err); }
   try { rebuildTrayMenu(); }
   catch (err) { console.error('[gatheros] rebuildTrayMenu failed:', err); }
-  routeNewSaveToBackground(record);
-  try { maybeAIIndexInBackground(record); }
-  catch (err) { console.error('[gatheros] AI index failed:', err); }
+  routeNewSaveToBackground(record, options);
   try { smartCategoryRefresh?.noteActivity({ kind: 'capture' }); }
   catch (err) { console.error('[smart-categories] refresh schedule failed:', err?.message || err); }
 }
@@ -564,11 +561,9 @@ function notifyBookmarkFailed() {
   bookmarkBatchTimer = setTimeout(flushBookmarkBatch, 1500);
 }
 
-function notifyBookmarkSaved(record) {
+function notifyBookmarkSaved(record, options = {}) {
   // Keep search working — embeddings still index in the background.
-  routeNewSaveToBackground(record);
-  try { maybeAIIndexInBackground(record); }
-  catch (err) { console.error('[gatheros] AI index failed:', err); }
+  routeNewSaveToBackground(record, options);
   try { smartCategoryRefresh?.noteActivity({ kind: 'import' }); }
   catch (err) { console.error('[smart-categories] refresh schedule failed:', err?.message || err); }
   if (bookmarkBatchCount === 0) bookmarkBatchStartedAt = Date.now();
@@ -608,7 +603,7 @@ function notifyNeedsUpgrade(context) {
 
 // One image-only vision call yields title + description + OCR. Persisted
 // changes then coalesce through the dedicated Ollama semantic queue.
-async function maybeAIIndexInBackground(record) {
+async function enrichImageSaveInBackground(record) {
   if (!record?.id || !record.file_path) return;
   // MP4/video bytes never enter image-only Codex stages. Their dedicated
   // workflow extracts bounded frames/contact sheets before any provider call.
@@ -667,12 +662,6 @@ async function maybeAIIndexInBackground(record) {
   } catch (err) {
     console.error('AI index failed:', err.message);
   } finally {
-    const current = getSave(record.id) || record;
-    backgroundRuntime?.routeSave(current, { changed: true }).catch((error) => {
-      if (error?.code !== 'library_epoch_stale') {
-        console.error('[semantic-index] changed-save enqueue failed:', error?.message || error);
-      }
-    });
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('save:indexing-end', record.id);
     }
@@ -721,6 +710,10 @@ function createMainWindow() {
       webviewTag: true,
     },
   });
+
+  const noteInteractiveActivity = () => foregroundActivity?.noteActivity({ kind: 'interactive-ui' });
+  mainWindow.webContents.on('before-input-event', noteInteractiveActivity);
+  mainWindow.webContents.on('ipc-message', noteInteractiveActivity);
 
   // Re-apply maximized / fullscreen flags after construction (they
   // can't be passed to the BrowserWindow constructor on macOS).
@@ -1136,6 +1129,9 @@ app.whenReady().then(() => {
   ensureStorageDirs();
   initDatabase();
   const aiConfig = readAiConfig();
+  foregroundActivity = createForegroundActivityTracker({
+    onIdle: () => backgroundRuntime?.noteActivity(),
+  });
   backgroundRuntime = createVideoSemanticWorkflows({
     repository: databaseRepository,
     ollama: createOllamaEmbedClient(aiConfig.ollama),
@@ -1146,8 +1142,15 @@ app.whenReady().then(() => {
     cleanupDerivedSave: cleanupSaveVideoDerived,
     cleanupDerivedAll: cleanupAllVideoDerived,
     restoreBackupImpl: (snapshotPath) => require('./backup').restoreFromSnapshot(snapshotPath),
+    isForegroundBusy: () => foregroundActivity.isBusy(),
   });
   backgroundRuntime.start();
+  saveBackgroundRouter = createSaveBackgroundRouter({
+    backgroundRuntime,
+    getSave,
+    enrichImageSave: enrichImageSaveInBackground,
+    noteActivity: (context) => foregroundActivity.noteActivity(context),
+  });
   smartCategoryRefresh = createBackgroundSmartCategoryRefresh({
     getPendingSmartCategorySaves,
     listSmartCategories,
@@ -1222,7 +1225,7 @@ app.whenReady().then(() => {
   createTray();
   registerCaptureHotkey();
   extensionServer.start({
-    routeSave: (record) => backgroundRuntime.routeSave(record),
+    routeSave: (record, options) => saveBackgroundRouter.route(record, options),
   });
   // Drop the native-messaging host manifest into every Chromium-
   // family browser's user dir so the extension can connect without
@@ -1344,6 +1347,7 @@ app.on('before-quit', (event) => {
     .catch((error) => console.error('[background] quit drain failed:', error?.message || error))
     .finally(() => {
       backgroundDrainedForQuit = true;
+      foregroundActivity?.dispose();
       destroyToastWindow();
       app.quit();
     });

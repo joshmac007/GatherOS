@@ -146,7 +146,7 @@ function createVideoSemanticWorkflows({
             await videoAnalysis.prepare({ save });
           }
           if (boundEpoch !== epoch) return { ok: false, reason: 'library_epoch_stale' };
-          emit('video-analysis:status', { saveId: job.save_id, ...result });
+          emit('video-analysis:updated', { saveId: job.save_id, ...result });
           return result;
         } catch (error) {
           if (error?.code === 'library_epoch_stale' || boundEpoch !== epoch) {
@@ -170,7 +170,7 @@ function createVideoSemanticWorkflows({
             reason: error?.code || 'video_analysis_failed',
             error: error?.message || String(error),
           };
-          emit('video-analysis:status', failure);
+          emit('video-analysis:updated', failure);
           return { ok: false, ...failure };
         }
       },
@@ -267,11 +267,26 @@ function createVideoSemanticWorkflows({
   }
 
   async function routeSave(save, { duplicate = false, changed = false } = {}) {
-    if (duplicate) return { ok: true, skipped: 'duplicate' };
     if (!active) return { ok: false, reason: 'runtime_not_started' };
     const current = active;
     const persisted = current.repository.getSave(save?.id) || save;
     if (!persisted?.id) return { ok: false, reason: 'save_not_found' };
+    let video = null;
+    if (!changed && isVideoSave(persisted)) {
+      try {
+        video = await current.videoAnalysis.prepare({ save: persisted });
+      } catch (error) {
+        if (error?.code !== 'library_epoch_stale') {
+          emit('video-analysis:updated', {
+            saveId: persisted.id,
+            state: 'failed',
+            reason: error?.code || 'video_prepare_failed',
+            error: error?.message || String(error),
+          });
+        }
+        throw error;
+      }
+    }
     let semantic = null;
     let semanticWarning = null;
     try {
@@ -287,22 +302,6 @@ function createVideoSemanticWorkflows({
         reason: 'semantic-enqueue-failed',
         detail: error?.message || String(error),
       };
-    }
-    let video = null;
-    if (!changed && isVideoSave(persisted)) {
-      try {
-        video = await current.videoAnalysis.prepare({ save: persisted });
-      } catch (error) {
-        if (error?.code !== 'library_epoch_stale') {
-          emit('video-analysis:status', {
-            saveId: persisted.id,
-            state: 'failed',
-            reason: error?.code || 'video_prepare_failed',
-            error: error?.message || String(error),
-          });
-        }
-        throw error;
-      }
     }
     if (current.epoch === epoch) current.coordinator.wake();
     return semanticWarning
