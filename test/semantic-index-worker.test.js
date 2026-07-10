@@ -15,7 +15,23 @@ function makeRepository(overrides = {}) {
       building_generation_id: null,
       paused: false,
     }),
-    getSemanticIndexStatus: () => ({ waiting: jobs.length, running: 0, failed: 0 }),
+    getSemanticIndexStatus: () => ({
+      active_generation_id: 'gen-active',
+      building_generation_id: null,
+      active_model: 'embeddinggemma',
+      active_dimension: 3,
+      indexed: 1,
+      total: 1,
+      waiting: jobs.length,
+      running: 0,
+      failed: 0,
+    }),
+    getActiveSemanticIndexIdentity: () => ({
+      generation_id: 'gen-active', model: 'embeddinggemma', dimension: 3,
+    }),
+    getActiveSemanticVectors() {
+      throw new Error('worker status must not materialize vector BLOBs');
+    },
     listSemanticIndexJobs: () => jobs,
     getSave: (id) => id === save.id ? save : undefined,
     getTagsForSave: () => tags,
@@ -71,7 +87,18 @@ function makeRepository(overrides = {}) {
     retrySemanticFailures: () => ({ ok: true, count: 0 }),
     dismissSemanticFailures: () => ({ ok: true, count: 0 }),
     cancelSemanticGeneration: () => ({ ok: true }),
-    createSemanticGeneration: () => ({ id: 'gen-building' }),
+    createSemanticRebuild(input) {
+      for (const job of input.jobs) {
+        this.enqueueSemanticIndexJob({
+          generationId: input.id,
+          saveId: job.saveId,
+          kind: 'rebuild',
+          sourceHash: job.sourceHash,
+          now: input.createdAt,
+        });
+      }
+      return { id: input.id, model: input.model, status: 'building' };
+    },
     ...overrides,
   };
   return { repository, save, tags, jobs, calls };
@@ -202,6 +229,48 @@ test('worker reuses unchanged active vector when source returns to indexed hash 
   assert.equal(embedCalls, 0);
   assert.equal(fixture.calls.completed.length, 1);
   assert.deepEqual(fixture.calls.completed[0].vector, fixture.repository.getSemanticVector().vector);
+});
+
+test('worker re-embeds malformed or zero stored vectors instead of reusing them', async () => {
+  for (const storedVector of [
+    Buffer.alloc(3),
+    Buffer.from(new Float32Array([0, 0]).buffer),
+  ]) {
+    const fixture = makeRepository();
+    let embedCalls = 0;
+    const index = createSemanticIndex({
+      repository: fixture.repository,
+      ollama: {
+        model: 'embeddinggemma',
+        health: async () => ({ ok: true }),
+        embed: async () => { embedCalls += 1; return [1, 0]; },
+      },
+      now: () => 360,
+    });
+    index.enqueue('save-1');
+    const [lane] = index.createLanes();
+    const job = lane.claimReady(360);
+    fixture.repository.getSemanticVector = () => ({
+      generation_id: 'gen-active',
+      source_hash: job.source_hash,
+      model: 'embeddinggemma',
+      dimension: 2,
+      vector: storedVector,
+    });
+
+    const result = await lane.run(job);
+
+    assert.equal(result.ok, true);
+    assert.equal(embedCalls, 1);
+    assert.equal(fixture.calls.completed.length, 1);
+    assert.deepEqual(
+      [
+        fixture.calls.completed[0].vector.readFloatLE(0),
+        fixture.calls.completed[0].vector.readFloatLE(4),
+      ],
+      [1, 0],
+    );
+  }
 });
 
 test('save deletion during embed records failure instead of leaving running job', async () => {

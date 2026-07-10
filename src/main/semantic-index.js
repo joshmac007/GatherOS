@@ -22,6 +22,29 @@ function errorMessage(error) {
   return typeof error?.message === 'string' && error.message ? error.message : String(error);
 }
 
+function decodeStoredVector(value, dimension) {
+  if (!Number.isInteger(dimension) || dimension < 1) {
+    throw new Error('Stored semantic vector dimension is invalid');
+  }
+  if (Buffer.isBuffer(value)) {
+    if (value.byteLength !== dimension * Float32Array.BYTES_PER_ELEMENT) {
+      throw new Error('Stored semantic vector payload length is invalid');
+    }
+    return Array.from(
+      { length: dimension },
+      (_, index) => value.readFloatLE(index * Float32Array.BYTES_PER_ELEMENT),
+    );
+  }
+  if (ArrayBuffer.isView(value) || Array.isArray(value)) {
+    const vector = Array.from(value);
+    if (vector.length !== dimension) {
+      throw new Error('Stored semantic vector payload length is invalid');
+    }
+    return vector;
+  }
+  throw new Error('Stored semantic vector payload is invalid');
+}
+
 function createSemanticIndex({
   repository,
   ollama,
@@ -75,12 +98,6 @@ function createSemanticIndex({
 
   function status() {
     const result = repository.getSemanticIndexStatus();
-    const activeVectors = typeof repository.getActiveSemanticVectors === 'function'
-      ? repository.getActiveSemanticVectors()
-      : [];
-    const saves = typeof repository.getAllSaves === 'function'
-      ? repository.getAllSaves({})
-      : [];
     const running = queue({ state: 'running' })[0];
     const current = running && typeof repository.getSave === 'function'
       ? repository.getSave(running.save_id)
@@ -88,11 +105,9 @@ function createSemanticIndex({
     return {
       ...result,
       model: ollama.model,
-      indexed: activeVectors.length,
-      total: saves.length,
       current: current ? { id: current.id, title: current.title || '' } : null,
       searchReady: !!result.active_generation_id
-        && activeVectors.some((vector) => vector.model === ollama.model),
+        && result.active_model === ollama.model,
     };
   }
 
@@ -121,11 +136,10 @@ function createSemanticIndex({
     const current = state.active_generation_id
       ? repository.getSemanticVector(saveId)
       : null;
-    const activeVectors = state.active_generation_id
-      && typeof repository.getActiveSemanticVectors === 'function'
-      ? repository.getActiveSemanticVectors()
-      : [];
-    const activeModel = current?.model || activeVectors[0]?.model || null;
+    const activeIdentity = state.active_generation_id
+      ? repository.getActiveSemanticIndexIdentity()
+      : null;
+    const activeModel = current?.model || activeIdentity?.model || null;
     const unchanged = current
       && current.generation_id === state.active_generation_id
       && current.source_hash === source.sourceHash;
@@ -163,37 +177,35 @@ function createSemanticIndex({
     }
     const timestamp = now();
     const generationId = randomUUID();
-    const generation = repository.createSemanticGeneration({
-      id: generationId,
-      model,
-      sourceVersion,
-      status: 'building',
-      createdAt: timestamp,
-    });
-    if (generation?.ok === false) return generation;
-
-    let count = 0;
+    const jobs = [];
     for (const save of repository.getAllSaves({})) {
       const source = sourceFor(save.id);
       if (!source) continue;
-      repository.enqueueSemanticIndexJob({
-        generationId,
+      jobs.push({
         saveId: save.id,
-        kind: 'rebuild',
         sourceHash: source.sourceHash,
-        now: timestamp,
       });
-      count += 1;
     }
-    if (count === 0) {
-      repository.cancelSemanticGeneration(generationId, timestamp);
-      emitStatus();
-      return { ok: false, reason: 'no_saves' };
+    if (jobs.length === 0) return { ok: false, reason: 'no_saves' };
+
+    let generation;
+    try {
+      generation = repository.createSemanticRebuild({
+        id: generationId,
+        model,
+        sourceVersion,
+        createdAt: timestamp,
+        jobs,
+      });
+    } catch (error) {
+      return { ok: false, reason: 'manifest_failed', error: errorMessage(error) };
     }
+    if (generation?.ok === false) return generation;
+
     healthVerified = false;
     wake();
     emitStatus();
-    return { ok: true, generation, count };
+    return { ok: true, generation, count: jobs.length };
   }
 
   function pause(reason = 'user') {
@@ -325,7 +337,10 @@ function createSemanticIndex({
         && Number.isInteger(existing.dimension)
         && existing.dimension > 0
       ) {
-        return completeJob(job, existing.vector, existing.dimension);
+        try {
+          validateVector(decodeStoredVector(existing.vector, existing.dimension), existing.dimension);
+          return completeJob(job, existing.vector, existing.dimension);
+        } catch {}
       }
 
       await ensureHealth();
@@ -395,8 +410,8 @@ function createSemanticIndex({
     return [createLane('incremental'), createLane('rebuild')];
   }
 
-  if (typeof repository.recoverBackgroundJobs === 'function') {
-    const recovered = repository.recoverBackgroundJobs(now());
+  if (typeof repository.recoverSemanticIndexJobs === 'function') {
+    const recovered = repository.recoverSemanticIndexJobs(now());
     if ((recovered?.semantic || 0) > 0) wake();
   }
 

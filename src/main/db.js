@@ -2635,6 +2635,54 @@ function createSemanticGeneration({
   return database.prepare('SELECT * FROM semantic_index_generations WHERE id = ?').get(id);
 }
 
+function createSemanticRebuild({ id, model, sourceVersion, createdAt, jobs } = {}) {
+  if (
+    !id
+    || !model
+    || !Number.isInteger(sourceVersion)
+    || !Array.isArray(jobs)
+    || jobs.length === 0
+    || jobs.some((job) => !job?.saveId || !job?.sourceHash)
+  ) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const database = getDatabase();
+  const now = Number.isFinite(createdAt) ? createdAt : Date.now();
+  const create = database.transaction(() => {
+    const existing = database.prepare(`
+      SELECT id FROM semantic_index_generations
+       WHERE status = 'building'
+       LIMIT 1
+    `).get();
+    if (existing) {
+      return { ok: false, reason: 'building_exists', generationId: existing.id };
+    }
+
+    database.prepare(`
+      INSERT INTO semantic_index_generations
+        (id, model, dimension, source_version, status, created_at, activated_at)
+      VALUES (?, ?, NULL, ?, 'building', ?, NULL)
+    `).run(id, model, sourceVersion, now);
+    database.prepare(`
+      UPDATE semantic_index_state
+         SET building_generation_id = ?, updated_at = ?
+       WHERE id = 1
+    `).run(id, now);
+
+    const insertJob = database.prepare(`
+      INSERT INTO semantic_index_jobs
+        (id, generation_id, save_id, kind, source_hash, state, retry_count, retryable,
+         available_at, created_at, updated_at)
+      VALUES (?, ?, ?, 'rebuild', ?, 'pending', 0, 0, ?, ?, ?)
+    `);
+    for (const job of jobs) {
+      insertJob.run(job.id || crypto.randomUUID(), id, job.saveId, job.sourceHash, now, now, now);
+    }
+    return database.prepare('SELECT * FROM semantic_index_generations WHERE id = ?').get(id);
+  });
+  return create();
+}
+
 function getSemanticIndexState() {
   const row = getDatabase().prepare(`
     SELECT active_generation_id, building_generation_id, paused,
@@ -2643,6 +2691,16 @@ function getSemanticIndexState() {
      WHERE id = 1
   `).get();
   return { ...row, paused: !!row.paused };
+}
+
+function getActiveSemanticIndexIdentity() {
+  const row = getDatabase().prepare(`
+    SELECT g.id AS generation_id, g.model, g.dimension
+      FROM semantic_index_state s
+      JOIN semantic_index_generations g ON g.id = s.active_generation_id
+     WHERE s.id = 1 AND g.status = 'active'
+  `).get();
+  return row || undefined;
 }
 
 function enqueueSemanticIndexJob({
@@ -2957,8 +3015,29 @@ function getSemanticIndexStatus() {
         OR (j.generation_id = s.building_generation_id AND g.status = 'building')
      GROUP BY j.state
   `).all().map((row) => [row.state, row.n]));
+  const summary = database.prepare(`
+    SELECT g.model AS active_model,
+           g.dimension AS active_dimension,
+           (SELECT COUNT(*) FROM saves WHERE deleted_at IS NULL) AS total,
+           (
+             SELECT COUNT(*)
+               FROM semantic_vectors v
+               JOIN saves live ON live.id = v.save_id AND live.deleted_at IS NULL
+              WHERE v.generation_id = s.active_generation_id
+                AND g.status = 'active'
+                AND v.model = g.model
+                AND v.dimension = g.dimension
+           ) AS indexed
+      FROM semantic_index_state s
+      LEFT JOIN semantic_index_generations g ON g.id = s.active_generation_id
+     WHERE s.id = 1
+  `).get();
   return {
     ...state,
+    active_model: summary.active_model || null,
+    active_dimension: summary.active_dimension || null,
+    indexed: summary.indexed || 0,
+    total: summary.total || 0,
     waiting: counts.pending || 0,
     running: counts.running || 0,
     failed: counts.failed || 0,
@@ -3197,6 +3276,15 @@ function recoverBackgroundJobs(now = Date.now()) {
     return { semantic, video };
   });
   return recover();
+}
+
+function recoverSemanticIndexJobs(now = Date.now()) {
+  const semantic = getDatabase().prepare(`
+    UPDATE semantic_index_jobs
+       SET state = 'pending', retryable = 0, started_at = NULL, updated_at = ?
+     WHERE state = 'running'
+  `).run(now).changes;
+  return { semantic };
 }
 
 function getVideoAnalysis(saveId) {
@@ -3766,7 +3854,9 @@ module.exports = {
   getPendingSmartCategorySaves,
   // Semantic index
   createSemanticGeneration,
+  createSemanticRebuild,
   getSemanticIndexState,
+  getActiveSemanticIndexIdentity,
   enqueueSemanticIndexJob,
   claimSemanticIndexJob,
   completeSemanticIndexJob,
@@ -3785,6 +3875,7 @@ module.exports = {
   claimVideoAnalysis,
   completeVideoAnalysis,
   failVideoAnalysis,
+  recoverSemanticIndexJobs,
   recoverBackgroundJobs,
   getVideoAnalysis,
   listVideoTagSuggestions,

@@ -202,6 +202,21 @@ test('find similar reads active generation only and falls back to palette when u
   assert.deepEqual(fallback.results.map((save) => save.id), ['save-c']);
 });
 
+test('find similar falls back to palette when active model differs from Ollama client', () => {
+  const fixture = makeRepository();
+  const search = createSemanticSearch({
+    repository: fixture.repository,
+    ollama: { model: 'nomic-embed-text', embed: async () => [1, 0, 0] },
+  });
+
+  const result = search.findSimilar('save-a', { limit: 5 });
+
+  assert.equal(result.semanticAvailable, false);
+  assert.equal(result.fallback, true);
+  assert.equal(result.reason, 'active_model_unavailable');
+  assert.deepEqual(result.results.map((save) => save.id), ['save-c']);
+});
+
 test('semantic core has no generic openai.embedText consumer', () => {
   for (const name of ['semantic-index.js', 'semantic-search.js']) {
     const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', name), 'utf8');

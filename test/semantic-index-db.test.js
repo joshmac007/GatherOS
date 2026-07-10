@@ -237,6 +237,38 @@ test('only one building generation can exist and a second request is rejected', 
   `).run(), /UNIQUE constraint failed/);
 }));
 
+test('rebuild generation and complete manifest roll back atomically on mid-insert failure', withTempDb((db) => {
+  insertSave(db, 'save-manifest-a');
+  const active = db.createSemanticGeneration({
+    id: 'gen-manifest-active', model: 'embeddinggemma', sourceVersion: 1,
+    status: 'active', createdAt: 10,
+  });
+
+  assert.throws(() => db.createSemanticRebuild({
+    id: 'gen-manifest-building',
+    model: 'embeddinggemma',
+    sourceVersion: 2,
+    createdAt: 20,
+    jobs: [
+      { id: 'job-manifest-a', saveId: 'save-manifest-a', sourceHash: 'hash-a' },
+      { id: 'job-manifest-missing', saveId: 'save-does-not-exist', sourceHash: 'hash-missing' },
+    ],
+  }), /FOREIGN KEY constraint failed/);
+
+  assert.equal(db.getSemanticIndexState().active_generation_id, active.id);
+  assert.equal(db.getSemanticIndexState().building_generation_id, null);
+  assert.equal(db.listSemanticIndexJobs({ generationId: 'gen-manifest-building' }).length, 0);
+  assert.equal(db.getDatabase().prepare(
+    'SELECT COUNT(*) AS n FROM semantic_index_generations WHERE id = ?',
+  ).get('gen-manifest-building').n, 0);
+
+  db.closeDatabase();
+  db.initDatabase();
+  assert.equal(db.getSemanticIndexState().active_generation_id, active.id);
+  assert.equal(db.getSemanticIndexState().building_generation_id, null);
+  assert.equal(db.claimSemanticIndexJob('rebuild', 100), undefined);
+}));
+
 test('jobs coalesce to latest source identity while active vectors stay generation-scoped', withTempDb((db) => {
   insertSave(db, 'save-1');
   const active = db.createSemanticGeneration({
@@ -422,6 +454,36 @@ test('pause, retry, dismiss, and crash recovery are durable queue operations', w
   assert.equal(dismissed.length, 1);
   assert.equal(dismissed[0].error, 'bad vector');
   assert.equal(dismissed[0].finished_at, 130);
+}));
+
+test('semantic-only recovery leaves a running video job untouched', withTempDb((db) => {
+  insertSave(db, 'save-scoped-recovery');
+  const generation = db.createSemanticGeneration({
+    id: 'gen-scoped-recovery', model: 'embeddinggemma', sourceVersion: 1,
+    status: 'active', createdAt: 10,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: generation.id,
+    saveId: 'save-scoped-recovery',
+    kind: 'incremental',
+    sourceHash: 'semantic-hash',
+    now: 20,
+  });
+  db.enqueueVideoAnalysis({
+    saveId: 'save-scoped-recovery',
+    fingerprint: 'video-fingerprint',
+    promptVersion: 1,
+    now: 20,
+  });
+  const semantic = db.claimSemanticIndexJob('incremental', 30);
+  const video = db.claimVideoAnalysis(30);
+  assert.equal(semantic.state, 'running');
+  assert.equal(video.state, 'running');
+
+  assert.deepEqual(db.recoverSemanticIndexJobs(40), { semantic: 1 });
+
+  assert.equal(db.listSemanticIndexJobs()[0].state, 'pending');
+  assert.equal(db.getVideoAnalysis('save-scoped-recovery').state, 'running');
 }));
 
 test('retryable semantic failures become claimable after durable backoff', withTempDb((db) => {
@@ -692,6 +754,45 @@ test('semantic status excludes jobs from historical generations', withTempDb((db
   assert.equal(status.waiting, 2);
   assert.equal(status.active_generation_id, active.id);
   assert.equal(status.building_generation_id, building.id);
+}));
+
+test('semantic status reports active identity and counts only live saves without vector payloads', withTempDb((db) => {
+  insertSave(db, 'save-status-live');
+  insertSave(db, 'save-status-trash');
+  const generation = db.createSemanticGeneration({
+    id: 'gen-status-identity', model: 'embeddinggemma', sourceVersion: 1,
+    status: 'active', createdAt: 10,
+  });
+  for (const [saveId, hash, vector] of [
+    ['save-status-live', 'hash-live', [1, 0]],
+    ['save-status-trash', 'hash-trash', [0, 1]],
+  ]) {
+    db.enqueueSemanticIndexJob({
+      generationId: generation.id, saveId, kind: 'incremental', sourceHash: hash, now: 20,
+    });
+    const job = db.claimSemanticIndexJob('incremental', 30);
+    db.completeSemanticIndexJob({
+      id: job.id,
+      sourceHash: hash,
+      model: 'embeddinggemma',
+      dimension: 2,
+      vector: floatBuffer(vector),
+      now: 40,
+    });
+  }
+  db.deleteSave('save-status-trash');
+
+  const status = db.getSemanticIndexStatus();
+  assert.equal(status.active_model, 'embeddinggemma');
+  assert.equal(status.active_dimension, 2);
+  assert.equal(status.indexed, 1);
+  assert.equal(status.total, 1);
+  assert.deepEqual(db.getActiveSemanticIndexIdentity(), {
+    generation_id: generation.id,
+    model: 'embeddinggemma',
+    dimension: 2,
+  });
+  assert.equal('vector' in status, false);
 }));
 
 test('deleting a save cascades semantic vectors and jobs', withTempDb((db) => {

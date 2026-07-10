@@ -9,7 +9,10 @@ function makeRepository() {
     { id: 'save-b', title: 'Beta' },
   ];
   const jobs = [];
-  const calls = { created: [], enqueued: [], cancelled: [], completed: [], recovered: 0 };
+  const calls = {
+    manifests: [], enqueued: [], cancelled: [], completed: [], recoveredSemantic: 0,
+    genericRecovery: 0, allSaves: 0,
+  };
   const state = {
     active_generation_id: 'gen-old',
     building_generation_id: null,
@@ -21,21 +24,46 @@ function makeRepository() {
     calls,
     state,
     repository: {
-      recoverBackgroundJobs() { calls.recovered += 1; return { semantic: 1, video: 0 }; },
+      recoverSemanticIndexJobs() { calls.recoveredSemantic += 1; return { semantic: 1 }; },
+      recoverBackgroundJobs() {
+        calls.genericRecovery += 1;
+        throw new Error('semantic constructor must not recover video jobs');
+      },
       getSemanticIndexState: () => ({ ...state }),
-      getSemanticIndexStatus: () => ({ ...state, waiting: jobs.length, running: 0, failed: 0 }),
+      getSemanticIndexStatus: () => ({
+        ...state,
+        active_model: 'embeddinggemma',
+        active_dimension: 2,
+        indexed: 2,
+        total: 2,
+        waiting: jobs.length,
+        running: 0,
+        failed: 0,
+      }),
+      getActiveSemanticIndexIdentity: () => ({
+        generation_id: 'gen-old', model: 'embeddinggemma', dimension: 2,
+      }),
       listSemanticIndexJobs: () => jobs,
-      getAllSaves: () => saves,
+      getAllSaves: () => { calls.allSaves += 1; return saves; },
       getSave: (id) => saves.find((save) => save.id === id),
       getTagsForSave: () => [],
       getSaveTopicProfile: () => undefined,
       getSemanticVector: () => undefined,
-      getActiveSemanticVectors: () => [
-        { generation_id: 'gen-old', model: 'embeddinggemma', dimension: 2 },
-      ],
-      createSemanticGeneration(input) {
-        calls.created.push(input);
+      getActiveSemanticVectors() {
+        throw new Error('status must not materialize vector BLOBs');
+      },
+      createSemanticRebuild(input) {
+        calls.manifests.push(input);
         state.building_generation_id = input.id;
+        for (const job of input.jobs) {
+          this.enqueueSemanticIndexJob({
+            generationId: input.id,
+            saveId: job.saveId,
+            kind: 'rebuild',
+            sourceHash: job.sourceHash,
+            now: input.createdAt,
+          });
+        }
         return { id: input.id, model: input.model, status: 'building' };
       },
       enqueueSemanticIndexJob(input) {
@@ -95,7 +123,7 @@ function makeRepository() {
   };
 }
 
-test('construction recovers interrupted durable jobs and wakes coordinator', () => {
+test('construction recovers only semantic jobs and wakes coordinator', () => {
   const fixture = makeRepository();
   let wakes = 0;
   createSemanticIndex({
@@ -105,7 +133,8 @@ test('construction recovers interrupted durable jobs and wakes coordinator', () 
     now: () => 10,
   });
 
-  assert.equal(fixture.calls.recovered, 1);
+  assert.equal(fixture.calls.recoveredSemantic, 1);
+  assert.equal(fixture.calls.genericRecovery, 0);
   assert.equal(wakes, 1);
 });
 
@@ -122,9 +151,15 @@ test('explicit rebuild creates isolated generation and enqueues every canonical 
   const result = index.startRebuild();
 
   assert.equal(result.ok, true);
-  assert.deepEqual(fixture.calls.created, [{
-    id: 'gen-new', model: 'embeddinggemma', sourceVersion: 7, status: 'building', createdAt: 20,
-  }]);
+  assert.equal(fixture.calls.manifests.length, 1);
+  assert.deepEqual(fixture.calls.manifests[0], {
+    id: 'gen-new',
+    model: 'embeddinggemma',
+    sourceVersion: 7,
+    createdAt: 20,
+    jobs: fixture.calls.manifests[0].jobs,
+  });
+  assert.deepEqual(fixture.calls.manifests[0].jobs.map(({ saveId }) => saveId), ['save-a', 'save-b']);
   assert.equal(fixture.calls.enqueued.length, 2);
   assert.deepEqual(fixture.calls.enqueued.map((job) => job.kind), ['rebuild', 'rebuild']);
   assert.deepEqual(new Set(fixture.calls.enqueued.map((job) => job.generationId)), new Set(['gen-new']));
@@ -247,9 +282,23 @@ test('pause, resume, cancel, retry, dismiss, status, and queue delegate durably'
   assert.deepEqual(index.retryFailed(['failed-1']), { ok: true, count: 1 });
   assert.deepEqual(index.dismissFailed(['failed-2']), { ok: true, count: 1 });
   assert.equal(index.queue().length, 2);
+  const allSavesBeforeStatus = fixture.calls.allSaves;
   const status = index.status();
   assert.equal(status.building_generation_id, fixture.state.building_generation_id);
   assert.equal(status.searchReady, true);
+  assert.equal(status.active_model, 'embeddinggemma');
+  assert.equal(status.indexed, 2);
+  assert.equal(fixture.calls.allSaves, allSavesBeforeStatus);
+
+  const changedModelIndex = createSemanticIndex({
+    repository: fixture.repository,
+    ollama: { model: 'nomic-embed-text', health: async () => ({ ok: true }), embed: async () => [1] },
+    now: () => 50,
+  });
+  const changedModelStatus = changedModelIndex.status();
+  assert.equal(changedModelStatus.searchReady, false);
+  assert.equal(changedModelStatus.active_model, 'embeddinggemma');
+  assert.equal(fixture.calls.allSaves, allSavesBeforeStatus);
   assert.deepEqual(index.cancelRebuild(), { ok: true });
   assert.equal(fixture.state.active_generation_id, 'gen-old');
   assert.equal(fixture.state.building_generation_id, null);

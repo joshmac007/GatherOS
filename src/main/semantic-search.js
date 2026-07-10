@@ -172,6 +172,9 @@ function createSemanticSearch({ repository, ollama } = {}) {
     const cap = Math.max(1, Math.min(Number(limit) || 24, 60));
     const identity = activeIdentity();
     if (!identity.ok) return paletteFallback(saveId, cap, identity.reason);
+    if (identity.model !== ollama.model) {
+      return paletteFallback(saveId, cap, 'active_model_unavailable');
+    }
 
     const anchor = repository.getSemanticVector(saveId);
     if (
