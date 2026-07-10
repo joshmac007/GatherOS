@@ -1,7 +1,5 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 
 async function helper() { return import('../extension/catch-up-import.mjs'); }
 
@@ -44,22 +42,67 @@ test('new resets known streak', async () => {
   });
 });
 
-test('ordered page statuses stop at boundary', async () => {
-  const { classifyCatchUpPage } = await helper();
-  assert.deepEqual(classifyCatchUpPage([{ tweetId: 'a' }, { tweetId: 'b' }], ['new', 'known-active']), [
-    { entry: { tweetId: 'a' }, status: 'new' },
-    { entry: { tweetId: 'b' }, status: 'known-active' },
-  ]);
+test('ordered processor saves before resetting streak and stops at boundary', async () => {
+  const { processCatchUpEntries } = await helper();
+  const state = { knownStreak: 1, processed: new Set() };
+  const events = [];
+  const result = await processCatchUpEntries({
+    state,
+    entries: [{ tweetId: 'new' }, { tweetId: 'known-1' }, { tweetId: 'known-2' }, { tweetId: 'older' }],
+    statuses: ['new', 'known-active', 'known-dismissed', 'new'],
+    save: async (entry) => { events.push(`save:${entry.tweetId}:streak:${state.knownStreak}`); },
+  });
+  assert.deepEqual(events, ['save:new:streak:1']);
+  assert.deepEqual(result, { boundaryReached: true, processedCount: 3 });
+  assert.equal(state.knownStreak, 2);
+  assert.deepEqual([...state.processed], ['new', 'known-1', 'known-2']);
 });
 
-test('API fallback preserves catch-up mode for scroll import', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
-  const fallbackCalls = source.match(/runXScrollImport\(limit(?:, mode)?\)/g) || [];
-  assert.equal(fallbackCalls.length, 4);
-  assert.deepEqual(new Set(fallbackCalls), new Set(['runXScrollImport(limit, mode)']));
+test('ordered processor stops on save failure before later statuses', async () => {
+  const { processCatchUpEntries } = await helper();
+  const state = { knownStreak: 1, processed: new Set() };
+  await assert.rejects(processCatchUpEntries({
+    state,
+    entries: [{ tweetId: 'new' }, { tweetId: 'later' }],
+    statuses: ['new', 'known-active'],
+    save: async () => { throw new Error('save rejected'); },
+  }), /save rejected/);
+  assert.equal(state.knownStreak, 1);
+  assert.deepEqual([...state.processed], ['new']);
 });
 
-test('catch-up does not mark entries beyond its boundary as seen', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
-  assert.match(source, /if \(mode !== 'catch-up'\) rememberImportEntries\(state, entries\);/);
+test('ordered processor reports pagination page ended before boundary', async () => {
+  const { processCatchUpEntries } = await helper();
+  const state = { knownStreak: 0, processed: new Set() };
+  const result = await processCatchUpEntries({
+    state,
+    entries: [{ tweetId: 'new' }, { tweetId: 'known' }],
+    statuses: ['new', 'known-active'],
+    save: async () => {},
+  });
+  assert.deepEqual(result, { boundaryReached: false, processedCount: 2 });
+  assert.equal(state.knownStreak, 1);
+});
+
+test('catch-up summary distinguishes boundary, bottom, imported, and error', async () => {
+  const { catchUpSummary } = await helper();
+  assert.equal(catchUpSummary({ imported: 0, boundaryReached: true }), 'Already caught up.');
+  assert.equal(catchUpSummary({ imported: 0 }), 'No new bookmarks to import.');
+  assert.equal(catchUpSummary({ imported: 2 }), 'Imported 2 bookmarks from X.');
+  assert.equal(catchUpSummary({ imported: 1, error: new Error('x') }), 'Bookmark import stopped — imported 1 so far.');
+});
+
+test('preflight returns no-boundary without starting when history is empty', async () => {
+  const { catchUpPreflightResult } = await helper();
+  assert.deepEqual(catchUpPreflightResult({ ok: true, hasKnownHistory: false, statuses: [] }), {
+    ok: false, noBoundary: true,
+  });
+  assert.equal(catchUpPreflightResult({ ok: true, hasKnownHistory: true, statuses: [] }), null);
+});
+
+test('fixed and all modes force saves while catch-up preserves tombstones', async () => {
+  const { importSaveOptions } = await helper();
+  assert.deepEqual(importSaveOptions('fixed'), { force: true });
+  assert.deepEqual(importSaveOptions('all'), { force: true });
+  assert.deepEqual(importSaveOptions('catch-up'), { force: false });
 });

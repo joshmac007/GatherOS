@@ -1596,15 +1596,20 @@ function sourceKeyFromUrl(url) {
 function classifyXBookmarkUrls(tweetUrls) {
   if (!Array.isArray(tweetUrls)) throw new TypeError('tweetUrls must be an array');
   if (tweetUrls.length > 100) throw new RangeError('tweetUrls batch too large');
+  if (tweetUrls.some((url) => typeof url !== 'string')) throw new TypeError('tweetUrls entries must be strings');
 
   const database = getDatabase();
-  const keys = tweetUrls.map((url) => tweetKeyFromUrl(url));
+  const keys = tweetUrls.map((url) => {
+    const key = sourceKeyFromUrl(url);
+    return key && key.startsWith('tw:') ? key : null;
+  });
   const active = new Set();
   const dismissed = new Set();
   for (const row of database.prepare(
     "SELECT source_url FROM saves WHERE deleted_at IS NULL AND source_url IS NOT NULL AND source != 'instagram'",
   ).all()) {
-    const key = tweetKeyFromUrl(row.source_url);
+    const sourceKey = sourceKeyFromUrl(row.source_url);
+    const key = sourceKey && sourceKey.startsWith('tw:') ? sourceKey : null;
     if (key) active.add(key);
   }
   for (const row of database.prepare(

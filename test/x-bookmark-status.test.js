@@ -39,6 +39,7 @@ test('classifyXBookmarkUrls returns ordered active, dismissed, and new statuses'
 }));
 
 test('classifyXBookmarkUrls reports no boundary on empty history and invalid URLs as new', withTempDb((db) => {
+  assert.deepEqual(db.classifyXBookmarkUrls([]), { hasKnownHistory: false, statuses: [] });
   assert.deepEqual(db.classifyXBookmarkUrls(['https://example.com/nope', 'not a url']), {
     hasKnownHistory: false,
     statuses: ['new', 'new'],
@@ -48,6 +49,7 @@ test('classifyXBookmarkUrls reports no boundary on empty history and invalid URL
 test('classifyXBookmarkUrls rejects non-array and batches over 100', withTempDb((db) => {
   assert.throws(() => db.classifyXBookmarkUrls(null), /tweetUrls must be an array/);
   assert.throws(() => db.classifyXBookmarkUrls(Array.from({ length: 101 }, () => 'https://x.com/a/status/1')), /too large/);
+  assert.throws(() => db.classifyXBookmarkUrls(['https://x.com/a/status/1', null]), /strings/);
 }));
 
 test('x-bookmark-status HTTP handler authenticates and returns exact contract', async () => {
@@ -76,6 +78,11 @@ test('x-bookmark-status HTTP handler authenticates and returns exact contract', 
     assert.deepEqual(response.body, { ok: true, hasKnownHistory: false, statuses: ['new'] });
     const bad = await invoke({ 'x-gatheros-token': 'bad' }, {});
     assert.equal(bad.status, 401);
+    const invalidElement = await invoke(
+      { 'x-gatheros-token': token, origin: 'chrome-extension://test' },
+      { tweetUrls: ['https://x.com/a/status/1', 2] },
+    );
+    assert.equal(invalidElement.status, 400);
   } finally {
     db.closeDatabase();
     fs.rmSync(userData, { recursive: true, force: true });
