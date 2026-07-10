@@ -1,4 +1,5 @@
 const { pathToFileURL } = require('node:url');
+const path = require('node:path');
 
 function assertDuration(duration) {
   if (!Number.isFinite(duration) || duration <= 0) {
@@ -23,6 +24,17 @@ function buildFrameTimestamps(duration) {
   return Array.from({ length: count }, (_, index) => (
     Number((((index + 1) * duration) / (count + 1)).toFixed(6))
   ));
+}
+
+function boundedFrameDimensions(width, height, { maxWidth = 960, maxHeight = 540 } = {}) {
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new Error('Video frame dimensions must be positive finite numbers');
+  }
+  const scale = Math.min(1, maxWidth / width, maxHeight / height);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
 }
 
 function jpegDataUrlToBuffer(dataUrl) {
@@ -75,16 +87,19 @@ function metadataScript() {
   }))()`;
 }
 
-function captureScript(timestamp, quality) {
+function captureScript(timestamp, quality, maxWidth, maxHeight) {
   return `(() => new Promise((resolve, reject) => {
     const video = document.querySelector('video');
     if (!video) { reject(new Error('Video element unavailable')); return; }
     const requestedTime = ${JSON.stringify(timestamp)};
     const draw = () => {
       try {
+        const maxWidth = ${JSON.stringify(maxWidth)};
+        const maxHeight = ${JSON.stringify(maxHeight)};
+        const scale = Math.min(1, maxWidth / video.videoWidth, maxHeight / video.videoHeight);
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
         if (!canvas.width || !canvas.height) throw new Error('Video frame dimensions unavailable');
         canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
         resolve(canvas.toDataURL('image/jpeg', ${JSON.stringify(quality)}));
@@ -101,7 +116,12 @@ function captureScript(timestamp, quality) {
   }))()`;
 }
 
-function createElectronBrowserWindowAdapter({ BrowserWindow, jpegQuality = 0.82 } = {}) {
+function createElectronBrowserWindowAdapter({
+  BrowserWindow,
+  jpegQuality = 0.82,
+  maxWidth = 960,
+  maxHeight = 540,
+} = {}) {
   if (typeof BrowserWindow !== 'function') {
     throw new TypeError('Electron BrowserWindow constructor is required');
   }
@@ -119,13 +139,24 @@ function createElectronBrowserWindowAdapter({ BrowserWindow, jpegQuality = 0.82 
         },
       });
       try {
-        await window.loadURL(pathToFileURL(videoPath).href);
+        await window.loadURL(pathToFileURL(path.join(__dirname, 'video-frame-extractor.html')).href);
+        const videoUrl = pathToFileURL(videoPath).href;
+        await window.webContents.executeJavaScript(`(() => {
+          const video = document.querySelector('video');
+          if (!video) throw new Error('Video element unavailable');
+          video.src = ${JSON.stringify(videoUrl)};
+          video.load();
+          return true;
+        })()`, true);
         const duration = Number(await window.webContents.executeJavaScript(metadataScript(), true));
         assertDuration(duration);
         return {
           duration,
           captureFrame(timestamp) {
-            return window.webContents.executeJavaScript(captureScript(timestamp, jpegQuality), true);
+            return window.webContents.executeJavaScript(
+              captureScript(timestamp, jpegQuality, maxWidth, maxHeight),
+              true,
+            );
           },
           async close() {
             if (!window.isDestroyed()) window.destroy();
@@ -147,6 +178,7 @@ function createDefaultVideoFrameExtractor() {
 }
 
 module.exports = {
+  boundedFrameDimensions,
   buildFrameTimestamps,
   createDefaultVideoFrameExtractor,
   createElectronBrowserWindowAdapter,

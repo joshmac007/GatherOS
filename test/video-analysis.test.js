@@ -11,6 +11,8 @@ const {
   buildVideoAnalysisFingerprint,
   cleanupDerivedVideoCache,
   createVideoAnalysisService,
+  resolveDerivedCacheDirectory,
+  resolveDerivedCachePath,
   validateVideoTagSuggestions,
 } = require('../src/main/video-analysis');
 
@@ -79,11 +81,9 @@ test('validator keeps unique high-confidence visual tags and filters unsafe sugg
       { name: 'woodworking', confidence: 'medium', evidence: ['visual'] },
       { name: 'existing tag', confidence: 'high', evidence: ['visual'] },
       { name: 'text only', confidence: 'high', evidence: ['post_context'] },
-      { name: 'video', confidence: 'high', evidence: ['visual'] },
-      { name: 'conflicted subject', confidence: 'high', evidence: ['visual', 'post_context'], conflict: true },
-      { name: 'warning conflict', confidence: 'high', evidence: ['visual', 'conflict'] },
       { name: 'cedar privacy wall', confidence: 'high', evidence: ['visual'] },
     ],
+    warnings: [],
   }, { acceptedTags: ['Existing Tag'] });
 
   assert.deepEqual(suggestions, [
@@ -91,6 +91,68 @@ test('validator keeps unique high-confidence visual tags and filters unsafe sugg
     { name: 'cedar privacy wall', confidence: 'high', evidence: ['visual'] },
   ]);
   assert.equal(suggestions.every((suggestion) => !('tagMutation' in suggestion)), true);
+});
+
+test('validator filters generic, conflicting, reserved, punctuation, and control tag names', () => {
+  const suggestions = validateVideoTagSuggestions({
+    tags: [
+      { name: 'video', confidence: 'high', evidence: ['visual'] },
+      { name: 'conflicted subject', confidence: 'high', evidence: ['visual'], conflict: true },
+      { name: '__proto__', confidence: 'high', evidence: ['visual'] },
+      { name: 'constructor', confidence: 'high', evidence: ['visual'] },
+      { name: '!!!', confidence: 'high', evidence: ['visual'] },
+      { name: 'control\u0000tag', confidence: 'high', evidence: ['visual'] },
+    ],
+    warnings: [],
+  });
+  assert.deepEqual(suggestions, []);
+});
+
+test('strict validator rejects malformed typed output with retryable inspectable errors', () => {
+  const invalid = [
+    [null, 'top_level'],
+    [[], 'top_level'],
+    [{ tags: [], warnings: 'none' }, 'warnings'],
+    [{ tags: 'none', warnings: [] }, 'tags'],
+    [{ tags: Array(7).fill({ name: 'cedar wall', confidence: 'high', evidence: ['visual'] }), warnings: [] }, 'tags'],
+    [{ tags: [{ name: 'cedar wall', confidence: 'high', evidence: ['visual', 'filesystem'] }], warnings: [] }, 'evidence'],
+    [{ tags: [{ name: 42, confidence: 'high', evidence: ['visual'] }], warnings: [] }, 'name'],
+  ];
+  for (const [value, field] of invalid) {
+    assert.throws(() => validateVideoTagSuggestions(value), (error) => {
+      assert.equal(error.code, 'invalid_video_suggestions');
+      assert.equal(error.retryable, true);
+      assert.equal(error.details.field, field);
+      assert.equal(typeof error.details.reason, 'string');
+      return true;
+    });
+  }
+});
+
+test('validator returns at most six valid normalized suggestions', () => {
+  const result = validateVideoTagSuggestions({
+    tags: [
+      'cedar wall', 'patio build', 'outdoor kitchen', 'deck framing', 'privacy screen', 'stone pavers',
+    ].map((name) => ({ name, confidence: 'high', evidence: ['visual'] })),
+    warnings: [],
+  });
+  assert.equal(result.length, 6);
+});
+
+test('derived cache paths remain below root for traversal and Unicode save ids', () => {
+  const root = path.resolve('/tmp/gatherlocal-derived-root');
+  const ids = ['.', '..', 'nested/save', 'caf\u00e9', 'cafe\u0301'];
+  const directories = ids.map((saveId) => resolveDerivedCacheDirectory(root, saveId));
+  for (const directory of directories) {
+    assert.equal(path.dirname(directory), root);
+    assert.notEqual(path.basename(directory), '.');
+    assert.notEqual(path.basename(directory), '..');
+  }
+  assert.equal(new Set(directories).size, ids.length);
+  const artifact = resolveDerivedCachePath(root, '..', 'a'.repeat(64));
+  assert.equal(path.dirname(path.dirname(artifact)), root);
+  assert.equal(path.basename(artifact), `${'a'.repeat(64)}.jpg`);
+  assert.throws(() => resolveDerivedCachePath(root, 'safe', '../escape'), /fingerprint/i);
 });
 
 test('prepare skips unchanged completed fingerprint without provider work', async () => {
@@ -169,9 +231,9 @@ test('frames compose one cached contact sheet and make exactly one Codex call', 
           assert.deepEqual(input.timestamps, [5, 10, 15, 20, 25, 27]);
           assert.equal(input.evidenceMode, 'frames');
           assert.deepEqual(input.context.acceptedTags, ['woodworking']);
-          assert.equal(options.imagePath, path.join(directory, 'video-save', `${expectedFingerprint}.jpg`));
+          assert.equal(options.imagePath, resolveDerivedCachePath(directory, 'video-save', expectedFingerprint));
           assert.equal(fs.existsSync(options.imagePath), true);
-          return { tags: [{ name: 'Patio renovation', confidence: 'high', evidence: ['visual'] }] };
+          return { tags: [{ name: 'Patio renovation', confidence: 'high', evidence: ['visual'] }], warnings: [] };
         },
       },
       derivedDir: directory,
@@ -190,7 +252,7 @@ test('frames compose one cached contact sheet and make exactly one Codex call', 
 
     assert.equal(result.status, 'completed');
     assert.equal(providerCalls, 1);
-    assert.equal(result.contactSheetPath, path.join(directory, 'video-save', `${result.fingerprint}.jpg`));
+    assert.equal(result.contactSheetPath, resolveDerivedCachePath(directory, 'video-save', result.fingerprint));
     assert.deepEqual(completions, [{
       id: 'job-a',
       fingerprint: expectedFingerprint,
@@ -221,7 +283,7 @@ test('frame failure uses poster once and marks poster evidence', async () => {
           providerCalls += 1;
           assert.equal(input.evidenceMode, 'poster');
           assert.equal(options.imagePath, posterPath);
-          return { tags: [{ name: 'outdoor living', confidence: 'high', evidence: ['visual'] }] };
+          return { tags: [{ name: 'outdoor living', confidence: 'high', evidence: ['visual'] }], warnings: [] };
         },
       },
       derivedDir: directory,
@@ -316,25 +378,100 @@ test('run rejects jobs whose media identity or source context changed before pro
 test('derived cache cleanup removes only one save superseded JPEGs', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-video-cache-'));
   try {
-    const targetDirectory = path.join(directory, 'save-a');
-    const otherDirectory = path.join(directory, 'save-b');
+    const targetDirectory = resolveDerivedCacheDirectory(directory, 'save-a');
+    const otherDirectory = resolveDerivedCacheDirectory(directory, 'save-b');
     fs.mkdirSync(targetDirectory);
     fs.mkdirSync(otherDirectory);
-    fs.writeFileSync(path.join(targetDirectory, 'keep.jpg'), 'keep');
-    fs.writeFileSync(path.join(targetDirectory, 'old.jpg'), 'old');
+    const keepFingerprint = 'a'.repeat(64);
+    const oldFingerprint = 'b'.repeat(64);
+    fs.writeFileSync(path.join(targetDirectory, `${keepFingerprint}.jpg`), 'keep');
+    fs.writeFileSync(path.join(targetDirectory, `${oldFingerprint}.jpg`), 'old');
     fs.writeFileSync(path.join(targetDirectory, 'unrelated.txt'), 'unrelated');
     fs.writeFileSync(path.join(otherDirectory, 'other.jpg'), 'other');
 
     const removed = await cleanupDerivedVideoCache({
       directory,
       saveId: 'save-a',
-      keepFingerprints: ['keep'],
+      keepFingerprints: [keepFingerprint],
     });
 
-    assert.deepEqual(removed, [path.join(targetDirectory, 'old.jpg')]);
-    assert.equal(fs.existsSync(path.join(targetDirectory, 'keep.jpg')), true);
+    assert.deepEqual(removed, [path.join(targetDirectory, `${oldFingerprint}.jpg`)]);
+    assert.equal(fs.existsSync(path.join(targetDirectory, `${keepFingerprint}.jpg`)), true);
     assert.equal(fs.existsSync(path.join(targetDirectory, 'unrelated.txt')), true);
     assert.equal(fs.existsSync(path.join(otherDirectory, 'other.jpg')), true);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('corrupt cached contact sheet is rebuilt atomically before Codex sees it', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-video-corrupt-cache-'));
+  try {
+    const save = saveFixture();
+    const fingerprint = fingerprintForSave(save);
+    const cachePath = resolveDerivedCachePath(directory, save.id, fingerprint);
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    fs.writeFileSync(cachePath, 'corrupt jpeg');
+    const frame = await sharp({
+      create: { width: 48, height: 27, channels: 3, background: '#338855' },
+    }).jpeg().toBuffer();
+    let extractions = 0;
+    const service = createVideoAnalysisService({
+      repository: { completeVideoAnalysis() { return { ok: true }; } },
+      frameExtractor: {
+        async extract() {
+          extractions += 1;
+          return { duration: 6, timestamps: [1, 2, 3, 4, 5, 5.5], frames: Array(6).fill(frame) };
+        },
+      },
+      codex: {
+        async generateVideoTagSuggestions(input, { imagePath }) {
+          const metadata = await sharp(imagePath).metadata();
+          assert.equal(metadata.format, 'jpeg');
+          return { tags: [], warnings: [] };
+        },
+      },
+      derivedDir: directory,
+    });
+
+    const result = await service.run({
+      job: { id: 'corrupt-cache-job', fingerprint, prompt_version: 1 },
+      save,
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.equal(extractions, 1);
+    assert.equal((await sharp(cachePath).metadata()).format, 'jpeg');
+    assert.deepEqual(fs.readdirSync(path.dirname(cachePath)).filter((name) => name.includes('.tmp-')), []);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('malformed provider output remains retryable and never persists completion', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-video-invalid-output-'));
+  const posterPath = path.join(directory, 'poster.jpg');
+  await sharp({ create: { width: 20, height: 20, channels: 3, background: '#333333' } }).jpeg().toFile(posterPath);
+  try {
+    let completions = 0;
+    const save = saveFixture({ thumb_path: posterPath });
+    const service = createVideoAnalysisService({
+      repository: { completeVideoAnalysis() { completions += 1; } },
+      frameExtractor: { async extract() { throw new Error('poster fallback'); } },
+      codex: { async generateVideoTagSuggestions() { return { tags: 'bad', warnings: [] }; } },
+      derivedDir: directory,
+    });
+
+    await assert.rejects(service.run({
+      job: { id: 'invalid-output-job', fingerprint: fingerprintForSave(save), prompt_version: 1 },
+      save,
+    }), (error) => {
+      assert.equal(error.code, 'invalid_video_suggestions');
+      assert.equal(error.retryable, true);
+      assert.deepEqual(error.details, { field: 'tags', reason: 'must_be_array' });
+      return true;
+    });
+    assert.equal(completions, 0);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

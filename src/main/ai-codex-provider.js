@@ -295,12 +295,15 @@ function createCodexProvider(config, { codexJson: codexJsonImpl = codexJson } = 
         '  "warnings": []\n' +
         '}\n\n' +
         'Rules:\n' +
+        '- Return at most 6 tags.\n' +
         '- Return only high-confidence tags supported by visual evidence.\n' +
-        '- Include "visual" in evidence for every tag.\n' +
+        '- Evidence values may only be "visual" or "post_context".\n' +
+        '- Include "visual" in evidence for every returned tag.\n' +
         '- Use post context only when it agrees with the visual evidence.\n' +
         '- Mark conflict true and omit the tag when text and visual evidence conflict.\n' +
         '- Never infer a tag from text alone.\n' +
-        '- Do not repeat accepted tags.\n' +
+        '- Do not repeat accepted tags listed in Inputs.context.acceptedTags.\n' +
+        '- Use plain words or hyphenated phrases; never return internal names, control characters, or punctuation-only names.\n' +
         '- Avoid generic tags such as video, clip, bookmark, image, design, or content.\n\n' +
         `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
       );

@@ -104,8 +104,7 @@ test('Codex provider exposes one-image video suggestion contract', async () => {
     duration: 30,
     timestamps: [5, 10, 15],
     evidenceMode: 'frames',
-    context: { title: 'Patio build' },
-    acceptedTags: ['woodworking'],
+    context: { title: 'Patio build', acceptedTags: ['woodworking'] },
   }, { imagePath: '/tmp/contact-sheet.jpg' });
 
   assert.equal(calls.length, 1);
@@ -147,5 +146,39 @@ test('dedicated video facade always constructs Codex provider, never active loca
   assert.equal(first.provider, 'codex');
   assert.equal(second.provider, 'codex');
   assert.equal(codexCreations, 1);
+  assert.equal(localCalls, 0);
+});
+
+test('cached Codex video facade exposes session status independent of active local provider', async () => {
+  const { createCodexVideoFacade } = require('../src/main/openai');
+  let creations = 0;
+  const facade = createCodexVideoFacade({
+    readConfig: () => ({ provider: 'local', codex: { bin: 'codex-subscription' } }),
+    createCodex: () => {
+      creations += 1;
+      return {
+        hasSession: () => true,
+        async generateVideoTagSuggestions() { return { tags: [], warnings: [] }; },
+      };
+    },
+  });
+
+  assert.equal(facade.hasCodexSession(), true);
+  assert.deepEqual(await facade.generateVideoTagSuggestions({}, { imagePath: '/tmp/poster.jpg' }), {
+    tags: [], warnings: [],
+  });
+  assert.equal(creations, 1);
+});
+
+test('cached Codex video facade reports missing Codex session without consulting local provider', () => {
+  const { createCodexVideoFacade } = require('../src/main/openai');
+  let localCalls = 0;
+  const facade = createCodexVideoFacade({
+    readConfig: () => ({ provider: 'local', codex: { bin: 'missing-codex' } }),
+    createCodex: () => ({ hasSession: () => false }),
+    createLocal: () => { localCalls += 1; return { hasSession: () => true }; },
+  });
+
+  assert.equal(facade.hasCodexSession(), false);
   assert.equal(localCalls, 0);
 });

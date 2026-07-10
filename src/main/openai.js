@@ -13,18 +13,46 @@ function createProvider() {
   return createCodexProvider(config.codex);
 }
 
-function createVideoTagSuggestionGenerator({
+function createCodexVideoFacade({
   readConfig = readAiConfig,
   createCodex = createCodexProvider,
 } = {}) {
   let codexProvider = null;
-  return async function generateVideoTagSuggestions(input, options = {}) {
+  function getCodexProvider() {
     if (!codexProvider) codexProvider = createCodex(readConfig().codex);
-    return codexProvider.generateVideoTagSuggestions(input, options);
+    return codexProvider;
+  }
+  return {
+    hasCodexSession() {
+      const activeCodex = getCodexProvider();
+      return typeof activeCodex?.hasSession === 'function' && activeCodex.hasSession();
+    },
+    async generateVideoTagSuggestions(input, options = {}) {
+      const activeCodex = getCodexProvider();
+      if (typeof activeCodex?.generateVideoTagSuggestions !== 'function') {
+        const error = new Error('Codex video suggestions are unavailable');
+        error.code = 'codex_video_unavailable';
+        throw error;
+      }
+      return activeCodex.generateVideoTagSuggestions(input, options);
+    },
   };
 }
 
-const generateVideoTagSuggestions = createVideoTagSuggestionGenerator();
+function createVideoTagSuggestionGenerator(options = {}) {
+  const facade = createCodexVideoFacade(options);
+  return facade.generateVideoTagSuggestions.bind(facade);
+}
+
+const codexVideoFacade = createCodexVideoFacade();
+
+function hasCodexSession() {
+  return codexVideoFacade.hasCodexSession();
+}
+
+function generateVideoTagSuggestions(input, options = {}) {
+  return codexVideoFacade.generateVideoTagSuggestions(input, options);
+}
 
 let provider = null;
 
@@ -83,6 +111,7 @@ async function getUsage() {
 
 module.exports = {
   hasSession,
+  hasCodexSession,
   autoTagImage,
   analyzeImage,
   generateImagePrompt,
@@ -90,6 +119,7 @@ module.exports = {
   generateSmartCategoryMemberships,
   generateSmartCategoryTaxonomyRefresh,
   generateVideoTagSuggestions,
+  createCodexVideoFacade,
   createVideoTagSuggestionGenerator,
   generateImage,
   createOllamaEmbedClient,
