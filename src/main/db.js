@@ -725,9 +725,25 @@ const MIGRATIONS = [
   // version already advanced user_version but did not yet have retry flags,
   // remembered supersession state, or a database-level single-build guard.
   (database) => {
-    addColumnIfMissing(database, 'semantic_index_jobs', 'retryable', 'INTEGER NOT NULL DEFAULT 0');
-    addColumnIfMissing(database, 'video_analysis_jobs', 'retryable', 'INTEGER NOT NULL DEFAULT 0');
-    addColumnIfMissing(database, 'video_analysis_jobs', 'superseded_from_state', 'TEXT');
+    addColumnIfMissing(
+      database,
+      'semantic_index_jobs',
+      'retryable',
+      'INTEGER NOT NULL DEFAULT 0 CHECK (retryable IN (0, 1))',
+    );
+    addColumnIfMissing(
+      database,
+      'video_analysis_jobs',
+      'retryable',
+      'INTEGER NOT NULL DEFAULT 0 CHECK (retryable IN (0, 1))',
+    );
+    addColumnIfMissing(
+      database,
+      'video_analysis_jobs',
+      'superseded_from_state',
+      `TEXT CHECK (superseded_from_state IS NULL OR superseded_from_state IN
+        ('pending', 'completed', 'failed', 'unavailable'))`,
+    );
 
     const state = database.prepare(`
       SELECT building_generation_id FROM semantic_index_state WHERE id = 1
@@ -746,6 +762,20 @@ const MIGRATIONS = [
     `).get();
 
     if (survivor) {
+      database.prepare(`
+        DELETE FROM semantic_index_jobs
+         WHERE generation_id IN (
+           SELECT id FROM semantic_index_generations
+            WHERE status = 'building' AND id != ?
+         )
+      `).run(survivor.id);
+      database.prepare(`
+        DELETE FROM semantic_vectors
+         WHERE generation_id IN (
+           SELECT id FROM semantic_index_generations
+            WHERE status = 'building' AND id != ?
+         )
+      `).run(survivor.id);
       database.prepare(`
         UPDATE semantic_index_generations
            SET status = 'cancelled',

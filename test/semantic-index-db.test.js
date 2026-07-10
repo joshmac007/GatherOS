@@ -136,10 +136,34 @@ test('compatibility migration upgrades the committed intermediate queue schema',
     );
 
     INSERT INTO semantic_index_generations
-      (id, model, source_version, status, created_at)
+      (id, model, dimension, source_version, status, created_at)
     VALUES
-      ('gen-older-build', 'embeddinggemma', 1, 'building', 10),
-      ('gen-current-build', 'embeddinggemma', 1, 'building', 20);
+      ('gen-older-build', 'embeddinggemma', 2, 1, 'building', 10),
+      ('gen-current-build', 'embeddinggemma', 2, 1, 'building', 20);
+    INSERT INTO saves (id, file_path, thumb_path, created_at)
+    VALUES
+      ('save-old-partial', '/tmp/old', '/tmp/old-thumb', 1),
+      ('save-current-partial', '/tmp/current', '/tmp/current-thumb', 2);
+    INSERT INTO semantic_index_jobs
+      (id, generation_id, save_id, kind, source_hash, state,
+       available_at, created_at, updated_at)
+    VALUES
+      ('job-old-partial', 'gen-older-build', 'save-old-partial', 'rebuild',
+       'old-hash', 'completed', 10, 10, 10),
+      ('job-current-partial', 'gen-current-build', 'save-current-partial', 'rebuild',
+       'current-hash', 'completed', 20, 20, 20);
+    INSERT INTO semantic_vectors
+      (generation_id, save_id, model, dimension, source_hash, vector, created_at, updated_at)
+    VALUES
+      ('gen-older-build', 'save-old-partial', 'embeddinggemma', 2,
+       'old-hash', X'0000000000000000', 10, 10),
+      ('gen-current-build', 'save-current-partial', 'embeddinggemma', 2,
+       'current-hash', X'0000000000000000', 20, 20);
+    INSERT INTO video_analysis_jobs
+      (id, save_id, fingerprint, prompt_version, state,
+       available_at, created_at, updated_at)
+    VALUES
+      ('video-compat', 'save-current-partial', 'fp-compat', 1, 'pending', 20, 20, 20);
     UPDATE semantic_index_state
        SET building_generation_id = 'gen-current-build'
      WHERE id = 1;
@@ -164,9 +188,32 @@ test('compatibility migration upgrades the committed intermediate queue schema',
     SELECT status FROM semantic_index_generations WHERE id = 'gen-older-build'
   `).get().status, 'cancelled');
   assert.equal(db.getDatabase().prepare(`
+    SELECT COUNT(*) AS n FROM semantic_index_jobs WHERE generation_id = 'gen-older-build'
+  `).get().n, 0);
+  assert.equal(db.getDatabase().prepare(`
+    SELECT COUNT(*) AS n FROM semantic_vectors WHERE generation_id = 'gen-older-build'
+  `).get().n, 0);
+  assert.equal(db.getDatabase().prepare(`
+    SELECT COUNT(*) AS n FROM semantic_index_jobs WHERE generation_id = 'gen-current-build'
+  `).get().n, 1);
+  assert.equal(db.getDatabase().prepare(`
+    SELECT COUNT(*) AS n FROM semantic_vectors WHERE generation_id = 'gen-current-build'
+  `).get().n, 1);
+  assert.equal(db.getDatabase().prepare(`
     SELECT COUNT(*) AS n FROM sqlite_master
      WHERE type = 'index' AND name = 'idx_semantic_generations_one_building'
   `).get().n, 1);
+  assert.throws(() => db.getDatabase().prepare(`
+    UPDATE semantic_index_jobs SET retryable = 2 WHERE id = 'job-current-partial'
+  `).run(), /CHECK constraint failed/);
+  assert.throws(() => db.getDatabase().prepare(`
+    UPDATE video_analysis_jobs SET retryable = -1 WHERE id = 'video-compat'
+  `).run(), /CHECK constraint failed/);
+  assert.throws(() => db.getDatabase().prepare(`
+    UPDATE video_analysis_jobs
+       SET superseded_from_state = 'invalid-state'
+     WHERE id = 'video-compat'
+  `).run(), /CHECK constraint failed/);
 }));
 
 test('only one building generation can exist and a second request is rejected', withTempDb((db) => {
