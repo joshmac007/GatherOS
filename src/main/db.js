@@ -1068,6 +1068,37 @@ function sourceKeyFromUrl(url) {
   return tweetKeyFromUrl(url) || igKeyFromUrl(url);
 }
 
+// Classify ordered X bookmark URLs against desktop save/tombstone history.
+// Desktop DB remains boundary source; extension seen-set is intentionally
+// excluded because baseline IDs may never have been saved.
+function classifyXBookmarkUrls(tweetUrls) {
+  if (!Array.isArray(tweetUrls)) throw new TypeError('tweetUrls must be an array');
+  if (tweetUrls.length > 100) throw new RangeError('tweetUrls batch too large');
+
+  const database = getDatabase();
+  const keys = tweetUrls.map((url) => tweetKeyFromUrl(url));
+  const active = new Set();
+  const dismissed = new Set();
+  for (const row of database.prepare(
+    "SELECT source_url FROM saves WHERE deleted_at IS NULL AND source_url IS NOT NULL AND source != 'instagram'",
+  ).all()) {
+    const key = tweetKeyFromUrl(row.source_url);
+    if (key) active.add(key);
+  }
+  for (const row of database.prepare(
+    "SELECT tweet_key FROM dismissed_tweets WHERE tweet_key LIKE 'tw:%'",
+  ).all()) dismissed.add(row.tweet_key);
+
+  const hasKnownHistory = active.size > 0 || dismissed.size > 0;
+  const statuses = keys.map((key) => {
+    if (!key) return 'new';
+    if (dismissed.has(key)) return 'known-dismissed';
+    if (active.has(key)) return 'known-active';
+    return 'new';
+  });
+  return { hasKnownHistory, statuses };
+}
+
 function isTweetDismissed(key) {
   if (!key) return false;
   return !!getDatabase()
@@ -1971,6 +2002,7 @@ module.exports = {
   tweetKeyFromUrl,
   igKeyFromUrl,
   sourceKeyFromUrl,
+  classifyXBookmarkUrls,
   isTweetDismissed,
   dismissTweet,
   undismissTweet,

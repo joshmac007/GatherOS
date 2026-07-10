@@ -1,3 +1,15 @@
+import {
+  claimImportItem,
+  importLimitReached,
+  importProcessedCount,
+  rememberImportEntries,
+} from './import-limit.mjs';
+import {
+  isAcceptedSaveResponse,
+  isNewImportedSaveResponse,
+} from './save-response.mjs';
+import { applyCatchUpStatus } from './catch-up-import.mjs';
+
 // Service worker for the GatherOS browser extension.
 //
 // v1 capture surface: right-click any image → "Save to GatherOS".
@@ -247,11 +259,13 @@ function handleClickBookmark(msg, sendResponse) {
     tweetMeta: msg.tweetMeta,
     tags: msg.tags,
   }).then(async (response) => {
-    const ok = !!(response && response.ok);
+    const ok = isAcceptedSaveResponse(response);
     sendResponse({
       ok,
       duplicate: !!(response && response.duplicate),
-      error: response?.error || null,
+      error: response?.error
+        || (response?.syncDisabled ? 'Bookmark sync is disabled in GatherLocal.' : null)
+        || (response?.skipped ? 'Save skipped.' : null),
     });
     // Mark this tweet as seen so the bookmark-batch flow (cross-
     // device sync) doesn't re-import it later. We do this even on
@@ -357,17 +371,14 @@ async function handleBookmarkBatch(bookmarks) {
   const toImport = bookmarks.filter((b) => b && b.tweetId && !seen.has(b.tweetId));
   for (const b of toImport) {
     try {
-      await syncBookmarkToGather(b);
-      // Add to seen even when the save fails offline — the next
-      // visit will retry naturally because the bookmark will appear
-      // in the response again. Tracking it as "seen" only on
-      // confirmed save would otherwise re-attempt on every poll.
-      seen.add(b.tweetId);
+      const response = await syncBookmarkToGather(b);
+      if (isAcceptedSaveResponse(response)) {
+        seen.add(b.tweetId);
+      } else {
+        console.warn('[gatheros] cross-device bookmark sync rejected:', response?.error || 'save not accepted');
+      }
     } catch (err) {
       console.warn('[gatheros] cross-device bookmark sync failed:', err?.message || err);
-      // Still mark seen — same reasoning as above; an unrecoverable
-      // failure (e.g. content_hash bug) shouldn't loop forever.
-      seen.add(b.tweetId);
     }
   }
   await writeSeenSet(seen);
@@ -444,14 +455,41 @@ async function handleImportBookmarks(msg) {
     return { ok: false, appClosed: true };
   }
 
+  const mode = msg && msg.mode === 'catch-up' ? 'catch-up' : 'fixed';
+  if (mode === 'catch-up') {
+    try {
+      const boundary = await requestXBookmarkStatus([]);
+      if (!boundary || !boundary.ok) {
+        notify('Could not reach GatherOS.');
+        return { ok: false, error: 'Could not reach GatherOS.' };
+      }
+      if (!boundary.hasKnownHistory) return { ok: false, noBoundary: true };
+    } catch {
+      notify('Could not reach GatherOS.');
+      return { ok: false, error: 'Could not reach GatherOS.' };
+    }
+  }
+
   // 0 / missing / non-positive = "all".
   const n = Number(msg && msg.limit);
-  const limit = Number.isFinite(n) && n > 0 ? n : Infinity;
+  const limit = mode === 'catch-up' ? Infinity : (Number.isFinite(n) && n > 0 ? n : Infinity);
 
   // Background import — replay the captured Bookmarks request and follow
   // the cursor, no tab or auto-scroll (mirrors the Instagram path).
-  runXApiImport(limit);
+  runXApiImport(limit, mode);
   return { ok: true };
+}
+
+async function requestXBookmarkStatus(tweetUrls) {
+  const response = await chrome.runtime.sendNativeMessage(HOST_NAME, {
+    type: 'x-bookmark-status',
+    tweetUrls,
+  });
+  if (!response || !response.ok || !Array.isArray(response.statuses)
+    || response.statuses.length !== tweetUrls.length) {
+    throw new Error(response?.error || 'bookmark status failed');
+  }
+  return response;
 }
 
 // Rewrite the Bookmarks request URL's `variables` JSON to page from a
@@ -485,7 +523,7 @@ function extractBottomCursor(json) {
 // following the bottom cursor, importing each bookmark (force = override
 // tombstones) up to `limit`. Uses the stored bearer + a fresh ct0 cookie;
 // no tab, no scroll.
-async function runXApiImport(limit) {
+async function runXApiImport(limit, mode = 'fixed') {
   // Signed-in check first. auth_token is X's real login cookie (ct0 is
   // the CSRF token and can exist for guests), so check it before doing
   // anything — a signed-out user gets a clear message instead of being
@@ -509,7 +547,7 @@ async function runXApiImport(limit) {
   // the visible bookmarks tab, which captures a fresh template so the
   // quiet path works next time.
   if (!template || !template.url || !template.authorization || !csrf) {
-    return runXScrollImport(limit);
+    return runXScrollImport(limit, mode);
   }
 
   const headers = {
@@ -527,15 +565,27 @@ async function runXApiImport(limit) {
   let json;
   try {
     const res = await fetch(template.url, { method: 'GET', credentials: 'include', headers });
-    if (!res.ok) return runXScrollImport(limit);
+    if (!res.ok) return runXScrollImport(limit, mode);
     json = await res.json();
   } catch {
-    return runXScrollImport(limit);
+    return runXScrollImport(limit, mode);
   }
   let entries = pollExtractBookmarkEntries(json);
-  if (entries.length === 0) return runXScrollImport(limit);
+  if (entries.length === 0) return runXScrollImport(limit, mode);
 
-  importState = { active: true, apiMode: true, limit, imported: 0, processed: 0 };
+  const state = {
+    active: true,
+    apiMode: true,
+    limit,
+    imported: 0,
+    processed: new Set(),
+    seenIds: new Set(),
+    mode,
+    knownStreak: 0,
+    boundaryReached: false,
+    error: null,
+  };
+  importState = state;
   notify('Importing bookmarks from X…');
 
   const PAGE_DELAY_MS = 1200;
@@ -544,22 +594,52 @@ async function runXApiImport(limit) {
   let lastCursor = null;
   let pages = 0;
   try {
-    while (importState && importState.active && importState.processed < limit && pages < MAX_PAGES) {
-      for (const b of entries) {
-        if (importState.processed >= limit) break;
-        importState.processed += 1;
+    while (state.active && !importLimitReached(state) && pages < MAX_PAGES) {
+      if (mode !== 'catch-up') rememberImportEntries(state, entries);
+      const statuses = mode === 'catch-up'
+        ? (await requestXBookmarkStatus(entries.map((b) => b && b.tweetUrl || ''))).statuses
+        : null;
+      for (let index = 0; index < entries.length; index += 1) {
+        const b = entries[index];
+        if (mode === 'catch-up') {
+          if (!b || !b.tweetId || state.processed.has(b.tweetId)) continue;
+          state.processed.add(b.tweetId);
+          const decision = applyCatchUpStatus(state, statuses[index]);
+          if (decision.shouldSave) {
+            try {
+              const resp = await syncBookmarkToGather(b, { force: false });
+              if (!isAcceptedSaveResponse(resp)) throw new Error(resp?.error || 'save rejected');
+              if (isNewImportedSaveResponse(resp)) state.imported += 1;
+              state.seenIds.add(b.tweetId);
+            } catch (err) {
+              state.error = err;
+              console.warn('[gatheros] X catch-up save failed:', err?.message || err);
+              break;
+            }
+          }
+          if (decision.shouldStop) { state.boundaryReached = true; break; }
+          continue;
+        }
+        if (!claimImportItem(state, b && b.tweetId)) {
+          if (importLimitReached(state)) break;
+          continue;
+        }
         try {
           const resp = await syncBookmarkToGather(b, { force: true });
-          if (resp && resp.ok && !resp.duplicate && !resp.dismissed) importState.imported += 1;
+          if (isNewImportedSaveResponse(resp)) state.imported += 1;
+          if (isAcceptedSaveResponse(resp)) state.seenIds.add(b.tweetId);
+          else state.seenIds.delete(b.tweetId);
         } catch (err) {
           console.warn('[gatheros] X import save failed:', err?.message || err);
+          state.seenIds.delete(b.tweetId);
         }
       }
+      if (state.error || state.boundaryReached) break;
       pages += 1;
       const next = extractBottomCursor(json);
       // Stop at the bottom: no cursor, an unchanging cursor, an empty
       // page (X pads the tail with cursor-only pages), or limit reached.
-      if (!next || next === lastCursor || entries.length === 0 || importState.processed >= limit) break;
+      if (!next || next === lastCursor || entries.length === 0 || importLimitReached(state)) break;
       lastCursor = next;
       cursor = next;
       await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
@@ -571,14 +651,21 @@ async function runXApiImport(limit) {
       try { json = await res.json(); } catch { break; }
       entries = pollExtractBookmarkEntries(json);
     }
+  } catch (err) {
+    state.error = err;
   } finally {
-    const imported = importState ? importState.imported : 0;
-    importState = null;
+    const imported = state.imported;
+    if (importState === state) importState = null;
     try {
       const { seen } = await readSeenSet();
+      for (const id of state.seenIds) seen.add(id);
       await writeSeenSet(seen, { baseline: true, version: CAPTURE_VERSION });
     } catch { /* ignore */ }
-    notify(imported > 0
+    notify(state.error
+      ? `Bookmark import stopped — imported ${imported} so far.`
+      : (state.boundaryReached && imported === 0)
+        ? 'Already caught up.'
+        : imported > 0
       ? `Imported ${imported} bookmark${imported === 1 ? '' : 's'} from X.`
       : 'No new bookmarks to import.');
   }
@@ -587,7 +674,7 @@ async function runXApiImport(limit) {
 // Reliable fallback: open the bookmarks tab and auto-scroll (the original
 // import). Also re-captures a fresh request template so the quiet API path
 // works on the next run.
-async function runXScrollImport(limit) {
+async function runXScrollImport(limit, mode = 'fixed') {
   let tab;
   try {
     tab = await chrome.tabs.create({ url: 'https://x.com/i/bookmarks', active: true });
@@ -602,6 +689,10 @@ async function runXScrollImport(limit) {
     processed: new Set(),
     imported: 0,
     stagnant: 0,
+    mode,
+    knownStreak: 0,
+    boundaryReached: false,
+    error: null,
     watchdog: setTimeout(() => { endImport('timeout'); }, IMPORT_WATCHDOG_MS),
   };
   scheduleImportStart(tab.id);
@@ -612,7 +703,7 @@ async function runXScrollImport(limit) {
 // times with backoff until the message is received.
 function scheduleImportStart(tabId, attempt = 0) {
   setTimeout(() => {
-    if (!importState || !importState.active || importState.tabId !== tabId) return;
+    if (!importState || !importState.active || importState.scrollPaused || importState.tabId !== tabId) return;
     chrome.tabs.sendMessage(tabId, { type: 'gatheros:start-import' }, () => {
       if (chrome.runtime.lastError && attempt < 6) {
         scheduleImportStart(tabId, attempt + 1);
@@ -621,44 +712,105 @@ function scheduleImportStart(tabId, attempt = 0) {
   }, attempt === 0 ? 2500 : 1000);
 }
 
+function pauseImportScroll(state) {
+  if (!state || state.scrollPaused || state.tabId == null) return;
+  state.scrollPaused = true;
+  chrome.tabs.sendMessage(state.tabId, {
+    type: 'gatheros:pause-import-scroll',
+    processed: importProcessedCount(state),
+  }, () => { void chrome.runtime.lastError; });
+}
+
 async function handleImportBatch(bookmarks) {
+  const state = importState;
+  if (!state || !state.active || state.apiMode) return;
   let foundNew = false;
   let reachedLimit = false;
+  const toSave = [];
+  const resolvedIds = [];
+  let statuses = null;
+  if (state.mode === 'catch-up') {
+    try {
+      statuses = (await requestXBookmarkStatus(bookmarks.map((b) => b && b.tweetUrl || ''))).statuses;
+    } catch (err) {
+      state.error = err;
+      await endImport('error');
+      return;
+    }
+  }
   for (const b of bookmarks) {
     if (!b || !b.tweetId) continue;
-    if (importState.processed.has(b.tweetId)) continue; // counted this run already
-    importState.processed.add(b.tweetId);
+    const index = bookmarks.indexOf(b);
+    if (state.mode === 'catch-up') {
+      if (state.processed.has(b.tweetId)) continue;
+      state.processed.add(b.tweetId);
+      let decision;
+      try { decision = applyCatchUpStatus(state, statuses[index]); }
+      catch (err) { state.error = err; await endImport('error'); return; }
+      if (decision.shouldSave) {
+        foundNew = true;
+        toSave.push(b);
+      }
+      if (decision.shouldStop) {
+        state.boundaryReached = true;
+        reachedLimit = true;
+        pauseImportScroll(state);
+        break;
+      }
+      continue;
+    }
+    if (!claimImportItem(state, b.tweetId)) {
+      if (importLimitReached(state)) {
+        reachedLimit = true;
+        pauseImportScroll(state);
+        break;
+      }
+      continue;
+    }
+    if (importLimitReached(state)) {
+      reachedLimit = true;
+      pauseImportScroll(state);
+    }
     foundNew = true;
+    toSave.push(b);
+    if (reachedLimit) break;
+  }
+  for (const b of toSave) {
     try {
       // force: true → explicit backfill overrides tombstones (re-imports
       // bookmarks the user previously deleted). Count only genuinely new
       // saves — not duplicates, and not dismissed (so the toast is honest).
-      const resp = await syncBookmarkToGather(b, { force: true });
-      if (resp && resp.ok && !resp.duplicate && !resp.dismissed) importState.imported += 1;
+      const resp = await syncBookmarkToGather(b, { force: state.mode !== 'catch-up' });
+      if (state.mode === 'catch-up' && !isAcceptedSaveResponse(resp)) throw new Error(resp?.error || 'save rejected');
+      if (!state.active) return;
+      if (isNewImportedSaveResponse(resp)) state.imported += 1;
+      if (isAcceptedSaveResponse(resp)) resolvedIds.push(b.tweetId);
     } catch (err) {
+      if (state.mode === 'catch-up') state.error = err;
       console.warn('[gatheros] backfill import failed:', err?.message || err);
+      if (state.mode === 'catch-up') break;
     }
-    // Limit counts bookmarks *traversed*, newest-first — "most recent
-    // N" — not just the ones that turned out to be new.
-    if (importState.processed.size >= importState.limit) { reachedLimit = true; break; }
   }
   // Keep the seen-set current so the normal incremental poll doesn't
   // re-handle these later.
-  await markBookmarksSeen(bookmarks.map((b) => b && b.tweetId).filter(Boolean));
+  await markBookmarksSeen(resolvedIds);
+  if (!state.active || importState !== state) return;
 
   // Stream the running count to the tab so the import toast updates live.
-  if (importState.tabId != null) {
-    chrome.tabs.sendMessage(importState.tabId, {
+  if (state.tabId != null) {
+    chrome.tabs.sendMessage(state.tabId, {
       type: 'gatheros:import-progress',
-      imported: importState.imported,
-      processed: importState.processed.size,
+      imported: state.imported,
+      processed: importProcessedCount(state),
     }, () => { void chrome.runtime.lastError; });
   }
 
-  if (foundNew) importState.stagnant = 0;
-  else importState.stagnant += 1;
+  if (foundNew) state.stagnant = 0;
+  else state.stagnant += 1;
 
-  if (reachedLimit || importState.stagnant >= IMPORT_STAGNANT_BATCHES_LIMIT) {
+  if (state.error) {
+    await endImport('error');
+  } else if (reachedLimit || state.stagnant >= IMPORT_STAGNANT_BATCHES_LIMIT) {
     await endImport(reachedLimit ? 'limit' : 'bottom');
   }
 }
@@ -685,9 +837,13 @@ async function endImport(_reason) {
       void chrome.runtime.lastError; // tab may have closed — ignore
     });
   }
-  notify(imported > 0
-    ? `Imported ${imported} bookmark${imported === 1 ? '' : 's'} from X.`
-    : 'No new bookmarks to import.');
+  notify(importState?.error
+    ? `Bookmark import stopped — imported ${imported} so far.`
+    : (importState?.boundaryReached && imported === 0)
+      ? 'Already caught up.'
+      : imported > 0
+      ? `Imported ${imported} bookmark${imported === 1 ? '' : 's'} from X.`
+      : 'No new bookmarks to import.');
 
   // Keep the (now-inactive) state around briefly to swallow trailing
   // cursor pages until the watcher stops scrolling + the interceptor's
@@ -700,6 +856,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (importState && importState.active && importState.tabId === tabId) {
     if (importState.watchdog) clearTimeout(importState.watchdog);
     const imported = importState.imported;
+    importState.active = false;
     importState = null;
     if (imported > 0) notify(`Bookmark import stopped — imported ${imported} so far.`);
   }
@@ -1123,11 +1280,14 @@ async function handleIgSavedBatch(posts) {
   const toImport = posts.filter((p) => p && p.postId && !seen.has(p.postId));
   for (const p of toImport) {
     try {
-      await syncSavedPostToGather(p);
-      seen.add(p.postId);
+      const response = await syncSavedPostToGather(p);
+      if (isAcceptedSaveResponse(response)) {
+        seen.add(p.postId);
+      } else {
+        console.warn('[gatheros] instagram saved sync rejected:', response?.error || 'save not accepted');
+      }
     } catch (err) {
       console.warn('[gatheros] instagram saved sync failed:', err?.message || err);
-      seen.add(p.postId);
     }
   }
   await writeIgSeenSet(seen);
@@ -1211,7 +1371,15 @@ async function runIgApiImport(limit) {
   const headers = { ...((template && template.headers) || {}), 'x-csrftoken': csrf, accept: '*/*' };
   if (!headers['x-ig-app-id']) headers['x-ig-app-id'] = IG_WEB_APP_ID;
 
-  igImportState = { active: true, apiMode: true, limit, imported: 0, processed: 0 };
+  const state = {
+    active: true,
+    apiMode: true,
+    limit,
+    imported: 0,
+    processed: 0,
+    seenIds: new Set(),
+  };
+  igImportState = state;
   notify('Importing saved posts from Instagram…');
 
   const PAGE_DELAY_MS = 1400; // gentle pacing — looks like a slow scroll
@@ -1241,7 +1409,8 @@ async function runIgApiImport(limit) {
         igImportState.processed += 1;
         try {
           const resp = await syncSavedPostToGather(p, { force: true });
-          if (resp && resp.ok && !resp.duplicate && !resp.dismissed) igImportState.imported += 1;
+          if (isNewImportedSaveResponse(resp)) state.imported += 1;
+          if (isAcceptedSaveResponse(resp)) state.seenIds.add(p.postId);
         } catch (err) {
           console.warn('[gatheros] IG import save failed:', err?.message || err);
         }
@@ -1252,11 +1421,12 @@ async function runIgApiImport(limit) {
       await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
     }
   } finally {
-    const imported = igImportState ? igImportState.imported : 0;
+    const imported = state.imported;
     igImportState = null;
     // Establish the baseline so passive sync only imports newer posts.
     try {
       const { seen } = await readIgSeenSet();
+      for (const id of state.seenIds) seen.add(id);
       await writeIgSeenSet(seen, { baseline: true, version: IG_CAPTURE_VERSION });
     } catch { /* ignore */ }
     if (authFailedFirstPage) {
@@ -1272,6 +1442,7 @@ async function runIgApiImport(limit) {
 async function handleIgImportBatch(posts) {
   let foundNew = false;
   let reachedLimit = false;
+  const resolvedIds = [];
   for (const p of posts) {
     if (!p || !p.postId) continue;
     if (igImportState.processed.has(p.postId)) continue;
@@ -1279,13 +1450,14 @@ async function handleIgImportBatch(posts) {
     foundNew = true;
     try {
       const resp = await syncSavedPostToGather(p, { force: true });
-      if (resp && resp.ok && !resp.duplicate && !resp.dismissed) igImportState.imported += 1;
+      if (isNewImportedSaveResponse(resp)) igImportState.imported += 1;
+      if (isAcceptedSaveResponse(resp)) resolvedIds.push(p.postId);
     } catch (err) {
       console.warn('[gatheros] instagram backfill failed:', err?.message || err);
     }
     if (igImportState.processed.size >= igImportState.limit) { reachedLimit = true; break; }
   }
-  await markIgSeen(posts.map((p) => p && p.postId).filter(Boolean));
+  await markIgSeen(resolvedIds);
 
   if (igImportState.tabId != null) {
     chrome.tabs.sendMessage(igImportState.tabId, {
