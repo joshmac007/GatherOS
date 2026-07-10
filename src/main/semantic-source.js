@@ -23,7 +23,9 @@ function normalizedList(values, { lowercase = false } = {}) {
     const normalized = normalizeText(raw);
     if (!normalized) continue;
     const key = normalized.toLowerCase();
-    if (!byKey.has(key)) byKey.set(key, lowercase ? key : normalized);
+    const candidate = lowercase ? key : normalized;
+    const existing = byKey.get(key);
+    if (existing === undefined || candidate < existing) byKey.set(key, candidate);
   }
   return [...byKey.entries()]
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)

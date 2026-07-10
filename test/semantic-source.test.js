@@ -95,3 +95,14 @@ test('accepted ordinary tag changes source hash', () => {
   assert.notEqual(after.sourceHash, before.sourceHash);
   assert.match(after.text, /Tags: aviation, cockpit, operations/);
 });
+
+test('case-variant concepts produce same canonical text regardless of input order', () => {
+  const first = buildSemanticSource({
+    topicProfile: { concepts: ['Aviation UI', 'aviation ui'] },
+  });
+  const reversed = buildSemanticSource({
+    topicProfile: { concepts: ['aviation ui', 'Aviation UI'] },
+  });
+
+  assert.deepEqual(first, reversed);
+});
