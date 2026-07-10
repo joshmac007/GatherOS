@@ -179,9 +179,7 @@ test('times out a hanging request with abort cleanup and a distinct error', asyn
       const fixtureCleanup = setTimeout(() => reject(new Error('fixture cleanup')), 20);
       options.signal.addEventListener('abort', () => {
         clearTimeout(fixtureCleanup);
-        const error = new Error('aborted');
-        error.name = 'AbortError';
-        reject(error);
+        reject(new DOMException('aborted', 'AbortError'));
       }, { once: true });
     }),
     setTimeoutImpl(callback, ms) {
@@ -203,6 +201,53 @@ test('times out a hanging request with abort cleanup and a distinct error', asyn
   await rejected;
   assert.equal(timeoutMs, 250);
   assert.equal(requestSignal.aborted, true);
+  assert.equal(clearedTimer, timerId);
+});
+
+test('times out when a successful response body hangs until abort', async () => {
+  const timerId = Symbol('ollama-body-timeout');
+  let timeoutCallback;
+  let clearedTimer = null;
+  let markBodyStarted;
+  const bodyStarted = new Promise((resolve) => { markBodyStarted = resolve; });
+  const client = loadClient().createOllamaEmbedClient({
+    baseUrl: 'http://127.0.0.1:11434',
+    embedModel: 'embeddinggemma',
+    timeoutMs: 250,
+  }, {
+    fetchImpl: async (_url, options) => ({
+      ok: true,
+      status: 200,
+      async text() {
+        markBodyStarted();
+        return new Promise((_resolve, reject) => {
+          if (options.signal.aborted) {
+            reject(new DOMException('aborted', 'AbortError'));
+            return;
+          }
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          }, { once: true });
+        });
+      },
+    }),
+    setTimeoutImpl(callback) {
+      timeoutCallback = callback;
+      return timerId;
+    },
+    clearTimeoutImpl(id) {
+      clearedTimer = id;
+    },
+  });
+
+  const pending = client.embed('semantic source');
+  const rejected = assert.rejects(pending, (error) => {
+    assert.equal(error.code, 'ollama_timeout');
+    return true;
+  });
+  await bodyStarted;
+  timeoutCallback();
+  await rejected;
   assert.equal(clearedTimer, timerId);
 });
 

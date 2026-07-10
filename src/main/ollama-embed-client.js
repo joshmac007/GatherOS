@@ -1,3 +1,5 @@
+const OLLAMA_ERROR = Symbol('ollama-error');
+
 function clean(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -5,26 +7,24 @@ function clean(value) {
 function createError(message, code, details = {}) {
   const error = new Error(message);
   error.code = code;
+  error[OLLAMA_ERROR] = true;
   Object.assign(error, details);
   return error;
 }
 
 async function readResponseBody(response) {
   if (typeof response.text === 'function') {
+    const raw = await response.text();
     try {
-      const raw = await response.text();
-      try {
-        return { data: JSON.parse(raw), raw, invalidJson: false };
-      } catch {
-        return { data: null, raw, invalidJson: true };
-      }
+      return { data: JSON.parse(raw), raw, invalidJson: false };
     } catch {
-      return { data: null, raw: '', invalidJson: true };
+      return { data: null, raw, invalidJson: true };
     }
   }
   try {
     return { data: await response.json(), raw: '', invalidJson: false };
-  } catch {
+  } catch (cause) {
+    if (cause?.name === 'AbortError') throw cause;
     return { data: null, raw: '', invalidJson: true };
   }
 }
@@ -109,7 +109,6 @@ function createOllamaEmbedClient(config = {}, {
       }
       return body.data;
     } catch (cause) {
-      if (cause?.code) throw cause;
       if (timedOut) {
         throw createError(`Ollama request timed out after ${timeoutMs}ms`, 'ollama_timeout', {
           timeoutMs,
@@ -117,6 +116,7 @@ function createOllamaEmbedClient(config = {}, {
           cause,
         });
       }
+      if (cause?.[OLLAMA_ERROR]) throw cause;
       throw createError('Ollama is unavailable', 'ollama_unavailable', { cause });
     } finally {
       clearTimeoutImpl(timeoutId);
