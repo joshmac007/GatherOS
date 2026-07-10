@@ -103,6 +103,29 @@ function readJsonBody(req) {
   });
 }
 
+function validateExtensionRequest(req, res) {
+  const origin = req.headers.origin || '';
+  if (origin && !origin.startsWith('chrome-extension://') && !origin.startsWith('moz-extension://')) {
+    sendJson(res, 403, { ok: false, error: 'forbidden origin' });
+    return false;
+  }
+  const token = req.headers['x-gatheros-token'];
+  if (!token || token !== getOrCreateToken()) {
+    sendJson(res, 401, { ok: false, error: 'invalid token' });
+    return false;
+  }
+  return true;
+}
+
+async function readPostBody(req, res) {
+  try {
+    return { body: await readJsonBody(req) };
+  } catch {
+    sendJson(res, 400, { ok: false, error: 'invalid body' });
+    return null;
+  }
+}
+
 // A custom-protocol URL the renderer resolves to a local file — same
 // scheme src/renderer/lib/fileUrl.js produces, so a media item rewritten
 // to this loads from disk just like a primary save.
@@ -138,17 +161,7 @@ async function handleSave(req, res) {
   // Defense in depth: the token is the real check, but rejecting
   // anything that isn't a browser-extension origin keeps stray
   // web-page fetches from even reaching the auth path.
-  const origin = req.headers.origin || '';
-  if (origin && !origin.startsWith('chrome-extension://') && !origin.startsWith('moz-extension://')) {
-    sendJson(res, 403, { ok: false, error: 'forbidden origin' });
-    return;
-  }
-
-  const token = req.headers['x-gatheros-token'];
-  if (!token || token !== getOrCreateToken()) {
-    sendJson(res, 401, { ok: false, error: 'invalid token' });
-    return;
-  }
+  if (!validateExtensionRequest(req, res)) return;
 
   // Free tier: new saves require an upgrade. Surface the prompt in the
   // app window and tell the extension so it can show its own notice.
@@ -162,13 +175,9 @@ async function handleSave(req, res) {
     }
   } catch { /* fail open */ }
 
-  let body;
-  try {
-    body = await readJsonBody(req);
-  } catch {
-    sendJson(res, 400, { ok: false, error: 'invalid body' });
-    return;
-  }
+  const parsed = await readPostBody(req, res);
+  if (!parsed) return;
+  const { body } = parsed;
 
   const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
   const videoUrl = typeof body?.videoUrl === 'string' ? body.videoUrl.trim() : '';
@@ -391,21 +400,10 @@ async function handleSave(req, res) {
 }
 
 async function handleXBookmarkStatus(req, res) {
-  const origin = req.headers.origin || '';
-  if (origin && !origin.startsWith('chrome-extension://') && !origin.startsWith('moz-extension://')) {
-    sendJson(res, 403, { ok: false, error: 'forbidden origin' });
-    return;
-  }
-  const token = req.headers['x-gatheros-token'];
-  if (!token || token !== getOrCreateToken()) {
-    sendJson(res, 401, { ok: false, error: 'invalid token' });
-    return;
-  }
-  let body;
-  try { body = await readJsonBody(req); } catch {
-    sendJson(res, 400, { ok: false, error: 'invalid body' });
-    return;
-  }
+  if (!validateExtensionRequest(req, res)) return;
+  const parsed = await readPostBody(req, res);
+  if (!parsed) return;
+  const { body } = parsed;
   try {
     const { classifyXBookmarkUrls } = require('./db');
     const result = classifyXBookmarkUrls(body?.tweetUrls);
