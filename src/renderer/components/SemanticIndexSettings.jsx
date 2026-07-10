@@ -13,6 +13,7 @@ import {
 import styles from './SemanticIndexSettings.module.css';
 
 const DEFAULT_MODEL = 'embeddinggemma';
+const QUEUE_PAGE_SIZE = 100;
 const SEMANTIC_EVENTS = [
   'semantic-index:status',
   'semantic-index:progress',
@@ -155,6 +156,78 @@ export function semanticActionFailure(result) {
   return sentenceCase(result.reason || 'Action failed');
 }
 
+export function claimSemanticAction(busyRef, api, method) {
+  if (!busyRef || busyRef.current || typeof api?.[method] !== 'function') return false;
+  busyRef.current = true;
+  return true;
+}
+
+export function createSemanticRefreshController({
+  load,
+  apply,
+  onError = () => {},
+  schedule = (callback) => queueMicrotask(callback),
+} = {}) {
+  let mounted = true;
+  let generation = 0;
+  let scheduled = false;
+
+  async function refresh() {
+    if (!mounted) return { applied: false, reason: 'disposed' };
+    const requestGeneration = ++generation;
+    try {
+      const value = await load();
+      if (!mounted || requestGeneration !== generation) {
+        return { applied: false, reason: mounted ? 'stale' : 'disposed' };
+      }
+      apply(value);
+      return { applied: true };
+    } catch (error) {
+      if (mounted && requestGeneration === generation) onError(error);
+      return { applied: false, reason: 'failed', error };
+    }
+  }
+
+  function scheduleRefresh() {
+    if (!mounted || scheduled) return false;
+    scheduled = true;
+    schedule(async () => {
+      scheduled = false;
+      if (!mounted) return { applied: false, reason: 'disposed' };
+      return refresh();
+    });
+    return true;
+  }
+
+  return {
+    refresh,
+    scheduleRefresh,
+    isActive: () => mounted,
+    dispose() {
+      mounted = false;
+      generation += 1;
+      scheduled = false;
+    },
+  };
+}
+
+export function deriveSemanticQueuePage(queue, requestedCount = QUEUE_PAGE_SIZE, apiAvailable = true) {
+  const items = Array.isArray(queue) ? queue : [];
+  const normalizedCount = Math.max(
+    QUEUE_PAGE_SIZE,
+    Number.isFinite(Number(requestedCount)) ? Math.floor(Number(requestedCount)) : QUEUE_PAGE_SIZE,
+  );
+  const visibleCount = Math.min(items.length, normalizedCount);
+  const remaining = Math.max(0, items.length - visibleCount);
+  return {
+    showToggle: Boolean(apiAvailable),
+    items: apiAvailable ? items.slice(0, visibleCount) : [],
+    visibleCount,
+    remaining,
+    nextVisibleCount: Math.min(items.length, normalizedCount + QUEUE_PAGE_SIZE),
+  };
+}
+
 export function deriveSemanticQueueView(input) {
   const jobs = Array.isArray(input)
     ? input
@@ -175,9 +248,7 @@ export function deriveSemanticQueueView(input) {
       const semanticKind = ['incremental', 'rebuild', 'semantic', 'semantic-index'].includes(kind);
       return !domain.includes('video')
         && !kind.includes('video')
-        && (semanticDomain || semanticKind)
-        && (!domain || semanticDomain)
-        && (!kind || semanticKind)
+        && (semanticDomain || (!domain && semanticKind))
         && !['completed', 'dismissed', 'cancelled'].includes(state);
     })
     .map((job) => {
@@ -206,42 +277,41 @@ export default function SemanticIndexSettings() {
   const [status, setStatus] = React.useState(null);
   const [queue, setQueue] = React.useState([]);
   const [expanded, setExpanded] = React.useState(false);
+  const [visibleQueueCount, setVisibleQueueCount] = React.useState(QUEUE_PAGE_SIZE);
   const [busyAction, setBusyAction] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [notice, setNotice] = React.useState(null);
-
-  const refresh = React.useCallback(async () => {
-    const api = getSemanticApi();
-    if (!api?.status || !api?.queue) {
-      setStatus(null);
-      setQueue([]);
-      return;
-    }
-
-    try {
-      const [nextStatus, nextQueue] = await Promise.all([api.status(), api.queue()]);
-      setStatus(nextStatus);
-      setQueue(deriveSemanticQueueView(nextQueue));
-      setError(null);
-    } catch (nextError) {
-      setError(nextError?.message || 'Could not load semantic index status');
-    }
-  }, []);
+  const refreshControllerRef = React.useRef(null);
+  const busyRef = React.useRef(false);
 
   React.useEffect(() => {
-    let active = true;
-    const guardedRefresh = async () => {
-      if (!active) return;
-      await refresh();
-    };
-    guardedRefresh();
-
     const moodmark = typeof window !== 'undefined' ? window.moodmark : null;
+    const controller = createSemanticRefreshController({
+      async load() {
+        const api = getSemanticApi();
+        if (typeof api?.status !== 'function' || typeof api?.queue !== 'function') {
+          return { status: null, queue: [] };
+        }
+        const [nextStatus, nextQueue] = await Promise.all([api.status(), api.queue()]);
+        return { status: nextStatus, queue: deriveSemanticQueueView(nextQueue) };
+      },
+      apply(snapshot) {
+        setStatus(snapshot.status);
+        setQueue(snapshot.queue);
+        setError(null);
+      },
+      onError(nextError) {
+        setError(nextError?.message || 'Could not load semantic index status');
+      },
+    });
+    refreshControllerRef.current = controller;
+    controller.refresh();
+
     const unsubscribers = SEMANTIC_EVENTS.map((eventName) => {
       if (!moodmark?.on) return null;
       try {
         return moodmark.on(eventName, (payload) => {
-          if (!active) return;
+          if (!controller.isActive()) return;
           if (eventName === 'semantic-index:notice') {
             setNotice(
               typeof payload === 'string'
@@ -249,7 +319,7 @@ export default function SemanticIndexSettings() {
                 : payload?.message || payload?.notice || null,
             );
           }
-          guardedRefresh();
+          controller.scheduleRefresh();
         });
       } catch {
         return null;
@@ -257,16 +327,24 @@ export default function SemanticIndexSettings() {
     });
 
     return () => {
-      active = false;
+      controller.dispose();
+      if (refreshControllerRef.current === controller) refreshControllerRef.current = null;
       unsubscribers.forEach((unsubscribe) => {
         if (typeof unsubscribe === 'function') unsubscribe();
       });
     };
-  }, [refresh]);
+  }, []);
+
+  React.useEffect(() => {
+    setVisibleQueueCount((current) => {
+      if (queue.length <= QUEUE_PAGE_SIZE) return QUEUE_PAGE_SIZE;
+      return Math.max(QUEUE_PAGE_SIZE, Math.min(current, Math.ceil(queue.length / QUEUE_PAGE_SIZE) * QUEUE_PAGE_SIZE));
+    });
+  }, [queue.length]);
 
   async function runAction(name, method, ids) {
     const api = getSemanticApi();
-    if (typeof api?.[method] !== 'function' || busyAction) return;
+    if (!claimSemanticAction(busyRef, api, method)) return;
     setBusyAction(name);
     setError(null);
     try {
@@ -276,11 +354,14 @@ export default function SemanticIndexSettings() {
         setError(failure);
         return;
       }
-      await refresh();
+      await refreshControllerRef.current?.refresh();
     } catch (nextError) {
-      setError(nextError?.message || `Could not ${name}`);
+      if (refreshControllerRef.current?.isActive()) {
+        setError(nextError?.message || `Could not ${name}`);
+      }
     } finally {
-      setBusyAction(null);
+      busyRef.current = false;
+      if (refreshControllerRef.current?.isActive()) setBusyAction(null);
     }
   }
 
@@ -290,6 +371,12 @@ export default function SemanticIndexSettings() {
   const failedIds = queue.filter((job) => job.stateValue === 'failed').map((job) => job.id).filter(Boolean);
   const queueAction = view.paused ? 'resume' : 'pause';
   const rebuildAction = view.rebuilding ? 'cancelRebuild' : 'startRebuild';
+  const queuePage = deriveSemanticQueuePage(queue, visibleQueueCount, apiAvailable);
+
+  function toggleQueue() {
+    if (expanded) setVisibleQueueCount(QUEUE_PAGE_SIZE);
+    setExpanded((value) => !value);
+  }
 
   return (
     <section className={styles.root} aria-labelledby="semantic-index-heading">
@@ -419,12 +506,12 @@ export default function SemanticIndexSettings() {
       {error && <p className={styles.error} role="alert">{error}</p>}
       {notice && <p className={styles.notice} role="status">{notice}</p>}
 
-      <div className={styles.queueSection}>
+      {queuePage.showToggle && <div className={styles.queueSection}>
         <button
           type="button"
           className={styles.queueToggle}
           aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
+          onClick={toggleQueue}
         >
           {expanded
             ? <ChevronDown size={15} aria-hidden="true" />
@@ -437,7 +524,7 @@ export default function SemanticIndexSettings() {
           <div className={styles.queueList}>
             {queue.length === 0 ? (
               <p className={styles.empty}>No semantic index jobs.</p>
-            ) : queue.map((job) => (
+            ) : queuePage.items.map((job) => (
               <article key={job.id} className={styles.queueRow}>
                 <div className={styles.queueRowTop}>
                   <strong>{job.title}</strong>
@@ -447,13 +534,30 @@ export default function SemanticIndexSettings() {
                 </div>
                 <div className={styles.queueMeta}>
                   <span>{job.retryCount === 1 ? '1 retry' : `${job.retryCount} retries`}</span>
-                  {job.failureReason && <span className={styles.failure}>{job.failureReason}</span>}
+                  {job.failureReason && (
+                    <span
+                      className={styles.failure}
+                      aria-label={`Failure: ${job.failureReason}`}
+                    >
+                      {job.failureReason}
+                    </span>
+                  )}
                 </div>
               </article>
             ))}
+            {queuePage.remaining > 0 && (
+              <button
+                type="button"
+                className={styles.showMore}
+                onClick={() => setVisibleQueueCount(queuePage.nextVisibleCount)}
+              >
+                Show more
+                <span>{queuePage.remaining.toLocaleString()} remaining</span>
+              </button>
+            )}
           </div>
         )}
-      </div>
+      </div>}
     </section>
   );
 }

@@ -292,7 +292,7 @@
 
 .queueMeta {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 9px;
   margin-top: 4px;
   color: var(--text-tertiary);
@@ -300,9 +300,35 @@
 }
 
 .failure {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.showMore {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-top: 0.5px solid var(--border-subtle);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.showMore:hover {
+  background: var(--hover-bg-soft);
+  color: var(--text-primary);
+}
+
+.showMore span {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
 }
 
 @media (max-width: 680px) {

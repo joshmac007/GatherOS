@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const esbuild = require('esbuild');
+const React = require('react');
+const { renderToStaticMarkup } = require('react-dom/server');
 
 function loadSemanticIndexSettings() {
   const filename = path.join(
@@ -22,7 +24,10 @@ function loadSemanticIndexSettings() {
   const module = { exports: {} };
   const localRequire = (request) => {
     if (request.endsWith('.module.css')) {
-      return new Proxy({}, { get: (_target, key) => String(key) });
+      return {
+        __esModule: true,
+        default: new Proxy({}, { get: (_target, key) => String(key) }),
+      };
     }
     return require(request);
   };
@@ -130,6 +135,82 @@ test('reports resolved semantic action failures and exact method availability', 
   );
 });
 
+test('semantic action claim synchronously blocks rapid duplicate actions', () => {
+  const { claimSemanticAction } = loadSemanticIndexSettings();
+  const busyRef = { current: false };
+  const api = { pause() {} };
+
+  assert.equal(claimSemanticAction(busyRef, api, 'pause'), true);
+  assert.equal(busyRef.current, true);
+  assert.equal(claimSemanticAction(busyRef, api, 'pause'), false);
+  busyRef.current = false;
+  assert.equal(claimSemanticAction(busyRef, api, 'resume'), false);
+});
+
+test('refresh controller ignores stale and post-dispose responses', async () => {
+  const { createSemanticRefreshController } = loadSemanticIndexSettings();
+  const pending = [];
+  const applied = [];
+  const controller = createSemanticRefreshController({
+    load() {
+      let resolve;
+      const promise = new Promise((done) => { resolve = done; });
+      pending.push({ promise, resolve });
+      return promise;
+    },
+    apply: (value) => applied.push(value),
+  });
+
+  const first = controller.refresh();
+  const second = controller.refresh();
+  pending[1].resolve('new snapshot');
+  await second;
+  pending[0].resolve('stale snapshot');
+  await first;
+  assert.deepEqual(applied, ['new snapshot']);
+
+  const afterUnmount = controller.refresh();
+  controller.dispose();
+  pending[2].resolve('post-dispose snapshot');
+  await afterUnmount;
+  assert.deepEqual(applied, ['new snapshot']);
+});
+
+test('refresh controller coalesces event bursts into one scheduled load', async () => {
+  const { createSemanticRefreshController } = loadSemanticIndexSettings();
+  const scheduled = [];
+  let loads = 0;
+  const controller = createSemanticRefreshController({
+    load: async () => { loads += 1; return loads; },
+    apply() {},
+    schedule: (callback) => scheduled.push(callback),
+  });
+
+  assert.equal(controller.scheduleRefresh(), true);
+  assert.equal(controller.scheduleRefresh(), false);
+  assert.equal(controller.scheduleRefresh(), false);
+  assert.equal(scheduled.length, 1);
+  await scheduled[0]();
+  assert.equal(loads, 1);
+  assert.equal(controller.scheduleRefresh(), true);
+  assert.equal(scheduled.length, 2);
+});
+
+test('semantic queue page limits rows and advances in 100-row increments', () => {
+  const { deriveSemanticQueuePage } = loadSemanticIndexSettings();
+  const queue = Array.from({ length: 250 }, (_value, index) => ({ id: `job-${index}` }));
+  const first = deriveSemanticQueuePage(queue, 100, true);
+  const second = deriveSemanticQueuePage(queue, first.nextVisibleCount, true);
+
+  assert.equal(first.showToggle, true);
+  assert.equal(first.items.length, 100);
+  assert.equal(first.remaining, 150);
+  assert.equal(first.nextVisibleCount, 200);
+  assert.equal(second.items.length, 200);
+  assert.equal(second.remaining, 50);
+  assert.equal(deriveSemanticQueuePage(queue, 100, false).showToggle, false);
+});
+
 test('normalizes only actionable semantic queue rows', () => {
   const { deriveSemanticQueueView } = loadSemanticIndexSettings();
   const rows = deriveSemanticQueueView({ jobs: [
@@ -167,16 +248,57 @@ test('normalizes only actionable semantic queue rows', () => {
       title: 'Dismissed reference',
       state: 'dismissed',
     },
+    {
+      id: 'semantic-maintenance',
+      domain: 'semantic-index',
+      kind: 'maintenance',
+      title: 'Semantic maintenance',
+      state: 'pending',
+    },
   ] });
 
-  assert.deepEqual(rows, [{
-    id: 'semantic-failed',
-    title: 'Reference board',
-    state: 'Failed',
-    stateValue: 'failed',
-    retryCount: 2,
-    failureReason: 'Vector dimensions changed',
-  }]);
+  assert.deepEqual(rows, [
+    {
+      id: 'semantic-failed',
+      title: 'Reference board',
+      state: 'Failed',
+      stateValue: 'failed',
+      retryCount: 2,
+      failureReason: 'Vector dimensions changed',
+    },
+    {
+      id: 'semantic-maintenance',
+      title: 'Semantic maintenance',
+      state: 'Waiting',
+      stateValue: 'pending',
+      retryCount: 0,
+      failureReason: null,
+    },
+  ]);
+});
+
+test('queue toggle is absent when semantic snapshot API is unavailable', () => {
+  const { default: SemanticIndexSettings } = loadSemanticIndexSettings();
+  const priorWindow = global.window;
+  global.window = { moodmark: {} };
+  try {
+    const markup = renderToStaticMarkup(React.createElement(SemanticIndexSettings));
+    assert.doesNotMatch(markup, /Queue details/);
+  } finally {
+    global.window = priorWindow;
+  }
+});
+
+test('failure reason styling wraps full text and exposes an accessible label', () => {
+  const componentSource = fs.readFileSync(path.join(
+    __dirname, '..', 'src', 'renderer', 'components', 'SemanticIndexSettings.jsx',
+  ), 'utf8');
+  const cssSource = fs.readFileSync(path.join(
+    __dirname, '..', 'src', 'renderer', 'components', 'SemanticIndexSettings.module.css',
+  ), 'utf8');
+
+  assert.match(componentSource, /aria-label=\{`Failure: \$\{job\.failureReason\}`\}/);
+  assert.match(cssSource, /\.failure\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*white-space:\s*normal;/s);
 });
 
 test('visual search preference is independent from Codex session state', () => {
