@@ -526,6 +526,103 @@ test('tracked image enrichment defers coordinator and lifecycle transition until
   assert.deepEqual(harness.completions, []);
 });
 
+test('rapid foreground tasks run FIFO with concurrency one and lifecycle waits for the whole queue', async () => {
+  const firstGate = deferred();
+  const firstStarted = deferred();
+  const taskOrder = [];
+  let concurrent = 0;
+  let maxConcurrent = 0;
+  const harness = createHarness();
+  harness.runtime.start();
+
+  function track(name, wait = null) {
+    return async () => {
+      concurrent += 1;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      taskOrder.push(`${name}:start`);
+      if (name === 'first') firstStarted.resolve();
+      try {
+        if (wait) await wait;
+      } finally {
+        taskOrder.push(`${name}:end`);
+        concurrent -= 1;
+      }
+    };
+  }
+
+  assert.deepEqual(harness.runtime.scheduleForegroundTask(track('first', firstGate.promise)), {
+    ok: true, scheduled: true,
+  });
+  assert.deepEqual(harness.runtime.scheduleForegroundTask(track('second')), {
+    ok: true, scheduled: true,
+  });
+  await firstStarted.promise;
+  await Promise.resolve();
+  assert.deepEqual(taskOrder, ['first:start']);
+
+  const switching = harness.runtime.rebind(async () => {
+    taskOrder.push('switch');
+    harness.switchLibrary('library-b');
+  });
+  await Promise.resolve();
+  assert.deepEqual(taskOrder, ['first:start']);
+
+  firstGate.resolve();
+  await switching;
+
+  assert.deepEqual(taskOrder, [
+    'first:start', 'first:end', 'second:start', 'second:end', 'switch',
+  ]);
+  assert.equal(maxConcurrent, 1);
+  assert.deepEqual(harness.recovery.map(({ library }) => library), ['library-a', 'library-b']);
+});
+
+test('concurrent rebind requests serialize complete transitions in request order', async () => {
+  const firstActionGate = deferred();
+  const firstActionStarted = deferred();
+  const order = [];
+  const harness = createHarness();
+  harness.runtime.setLifecycleHooks({
+    beforeTransition: async () => { order.push('before'); },
+    afterTransition: async () => { order.push('after'); },
+  });
+  harness.runtime.start();
+
+  const first = harness.runtime.rebind(async () => {
+    order.push('first:start');
+    firstActionStarted.resolve();
+    await firstActionGate.promise;
+    harness.switchLibrary('library-b');
+    order.push('first:end');
+    return { ok: true, activeId: 'library-b' };
+  });
+  await firstActionStarted.promise;
+  const second = harness.runtime.rebind(async () => {
+    order.push('second:start');
+    harness.switchLibrary('library-c');
+    order.push('second:end');
+    return { ok: true, activeId: 'library-c' };
+  });
+
+  await Promise.resolve();
+  assert.deepEqual(order, ['before', 'first:start']);
+  assert.deepEqual(harness.recovery.map(({ library }) => library), ['library-a']);
+
+  firstActionGate.resolve();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.deepEqual(firstResult, { ok: true, activeId: 'library-b' });
+  assert.deepEqual(secondResult, { ok: true, activeId: 'library-c' });
+  assert.deepEqual(order, [
+    'before', 'first:start', 'first:end', 'after',
+    'before', 'second:start', 'second:end', 'after',
+  ]);
+  assert.deepEqual(
+    harness.recovery.map(({ library }) => library),
+    ['library-a', 'library-b', 'library-c'],
+  );
+});
+
 test('automatic trash purge attempts derived cleanup for every purged save', async () => {
   const cleaned = [];
   const errors = [];

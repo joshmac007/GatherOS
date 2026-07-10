@@ -50,6 +50,23 @@ export function createVideoSnapshotRequestGuard() {
   };
 }
 
+export function createVideoActionRequestGuard() {
+  let activeClaim = null;
+
+  return {
+    claim() {
+      if (activeClaim) return null;
+      activeClaim = Symbol('video-suggestion-action');
+      return activeClaim;
+    },
+    release(claim) {
+      if (!claim || claim !== activeClaim) return false;
+      activeClaim = null;
+      return true;
+    },
+  };
+}
+
 export function deriveVideoSuggestionView(snapshot) {
   const analysis = snapshot?.analysis || null;
   const state = String(analysis?.state || '').toLowerCase();
@@ -81,8 +98,12 @@ export default function VideoTagSuggestions({ saveId, onAccepted }) {
   const [busy, setBusy] = React.useState(null);
   const [error, setError] = React.useState(null);
   const requestGuardRef = React.useRef(null);
+  const actionGuardRef = React.useRef(null);
   if (!requestGuardRef.current) {
     requestGuardRef.current = createVideoSnapshotRequestGuard();
+  }
+  if (!actionGuardRef.current) {
+    actionGuardRef.current = createVideoActionRequestGuard();
   }
 
   const refresh = React.useCallback(async () => {
@@ -125,7 +146,8 @@ export default function VideoTagSuggestions({ saveId, onAccepted }) {
   }, [refresh, saveId]);
 
   async function act(name, callback, accepted = false) {
-    if (busy) return;
+    const claim = actionGuardRef.current.claim();
+    if (!claim) return;
     setBusy(name);
     setError(null);
     try {
@@ -139,6 +161,7 @@ export default function VideoTagSuggestions({ saveId, onAccepted }) {
     } catch (nextError) {
       setError(nextError?.message || 'Video suggestion action failed');
     } finally {
+      actionGuardRef.current.release(claim);
       setBusy(null);
     }
   }

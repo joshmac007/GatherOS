@@ -59,6 +59,19 @@ test('request guard rejects late A response after B becomes current', async () =
   assert.deepEqual(applied, [{ saveId: 'b' }]);
 });
 
+test('action guard synchronously rejects duplicate claims until original action releases', () => {
+  const { createVideoActionRequestGuard } = loadVideoSuggestions();
+  const guard = createVideoActionRequestGuard();
+
+  const first = guard.claim();
+  assert.ok(first);
+  assert.equal(guard.claim(), null);
+  assert.equal(guard.release(Symbol('wrong claim')), false);
+  assert.equal(guard.claim(), null);
+  assert.equal(guard.release(first), true);
+  assert.ok(guard.claim());
+});
+
 test('derives analyzing states for queued and running video jobs', () => {
   const { deriveVideoSuggestionView } = loadVideoSuggestions();
   for (const state of ['pending', 'queued', 'running']) {

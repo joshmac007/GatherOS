@@ -81,7 +81,10 @@ function createVideoSemanticWorkflows({
   let healthPromise = null;
   let healthPromiseEpoch = null;
   let transitioning = false;
+  let pendingTransitions = 0;
+  let transitionTail = Promise.resolve();
   const foregroundTasks = new Set();
+  let foregroundTaskTail = Promise.resolve();
   let lifecycleHooks = null;
   let semanticHealth = {
     ok: null,
@@ -224,7 +227,6 @@ function createVideoSemanticWorkflows({
       semanticSearch,
       videoAnalysis,
     };
-    transitioning = false;
     semanticHealth = {
       ok: null,
       status: 'checking',
@@ -255,7 +257,22 @@ function createVideoSemanticWorkflows({
     if (active === previous) active = null;
   }
 
-  async function rebind(action) {
+  function serializeTransition(run) {
+    pendingTransitions += 1;
+    transitioning = true;
+    const queued = transitionTail.then(async () => {
+      try {
+        return await run();
+      } finally {
+        pendingTransitions -= 1;
+        transitioning = pendingTransitions > 0;
+      }
+    });
+    transitionTail = queued.catch(() => {});
+    return queued;
+  }
+
+  async function performRebind(action) {
     await deactivate();
     let result;
     let error;
@@ -270,8 +287,12 @@ function createVideoSemanticWorkflows({
     return result;
   }
 
-  async function stopAndDrain() {
-    await deactivate();
+  function rebind(action) {
+    return serializeTransition(() => performRebind(action));
+  }
+
+  function stopAndDrain() {
+    return serializeTransition(() => deactivate());
   }
 
   async function routeSave(save, {
@@ -340,7 +361,7 @@ function createVideoSemanticWorkflows({
     if (!active || transitioning) return { ok: false, reason: 'runtime_not_started' };
     const taskEpoch = epoch;
     const boundCoordinator = active.coordinator;
-    const execution = Promise.resolve().then(async () => {
+    const execution = foregroundTaskTail.then(async () => {
       await boundCoordinator.whenIdle();
       return run({
         isCurrent: () => taskEpoch === epoch,
@@ -357,6 +378,7 @@ function createVideoSemanticWorkflows({
       if (taskEpoch === epoch && !transitioning) active?.coordinator.wake();
     });
     foregroundTasks.add(tracked);
+    foregroundTaskTail = tracked;
     return { ok: true, scheduled: true };
   }
 
