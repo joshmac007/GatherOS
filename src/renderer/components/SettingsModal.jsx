@@ -1576,7 +1576,7 @@ export default function SettingsModal({
                   </span>
                 </span>
                 <ToggleSwitch
-                  on={hasAi && !!prefs.semanticSearch}
+                  on={!!prefs.semanticSearch}
                   onChange={() => togglePref('semanticSearch')}
                 />
               </div>

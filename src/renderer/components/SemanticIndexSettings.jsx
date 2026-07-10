@@ -56,17 +56,19 @@ export function deriveSemanticIndexView(input) {
     || status.activeGeneration?.model
     || status.active_generation?.model
     || DEFAULT_MODEL;
-  const modelInstalled = Boolean(
-    ollama.modelInstalled
-      ?? ollama.model_installed
-      ?? ollama.modelAvailable
-      ?? ollama.model_available
-      ?? status.modelInstalled
-      ?? status.model_installed
-      ?? status.modelAvailable
-      ?? status.model_available
-      ?? connected,
-  );
+  const modelInstalledValue = ollama.modelInstalled
+    ?? ollama.model_installed
+    ?? ollama.modelAvailable
+    ?? ollama.model_available
+    ?? status.modelInstalled
+    ?? status.model_installed
+    ?? status.modelAvailable
+    ?? status.model_available;
+  const modelInstalled = modelInstalledValue === true
+    ? true
+    : modelInstalledValue === false
+      ? false
+      : null;
   const indexed = asCount(
     status.indexed
       ?? status.indexedCount
@@ -102,7 +104,12 @@ export function deriveSemanticIndexView(input) {
     healthLabel: connected ? 'Connected' : 'Not connected',
     model,
     modelInstalled,
-    installCommand: `ollama pull ${model}`,
+    modelStatusLabel: modelInstalled === true
+      ? 'Installed'
+      : modelInstalled === false
+        ? 'Not installed'
+        : 'Checking',
+    installCommand: modelInstalled === false ? `ollama pull ${model}` : null,
     indexed,
     total,
     percent,
@@ -126,6 +133,28 @@ export function deriveSemanticIndexView(input) {
   };
 }
 
+export function deriveSemanticActionAvailability(api) {
+  const methods = [
+    'status',
+    'queue',
+    'pause',
+    'resume',
+    'retryFailed',
+    'dismissFailed',
+    'startRebuild',
+    'cancelRebuild',
+  ];
+  return Object.fromEntries(methods.map((method) => [method, typeof api?.[method] === 'function']));
+}
+
+export function semanticActionFailure(result) {
+  if (!result || result.ok !== false) return null;
+  const detail = [result.detail, result.message, result.error]
+    .find((value) => typeof value === 'string' && value.trim());
+  if (detail) return detail.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 240);
+  return sentenceCase(result.reason || 'Action failed');
+}
+
 export function deriveSemanticQueueView(input) {
   const jobs = Array.isArray(input)
     ? input
@@ -139,12 +168,16 @@ export function deriveSemanticQueueView(input) {
 
   return jobs
     .filter((job) => {
-      const domain = String(job?.domain || job?.queue || '').toLowerCase();
-      const kind = String(job?.kind || '').toLowerCase();
+      const domain = String(job?.domain || job?.queue || '').toLowerCase().replaceAll('_', '-');
+      const kind = String(job?.kind || '').toLowerCase().replaceAll('_', '-');
       const state = String(job?.state || job?.status || 'pending').toLowerCase();
+      const semanticDomain = ['semantic', 'semantic-index'].includes(domain);
+      const semanticKind = ['incremental', 'rebuild', 'semantic', 'semantic-index'].includes(kind);
       return !domain.includes('video')
-        && kind !== 'video'
-        && kind !== 'video-analysis'
+        && !kind.includes('video')
+        && (semanticDomain || semanticKind)
+        && (!domain || semanticDomain)
+        && (!kind || semanticKind)
         && !['completed', 'dismissed', 'cancelled'].includes(state);
     })
     .map((job) => {
@@ -237,7 +270,12 @@ export default function SemanticIndexSettings() {
     setBusyAction(name);
     setError(null);
     try {
-      await api[method](...(ids ? [ids] : []));
+      const result = await api[method](...(ids ? [ids] : []));
+      const failure = semanticActionFailure(result);
+      if (failure) {
+        setError(failure);
+        return;
+      }
       await refresh();
     } catch (nextError) {
       setError(nextError?.message || `Could not ${name}`);
@@ -247,8 +285,11 @@ export default function SemanticIndexSettings() {
   }
 
   const view = deriveSemanticIndexView(status);
-  const apiAvailable = Boolean(getSemanticApi()?.status && getSemanticApi()?.queue);
+  const actions = deriveSemanticActionAvailability(getSemanticApi());
+  const apiAvailable = actions.status && actions.queue;
   const failedIds = queue.filter((job) => job.stateValue === 'failed').map((job) => job.id).filter(Boolean);
+  const queueAction = view.paused ? 'resume' : 'pause';
+  const rebuildAction = view.rebuilding ? 'cancelRebuild' : 'startRebuild';
 
   return (
     <section className={styles.root} aria-labelledby="semantic-index-heading">
@@ -275,7 +316,7 @@ export default function SemanticIndexSettings() {
           </div>
           <div>
             <dt>Model</dt>
-            <dd>{view.model}</dd>
+            <dd>{view.model} · {view.modelStatusLabel}</dd>
           </div>
           <div>
             <dt>Index</dt>
@@ -316,7 +357,7 @@ export default function SemanticIndexSettings() {
           </div>
         )}
 
-        {!view.modelInstalled && (
+        {view.installCommand && (
           <div className={styles.installNote}>
             <span>Install model</span>
             <code>{view.installCommand}</code>
@@ -328,10 +369,10 @@ export default function SemanticIndexSettings() {
         <button
           type="button"
           className={styles.button}
-          disabled={!apiAvailable || !!busyAction}
+          disabled={!actions[queueAction] || !!busyAction}
           onClick={() => runAction(
             view.paused ? 'resume indexing' : 'pause indexing',
-            view.paused ? 'resume' : 'pause',
+            queueAction,
           )}
         >
           {view.paused ? <Play size={14} aria-hidden="true" /> : <Pause size={14} aria-hidden="true" />}
@@ -340,10 +381,10 @@ export default function SemanticIndexSettings() {
         <button
           type="button"
           className={styles.button}
-          disabled={!apiAvailable || !!busyAction}
+          disabled={!actions[rebuildAction] || !!busyAction}
           onClick={() => runAction(
             view.rebuilding ? 'cancel rebuild' : 'start rebuild',
-            view.rebuilding ? 'cancelRebuild' : 'startRebuild',
+            rebuildAction,
           )}
         >
           {view.rebuilding ? <XCircle size={14} aria-hidden="true" /> : <RefreshCw size={14} aria-hidden="true" />}
@@ -354,7 +395,7 @@ export default function SemanticIndexSettings() {
             <button
               type="button"
               className={styles.button}
-              disabled={!!busyAction}
+              disabled={!actions.retryFailed || !!busyAction}
               onClick={() => runAction('retry failures', 'retryFailed', failedIds)}
             >
               <RotateCcw size={14} aria-hidden="true" />
@@ -363,7 +404,7 @@ export default function SemanticIndexSettings() {
             <button
               type="button"
               className={styles.textButton}
-              disabled={!!busyAction}
+              disabled={!actions.dismissFailed || !!busyAction}
               onClick={() => runAction('dismiss failures', 'dismissFailed', failedIds)}
             >
               Dismiss failed
