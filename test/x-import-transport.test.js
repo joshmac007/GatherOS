@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 async function transport() { return import('../extension/x-import-transport.mjs'); }
 
@@ -7,23 +9,21 @@ function catchUpState() {
   return { active: true, mode: 'catch-up', knownStreak: 0, processed: new Set(), imported: 0 };
 }
 
-test('API and scroll adapters execute identical ordered catch-up behavior', async () => {
+test('shared transport adapter executes ordered catch-up behavior', async () => {
   const { runCatchUpTransportBatch } = await transport();
-  for (const transportName of ['api', 'scroll']) {
-    const state = catchUpState();
-    const saved = [];
-    const result = await runCatchUpTransportBatch({
-      state,
-      entries: [{ tweetId: 'known' }, { tweetId: 'missed' }, { tweetId: 'known-2' }, { tweetId: 'known-3' }],
-      classify: async () => ['known-active', 'new', 'known-dismissed', 'known-active'],
-      save: async (entry, options) => { saved.push([transportName, entry.tweetId, options]); return { ok: true, id: entry.tweetId }; },
-      isAccepted: (response) => response.ok,
-      isNew: (response) => !!response.id,
-    });
-    assert.deepEqual(saved, [[transportName, 'missed', { force: false }]]);
-    assert.deepEqual(result, { boundaryReached: true, acceptedIds: ['missed'] });
-    assert.equal(state.imported, 1);
-  }
+  const state = catchUpState();
+  const saved = [];
+  const result = await runCatchUpTransportBatch({
+    state,
+    entries: [{ tweetId: 'known' }, { tweetId: 'missed' }, { tweetId: 'known-2' }, { tweetId: 'known-3' }],
+    classify: async () => ['known-active', 'new', 'known-dismissed', 'known-active'],
+    save: async (entry, options) => { saved.push([entry.tweetId, options]); return { ok: true, id: entry.tweetId }; },
+    isAccepted: (response) => response.ok,
+    isNew: (response) => !!response.id,
+  });
+  assert.deepEqual(saved, [['missed', { force: false }]]);
+  assert.deepEqual(result, { boundaryReached: true, acceptedIds: ['missed'] });
+  assert.equal(state.imported, 1);
 });
 
 test('save failure stops before later status with accurate partial progress', async () => {
@@ -79,9 +79,10 @@ test('fixed/all transport keeps force and limit behavior', async () => {
   }
 });
 
-test('API fallback launcher preserves catch-up mode and limit', async () => {
-  const { launchScrollFallback } = await transport();
-  const calls = [];
-  await launchScrollFallback((limit, mode) => calls.push({ limit, mode }), Infinity, 'catch-up');
-  assert.deepEqual(calls, [{ limit: Infinity, mode: 'catch-up' }]);
+test('background wires catch-up adapter into API and scroll and preserves fallback mode', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
+  const fallbackCalls = source.match(/runXScrollImport\(limit(?:, mode)?\)/g) || [];
+  assert.equal(fallbackCalls.length, 4);
+  assert.deepEqual(new Set(fallbackCalls), new Set(['runXScrollImport(limit, mode)']));
+  assert.equal((source.match(/runCatchUpTransportBatch\(\{/g) || []).length, 2);
 });

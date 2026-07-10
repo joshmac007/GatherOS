@@ -12,7 +12,6 @@ import {
   catchUpSummary,
 } from './catch-up-import.mjs';
 import {
-  launchScrollFallback,
   runCatchUpTransportBatch,
   runFixedTransportBatch,
 } from './x-import-transport.mjs';
@@ -556,7 +555,7 @@ async function runXApiImport(limit, mode = 'fixed') {
   // the visible bookmarks tab, which captures a fresh template so the
   // quiet path works next time.
   if (!template || !template.url || !template.authorization || !csrf) {
-    return launchScrollFallback(runXScrollImport, limit, mode);
+    return runXScrollImport(limit, mode);
   }
 
   const headers = {
@@ -574,13 +573,13 @@ async function runXApiImport(limit, mode = 'fixed') {
   let json;
   try {
     const res = await fetch(template.url, { method: 'GET', credentials: 'include', headers });
-    if (!res.ok) return launchScrollFallback(runXScrollImport, limit, mode);
+    if (!res.ok) return runXScrollImport(limit, mode);
     json = await res.json();
   } catch {
-    return launchScrollFallback(runXScrollImport, limit, mode);
+    return runXScrollImport(limit, mode);
   }
   let entries = pollExtractBookmarkEntries(json);
-  if (entries.length === 0) return launchScrollFallback(runXScrollImport, limit, mode);
+  if (entries.length === 0) return runXScrollImport(limit, mode);
 
   const state = {
     active: true,
