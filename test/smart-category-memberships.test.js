@@ -321,6 +321,45 @@ test('uses active semantic generation vectors without calling Codex scoring or e
   assert.match(stored[0].evidence.centroidSourceHash, /^[a-f0-9]{64}$/);
 });
 
+test('returns a successful zero assignment without Codex when active semantic vectors do not match', async () => {
+  let codexCalls = 0;
+  const stored = [];
+
+  const result = await assignSmartCategoryMemberships({
+    saveId: 'save-orthogonal',
+    profile: profile({ save_id: 'save-orthogonal' }),
+    candidateCategories: [candidates()[0]],
+    provider: {
+      async generateSmartCategoryMemberships() {
+        codexCalls += 1;
+        throw new Error('must not be called for a valid semantic no-match');
+      },
+    },
+    getSemanticIndexState: () => ({ active_generation_id: 'gen-active' }),
+    getSemanticVector: () => ({
+      save_id: 'save-orthogonal', generation_id: 'gen-active', model: 'embeddinggemma', dimension: 3,
+      source_hash: 'target-hash', vector: vectorToBuffer([0, 1, 0]),
+    }),
+    getActiveSemanticVectors: () => [{
+      save_id: 'member-ai', generation_id: 'gen-active', model: 'embeddinggemma', dimension: 3,
+      source_hash: 'member-hash', vector: vectorToBuffer([1, 0, 0]),
+    }],
+    getSmartCategoryMembers: () => [{ save_id: 'member-ai', weight: 0.9 }],
+    upsertSmartCategoryMembership: (entry) => { stored.push(entry); return { ok: true }; },
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    provider: 'ollama-semantic-index',
+    assignedCount: 0,
+    memberships: [],
+    needsNewCategory: true,
+    newCategoryHint: null,
+  });
+  assert.equal(codexCalls, 0);
+  assert.deepEqual(stored, []);
+});
+
 test('never compares mismatched vector identities and falls back to Codex membership scoring', withTempDb(async (db) => {
   const save = db.insertSave({
     id: 'save-fallback',

@@ -264,7 +264,16 @@ async function assignSmartCategoryMembershipsWithSemanticIndex({
     });
   }
 
-  if (scored.length === 0) return { ok: false, reason: 'no-active-semantic-centroid-matches' };
+  if (scored.length === 0) {
+    return {
+      ok: true,
+      provider: 'ollama-semantic-index',
+      assignedCount: 0,
+      memberships: [],
+      needsNewCategory: true,
+      newCategoryHint: null,
+    };
+  }
 
   const validation = validateSmartCategoryMemberships({ memberships: scored }, {
     candidateCategories: input.candidate_categories,
