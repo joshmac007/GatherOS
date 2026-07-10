@@ -45,7 +45,3 @@ export async function runFixedTransportBatch({
   }
   return { reachedLimit, acceptedIds, attemptedIds };
 }
-
-export function launchScrollFallback(start, limit, mode) {
-  return start(limit, mode);
-}
