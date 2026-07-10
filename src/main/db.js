@@ -4,6 +4,125 @@ const crypto = require('node:crypto');
 const { app } = require('electron');
 const Database = require('better-sqlite3');
 
+// Video suggestions and semantic search are separate durable domains. This
+// block is used by both the fresh-database baseline and one appended migration
+// so old libraries and new libraries receive the exact same constraints.
+const AI_DOMAIN_SCHEMA = `
+CREATE TABLE IF NOT EXISTS semantic_index_generations (
+  id              TEXT PRIMARY KEY,
+  model           TEXT NOT NULL,
+  dimension       INTEGER,
+  source_version  INTEGER NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'building',
+  created_at      INTEGER NOT NULL,
+  activated_at    INTEGER,
+  completed_at    INTEGER,
+  cancelled_at    INTEGER,
+  CHECK (dimension IS NULL OR dimension > 0),
+  CHECK (status IN ('building', 'active', 'retired', 'cancelled', 'failed'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_semantic_generations_status
+  ON semantic_index_generations(status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS semantic_index_state (
+  id                      INTEGER PRIMARY KEY CHECK (id = 1),
+  active_generation_id    TEXT REFERENCES semantic_index_generations(id) ON DELETE SET NULL,
+  building_generation_id  TEXT REFERENCES semantic_index_generations(id) ON DELETE SET NULL,
+  paused                  INTEGER NOT NULL DEFAULT 0,
+  pause_reason            TEXT,
+  paused_at               INTEGER,
+  updated_at              INTEGER NOT NULL DEFAULT 0,
+  CHECK (paused IN (0, 1))
+);
+
+INSERT OR IGNORE INTO semantic_index_state (id, updated_at) VALUES (1, 0);
+
+CREATE TABLE IF NOT EXISTS semantic_vectors (
+  generation_id  TEXT NOT NULL REFERENCES semantic_index_generations(id) ON DELETE CASCADE,
+  save_id        TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
+  model          TEXT NOT NULL,
+  dimension      INTEGER NOT NULL,
+  source_hash    TEXT NOT NULL,
+  vector         BLOB NOT NULL,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL,
+  PRIMARY KEY (generation_id, save_id),
+  CHECK (dimension > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_semantic_vectors_save
+  ON semantic_vectors(save_id, generation_id);
+
+CREATE TABLE IF NOT EXISTS semantic_index_jobs (
+  id              TEXT PRIMARY KEY,
+  generation_id   TEXT NOT NULL REFERENCES semantic_index_generations(id) ON DELETE CASCADE,
+  save_id          TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
+  kind             TEXT NOT NULL,
+  source_hash      TEXT NOT NULL,
+  state            TEXT NOT NULL DEFAULT 'pending',
+  retry_count      INTEGER NOT NULL DEFAULT 0,
+  available_at     INTEGER NOT NULL,
+  error            TEXT,
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,
+  started_at       INTEGER,
+  finished_at      INTEGER,
+  UNIQUE (generation_id, save_id, kind),
+  CHECK (kind IN ('incremental', 'rebuild')),
+  CHECK (state IN ('pending', 'running', 'completed', 'failed', 'dismissed')),
+  CHECK (retry_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_semantic_jobs_ready
+  ON semantic_index_jobs(state, kind, available_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_semantic_jobs_generation
+  ON semantic_index_jobs(generation_id, state);
+
+CREATE TABLE IF NOT EXISTS video_analysis_jobs (
+  id              TEXT PRIMARY KEY,
+  save_id          TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
+  fingerprint      TEXT NOT NULL,
+  prompt_version   INTEGER NOT NULL,
+  state            TEXT NOT NULL DEFAULT 'pending',
+  retry_count      INTEGER NOT NULL DEFAULT 0,
+  available_at     INTEGER NOT NULL,
+  error            TEXT,
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,
+  started_at       INTEGER,
+  finished_at      INTEGER,
+  UNIQUE (save_id, fingerprint),
+  CHECK (prompt_version > 0),
+  CHECK (state IN ('pending', 'running', 'completed', 'failed', 'unavailable', 'superseded')),
+  CHECK (retry_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_video_analysis_ready
+  ON video_analysis_jobs(state, available_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_video_analysis_save
+  ON video_analysis_jobs(save_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS video_tag_suggestions (
+  id            TEXT PRIMARY KEY,
+  job_id        TEXT NOT NULL REFERENCES video_analysis_jobs(id) ON DELETE CASCADE,
+  save_id       TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
+  fingerprint   TEXT NOT NULL,
+  name          TEXT NOT NULL,
+  confidence    TEXT NOT NULL DEFAULT 'high',
+  evidence      TEXT NOT NULL DEFAULT '[]',
+  state         TEXT NOT NULL DEFAULT 'suggested',
+  created_at    INTEGER NOT NULL,
+  resolved_at   INTEGER,
+  UNIQUE (job_id, name),
+  CHECK (confidence IN ('high', 'medium', 'low')),
+  CHECK (state IN ('suggested', 'accepted', 'dismissed'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_video_suggestions_save
+  ON video_tag_suggestions(save_id, state, created_at);
+`;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS saves (
   id          TEXT PRIMARY KEY,
@@ -163,6 +282,7 @@ CREATE TABLE IF NOT EXISTS smart_category_runs (
 CREATE INDEX IF NOT EXISTS idx_smart_category_runs_started
   ON smart_category_runs(started_at DESC);
 
+${AI_DOMAIN_SCHEMA}
 `;
 
 function safeJsonExpr(col) {
@@ -587,6 +707,12 @@ const MIGRATIONS = [
   // are recorded here until assignment behavior is stable enough to apply them.
   (database) => {
     addColumnIfMissing(database, 'smart_category_runs', 'metadata', 'TEXT');
+  },
+  // Durable, generation-isolated semantic indexing and fingerprint-scoped
+  // video tag suggestions. Additive only: legacy save embeddings remain
+  // readable but are not copied into this index.
+  (database) => {
+    database.exec(AI_DOMAIN_SCHEMA);
   },
 ];
 
@@ -2363,6 +2489,593 @@ function createCollection({ name, color, parentId } = {}) {
   return record;
 }
 
+// ── Semantic index persistence ────────────────────────────────────────────
+
+function createSemanticGeneration({
+  id,
+  model,
+  dimension,
+  sourceVersion,
+  status = 'building',
+  createdAt,
+} = {}) {
+  if (!id || !model || !Number.isInteger(sourceVersion)) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const database = getDatabase();
+  const now = Number.isFinite(createdAt) ? createdAt : Date.now();
+  const record = {
+    id,
+    model,
+    dimension: Number.isInteger(dimension) && dimension > 0 ? dimension : null,
+    source_version: sourceVersion,
+    status,
+    created_at: now,
+    activated_at: status === 'active' ? now : null,
+  };
+  const create = database.transaction(() => {
+    database.prepare(`
+      INSERT INTO semantic_index_generations
+        (id, model, dimension, source_version, status, created_at, activated_at)
+      VALUES
+        (@id, @model, @dimension, @source_version, @status, @created_at, @activated_at)
+    `).run(record);
+    if (status === 'active') {
+      database.prepare(
+        "UPDATE semantic_index_generations SET status = 'retired' WHERE status = 'active' AND id != ?",
+      ).run(id);
+      database.prepare(`
+        UPDATE semantic_index_state
+           SET active_generation_id = ?, updated_at = ?
+         WHERE id = 1
+      `).run(id, now);
+    } else if (status === 'building') {
+      database.prepare(`
+        UPDATE semantic_index_state
+           SET building_generation_id = ?, updated_at = ?
+         WHERE id = 1
+      `).run(id, now);
+    }
+  });
+  create();
+  return database.prepare('SELECT * FROM semantic_index_generations WHERE id = ?').get(id);
+}
+
+function getSemanticIndexState() {
+  const row = getDatabase().prepare(`
+    SELECT active_generation_id, building_generation_id, paused,
+           pause_reason, paused_at, updated_at
+      FROM semantic_index_state
+     WHERE id = 1
+  `).get();
+  return { ...row, paused: !!row.paused };
+}
+
+function enqueueSemanticIndexJob({
+  id,
+  generationId,
+  saveId,
+  kind = 'incremental',
+  sourceHash,
+  now,
+} = {}) {
+  if (!generationId || !saveId || !sourceHash) return { ok: false, reason: 'invalid' };
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  database.prepare(`
+    INSERT INTO semantic_index_jobs
+      (id, generation_id, save_id, kind, source_hash, state, retry_count,
+       available_at, created_at, updated_at)
+    VALUES
+      (@id, @generation_id, @save_id, @kind, @source_hash, 'pending', 0,
+       @available_at, @created_at, @updated_at)
+    ON CONFLICT(generation_id, save_id, kind) DO UPDATE SET
+      source_hash = excluded.source_hash,
+      state = 'pending',
+      retry_count = CASE
+        WHEN semantic_index_jobs.source_hash = excluded.source_hash
+        THEN semantic_index_jobs.retry_count ELSE 0 END,
+      available_at = excluded.available_at,
+      error = NULL,
+      updated_at = excluded.updated_at,
+      started_at = NULL,
+      finished_at = NULL
+  `).run({
+    id: id || crypto.randomUUID(),
+    generation_id: generationId,
+    save_id: saveId,
+    kind,
+    source_hash: sourceHash,
+    available_at: timestamp,
+    created_at: timestamp,
+    updated_at: timestamp,
+  });
+  return database.prepare(`
+    SELECT * FROM semantic_index_jobs
+     WHERE generation_id = ? AND save_id = ? AND kind = ?
+  `).get(generationId, saveId, kind);
+}
+
+function claimSemanticIndexJob(kind, now = Date.now()) {
+  const database = getDatabase();
+  if (database.prepare('SELECT paused FROM semantic_index_state WHERE id = 1').get().paused) {
+    return undefined;
+  }
+  const claim = database.transaction(() => {
+    const row = database.prepare(`
+      SELECT j.*
+        FROM semantic_index_jobs j
+        JOIN semantic_index_generations g ON g.id = j.generation_id
+       WHERE j.state = 'pending'
+         AND j.available_at <= ?
+         AND (? IS NULL OR j.kind = ?)
+         AND g.status IN ('active', 'building')
+       ORDER BY CASE j.kind WHEN 'incremental' THEN 0 ELSE 1 END,
+                j.available_at ASC, j.created_at ASC
+       LIMIT 1
+    `).get(now, kind || null, kind || null);
+    if (!row) return undefined;
+    const result = database.prepare(`
+      UPDATE semantic_index_jobs
+         SET state = 'running', started_at = ?, updated_at = ?, error = NULL
+       WHERE id = ? AND state = 'pending'
+    `).run(now, now, row.id);
+    if (result.changes !== 1) return undefined;
+    return database.prepare('SELECT * FROM semantic_index_jobs WHERE id = ?').get(row.id);
+  });
+  return claim();
+}
+
+function vectorBuffer(value) {
+  if (Buffer.isBuffer(value)) return value;
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return null;
+}
+
+function completeSemanticIndexJob({
+  id,
+  sourceHash,
+  model,
+  dimension,
+  vector,
+  now,
+  activate = true,
+} = {}) {
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const bytes = vectorBuffer(vector);
+  const complete = database.transaction(() => {
+    const job = database.prepare('SELECT * FROM semantic_index_jobs WHERE id = ?').get(id);
+    if (!job) return { ok: false, reason: 'not_found' };
+    if (job.state !== 'running') {
+      return { ok: false, reason: job.source_hash !== sourceHash ? 'stale' : 'not_running' };
+    }
+    if (job.source_hash !== sourceHash) return { ok: false, reason: 'stale' };
+    const generation = database.prepare(
+      'SELECT * FROM semantic_index_generations WHERE id = ?',
+    ).get(job.generation_id);
+    if (!generation || generation.model !== model || !bytes || !Number.isInteger(dimension) || dimension < 1) {
+      return { ok: false, reason: 'invalid_vector_identity' };
+    }
+    if (generation.dimension && generation.dimension !== dimension) {
+      return { ok: false, reason: 'dimension_mismatch' };
+    }
+
+    database.prepare(`
+      UPDATE semantic_index_generations
+         SET dimension = COALESCE(dimension, ?)
+       WHERE id = ?
+    `).run(dimension, generation.id);
+    database.prepare(`
+      INSERT INTO semantic_vectors
+        (generation_id, save_id, model, dimension, source_hash, vector, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(generation_id, save_id) DO UPDATE SET
+        model = excluded.model,
+        dimension = excluded.dimension,
+        source_hash = excluded.source_hash,
+        vector = excluded.vector,
+        updated_at = excluded.updated_at
+    `).run(
+      generation.id,
+      job.save_id,
+      model,
+      dimension,
+      sourceHash,
+      bytes,
+      timestamp,
+      timestamp,
+    );
+    database.prepare(`
+      UPDATE semantic_index_jobs
+         SET state = 'completed', updated_at = ?, finished_at = ?, error = NULL
+       WHERE id = ?
+    `).run(timestamp, timestamp, id);
+
+    if (generation.status === 'building' && activate !== false) {
+      const remaining = database.prepare(`
+        SELECT COUNT(*) AS n
+          FROM semantic_index_jobs
+         WHERE generation_id = ? AND state IN ('pending', 'running', 'failed')
+      `).get(generation.id).n;
+      if (remaining === 0) {
+        database.prepare(`
+          UPDATE semantic_index_generations
+             SET status = 'retired'
+           WHERE status = 'active' AND id != ?
+        `).run(generation.id);
+        database.prepare(`
+          UPDATE semantic_index_generations
+             SET status = 'active', activated_at = ?, completed_at = ?
+           WHERE id = ?
+        `).run(timestamp, timestamp, generation.id);
+        database.prepare(`
+          UPDATE semantic_index_state
+             SET active_generation_id = ?, building_generation_id = NULL, updated_at = ?
+           WHERE id = 1
+        `).run(generation.id, timestamp);
+      }
+    }
+    return { ok: true, saveId: job.save_id, generationId: generation.id };
+  });
+  return complete();
+}
+
+function failSemanticIndexJob({ id, error, retryAt, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const availableAt = Number.isFinite(retryAt) ? retryAt : timestamp;
+  const result = getDatabase().prepare(`
+    UPDATE semantic_index_jobs
+       SET state = 'failed', retry_count = retry_count + 1,
+           available_at = ?, error = ?, updated_at = ?, finished_at = ?
+     WHERE id = ? AND state = 'running'
+  `).run(availableAt, error || null, timestamp, timestamp, id);
+  return { ok: result.changes === 1 };
+}
+
+function pauseSemanticIndex({ reason, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  getDatabase().prepare(`
+    UPDATE semantic_index_state
+       SET paused = 1, pause_reason = ?, paused_at = ?, updated_at = ?
+     WHERE id = 1
+  `).run(reason || null, timestamp, timestamp);
+  return getSemanticIndexState();
+}
+
+function resumeSemanticIndex(now = Date.now()) {
+  getDatabase().prepare(`
+    UPDATE semantic_index_state
+       SET paused = 0, pause_reason = NULL, paused_at = NULL, updated_at = ?
+     WHERE id = 1
+  `).run(now);
+  return getSemanticIndexState();
+}
+
+function retrySemanticFailures(ids, now = Date.now()) {
+  if (!Array.isArray(ids) || ids.length === 0) return { ok: true, count: 0 };
+  const placeholders = ids.map(() => '?').join(',');
+  const result = getDatabase().prepare(`
+    UPDATE semantic_index_jobs
+       SET state = 'pending', available_at = ?, error = NULL,
+           updated_at = ?, started_at = NULL, finished_at = NULL
+     WHERE state = 'failed' AND id IN (${placeholders})
+  `).run(now, now, ...ids);
+  return { ok: true, count: result.changes };
+}
+
+function dismissSemanticFailures(ids, now = Date.now()) {
+  if (!Array.isArray(ids) || ids.length === 0) return { ok: true, count: 0 };
+  const placeholders = ids.map(() => '?').join(',');
+  const result = getDatabase().prepare(`
+    UPDATE semantic_index_jobs
+       SET state = 'dismissed', updated_at = ?, finished_at = ?
+     WHERE state = 'failed' AND id IN (${placeholders})
+  `).run(now, now, ...ids);
+  return { ok: true, count: result.changes };
+}
+
+function cancelSemanticGeneration(generationId, now = Date.now()) {
+  const database = getDatabase();
+  const cancel = database.transaction(() => {
+    const generation = database.prepare(
+      'SELECT status FROM semantic_index_generations WHERE id = ?',
+    ).get(generationId);
+    if (!generation) return { ok: false, reason: 'not_found' };
+    if (generation.status === 'active') return { ok: false, reason: 'active' };
+    database.prepare('DELETE FROM semantic_index_jobs WHERE generation_id = ?').run(generationId);
+    database.prepare('DELETE FROM semantic_vectors WHERE generation_id = ?').run(generationId);
+    database.prepare(`
+      UPDATE semantic_index_generations
+         SET status = 'cancelled', cancelled_at = ?, completed_at = ?
+       WHERE id = ?
+    `).run(now, now, generationId);
+    database.prepare(`
+      UPDATE semantic_index_state
+         SET building_generation_id = CASE
+               WHEN building_generation_id = ? THEN NULL ELSE building_generation_id END,
+             updated_at = ?
+       WHERE id = 1
+    `).run(generationId, now);
+    return { ok: true };
+  });
+  return cancel();
+}
+
+function getSemanticIndexStatus() {
+  const database = getDatabase();
+  const state = getSemanticIndexState();
+  const counts = Object.fromEntries(database.prepare(`
+    SELECT state, COUNT(*) AS n
+      FROM semantic_index_jobs
+     GROUP BY state
+  `).all().map((row) => [row.state, row.n]));
+  return {
+    ...state,
+    waiting: counts.pending || 0,
+    running: counts.running || 0,
+    failed: counts.failed || 0,
+    dismissed: counts.dismissed || 0,
+  };
+}
+
+function listSemanticIndexJobs({ generationId, saveId, kind, state } = {}) {
+  const clauses = [];
+  const params = [];
+  if (generationId) { clauses.push('generation_id = ?'); params.push(generationId); }
+  if (saveId) { clauses.push('save_id = ?'); params.push(saveId); }
+  if (kind) { clauses.push('kind = ?'); params.push(kind); }
+  if (state) { clauses.push('state = ?'); params.push(state); }
+  return getDatabase().prepare(`
+    SELECT * FROM semantic_index_jobs
+    ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+    ORDER BY created_at ASC, id ASC
+  `).all(...params);
+}
+
+function getActiveSemanticVectors() {
+  return getDatabase().prepare(`
+    SELECT v.*
+      FROM semantic_vectors v
+      JOIN semantic_index_state s ON s.id = 1 AND s.active_generation_id = v.generation_id
+      JOIN semantic_index_generations g ON g.id = v.generation_id
+     WHERE g.status = 'active'
+       AND g.model = v.model
+       AND g.dimension = v.dimension
+     ORDER BY v.save_id ASC
+  `).all();
+}
+
+function getSemanticVector(saveId) {
+  return getDatabase().prepare(`
+    SELECT v.*
+      FROM semantic_vectors v
+      JOIN semantic_index_state s ON s.id = 1 AND s.active_generation_id = v.generation_id
+      JOIN semantic_index_generations g ON g.id = v.generation_id
+     WHERE v.save_id = ?
+       AND g.status = 'active'
+       AND g.model = v.model
+       AND g.dimension = v.dimension
+  `).get(saveId);
+}
+
+// ── Video analysis persistence ────────────────────────────────────────────
+
+function enqueueVideoAnalysis({ id, saveId, fingerprint, promptVersion, now } = {}) {
+  if (!saveId || !fingerprint || !Number.isInteger(promptVersion) || promptVersion < 1) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const enqueue = database.transaction(() => {
+    const current = database.prepare(`
+      SELECT * FROM video_analysis_jobs
+       WHERE save_id = ? AND state != 'superseded'
+       ORDER BY updated_at DESC LIMIT 1
+    `).get(saveId);
+    if (current && current.fingerprint === fingerprint) return current;
+
+    if (current) {
+      database.prepare(`
+        UPDATE video_analysis_jobs
+           SET state = 'superseded', updated_at = ?, finished_at = COALESCE(finished_at, ?)
+         WHERE id = ?
+      `).run(timestamp, timestamp, current.id);
+    }
+    // Only unresolved output is replaceable. Accepted and dismissed rows are
+    // durable history tied to their original fingerprint.
+    database.prepare(`
+      DELETE FROM video_tag_suggestions
+       WHERE save_id = ? AND state = 'suggested'
+    `).run(saveId);
+
+    const record = {
+      id: id || crypto.randomUUID(),
+      save_id: saveId,
+      fingerprint,
+      prompt_version: promptVersion,
+      available_at: timestamp,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    database.prepare(`
+      INSERT INTO video_analysis_jobs
+        (id, save_id, fingerprint, prompt_version, state, retry_count,
+         available_at, created_at, updated_at)
+      VALUES
+        (@id, @save_id, @fingerprint, @prompt_version, 'pending', 0,
+         @available_at, @created_at, @updated_at)
+    `).run(record);
+    return database.prepare('SELECT * FROM video_analysis_jobs WHERE id = ?').get(record.id);
+  });
+  return enqueue();
+}
+
+function claimVideoAnalysis(now = Date.now()) {
+  const database = getDatabase();
+  const claim = database.transaction(() => {
+    const row = database.prepare(`
+      SELECT * FROM video_analysis_jobs
+       WHERE state IN ('pending', 'failed')
+         AND available_at <= ?
+       ORDER BY available_at ASC, created_at ASC
+       LIMIT 1
+    `).get(now);
+    if (!row) return undefined;
+    const result = database.prepare(`
+      UPDATE video_analysis_jobs
+         SET state = 'running', started_at = ?, updated_at = ?, error = NULL
+       WHERE id = ? AND state IN ('pending', 'failed')
+    `).run(now, now, row.id);
+    if (result.changes !== 1) return undefined;
+    return database.prepare('SELECT * FROM video_analysis_jobs WHERE id = ?').get(row.id);
+  });
+  return claim();
+}
+
+function normalizeTagName(name) {
+  return (name || '').trim().toLowerCase().replace(/^#+/, '');
+}
+
+function completeVideoAnalysis({ id, fingerprint, suggestions = [], unavailable = false, now } = {}) {
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const complete = database.transaction(() => {
+    const job = database.prepare('SELECT * FROM video_analysis_jobs WHERE id = ?').get(id);
+    if (!job) return { ok: false, reason: 'not_found' };
+    if (job.state !== 'running') return { ok: false, reason: 'not_running' };
+    if (job.fingerprint !== fingerprint) return { ok: false, reason: 'stale' };
+
+    database.prepare(`
+      DELETE FROM video_tag_suggestions
+       WHERE job_id = ? AND state = 'suggested'
+    `).run(id);
+    const insert = database.prepare(`
+      INSERT OR IGNORE INTO video_tag_suggestions
+        (id, job_id, save_id, fingerprint, name, confidence, evidence,
+         state, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'suggested', ?)
+    `);
+    if (!unavailable) {
+      for (const suggestion of suggestions) {
+        const name = normalizeTagName(suggestion && suggestion.name);
+        if (!name) continue;
+        const evidence = Array.isArray(suggestion.evidence) ? suggestion.evidence : [];
+        insert.run(
+          crypto.randomUUID(),
+          job.id,
+          job.save_id,
+          job.fingerprint,
+          name,
+          suggestion.confidence || 'high',
+          JSON.stringify(evidence),
+          timestamp,
+        );
+      }
+    }
+    database.prepare(`
+      UPDATE video_analysis_jobs
+         SET state = ?, error = NULL, updated_at = ?, finished_at = ?
+       WHERE id = ?
+    `).run(unavailable ? 'unavailable' : 'completed', timestamp, timestamp, id);
+    return { ok: true, saveId: job.save_id };
+  });
+  return complete();
+}
+
+function failVideoAnalysis({ id, error, retryAt, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const availableAt = Number.isFinite(retryAt) ? retryAt : timestamp;
+  const result = getDatabase().prepare(`
+    UPDATE video_analysis_jobs
+       SET state = 'failed', retry_count = retry_count + 1,
+           available_at = ?, error = ?, updated_at = ?, finished_at = ?
+     WHERE id = ? AND state = 'running'
+  `).run(availableAt, error || null, timestamp, timestamp, id);
+  return { ok: result.changes === 1 };
+}
+
+function recoverBackgroundJobs(now = Date.now()) {
+  const database = getDatabase();
+  const recover = database.transaction(() => {
+    const semantic = database.prepare(`
+      UPDATE semantic_index_jobs
+         SET state = 'pending', started_at = NULL, updated_at = ?
+       WHERE state = 'running'
+    `).run(now).changes;
+    const video = database.prepare(`
+      UPDATE video_analysis_jobs
+         SET state = 'pending', started_at = NULL, updated_at = ?
+       WHERE state = 'running'
+    `).run(now).changes;
+    return { semantic, video };
+  });
+  return recover();
+}
+
+function getVideoAnalysis(saveId) {
+  return getDatabase().prepare(`
+    SELECT * FROM video_analysis_jobs
+     WHERE save_id = ? AND state != 'superseded'
+     ORDER BY updated_at DESC LIMIT 1
+  `).get(saveId);
+}
+
+function listVideoTagSuggestions(saveId) {
+  return getDatabase().prepare(`
+    SELECT * FROM video_tag_suggestions
+     WHERE save_id = ?
+     ORDER BY name ASC, created_at ASC
+  `).all(saveId);
+}
+
+function acceptVideoTagSuggestion({ suggestionId, id, now } = {}) {
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const resolve = database.transaction(() => {
+    const suggestion = database.prepare(
+      'SELECT * FROM video_tag_suggestions WHERE id = ?',
+    ).get(suggestionId || id);
+    if (!suggestion) return { ok: false, reason: 'not_found' };
+    if (suggestion.state !== 'suggested') return { ok: false, reason: 'resolved' };
+    let tag = database.prepare('SELECT id FROM tags WHERE name = ?').get(suggestion.name);
+    if (!tag) {
+      tag = { id: crypto.randomUUID() };
+      database.prepare('INSERT INTO tags (id, name) VALUES (?, ?)').run(tag.id, suggestion.name);
+    }
+    database.prepare(
+      'INSERT OR IGNORE INTO save_tags (save_id, tag_id) VALUES (?, ?)',
+    ).run(suggestion.save_id, tag.id);
+    database.prepare(`
+      UPDATE video_tag_suggestions
+         SET state = 'accepted', resolved_at = ?
+       WHERE id = ? AND state = 'suggested'
+    `).run(timestamp, suggestion.id);
+    return { ok: true, saveId: suggestion.save_id };
+  });
+  return resolve();
+}
+
+function dismissVideoTagSuggestion({ suggestionId, id, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const database = getDatabase();
+  const suggestion = database.prepare(
+    'SELECT * FROM video_tag_suggestions WHERE id = ?',
+  ).get(suggestionId || id);
+  if (!suggestion) return { ok: false, reason: 'not_found' };
+  if (suggestion.state !== 'suggested') return { ok: false, reason: 'resolved' };
+  const result = database.prepare(`
+    UPDATE video_tag_suggestions
+       SET state = 'dismissed', resolved_at = ?
+     WHERE id = ? AND state = 'suggested'
+  `).run(timestamp, suggestion.id);
+  return result.changes === 1
+    ? { ok: true, saveId: suggestion.save_id }
+    : { ok: false, reason: 'resolved' };
+}
+
 // ── Tags ───────────────────────────────────────────────────────────────────
 
 // Internal tags are namespaced with a leading "__" (e.g. "__starter__",
@@ -2867,6 +3580,32 @@ module.exports = {
   recordSmartCategoryRun,
   listSmartCategoryRuns,
   getPendingSmartCategorySaves,
+  // Semantic index
+  createSemanticGeneration,
+  getSemanticIndexState,
+  enqueueSemanticIndexJob,
+  claimSemanticIndexJob,
+  completeSemanticIndexJob,
+  failSemanticIndexJob,
+  pauseSemanticIndex,
+  resumeSemanticIndex,
+  retrySemanticFailures,
+  dismissSemanticFailures,
+  cancelSemanticGeneration,
+  getSemanticIndexStatus,
+  listSemanticIndexJobs,
+  getActiveSemanticVectors,
+  getSemanticVector,
+  // Video analysis
+  enqueueVideoAnalysis,
+  claimVideoAnalysis,
+  completeVideoAnalysis,
+  failVideoAnalysis,
+  recoverBackgroundJobs,
+  getVideoAnalysis,
+  listVideoTagSuggestions,
+  acceptVideoTagSuggestion,
+  dismissVideoTagSuggestion,
   getAllCollections,
   getAllCollectionsWithThumbs,
   getCollectionsForSave,
