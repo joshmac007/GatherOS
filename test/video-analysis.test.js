@@ -29,6 +29,14 @@ function saveFixture(overrides = {}) {
   };
 }
 
+function fingerprintForSave(save, sourceContext = {}) {
+  return buildVideoAnalysisFingerprint({
+    contentIdentity: `sha256:${save.content_hash}`,
+    context: buildCanonicalVideoContext({ save, sourceContext }),
+    promptVersion: VIDEO_ANALYSIS_PROMPT_VERSION,
+  });
+}
+
 test('canonical context and fingerprint are stable across whitespace and tag order', () => {
   const firstContext = buildCanonicalVideoContext({
     save: saveFixture(),
@@ -36,7 +44,7 @@ test('canonical context and fingerprint are stable across whitespace and tag ord
   });
   const secondContext = buildCanonicalVideoContext({
     save: saveFixture({ notes: ' Wood   slat\nprivacy wall ' }),
-    acceptedTags: [{ name: 'WOODWORKING' }, 'outdoor living'],
+    acceptedTags: [{ name: 'completely different accepted tag' }],
   });
   const first = buildVideoAnalysisFingerprint({
     contentIdentity: 'sha256:content-hash-a',
@@ -50,6 +58,7 @@ test('canonical context and fingerprint are stable across whitespace and tag ord
   });
 
   assert.deepEqual(firstContext, secondContext);
+  assert.equal('acceptedTags' in firstContext, false);
   assert.equal(first, second);
   assert.notEqual(first, buildVideoAnalysisFingerprint({
     contentIdentity: 'sha256:changed', context: firstContext, promptVersion: VIDEO_ANALYSIS_PROMPT_VERSION,
@@ -141,6 +150,7 @@ test('frames compose one cached contact sheet and make exactly one Codex call', 
     const frame = await sharp({
       create: { width: 40, height: 30, channels: 3, background: '#9b6a45' },
     }).jpeg().toBuffer();
+    const expectedFingerprint = fingerprintForSave(saveFixture());
     let providerCalls = 0;
     const completions = [];
     const service = createVideoAnalysisService({
@@ -158,7 +168,8 @@ test('frames compose one cached contact sheet and make exactly one Codex call', 
           assert.equal(input.duration, 30);
           assert.deepEqual(input.timestamps, [5, 10, 15, 20, 25, 27]);
           assert.equal(input.evidenceMode, 'frames');
-          assert.equal(options.imagePath, path.join(directory, 'video-save', 'fingerprint-a.jpg'));
+          assert.deepEqual(input.context.acceptedTags, ['woodworking']);
+          assert.equal(options.imagePath, path.join(directory, 'video-save', `${expectedFingerprint}.jpg`));
           assert.equal(fs.existsSync(options.imagePath), true);
           return { tags: [{ name: 'Patio renovation', confidence: 'high', evidence: ['visual'] }] };
         },
@@ -168,16 +179,21 @@ test('frames compose one cached contact sheet and make exactly one Codex call', 
     });
 
     const result = await service.run({
-      job: { id: 'job-a', fingerprint: 'fingerprint-a', prompt_version: VIDEO_ANALYSIS_PROMPT_VERSION },
+      job: {
+        id: 'job-a',
+        fingerprint: expectedFingerprint,
+        prompt_version: VIDEO_ANALYSIS_PROMPT_VERSION,
+      },
       save: saveFixture(),
+      acceptedTags: ['woodworking'],
     });
 
     assert.equal(result.status, 'completed');
     assert.equal(providerCalls, 1);
-    assert.equal(result.contactSheetPath, path.join(directory, 'video-save', 'fingerprint-a.jpg'));
+    assert.equal(result.contactSheetPath, path.join(directory, 'video-save', `${result.fingerprint}.jpg`));
     assert.deepEqual(completions, [{
       id: 'job-a',
-      fingerprint: 'fingerprint-a',
+      fingerprint: expectedFingerprint,
       suggestions: [{ name: 'patio renovation', confidence: 'high', evidence: ['visual'] }],
       unavailable: false,
       now: 500,
@@ -213,7 +229,11 @@ test('frame failure uses poster once and marks poster evidence', async () => {
     });
 
     const result = await service.run({
-      job: { id: 'job-poster', fingerprint: 'fingerprint-poster', prompt_version: 1 },
+      job: {
+        id: 'job-poster',
+        fingerprint: fingerprintForSave(saveFixture({ thumb_path: posterPath })),
+        prompt_version: 1,
+      },
       save: saveFixture({ thumb_path: posterPath }),
     });
 
@@ -240,7 +260,7 @@ test('no usable frame or poster persists unavailable with zero provider calls', 
   });
 
   const result = await service.run({
-    job: { id: 'job-unavailable', fingerprint: 'fingerprint-unavailable', prompt_version: 1 },
+    job: { id: 'job-unavailable', fingerprint: fingerprintForSave(saveFixture()), prompt_version: 1 },
     save: saveFixture({ thumb_path: '/tmp/missing-poster.jpg' }),
   });
 
@@ -248,11 +268,49 @@ test('no usable frame or poster persists unavailable with zero provider calls', 
   assert.equal(providerCalls, 0);
   assert.deepEqual(completion, {
     id: 'job-unavailable',
-    fingerprint: 'fingerprint-unavailable',
+    fingerprint: fingerprintForSave(saveFixture()),
     suggestions: [],
     unavailable: true,
     now: 700,
   });
+});
+
+test('run rejects jobs whose media identity or source context changed before provider work', async () => {
+  const original = saveFixture();
+  const originalFingerprint = fingerprintForSave(original);
+  for (const current of [
+    saveFixture({ content_hash: 'content-hash-b' }),
+    saveFixture({ notes: 'Context changed after the job was queued' }),
+  ]) {
+    let extractions = 0;
+    let providerCalls = 0;
+    let completions = 0;
+    const service = createVideoAnalysisService({
+      repository: {
+        completeVideoAnalysis() { completions += 1; },
+      },
+      frameExtractor: {
+        async extract() { extractions += 1; throw new Error('must not extract stale job'); },
+      },
+      codex: {
+        async generateVideoTagSuggestions() { providerCalls += 1; },
+      },
+      exists: () => false,
+    });
+
+    const result = await service.run({
+      job: { id: 'stale-job', fingerprint: originalFingerprint, prompt_version: 1 },
+      save: current,
+    });
+
+    assert.equal(result.status, 'stale');
+    assert.equal(result.reason, 'fingerprint_changed');
+    assert.equal(result.jobFingerprint, originalFingerprint);
+    assert.equal(result.fingerprint, fingerprintForSave(current));
+    assert.equal(extractions, 0);
+    assert.equal(providerCalls, 0);
+    assert.equal(completions, 0);
+  }
 });
 
 test('derived cache cleanup removes only one save superseded JPEGs', async () => {

@@ -47,7 +47,7 @@ function sourceDomain(sourceUrl) {
   try { return new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; }
 }
 
-function buildCanonicalVideoContext({ save = {}, sourceContext = {}, acceptedTags = [] } = {}) {
+function buildCanonicalVideoContext({ save = {}, sourceContext = {} } = {}) {
   const tweetMeta = parseObject(save.tweet_meta ?? save.tweetMeta);
   const quoted = parseObject(tweetMeta.quoted);
   const sourceUrl = normalizeText(
@@ -65,6 +65,12 @@ function buildCanonicalVideoContext({ save = {}, sourceContext = {}, acceptedTag
     sourceDomain: normalizeText(sourceContext.sourceDomain ?? sourceContext.source_domain)
       .toLowerCase() || sourceDomain(sourceUrl),
     notes: normalizeText(sourceContext.notes ?? save.notes),
+  };
+}
+
+function buildVideoRequestContext({ save = {}, sourceContext = {}, acceptedTags = [] } = {}) {
+  return {
+    ...buildCanonicalVideoContext({ save, sourceContext }),
     acceptedTags: normalizeTagList(acceptedTags),
   };
 }
@@ -257,7 +263,16 @@ function createVideoAnalysisService({
   async function run({ job, save, sourceContext = {}, acceptedTags = [], posterPath = null } = {}) {
     if (!job?.id || !job?.fingerprint) throw new Error('Video analysis job is required');
     if (!save?.id) throw new Error('Video save is required');
-    const context = buildCanonicalVideoContext({ save, sourceContext, acceptedTags });
+    const current = await fingerprintFor({ save, sourceContext });
+    if (current.fingerprint !== job.fingerprint) {
+      return {
+        status: 'stale',
+        reason: 'fingerprint_changed',
+        jobFingerprint: job.fingerprint,
+        fingerprint: current.fingerprint,
+      };
+    }
+    const context = buildVideoRequestContext({ save, sourceContext, acceptedTags });
     const videoPath = save.file_path ?? save.filePath;
     const fallbackPosterPath = posterPath || save.thumb_path || save.thumbPath || null;
     let imagePath = null;
@@ -312,7 +327,6 @@ function createVideoAnalysisService({
       timestamps,
       evidenceMode,
       context,
-      acceptedTags: normalizeTagList(acceptedTags),
       promptVersion: job.prompt_version ?? promptVersion,
     }, { imagePath });
     const suggestions = validateVideoTagSuggestions(raw, { acceptedTags, evidenceMode });
@@ -338,6 +352,7 @@ function createVideoAnalysisService({
 module.exports = {
   VIDEO_ANALYSIS_PROMPT_VERSION,
   buildCanonicalVideoContext,
+  buildVideoRequestContext,
   buildVideoAnalysisFingerprint,
   cleanupDerivedVideoCache,
   composeContactSheet,
