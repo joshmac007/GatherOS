@@ -163,6 +163,42 @@ test('falls back to logging when a custom error reporter throws', async () => {
   assert.equal(logs[0][2].context.lane, video);
 });
 
+test('falls back without an unhandled rejection when an async error reporter rejects', async () => {
+  const order = [];
+  const logs = [];
+  const unhandled = [];
+  const failure = new Error('Codex unavailable');
+  const reporterFailure = new Error('Async reporter unavailable');
+  const video = createLane('video', ['video'], order, {
+    run: async () => { throw failure; },
+  });
+  const semantic = createLane('semantic', ['semantic'], order);
+  const onUnhandled = (error) => unhandled.push(error);
+  process.on('unhandledRejection', onUnhandled);
+
+  try {
+    const coordinator = createBackgroundWorkCoordinator({
+      lanes: [video, semantic],
+      isForegroundBusy: () => false,
+      onError: async () => { throw reporterFailure; },
+      logger: { error: (...args) => logs.push(args) },
+    });
+
+    coordinator.start();
+    await coordinator.whenIdle();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(order, ['semantic']);
+    assert.deepEqual(unhandled, []);
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0][1], reporterFailure);
+    assert.equal(logs[0][2].originalError, failure);
+    assert.equal(logs[0][2].context.lane, video);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+});
+
 test('defers claims while foreground work is busy and noteActivity wakes it', async () => {
   const order = [];
   let foregroundBusy = true;
