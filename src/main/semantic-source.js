@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 
 function normalizeText(value) {
-  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+  return typeof value === 'string' ? value.normalize('NFC').trim().replace(/\s+/g, ' ') : '';
 }
 
 function parseObject(value) {

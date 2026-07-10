@@ -9,11 +9,23 @@ function createError(message, code, details = {}) {
   return error;
 }
 
-async function readJson(response, service) {
+async function readResponseBody(response) {
+  if (typeof response.text === 'function') {
+    try {
+      const raw = await response.text();
+      try {
+        return { data: JSON.parse(raw), raw, invalidJson: false };
+      } catch {
+        return { data: null, raw, invalidJson: true };
+      }
+    } catch {
+      return { data: null, raw: '', invalidJson: true };
+    }
+  }
   try {
-    return await response.json();
+    return { data: await response.json(), raw: '', invalidJson: false };
   } catch {
-    throw createError(`${service} returned invalid JSON`, 'ollama_invalid_response');
+    return { data: null, raw: '', invalidJson: true };
   }
 }
 
@@ -21,8 +33,8 @@ function modelMatches(installedName, requestedName) {
   const installed = clean(installedName);
   const requested = clean(requestedName);
   if (!installed || !requested) return false;
-  if (installed === requested) return true;
-  return installed.split(':')[0] === requested.split(':')[0];
+  if (requested.includes(':')) return installed === requested;
+  return installed === requested || installed === `${requested}:latest`;
 }
 
 function validateVector(vector, expectedDimension) {
@@ -43,9 +55,17 @@ function validateVector(vector, expectedDimension) {
   return vector;
 }
 
-function createOllamaEmbedClient(config = {}, { fetchImpl = globalThis.fetch } = {}) {
+function createOllamaEmbedClient(config = {}, {
+  fetchImpl = globalThis.fetch,
+  setTimeoutImpl = setTimeout,
+  clearTimeoutImpl = clearTimeout,
+} = {}) {
   const baseUrl = (clean(config.baseUrl) || 'http://127.0.0.1:11434').replace(/\/+$/, '');
   const embedModel = clean(config.embedModel);
+  const configuredTimeout = Number(config.timeoutMs);
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : 30000;
   let observedDimension = Number.isInteger(config.expectedDimension) && config.expectedDimension > 0
     ? config.expectedDimension
     : null;
@@ -61,20 +81,46 @@ function createOllamaEmbedClient(config = {}, { fetchImpl = globalThis.fetch } =
   }
 
   async function request(path, options) {
-    let response;
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeoutImpl(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
     try {
-      response = await fetchImpl(`${baseUrl}${path}`, options);
-    } catch (cause) {
-      throw createError('Ollama is unavailable', 'ollama_unavailable', { cause });
-    }
-    const data = await readJson(response, 'Ollama');
-    if (!response.ok) {
-      const detail = clean(data?.error) || `HTTP ${response.status}`;
-      throw createError(`Ollama request failed: ${detail}`, 'ollama_request_failed', {
-        status: response.status,
+      const response = await fetchImpl(`${baseUrl}${path}`, {
+        ...options,
+        signal: controller.signal,
       });
+      const body = await readResponseBody(response);
+      if (!response.ok) {
+        const detail = clean(body.data?.error?.message) ||
+          clean(body.data?.error) ||
+          clean(body.raw) ||
+          `HTTP ${response.status}`;
+        const status = response.status;
+        throw createError(`Ollama request failed: ${detail}`, 'ollama_request_failed', {
+          status,
+          retryable: status === 408 || status === 429 || status >= 500,
+        });
+      }
+      if (body.invalidJson) {
+        throw createError('Ollama returned invalid JSON', 'ollama_invalid_response');
+      }
+      return body.data;
+    } catch (cause) {
+      if (cause?.code) throw cause;
+      if (timedOut) {
+        throw createError(`Ollama request timed out after ${timeoutMs}ms`, 'ollama_timeout', {
+          timeoutMs,
+          retryable: true,
+          cause,
+        });
+      }
+      throw createError('Ollama is unavailable', 'ollama_unavailable', { cause });
+    } finally {
+      clearTimeoutImpl(timeoutId);
     }
-    return data;
   }
 
   return {
@@ -94,7 +140,7 @@ function createOllamaEmbedClient(config = {}, { fetchImpl = globalThis.fetch } =
       }
       return { ok: true, model: embedModel };
     },
-    async embed(text, { expectedDimension = observedDimension } = {}) {
+    async embed(text, { expectedDimension = null } = {}) {
       requireModel();
       const input = clean(text);
       if (!input) throw new Error('Cannot embed empty text');
@@ -105,6 +151,7 @@ function createOllamaEmbedClient(config = {}, { fetchImpl = globalThis.fetch } =
       });
       const vector = validateVector(data.embeddings?.[0], expectedDimension);
       if (observedDimension == null) observedDimension = vector.length;
+      validateVector(vector, observedDimension);
       return vector;
     },
   };

@@ -106,3 +106,10 @@ test('case-variant concepts produce same canonical text regardless of input orde
 
   assert.deepEqual(first, reversed);
 });
+
+test('Unicode composed and decomposed source strings produce the same hash', () => {
+  const composed = buildSemanticSource({ save: { title: 'Caf\u00e9 inspiration' } });
+  const decomposed = buildSemanticSource({ save: { title: 'Cafe\u0301 inspiration' } });
+
+  assert.deepEqual(composed, decomposed);
+});
