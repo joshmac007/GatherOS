@@ -80,9 +80,6 @@ function createSemanticSearch({ repository, ollama } = {}) {
 
   function activeIdentity() {
     const state = repository.getSemanticIndexState();
-    if (state.building_generation_id) {
-      return { ok: false, reason: 'index_rebuilding', state };
-    }
     if (!state.active_generation_id) {
       return { ok: false, reason: 'index_unavailable', state };
     }

@@ -30,6 +30,9 @@ function makeRepository() {
       getTagsForSave: () => [],
       getSaveTopicProfile: () => undefined,
       getSemanticVector: () => undefined,
+      getActiveSemanticVectors: () => [
+        { generation_id: 'gen-old', model: 'embeddinggemma', dimension: 2 },
+      ],
       createSemanticGeneration(input) {
         calls.created.push(input);
         state.building_generation_id = input.id;
@@ -37,6 +40,17 @@ function makeRepository() {
       },
       enqueueSemanticIndexJob(input) {
         calls.enqueued.push(input);
+        const existing = jobs.find((job) =>
+          job.generation_id === input.generationId
+          && job.save_id === input.saveId
+          && job.kind === input.kind);
+        if (existing) {
+          existing.source_hash = input.sourceHash;
+          existing.state = 'pending';
+          existing.retry_count = 0;
+          existing.available_at = input.now;
+          return existing;
+        }
         const job = {
           id: `job-${jobs.length + 1}`,
           generation_id: input.generationId,
@@ -144,6 +158,44 @@ test('rebuild activation is delegated to repository only after final completed s
   assert.equal('activate' in fixture.calls.completed[0], false);
 });
 
+test('save mutation reopens completed building job before generation can activate', async () => {
+  const fixture = makeRepository();
+  const index = createSemanticIndex({
+    repository: fixture.repository,
+    ollama: {
+      model: 'embeddinggemma',
+      health: async () => ({ ok: true }),
+      embed: async (text) => text.includes('Alpha changed') ? [0.5, 0.5] : [1, 0],
+    },
+    now: () => 35,
+    randomUUID: () => 'gen-refresh',
+  });
+  index.startRebuild();
+  const rebuildLane = index.createLanes()[1];
+  const firstA = fixture.jobs.find((job) => job.kind === 'rebuild' && job.save_id === 'save-a');
+  const originalHash = firstA.source_hash;
+  firstA.state = 'running';
+  await rebuildLane.run({ ...firstA });
+  assert.equal(firstA.state, 'completed');
+
+  fixture.saves[0].title = 'Alpha changed';
+  index.enqueue('save-a');
+  const refreshedA = fixture.jobs.find((job) => job.kind === 'rebuild' && job.save_id === 'save-a');
+  assert.equal(refreshedA.state, 'pending');
+  assert.notEqual(refreshedA.source_hash, originalHash);
+
+  const saveB = fixture.jobs.find((job) => job.kind === 'rebuild' && job.save_id === 'save-b');
+  saveB.state = 'running';
+  await rebuildLane.run({ ...saveB });
+  assert.equal(fixture.state.active_generation_id, 'gen-old');
+  assert.equal(fixture.state.building_generation_id, 'gen-refresh');
+
+  refreshedA.state = 'running';
+  await rebuildLane.run({ ...refreshedA });
+  assert.equal(fixture.state.active_generation_id, 'gen-refresh');
+  assert.equal(fixture.state.building_generation_id, null);
+});
+
 test('post-embed revision change discards stale result and queues latest hash', async () => {
   const fixture = makeRepository();
   let changed = false;
@@ -195,7 +247,9 @@ test('pause, resume, cancel, retry, dismiss, status, and queue delegate durably'
   assert.deepEqual(index.retryFailed(['failed-1']), { ok: true, count: 1 });
   assert.deepEqual(index.dismissFailed(['failed-2']), { ok: true, count: 1 });
   assert.equal(index.queue().length, 2);
-  assert.equal(index.status().building_generation_id, fixture.state.building_generation_id);
+  const status = index.status();
+  assert.equal(status.building_generation_id, fixture.state.building_generation_id);
+  assert.equal(status.searchReady, true);
   assert.deepEqual(index.cancelRebuild(), { ok: true });
   assert.equal(fixture.state.active_generation_id, 'gen-old');
   assert.equal(fixture.state.building_generation_id, null);

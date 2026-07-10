@@ -91,7 +91,8 @@ function createSemanticIndex({
       indexed: activeVectors.length,
       total: saves.length,
       current: current ? { id: current.id, title: current.title || '' } : null,
-      searchReady: !!result.active_generation_id && !result.building_generation_id,
+      searchReady: !!result.active_generation_id
+        && activeVectors.some((vector) => vector.model === ollama.model),
     };
   }
 
@@ -103,27 +104,57 @@ function createSemanticIndex({
 
   function enqueue(saveId) {
     const state = repository.getSemanticIndexState();
-    if (!state.active_generation_id) return { ok: false, reason: 'no_active_generation' };
     const source = sourceFor(saveId);
     if (!source) return { ok: false, reason: 'save_not_found' };
-    const current = repository.getSemanticVector(saveId);
-    if (
-      current
+
+    let rebuildJob = null;
+    if (state.building_generation_id) {
+      rebuildJob = repository.enqueueSemanticIndexJob({
+        generationId: state.building_generation_id,
+        saveId,
+        kind: 'rebuild',
+        sourceHash: source.sourceHash,
+        now: now(),
+      });
+    }
+
+    const current = state.active_generation_id
+      ? repository.getSemanticVector(saveId)
+      : null;
+    const activeVectors = state.active_generation_id
+      && typeof repository.getActiveSemanticVectors === 'function'
+      ? repository.getActiveSemanticVectors()
+      : [];
+    const activeModel = current?.model || activeVectors[0]?.model || null;
+    const unchanged = current
       && current.generation_id === state.active_generation_id
-      && current.source_hash === source.sourceHash
-    ) {
+      && current.source_hash === source.sourceHash;
+    let job = null;
+    if (state.active_generation_id && !unchanged && (!activeModel || activeModel === ollama.model)) {
+      job = repository.enqueueSemanticIndexJob({
+        generationId: state.active_generation_id,
+        saveId,
+        kind: 'incremental',
+        sourceHash: source.sourceHash,
+        now: now(),
+      });
+    }
+
+    if (!job && !rebuildJob) {
+      if (!state.active_generation_id) return { ok: false, reason: 'no_active_generation' };
+      if (activeModel && activeModel !== ollama.model) {
+        return { ok: false, reason: 'active_model_unavailable', model: activeModel };
+      }
       return { ok: true, skipped: 'unchanged' };
     }
-    const job = repository.enqueueSemanticIndexJob({
-      generationId: state.active_generation_id,
-      saveId,
-      kind: 'incremental',
-      sourceHash: source.sourceHash,
-      now: now(),
-    });
     wake();
     emitStatus();
-    return { ok: true, job };
+    return {
+      ok: true,
+      job,
+      rebuildJob,
+      ...(unchanged ? { skipped: 'unchanged' } : {}),
+    };
   }
 
   function startRebuild({ model = ollama.model } = {}) {

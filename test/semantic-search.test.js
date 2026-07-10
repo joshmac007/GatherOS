@@ -36,6 +36,7 @@ function makeRepository(overrides = {}) {
       }),
       getAllSaves: (options) => {
         calls.push(options);
+        if (options.search === '') return saves;
         if (options.search === 'tag:aviation') return saves.slice(0, 2);
         return [saves[0]];
       },
@@ -88,7 +89,7 @@ test('query failure returns explicit unavailable signal with literal fallback', 
   assert.equal(result.reason, 'ollama_unavailable');
 });
 
-test('building generation gates query from partial or prior vectors', async () => {
+test('same-model rebuild keeps completed active generation searchable', async () => {
   let embedded = false;
   const fixture = makeRepository({
     getSemanticIndexState: () => ({
@@ -102,9 +103,29 @@ test('building generation gates query from partial or prior vectors', async () =
 
   const result = await search.search('cockpit');
 
+  assert.equal(embedded, true);
+  assert.equal(result.semanticAvailable, true);
+  assert.equal(result.reason, null);
+  assert.deepEqual(result.results.map((save) => save.id), ['save-b', 'save-c', 'save-a']);
+});
+
+test('changed-model rebuild leaves old active vectors intact but query unavailable', async () => {
+  let embedded = false;
+  const fixture = makeRepository({
+    getSemanticIndexState: () => ({
+      active_generation_id: 'gen-active', building_generation_id: 'gen-building', paused: false,
+    }),
+  });
+  const search = createSemanticSearch({
+    repository: fixture.repository,
+    ollama: { model: 'nomic-embed-text', embed: async () => { embedded = true; return [1, 0, 0]; } },
+  });
+
+  const result = await search.search('cockpit');
+
   assert.equal(embedded, false);
   assert.equal(result.semanticAvailable, false);
-  assert.equal(result.reason, 'index_rebuilding');
+  assert.equal(result.reason, 'active_model_unavailable');
   assert.deepEqual(result.results.map((save) => save.id), ['save-a']);
 });
 
