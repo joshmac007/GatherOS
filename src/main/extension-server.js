@@ -429,6 +429,31 @@ async function handleSave(req, res) {
   }
 }
 
+async function handleXBookmarkStatus(req, res) {
+  const origin = req.headers.origin || '';
+  if (origin && !origin.startsWith('chrome-extension://') && !origin.startsWith('moz-extension://')) {
+    sendJson(res, 403, { ok: false, error: 'forbidden origin' });
+    return;
+  }
+  const token = req.headers['x-gatheros-token'];
+  if (!token || token !== getOrCreateToken()) {
+    sendJson(res, 401, { ok: false, error: 'invalid token' });
+    return;
+  }
+  let body;
+  try { body = await readJsonBody(req); } catch {
+    sendJson(res, 400, { ok: false, error: 'invalid body' });
+    return;
+  }
+  try {
+    const { classifyXBookmarkUrls } = require('./db');
+    const result = classifyXBookmarkUrls(body?.tweetUrls);
+    sendJson(res, 200, { ok: true, ...result });
+  } catch (err) {
+    sendJson(res, 400, { ok: false, error: err?.message || 'invalid tweetUrls' });
+  }
+}
+
 function start({ routeSave } = {}) {
   backgroundSaveRouter = typeof routeSave === 'function' ? routeSave : null;
   if (server) return;
@@ -457,6 +482,10 @@ function start({ routeSave } = {}) {
       handleSave(req, res);
       return;
     }
+    if (req.method === 'POST' && req.url === '/x-bookmark-status') {
+      handleXBookmarkStatus(req, res);
+      return;
+    }
     sendJson(res, 404, { ok: false, error: 'not found' });
   });
 
@@ -476,4 +505,4 @@ function stop() {
   server = null;
 }
 
-module.exports = { start, stop, getOrCreateToken, completeSavedResponse, PORT };
+module.exports = { start, stop, getOrCreateToken, completeSavedResponse, PORT, handleXBookmarkStatus };
