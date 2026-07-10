@@ -3,6 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const Database = require('better-sqlite3');
+
+const { createSaveBackgroundRouter } = require('../src/main/save-background-router');
+const { createVideoSemanticWorkflows } = require('../src/main/video-semantic-workflows');
 
 function loadDb(userData) {
   const electronPath = require.resolve('electron');
@@ -38,6 +42,10 @@ function withTempDb(fn) {
       fs.rmSync(userData, { recursive: true, force: true });
     }
   };
+}
+
+function sqlitePath(userData) {
+  return path.join(userData, 'libraries', 'library_default', 'moodmark.db');
 }
 
 function insertVideo(db, id = 'video-save') {
@@ -97,6 +105,87 @@ test('save insert atomically creates durable background route and legacy rows ar
   db.getDatabase().prepare('DELETE FROM saves WHERE id = ?').run('route-failure-save');
   assert.equal(db.getSaveBackgroundRoute('route-failure-save'), undefined);
 }));
+
+test('pre-v19 migration leaves legacy saves unrouted and startup dispatches a crashed new route exactly once', async () => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-route-recovery-'));
+  const db = loadDb(userData);
+  let runtime;
+  try {
+    db.initDatabase();
+    db.closeDatabase();
+
+    const legacy = new Database(sqlitePath(userData));
+    legacy.pragma('foreign_keys = OFF');
+    legacy.exec(`
+      DROP TABLE save_background_routes;
+      PRAGMA user_version = 18;
+      INSERT INTO saves (id, file_path, thumb_path, title, kind, created_at)
+      VALUES ('legacy-before-v19', '/tmp/legacy.png', '/tmp/legacy-thumb.png',
+              'Legacy save', 'image', 10);
+    `);
+    legacy.close();
+
+    db.initDatabase();
+    assert.equal(db.getDatabase().pragma('user_version', { simple: true }), 20);
+    assert.equal(db.getSaveBackgroundRoute('legacy-before-v19'), undefined);
+
+    db.insertSave({
+      id: 'new-after-upgrade',
+      filePath: '/tmp/new-after-upgrade.url',
+      thumbPath: '/tmp/new-after-upgrade-thumb.png',
+      title: 'New save',
+      kind: 'url',
+      createdAt: 100,
+    });
+    assert.equal(db.claimSaveBackgroundRoute('new-after-upgrade', 200).state, 'running');
+    db.closeDatabase();
+
+    db.initDatabase();
+    let downstreamDispatches = 0;
+    runtime = createVideoSemanticWorkflows({
+      repository: db,
+      ollama: {
+        model: 'embeddinggemma',
+        health: async () => ({ ok: true, model: 'embeddinggemma' }),
+        embed: async () => [1, 0],
+      },
+      codex: {
+        hasCodexSession: () => true,
+        generateVideoTagSuggestions: async () => ({ tags: [], warnings: [] }),
+      },
+      frameExtractor: { extract: async () => ({ duration: 0, timestamps: [], frames: [] }) },
+      createSemanticIndexService: () => ({
+        enqueue(saveId) {
+          assert.equal(saveId, 'new-after-upgrade');
+          downstreamDispatches += 1;
+          return { ok: true };
+        },
+        createLanes: () => [],
+      }),
+      createSemanticSearchService: () => ({ search: async () => ({ results: [] }) }),
+      createVideoAnalysisService: () => ({ prepare: async () => ({ status: 'queued' }) }),
+      now: () => 300,
+    });
+    runtime.start();
+
+    const router = createSaveBackgroundRouter({
+      backgroundRuntime: runtime,
+      repository: db,
+      getSave: db.getSave,
+      isImageSave: () => false,
+      now: () => 300,
+    });
+    assert.deepEqual(await router.resume(), { ok: true, count: 1 });
+    assert.deepEqual(await router.recover(), { ok: true, count: 0 });
+    assert.equal(downstreamDispatches, 1);
+    assert.equal(db.getSaveBackgroundRoute('new-after-upgrade').state, 'completed');
+    assert.equal(db.getSaveBackgroundRoute('legacy-before-v19'), undefined);
+  } finally {
+    try { await runtime?.stopAndDrain(); } catch {}
+    try { db.closeDatabase(); } catch {}
+    fs.rmSync(userData, { recursive: true, force: true });
+  }
+});
 
 test('fingerprint supersession removes unresolved suggestions but preserves accepted and dismissed history', withTempDb((db) => {
   insertVideo(db);
