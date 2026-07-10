@@ -128,6 +128,23 @@ CREATE TABLE IF NOT EXISTS video_tag_suggestions (
 
 CREATE INDEX IF NOT EXISTS idx_video_suggestions_save
   ON video_tag_suggestions(save_id, state, created_at);
+
+CREATE TABLE IF NOT EXISTS save_background_routes (
+  save_id       TEXT PRIMARY KEY REFERENCES saves(id) ON DELETE CASCADE,
+  state         TEXT NOT NULL DEFAULT 'pending',
+  retry_count   INTEGER NOT NULL DEFAULT 0,
+  available_at  INTEGER NOT NULL,
+  error         TEXT,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  started_at    INTEGER,
+  finished_at   INTEGER,
+  CHECK (state IN ('pending', 'running', 'completed')),
+  CHECK (retry_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_save_background_routes_ready
+  ON save_background_routes(state, available_at, created_at);
 `;
 
 const SCHEMA = `
@@ -796,6 +813,28 @@ const MIGRATIONS = [
         ON semantic_index_generations(status) WHERE status = 'building';
     `);
   },
+  // Per-save transactional outbox for background semantic/video routing.
+  // Existing saves are deliberately not backfilled: only a new save commit
+  // creates pending work, so upgrades never surprise-analyze old libraries.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS save_background_routes (
+        save_id       TEXT PRIMARY KEY REFERENCES saves(id) ON DELETE CASCADE,
+        state         TEXT NOT NULL DEFAULT 'pending',
+        retry_count   INTEGER NOT NULL DEFAULT 0,
+        available_at  INTEGER NOT NULL,
+        error         TEXT,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        started_at    INTEGER,
+        finished_at   INTEGER,
+        CHECK (state IN ('pending', 'running', 'completed')),
+        CHECK (retry_count >= 0)
+      );
+      CREATE INDEX IF NOT EXISTS idx_save_background_routes_ready
+        ON save_background_routes(state, available_at, created_at);
+    `);
+  },
 ];
 
 function addColumnIfMissing(database, table, name, type) {
@@ -948,12 +987,19 @@ function insertSave({
     source: source || 'x',
     created_at: Number.isFinite(createdAt) ? createdAt : Date.now(),
   };
-  db.prepare(`
-    INSERT INTO saves
-      (id, file_path, thumb_path, title, notes, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, source, created_at)
-    VALUES
-      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @source, @created_at)
-  `).run(record);
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO saves
+        (id, file_path, thumb_path, title, notes, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, source, created_at)
+      VALUES
+        (@id, @file_path, @thumb_path, @title, @notes, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @source, @created_at)
+    `).run(record);
+    db.prepare(`
+      INSERT INTO save_background_routes
+        (save_id, state, retry_count, available_at, created_at, updated_at)
+      VALUES (?, 'pending', 0, ?, ?, ?)
+    `).run(record.id, record.created_at, record.created_at, record.created_at);
+  })();
   return record;
 }
 
@@ -3089,6 +3135,62 @@ function getSemanticVector(saveId) {
 
 const MAX_VIDEO_RETRY_BACKOFF_MS = 15 * 60 * 1000;
 
+function getSaveBackgroundRoute(saveId) {
+  return getDatabase().prepare('SELECT * FROM save_background_routes WHERE save_id = ?').get(saveId);
+}
+
+function listPendingSaveBackgroundRoutes(now = Date.now()) {
+  return getDatabase().prepare(`
+    SELECT * FROM save_background_routes
+     WHERE state = 'pending' AND available_at <= ?
+     ORDER BY available_at ASC, created_at ASC
+  `).all(now);
+}
+
+function getNextSaveBackgroundRouteReadyAt() {
+  const row = getDatabase().prepare(`
+    SELECT MIN(available_at) AS ready_at
+      FROM save_background_routes
+     WHERE state = 'pending'
+  `).get();
+  return Number.isFinite(row?.ready_at) ? row.ready_at : null;
+}
+
+function claimSaveBackgroundRoute(saveId, now = Date.now()) {
+  const database = getDatabase();
+  const claim = database.transaction(() => {
+    const result = database.prepare(`
+      UPDATE save_background_routes
+         SET state = 'running', started_at = ?, updated_at = ?, error = NULL
+       WHERE save_id = ? AND state = 'pending' AND available_at <= ?
+    `).run(now, now, saveId, now);
+    if (result.changes !== 1) return undefined;
+    return database.prepare('SELECT * FROM save_background_routes WHERE save_id = ?').get(saveId);
+  });
+  return claim();
+}
+
+function completeSaveBackgroundRoute(saveId, now = Date.now()) {
+  const result = getDatabase().prepare(`
+    UPDATE save_background_routes
+       SET state = 'completed', error = NULL, updated_at = ?, finished_at = ?
+     WHERE save_id = ? AND state = 'running'
+  `).run(now, now, saveId);
+  return { ok: result.changes === 1 };
+}
+
+function failSaveBackgroundRoute({ saveId, error, retryAt, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const availableAt = Number.isFinite(retryAt) ? Math.max(timestamp, retryAt) : timestamp + 5_000;
+  const result = getDatabase().prepare(`
+    UPDATE save_background_routes
+       SET state = 'pending', retry_count = retry_count + 1,
+           available_at = ?, error = ?, updated_at = ?, started_at = NULL
+     WHERE save_id = ? AND state = 'running'
+  `).run(availableAt, error || null, timestamp, saveId);
+  return { ok: result.changes === 1, availableAt };
+}
+
 function enqueueVideoAnalysis({ id, saveId, fingerprint, promptVersion, now } = {}) {
   if (!saveId || !fingerprint || !Number.isInteger(promptVersion) || promptVersion < 1) {
     return { ok: false, reason: 'invalid' };
@@ -3282,7 +3384,12 @@ function recoverBackgroundJobs(now = Date.now()) {
          SET state = 'pending', retryable = 0, started_at = NULL, updated_at = ?
        WHERE state = 'running'
     `).run(now).changes;
-    return { semantic, video };
+    const routes = database.prepare(`
+      UPDATE save_background_routes
+         SET state = 'pending', started_at = NULL, available_at = ?, updated_at = ?
+       WHERE state = 'running'
+    `).run(now, now).changes;
+    return { semantic, video, routes };
   });
   return recover();
 }
@@ -3892,6 +3999,12 @@ module.exports = {
   enqueueVideoAnalysis,
   claimVideoAnalysis,
   getNextVideoAnalysisReadyAt,
+  getSaveBackgroundRoute,
+  listPendingSaveBackgroundRoutes,
+  getNextSaveBackgroundRouteReadyAt,
+  claimSaveBackgroundRoute,
+  completeSaveBackgroundRoute,
+  failSaveBackgroundRoute,
   completeVideoAnalysis,
   failVideoAnalysis,
   recoverSemanticIndexJobs,

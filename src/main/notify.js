@@ -7,6 +7,7 @@ let needsUpgradeNotifier = () => {};
 let bookmarkNotifier = () => {};
 let bookmarkFailedNotifier = () => {};
 let errorNotifier = () => {};
+let saveChangedNotifier = () => {};
 
 function setSaveNotifier(fn) {
   savedNotifier = typeof fn === 'function' ? fn : () => {};
@@ -39,6 +40,14 @@ function notifyBookmarkFailed() {
 // Renders as a plain action toast in the window.
 function setErrorNotifier(fn) {
   errorNotifier = typeof fn === 'function' ? fn : () => {};
+}
+
+function setSaveChangedNotifier(fn) {
+  saveChangedNotifier = typeof fn === 'function' ? fn : () => {};
+}
+
+function notifySaveChanged(saveId, context) {
+  return saveChangedNotifier(saveId, context);
 }
 
 function notifyError(message) {
@@ -89,6 +98,7 @@ module.exports = {
   setBookmarkNotifier,
   setBookmarkFailedNotifier,
   setErrorNotifier,
+  setSaveChangedNotifier,
   setTrayRefresher,
   notifySaved,
   notifyDuplicate,
@@ -96,5 +106,6 @@ module.exports = {
   notifyBookmarkSaved,
   notifyBookmarkFailed,
   notifyError,
+  notifySaveChanged,
   refreshTray,
 };

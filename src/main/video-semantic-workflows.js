@@ -80,6 +80,9 @@ function createVideoSemanticWorkflows({
   let active = null;
   let healthPromise = null;
   let healthPromiseEpoch = null;
+  let transitioning = false;
+  const foregroundTasks = new Set();
+  let lifecycleHooks = null;
   let semanticHealth = {
     ok: null,
     status: 'checking',
@@ -206,7 +209,7 @@ function createVideoSemanticWorkflows({
     const videoLane = createVideoLane({ boundRepository, videoAnalysis, boundEpoch });
     coordinator = createCoordinator({
       lanes: [videoLane, ...semanticLanes],
-      isForegroundBusy,
+      isForegroundBusy: () => foregroundTasks.size > 0 || isForegroundBusy(),
       now,
       onError(error, context) {
         if (error?.code === 'library_epoch_stale') return;
@@ -221,6 +224,7 @@ function createVideoSemanticWorkflows({
       semanticSearch,
       videoAnalysis,
     };
+    transitioning = false;
     semanticHealth = {
       ok: null,
       status: 'checking',
@@ -241,10 +245,13 @@ function createVideoSemanticWorkflows({
 
   async function deactivate() {
     const previous = active;
-    epoch += 1;
     if (!previous) return;
+    transitioning = true;
+    await lifecycleHooks?.beforeTransition?.();
     previous.coordinator.stop();
+    await Promise.allSettled([...foregroundTasks]);
     await previous.coordinator.whenIdle();
+    epoch += 1;
     if (active === previous) active = null;
   }
 
@@ -258,6 +265,7 @@ function createVideoSemanticWorkflows({
       error = cause;
     }
     bind();
+    await lifecycleHooks?.afterTransition?.();
     if (error) throw error;
     return result;
   }
@@ -266,13 +274,20 @@ function createVideoSemanticWorkflows({
     await deactivate();
   }
 
-  async function routeSave(save, { duplicate = false, changed = false } = {}) {
+  async function routeSave(save, {
+    duplicate = false,
+    changed = false,
+    reanalyzeVideo = false,
+    _taskEpoch = null,
+  } = {}) {
+    if (duplicate) return { ok: true, skipped: 'duplicate' };
+    if (transitioning && _taskEpoch !== epoch) return { ok: false, reason: 'library_epoch_stale' };
     if (!active) return { ok: false, reason: 'runtime_not_started' };
     const current = active;
     const persisted = current.repository.getSave(save?.id) || save;
     if (!persisted?.id) return { ok: false, reason: 'save_not_found' };
     let video = null;
-    if (!changed && isVideoSave(persisted)) {
+    if ((!changed || reanalyzeVideo) && isVideoSave(persisted)) {
       try {
         video = await current.videoAnalysis.prepare({ save: persisted });
       } catch (error) {
@@ -314,7 +329,39 @@ function createVideoSemanticWorkflows({
   }
 
   function whenIdle() {
-    return active?.coordinator.whenIdle() || Promise.resolve();
+    return Promise.all([
+      active?.coordinator.whenIdle() || Promise.resolve(),
+      Promise.allSettled([...foregroundTasks]),
+    ]).then(() => undefined);
+  }
+
+  function scheduleForegroundTask(run) {
+    if (typeof run !== 'function') return { ok: false, reason: 'invalid_task' };
+    if (!active || transitioning) return { ok: false, reason: 'runtime_not_started' };
+    const taskEpoch = epoch;
+    const boundCoordinator = active.coordinator;
+    const execution = Promise.resolve().then(async () => {
+      await boundCoordinator.whenIdle();
+      return run({
+        isCurrent: () => taskEpoch === epoch,
+        routeSave: (save, options = {}) => routeSave(save, { ...options, _taskEpoch: taskEpoch }),
+      });
+    });
+    let tracked;
+    tracked = execution.catch((error) => {
+      if (error?.code !== 'library_epoch_stale') {
+        try { logger?.error?.('Foreground background-preparation task failed', error); } catch {}
+      }
+    }).finally(() => {
+      foregroundTasks.delete(tracked);
+      if (taskEpoch === epoch && !transitioning) active?.coordinator.wake();
+    });
+    foregroundTasks.add(tracked);
+    return { ok: true, scheduled: true };
+  }
+
+  function setLifecycleHooks(hooks) {
+    lifecycleHooks = hooks && typeof hooks === 'object' ? hooks : null;
   }
 
   function serviceFacade(key) {
@@ -346,6 +393,13 @@ function createVideoSemanticWorkflows({
     return { ...semanticHealth };
   }
 
+  function updateSemanticHealth(next) {
+    const changed = ['ok', 'status', 'model', 'reason', 'setupAction']
+      .some((key) => semanticHealth[key] !== next[key]);
+    semanticHealth = next;
+    if (changed) emit('semantic-index:status', semanticHealth);
+  }
+
   function refreshSemanticHealth() {
     if (healthPromise && healthPromiseEpoch === epoch) return healthPromise;
     const healthEpoch = epoch;
@@ -353,27 +407,25 @@ function createVideoSemanticWorkflows({
       .then(() => ollama.health())
       .then((result) => {
         if (healthEpoch === epoch) {
-          semanticHealth = {
+          updateSemanticHealth({
             ok: true,
             status: 'connected',
             model: result?.model || ollama.model,
             reason: null,
             setupAction: null,
-          };
-          emit('semantic-index:status', semanticHealth);
+          });
         }
         return getSemanticHealth();
       })
       .catch((error) => {
         if (healthEpoch === epoch) {
-          semanticHealth = {
+          updateSemanticHealth({
             ok: false,
             status: error?.code === 'ollama_model_missing' ? 'model-missing' : 'unavailable',
             model: ollama.model,
             reason: error?.code || 'ollama_unavailable',
             setupAction: error?.setupAction || null,
-          };
-          emit('semantic-index:status', semanticHealth);
+          });
         }
         return getSemanticHealth();
       })
@@ -412,6 +464,8 @@ function createVideoSemanticWorkflows({
     routeSave,
     noteActivity,
     whenIdle,
+    scheduleForegroundTask,
+    setLifecycleHooks,
     getSemanticIndex,
     getSemanticSearch,
     getSemanticHealth,

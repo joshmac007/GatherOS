@@ -110,6 +110,7 @@ async function createSaveTopicProfile({
   manualTags = [],
   provider,
   upsertSaveTopicProfile,
+  onProfilePersisted = null,
   now = Date.now,
 } = {}) {
   if (!save?.id) return { ok: false, reason: 'missing-save' };
@@ -128,11 +129,15 @@ async function createSaveTopicProfile({
   const validation = validateSaveTopicProfile(parsed);
   if (!validation.ok) return validation;
 
-  return upsertSaveTopicProfile({
+  const stored = upsertSaveTopicProfile({
     saveId: save.id,
     ...validation.profile,
     updatedAt: now(),
   });
+  if (stored?.ok && typeof onProfilePersisted === 'function') {
+    await onProfilePersisted(save.id, stored.profile);
+  }
+  return stored;
 }
 
 async function enrichSaveTopicProfile({
@@ -150,6 +155,7 @@ async function enrichSaveTopicProfile({
   getSemanticVector,
   getActiveSemanticVectors,
   getSmartCategoryMembers,
+  onProfilePersisted = null,
   now = Date.now,
 } = {}) {
   const save = typeof getSave === 'function' ? getSave(record?.id) || record : record;
@@ -159,6 +165,7 @@ async function enrichSaveTopicProfile({
     manualTags,
     provider: topicProvider,
     upsertSaveTopicProfile,
+    onProfilePersisted,
     now,
   });
   if (!result?.ok || typeof assignMemberships !== 'function') return result;

@@ -66,6 +66,7 @@ const DOMAIN_TABLES = [
   'semantic_index_jobs',
   'video_analysis_jobs',
   'video_tag_suggestions',
+  'save_background_routes',
 ];
 
 test('fresh schema and upgrade migrations create all domain tables', withTempDb((db, userData) => {
@@ -167,7 +168,7 @@ test('compatibility migration upgrades the committed intermediate queue schema',
     UPDATE semantic_index_state
        SET building_generation_id = 'gen-current-build'
      WHERE id = 1;
-    PRAGMA user_version = ${targetVersion - 1};
+    PRAGMA user_version = ${targetVersion - 2};
   `);
   raw.close();
 

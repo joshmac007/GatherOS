@@ -361,9 +361,28 @@ function registerIpcHandlers({
     return result.response === 1;
   });
 
-  ipcMain.handle('saves:update', async (_e, payload) => (
-    enqueueAfterCanonicalMutation(updateSave(payload), payload?.id)
-  ));
+  ipcMain.handle('saves:update', async (_e, payload) => {
+    const before = getSave(payload?.id);
+    const result = updateSave(payload);
+    if (!result?.ok) return result;
+    const contextChanged = ['title', 'notes', 'sourceUrl']
+      .some((key) => Object.prototype.hasOwnProperty.call(payload || {}, key));
+    if (contextChanged && isVideoSave(before) && typeof backgroundRuntime?.routeSave === 'function') {
+      try {
+        const routed = await backgroundRuntime.routeSave(getSave(payload.id) || before, {
+          changed: true,
+          reanalyzeVideo: true,
+        });
+        return routed?.semanticWarning ? { ...result, semanticWarning: routed.semanticWarning } : result;
+      } catch (error) {
+        return {
+          ...result,
+          semanticWarning: { reason: 'background-route-failed', detail: error?.message || String(error) },
+        };
+      }
+    }
+    return enqueueAfterCanonicalMutation(result, payload?.id);
+  });
 
   ipcMain.handle('saves:drop-file', async (_e, filePath) => {
     if (blockNewSave('save')) return { needsUpgrade: true };
@@ -1055,7 +1074,10 @@ function registerIpcHandlers({
     return { ...snapshot, ...health, connected, modelInstalled };
   }
 
-  ipcMain.handle('semantic-index:status', () => semanticStatusSnapshot());
+  ipcMain.handle('semantic-index:status', async () => {
+    await backgroundRuntime?.refreshSemanticHealth?.();
+    return semanticStatusSnapshot();
+  });
   ipcMain.handle('semantic-index:queue', () => {
     if (typeof semanticIndex?.queue !== 'function') return [];
     const status = semanticStatusSnapshot();
@@ -1074,9 +1096,10 @@ function registerIpcHandlers({
   ipcMain.handle('semantic-index:pause', () => (
     semanticIndex?.pause?.() || { ok: false, reason: 'semantic-index-unavailable' }
   ));
-  ipcMain.handle('semantic-index:resume', () => (
-    semanticIndex?.resume?.() || { ok: false, reason: 'semantic-index-unavailable' }
-  ));
+  ipcMain.handle('semantic-index:resume', async () => {
+    await backgroundRuntime?.refreshSemanticHealth?.();
+    return semanticIndex?.resume?.() || { ok: false, reason: 'semantic-index-unavailable' };
+  });
   ipcMain.handle('semantic-index:retry-failed', (_event, ids) => (
     semanticIndex?.retryFailed?.(Array.isArray(ids) ? ids : [])
       || { ok: false, reason: 'semantic-index-unavailable' }

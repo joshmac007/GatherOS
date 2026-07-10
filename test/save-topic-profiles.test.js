@@ -259,3 +259,27 @@ test('validates save topic profile prompt contract shape', () => {
   assert.equal(validateSaveTopicProfile(validProfile({ confidence: 1.5 })).reason, 'invalid-confidence');
   assert.equal(validateSaveTopicProfile(validProfile({ visible_text: undefined })).reason, 'missing-visible-text');
 });
+
+test('successful topic-profile persistence notifies canonical semantic change', async () => {
+  const changed = [];
+  const result = await createSaveTopicProfile({
+    save: { id: 'topic-change', kind: 'url', title: 'A title' },
+    provider: {
+      async generateSaveTopicProfile() {
+        return {
+          summary: 'A concrete searchable summary.',
+          concepts: ['pricing', 'layout', 'saas'],
+          content_type: 'article',
+          intent: 'research',
+          visible_text: '',
+          confidence: 0.9,
+        };
+      },
+    },
+    upsertSaveTopicProfile: (profile) => ({ ok: true, profile }),
+    onProfilePersisted: async (saveId) => changed.push(saveId),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(changed, ['topic-change']);
+});

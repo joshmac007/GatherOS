@@ -80,6 +80,24 @@ test('video queue persists pending and running states and recovers interrupted w
   assert.equal(pending.updated_at, 30);
 }));
 
+test('save insert atomically creates durable background route and legacy rows are not backfilled', withTempDb((db) => {
+  insertVideo(db, 'legacy-save');
+  db.getDatabase().prepare('DELETE FROM save_background_routes WHERE save_id = ?').run('legacy-save');
+  insertVideo(db, 'route-failure-save');
+  assert.equal(db.getSaveBackgroundRoute('legacy-save'), undefined);
+  assert.equal(db.getSaveBackgroundRoute('route-failure-save').state, 'pending');
+  assert.equal(db.claimSaveBackgroundRoute('route-failure-save', 10).state, 'running');
+  db.failSaveBackgroundRoute({ saveId: 'route-failure-save', error: 'queue locked', now: 20 });
+  db.closeDatabase();
+  db.initDatabase();
+  assert.equal(db.getSaveBackgroundRoute('route-failure-save').state, 'pending');
+  assert.equal(db.claimSaveBackgroundRoute('route-failure-save', 5020).state, 'running');
+  assert.equal(db.completeSaveBackgroundRoute('route-failure-save', 30).ok, true);
+  assert.equal(db.getSaveBackgroundRoute('route-failure-save').state, 'completed');
+  db.getDatabase().prepare('DELETE FROM saves WHERE id = ?').run('route-failure-save');
+  assert.equal(db.getSaveBackgroundRoute('route-failure-save'), undefined);
+}));
+
 test('fingerprint supersession removes unresolved suggestions but preserves accepted and dismissed history', withTempDb((db) => {
   insertVideo(db);
   db.enqueueVideoAnalysis({

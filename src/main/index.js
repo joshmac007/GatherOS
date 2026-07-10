@@ -186,7 +186,7 @@ const {
 } = require('./capture');
 const extensionServer = require('./extension-server');
 const { showToast, destroyToastWindow } = require('./toast-window');
-const { setSaveNotifier, setDuplicateNotifier, setNeedsUpgradeNotifier, setBookmarkNotifier, setBookmarkFailedNotifier, setErrorNotifier, setTrayRefresher, notifyError } = require('./notify');
+const { setSaveNotifier, setDuplicateNotifier, setNeedsUpgradeNotifier, setBookmarkNotifier, setBookmarkFailedNotifier, setErrorNotifier, setSaveChangedNotifier, setTrayRefresher, notifyError } = require('./notify');
 const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
 const libraryRegistry = require('./library-registry');
@@ -1147,9 +1147,22 @@ app.whenReady().then(() => {
   backgroundRuntime.start();
   saveBackgroundRouter = createSaveBackgroundRouter({
     backgroundRuntime,
+    repository: databaseRepository,
     getSave,
     enrichImageSave: enrichImageSaveInBackground,
     noteActivity: (context) => foregroundActivity.noteActivity(context),
+  });
+  setSaveChangedNotifier((saveId, { reanalyzeVideo = false } = {}) => {
+    const save = getSave(saveId);
+    if (!save) return Promise.resolve({ ok: false, reason: 'save_not_found' });
+    return backgroundRuntime.routeSave(save, { changed: true, reanalyzeVideo });
+  });
+  backgroundRuntime.setLifecycleHooks({
+    beforeTransition: () => saveBackgroundRouter.pause(),
+    afterTransition: () => saveBackgroundRouter.resume(),
+  });
+  saveBackgroundRouter.resume().catch((error) => {
+    console.error('[background] initial outbox recovery failed:', error?.message || error);
   });
   smartCategoryRefresh = createBackgroundSmartCategoryRefresh({
     getPendingSmartCategorySaves,
@@ -1176,7 +1189,15 @@ app.whenReady().then(() => {
         getSave,
         getTagsForSave,
         getSaveTopicProfile,
-        createSaveTopicProfile,
+        createSaveTopicProfile: (input) => createSaveTopicProfile({
+          ...input,
+          onProfilePersisted: (saveId) => {
+            const save = getSave(saveId);
+            return save
+              ? backgroundRuntime.routeSave(save, { changed: true })
+              : { ok: false, reason: 'save_not_found' };
+          },
+        }),
         assignSaveToExistingSmartCategories: (input) => assignSaveToExistingSmartCategories({
           ...input,
           getSemanticIndexState,

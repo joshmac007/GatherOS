@@ -105,6 +105,7 @@ test('registers scoped semantic queue controls and uses semantic search without 
     search: async () => { searches += 1; return { results: [{ id: 'save-a' }] }; },
     findSimilar: () => ({ results: [{ id: 'save-b' }] }),
   };
+  let healthRefreshes = 0;
   const { registerIpcHandlers, handlers } = loadIpc({
     db: {
       getSave: (id) => saves.get(id),
@@ -117,10 +118,12 @@ test('registers scoped semantic queue controls and uses semantic search without 
     semanticSearch,
     backgroundRuntime: {
       getSemanticHealth: () => ({ ok: true, status: 'connected', model: 'embeddinggemma' }),
+      refreshSemanticHealth: async () => { healthRefreshes += 1; },
     },
   });
 
   const status = await handlers.get('semantic-index:status')();
+  assert.equal(healthRefreshes, 1);
   assert.equal(status.connected, true);
   assert.equal(status.modelInstalled, true);
   const queue = await handlers.get('semantic-index:queue')();
@@ -131,6 +134,8 @@ test('registers scoped semantic queue controls and uses semantic search without 
   assert.deepEqual(await handlers.get('saves:get-all')(null, { search: 'aviation' }), [{ id: 'save-a' }]);
   assert.equal(searches, 1);
   assert.deepEqual(await handlers.get('saves:find-similar')(null, 'save-a', 5), [{ id: 'save-b' }]);
+  await handlers.get('semantic-index:resume')();
+  assert.equal(healthRefreshes, 2);
   for (const channel of [
     'semantic-index:pause', 'semantic-index:resume', 'semantic-index:retry-failed',
     'semantic-index:dismiss-failed', 'semantic-index:start-rebuild', 'semantic-index:cancel-rebuild',
@@ -209,6 +214,39 @@ test('canonical save and tag mutations enqueue incremental semantic work after s
   await handlers.get('tags:remove-from-save')(null, { saveId: 'failed', tagId: 'tag-a' });
 
   assert.deepEqual(enqueued, ['save-a', 'save-a', 'save-a']);
+});
+
+test('video context edits reprepare analysis while ordinary tag changes stay semantic-only', async () => {
+  const routes = [];
+  const semantic = [];
+  const video = { id: 'video-context', kind: 'video', file_path: '/tmp/context.mp4', title: 'Before' };
+  const { registerIpcHandlers, handlers } = loadIpc({
+    db: {
+      getSave: () => video,
+      updateSave: (payload) => { Object.assign(video, payload); return { ok: true }; },
+      addTagToSave: () => ({ ok: true }),
+    },
+  });
+  registerIpcHandlers({
+    semanticIndex: {
+      status: () => ({}),
+      queue: () => [],
+      enqueue: async (saveId) => { semantic.push(saveId); return { ok: true }; },
+    },
+    backgroundRuntime: {
+      routeSave: async (save, options) => { routes.push([save.id, options]); return { ok: true }; },
+    },
+  });
+
+  await handlers.get('saves:update')(null, { id: video.id, title: 'After' });
+  await handlers.get('saves:update')(null, { id: video.id, notes: 'New context' });
+  await handlers.get('tags:add-to-save')(null, { saveId: video.id, name: 'accepted tag' });
+
+  assert.deepEqual(routes, [
+    [video.id, { changed: true, reanalyzeVideo: true }],
+    [video.id, { changed: true, reanalyzeVideo: true }],
+  ]);
+  assert.deepEqual(semantic, [video.id]);
 });
 
 test('global tag mutations enqueue every affected save once', async () => {

@@ -230,16 +230,18 @@ test('Codex outage fails video domain without blocking semantic work', async () 
   assert.equal(harness.events.some(({ event }) => event === 'video-analysis:updated'), true);
 });
 
-test('duplicate routing retries missing durable semantic and video work', async () => {
+test('ordinary duplicate is a no-op in the runtime', async () => {
   const harness = createHarness({ foregroundBusy: true });
   const save = { id: 'new-video', kind: 'video', file_path: '/tmp/new.mp4' };
   harness.saves.set(save.id, save);
   harness.runtime.start();
 
-  const routed = await harness.runtime.routeSave(save, { duplicate: true });
-  assert.equal(routed.ok, true);
-  assert.equal(harness.videoQueue.length, 1);
-  assert.equal(harness.incrementalQueue.length, 1);
+  assert.deepEqual(await harness.runtime.routeSave(save, { duplicate: true }), {
+    ok: true, skipped: 'duplicate',
+  });
+  assert.equal(harness.videoQueue.length, 0);
+  assert.equal(harness.incrementalQueue.length, 0);
+
 });
 
 test('new save routing warns instead of rejecting after semantic enqueue failure', async () => {
@@ -340,59 +342,150 @@ test('foreground activity defers ready work and wakes once the quiet window ends
   assert.equal(idleCalls, 1);
 });
 
-test('save router enriches images before one route, routes video immediately, and honors routed notifications', async () => {
+test('save router schedules image enrichment, drains outbox once, and leaves legacy duplicates alone', async () => {
   const order = [];
+  const enrichGate = deferred();
+  const tasks = [];
   const records = new Map([
     ['image-save', { id: 'image-save', kind: 'image', file_path: '/tmp/image.png' }],
     ['video-save', { id: 'video-save', kind: 'video', file_path: '/tmp/video.mp4' }],
   ]);
-  const router = createSaveBackgroundRouter({
-    backgroundRuntime: {
-      async routeSave(record, options) {
-        order.push(['route', record.id, options]);
-        return { ok: true };
-      },
+  const jobs = new Map([
+    ['image-save', { save_id: 'image-save', state: 'pending' }],
+    ['video-save', { save_id: 'video-save', state: 'pending' }],
+  ]);
+  const repository = {
+    claimSaveBackgroundRoute(saveId) {
+      const job = jobs.get(saveId);
+      if (!job || job.state !== 'pending') return undefined;
+      job.state = 'running';
+      return job;
     },
+    completeSaveBackgroundRoute(saveId) { jobs.get(saveId).state = 'completed'; return { ok: true }; },
+    failSaveBackgroundRoute({ saveId }) { jobs.get(saveId).state = 'pending'; return { ok: true, availableAt: 5_000 }; },
+    listPendingSaveBackgroundRoutes() { return [...jobs.values()].filter((job) => job.state === 'pending'); },
+  };
+  const backgroundRuntime = {
+    async routeSave(record, options) {
+      order.push(['route', record.id, options]);
+      return { ok: true };
+    },
+    scheduleForegroundTask(task) {
+      const pending = Promise.resolve().then(() => task({
+        isCurrent: () => true,
+        routeSave: this.routeSave.bind(this),
+      }));
+      tasks.push(pending);
+      return { ok: true, scheduled: true };
+    },
+  };
+  const router = createSaveBackgroundRouter({
+    backgroundRuntime,
+    repository,
     getSave: (id) => records.get(id),
-    enrichImageSave: async (record) => order.push(['enrich', record.id]),
+    enrichImageSave: async (record) => {
+      order.push(['enrich', record.id]);
+      await enrichGate.promise;
+    },
     noteActivity: (payload) => order.push(['activity', payload.kind]),
+    now: () => 1_000,
   });
 
-  await router.route(records.get('image-save'));
+  assert.deepEqual(await router.route(records.get('image-save')), { ok: true, scheduled: true });
+  await Promise.resolve();
+  assert.deepEqual(order, [['activity', 'save'], ['enrich', 'image-save']]);
   await router.route(records.get('video-save'));
   assert.equal(router.notify(records.get('video-save'), { backgroundRouted: true }), null);
-  await router.route(records.get('image-save'), { duplicate: true });
+  assert.deepEqual(await router.route(records.get('legacy-save') || { id: 'legacy-save' }, { duplicate: true }), {
+    ok: true, skipped: 'duplicate',
+  });
+  enrichGate.resolve();
+  await Promise.all(tasks);
 
   assert.deepEqual(order, [
     ['activity', 'save'],
     ['enrich', 'image-save'],
-    ['route', 'image-save', { duplicate: false, changed: true }],
     ['activity', 'save'],
-    ['route', 'video-save', { duplicate: false, changed: false }],
+    ['route', 'video-save', { changed: false }],
     ['activity', 'duplicate'],
-    ['route', 'image-save', { duplicate: true, changed: false }],
+    ['route', 'image-save', { changed: true }],
   ]);
+  assert.equal(jobs.get('image-save').state, 'completed');
+  assert.equal(jobs.get('video-save').state, 'completed');
 
   const indexSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'index.js'), 'utf8');
   assert.match(indexSource, /isForegroundBusy: \(\) => foregroundActivity\.isBusy\(\)/);
   assert.match(indexSource, /function notifySaved\(record, options = \{\}\)[\s\S]*routeNewSaveToBackground\(record, options\)/);
 });
 
+test('failed route stays durable and startup recovery heals it without user action', async () => {
+  const save = { id: 'durable-retry', kind: 'video', file_path: '/tmp/retry.mp4' };
+  const job = { save_id: save.id, state: 'pending', available_at: 100 };
+  const repository = {
+    claimSaveBackgroundRoute(saveId, now) {
+      if (saveId !== save.id || job.state !== 'pending' || job.available_at > now) return undefined;
+      job.state = 'running';
+      return job;
+    },
+    completeSaveBackgroundRoute() { job.state = 'completed'; return { ok: true }; },
+    failSaveBackgroundRoute({ error }) {
+      job.state = 'pending'; job.error = error; job.available_at = 200; return { ok: true, availableAt: 200 };
+    },
+    listPendingSaveBackgroundRoutes(now) {
+      return job.state === 'pending' && job.available_at <= now ? [job] : [];
+    },
+  };
+  const first = createSaveBackgroundRouter({
+    backgroundRuntime: {
+      routeSave: async () => { throw new Error('disk temporarily locked'); },
+      scheduleForegroundTask: () => ({ ok: false }),
+    },
+    repository,
+    getSave: () => save,
+    now: () => 100,
+    setTimer: () => ({ unref() {} }),
+    clearTimer: () => {},
+  });
+  await assert.rejects(first.route(save), /disk temporarily locked/);
+  assert.equal(job.state, 'pending');
+  assert.equal(job.error, 'disk temporarily locked');
+
+  let dispatched = 0;
+  const restarted = createSaveBackgroundRouter({
+    backgroundRuntime: {
+      routeSave: async () => { dispatched += 1; return { ok: true }; },
+      scheduleForegroundTask: () => ({ ok: false }),
+    },
+    repository,
+    getSave: () => save,
+    now: () => 200,
+  });
+  assert.deepEqual(await restarted.recover(), { ok: true, count: 1 });
+  assert.equal(dispatched, 1);
+  assert.equal(job.state, 'completed');
+});
+
 test('shared save notifiers preserve already-routed options', () => {
   const calls = [];
   saveNotifications.setSaveNotifier((record, options) => calls.push(['save', record.id, options]));
   saveNotifications.setBookmarkNotifier((record, options) => calls.push(['bookmark', record.id, options]));
+  saveNotifications.setSaveChangedNotifier((saveId, context) => calls.push(['changed', saveId, context]));
   try {
     saveNotifications.notifySaved({ id: 'save-1' }, { backgroundRouted: true });
     saveNotifications.notifyBookmarkSaved({ id: 'save-2' }, { backgroundRouted: true });
+    saveNotifications.notifySaveChanged('save-3', { kind: 'tag' });
   } finally {
     saveNotifications.setSaveNotifier(null);
     saveNotifications.setBookmarkNotifier(null);
+    saveNotifications.setSaveChangedNotifier(null);
   }
   assert.deepEqual(calls, [
     ['save', 'save-1', { backgroundRouted: true }],
     ['bookmark', 'save-2', { backgroundRouted: true }],
+    ['changed', 'save-3', { kind: 'tag' }],
   ]);
+  const captureSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'capture.js'), 'utf8');
+  assert.match(captureSource, /duplicateOf[\s\S]*notifySaveChanged\(imgData\.existing\.id/);
 });
 
 test('video routing rejects when its durable queue write fails', async () => {
@@ -404,6 +497,33 @@ test('video routing rejects when its durable queue write fails', async () => {
 
   await assert.rejects(harness.runtime.routeSave(save), error);
   assert.equal(harness.events.some(({ event }) => event === 'video-analysis:updated'), true);
+});
+
+test('tracked image enrichment defers coordinator and lifecycle transition until old epoch drains', async () => {
+  const gate = deferred();
+  const taskStarted = deferred();
+  const harness = createHarness();
+  const save = { id: 'slow-image', kind: 'image', file_path: '/tmp/slow.png' };
+  harness.saves.set(save.id, save);
+  harness.rebuildQueue.push({ id: 'must-wait-for-enrichment' });
+  harness.runtime.start();
+
+  const scheduled = harness.runtime.scheduleForegroundTask(async ({ routeSave }) => {
+    taskStarted.resolve();
+    await gate.promise;
+    await routeSave(save, { changed: true });
+  });
+  assert.deepEqual(scheduled, { ok: true, scheduled: true });
+  await taskStarted.promise;
+  const switching = harness.runtime.rebind(async () => harness.switchLibrary('library-b'));
+  await Promise.resolve();
+  assert.deepEqual(harness.recovery.map(({ library }) => library), ['library-a']);
+  assert.deepEqual(harness.order, ['semantic-rebuild']);
+
+  gate.resolve();
+  await switching;
+  assert.deepEqual(harness.recovery.map(({ library }) => library), ['library-a', 'library-b']);
+  assert.deepEqual(harness.completions, []);
 });
 
 test('automatic trash purge attempts derived cleanup for every purged save', async () => {
@@ -426,7 +546,7 @@ test('automatic trash purge attempts derived cleanup for every purged save', asy
   assert.match(indexSource, /cleanupPurgedSaveDerived\(\{[\s\S]*saveIds: result\.ids/);
 });
 
-test('library rebind invalidates active epoch before switch and stale completion cannot write', async () => {
+test('library rebind drains active old-library work before switch', async () => {
   const gate = deferred();
   const harness = createHarness({
     videoRun: async ({ job, repository }) => {
@@ -445,7 +565,8 @@ test('library rebind invalidates active epoch before switch and stale completion
   await switching;
   await harness.runtime.whenIdle();
 
-  assert.deepEqual(harness.completions, []);
+  assert.equal(harness.completions.length, 1);
+  assert.equal(harness.completions[0].library, 'library-a');
   assert.deepEqual(harness.recovery.map(({ library }) => library), ['library-a', 'library-b']);
 });
 
@@ -477,6 +598,36 @@ test('semantic health is cached/nonblocking and cleanup/restore use lifecycle ru
   assert.equal(harness.restores.length, 1);
   assert.equal(harness.recovery.length, 2);
   assert.equal(harness.events.some(({ event }) => event === 'library:switched'), true);
+});
+
+test('semantic health refresh detects outage and recovery and emits only changes', async () => {
+  let healthMode = 'connected';
+  const harness = createHarness({
+    ollamaHealth: async () => {
+      if (healthMode === 'outage') {
+        const error = new Error('Ollama stopped');
+        error.code = 'ollama_unavailable';
+        throw error;
+      }
+      return { ok: true, model: 'embeddinggemma' };
+    },
+  });
+  harness.runtime.start();
+  await harness.runtime.refreshSemanticHealth();
+  const initialEvents = harness.events.filter(({ event }) => event === 'semantic-index:status').length;
+
+  await harness.runtime.refreshSemanticHealth();
+  assert.equal(harness.events.filter(({ event }) => event === 'semantic-index:status').length, initialEvents);
+  healthMode = 'outage';
+  await harness.runtime.refreshSemanticHealth();
+  assert.equal(harness.runtime.getSemanticHealth().status, 'unavailable');
+  healthMode = 'connected';
+  await harness.runtime.refreshSemanticHealth();
+  assert.equal(harness.runtime.getSemanticHealth().status, 'connected');
+  assert.equal(
+    harness.events.filter(({ event }) => event === 'semantic-index:status').length,
+    initialEvents + 2,
+  );
 });
 
 test('MP4 and video saves never enter image AI or topic-profile image evidence', () => {
