@@ -9,7 +9,8 @@ const {
   filterByColor,
   getAllCollections, getAllCollectionsWithThumbs, getCollectionsForSave, getCollectionsContainingAll, createCollection, renameCollection, setCollectionParent,
   deleteCollection, reorderCollections, addSaveToCollection, removeSaveFromCollection,
-  getAllTags, getTagsForSave, addTagToSave, removeTagFromSave,
+  getAllTags, getTagsForSave, getSaveIdsForTag,
+  addTagToSave, removeTagFromSave, renameTag, deleteTag,
   listBoards, listBoardsWithThumbs, getBoard, createBoard, renameBoard, deleteBoard, reorderBoards,
   getBoardItems, getBoardPreviewSaves, getBoardSaveIds, getBoardsForSave,
   upsertBoardItem, bulkUpdateBoardItems, deleteBoardItem, deleteBoardItems,
@@ -109,9 +110,49 @@ function registerIpcHandlers({
     }
   }
 
-  function enqueueAfterCanonicalMutation(result, saveId) {
-    if (result?.ok && saveId) semanticIndex?.enqueue?.(saveId);
-    return result;
+  async function cleanupAllDerivedBestEffort() {
+    try {
+      await cleanupAllDerived();
+      return null;
+    } catch (error) {
+      return {
+        reason: 'derived-cleanup-failed',
+        detail: error?.message || String(error),
+      };
+    }
+  }
+
+  async function enqueueSemanticBestEffort(saveIds) {
+    if (typeof semanticIndex?.enqueue !== 'function') return null;
+    const ids = [...new Set(
+      (Array.isArray(saveIds) ? saveIds : [saveIds]).filter(Boolean),
+    )];
+    const failures = [];
+    for (const saveId of ids) {
+      try {
+        const result = await semanticIndex.enqueue(saveId);
+        if (result?.ok === false) {
+          failures.push({
+            saveId,
+            detail: result.detail || result.reason || 'Semantic indexing could not be queued',
+          });
+        }
+      } catch (error) {
+        failures.push({ saveId, detail: error?.message || String(error) });
+      }
+    }
+    if (failures.length === 0) return null;
+    return {
+      reason: 'semantic-enqueue-failed',
+      count: failures.length,
+      detail: failures[0].detail,
+    };
+  }
+
+  async function enqueueAfterCanonicalMutation(result, saveIds) {
+    if (!result?.ok) return result;
+    const semanticWarning = await enqueueSemanticBestEffort(saveIds);
+    return semanticWarning ? { ...result, semanticWarning } : result;
   }
   // Merges saves whose extracted palette is perceptually similar to a
   // named color in the query (e.g. "orange", "navy") into the existing
@@ -320,7 +361,7 @@ function registerIpcHandlers({
     return result.response === 1;
   });
 
-  ipcMain.handle('saves:update', (_e, payload) => (
+  ipcMain.handle('saves:update', async (_e, payload) => (
     enqueueAfterCanonicalMutation(updateSave(payload), payload?.id)
   ));
 
@@ -536,19 +577,19 @@ function registerIpcHandlers({
 
   ipcMain.handle('tags:get-all', () => getAllTags());
   ipcMain.handle('tags:get-for-save', (_e, saveId) => getTagsForSave(saveId));
-  ipcMain.handle('tags:add-to-save', (_e, payload) => (
+  ipcMain.handle('tags:add-to-save', async (_e, payload) => (
     enqueueAfterCanonicalMutation(addTagToSave(payload), payload?.saveId)
   ));
-  ipcMain.handle('tags:remove-from-save', (_e, payload) => (
+  ipcMain.handle('tags:remove-from-save', async (_e, payload) => (
     enqueueAfterCanonicalMutation(removeTagFromSave(payload), payload?.saveId)
   ));
-  ipcMain.handle('tags:rename', (_e, payload) => {
-    const { renameTag } = require('./db');
-    return renameTag(payload);
+  ipcMain.handle('tags:rename', async (_e, payload) => {
+    const saveIds = getSaveIdsForTag(payload?.id);
+    return enqueueAfterCanonicalMutation(renameTag(payload), saveIds);
   });
-  ipcMain.handle('tags:delete', (_e, id) => {
-    const { deleteTag } = require('./db');
-    return deleteTag(id);
+  ipcMain.handle('tags:delete', async (_e, id) => {
+    const saveIds = getSaveIdsForTag(id);
+    return enqueueAfterCanonicalMutation(deleteTag(id), saveIds);
   });
   ipcMain.handle('tags:delete-unused', () => {
     const { deleteUnusedTags } = require('./db');
@@ -866,8 +907,9 @@ function registerIpcHandlers({
     if (dlg.response !== 1) return { ok: false, canceled: true };
     const result = wipeLibrary();
     for (const f of result.files) deleteImageFiles(f.filePath, f.thumbPath);
-    await cleanupAllDerived();
-    return { ok: true, removed: result.files.length };
+    const cleanupWarning = await cleanupAllDerivedBestEffort();
+    const response = { ok: true, removed: result.files.length };
+    return cleanupWarning ? { ...response, cleanupWarning } : response;
   });
 
   // PNG snapshot of the current board view. Renderer measures the
@@ -1091,8 +1133,9 @@ function registerIpcHandlers({
     const suggestionId = typeof input === 'string' ? input : input?.suggestionId;
     const result = acceptVideoTagSuggestion({ suggestionId });
     if (result?.ok) {
-      semanticIndex?.enqueue?.(result.saveId);
+      const semanticWarning = await enqueueSemanticBestEffort(result.saveId);
       broadcastVideoUpdated(event, result.saveId);
+      return semanticWarning ? { ...result, semanticWarning } : result;
     }
     return result;
   });
@@ -1111,8 +1154,11 @@ function registerIpcHandlers({
       if (result?.ok) accepted += 1;
     }
     if (accepted > 0) {
-      semanticIndex?.enqueue?.(saveId);
+      const semanticWarning = await enqueueSemanticBestEffort(saveId);
       broadcastVideoUpdated(event, saveId);
+      return semanticWarning
+        ? { ok: true, accepted, semanticWarning }
+        : { ok: true, accepted };
     }
     return { ok: true, accepted };
   });
@@ -1285,7 +1331,10 @@ function registerIpcHandlers({
         const result = addTagToSave({ saveId, name });
         if (result.ok && result.tag) added.push(result.tag);
       }
-      return { ok: true, tags: added };
+      return enqueueAfterCanonicalMutation(
+        { ok: true, tags: added },
+        added.length > 0 ? saveId : null,
+      );
     } catch (err) {
       console.error('Auto-tag failed:', err.message);
       return { ok: false, reason: err.code || "api-error", detail: err.message };

@@ -51,6 +51,16 @@ function insertVideo(db, id = 'video-save') {
   });
 }
 
+test('tag lookup returns every affected save id for global mutations', withTempDb((db) => {
+  insertVideo(db, 'save-a');
+  insertVideo(db, 'save-b');
+  db.addTagToSave({ saveId: 'save-a', name: 'aviation' });
+  const tag = db.getTagsForSave('save-a')[0];
+  db.addTagToSave({ saveId: 'save-b', name: 'aviation' });
+
+  assert.deepEqual(db.getSaveIdsForTag(tag.id), ['save-a', 'save-b']);
+}));
+
 test('video queue persists pending and running states and recovers interrupted work', withTempDb((db) => {
   insertVideo(db);
   db.enqueueVideoAnalysis({

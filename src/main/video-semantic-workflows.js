@@ -272,7 +272,22 @@ function createVideoSemanticWorkflows({
     const current = active;
     const persisted = current.repository.getSave(save?.id) || save;
     if (!persisted?.id) return { ok: false, reason: 'save_not_found' };
-    const semantic = current.semanticIndex.enqueue(persisted.id);
+    let semantic = null;
+    let semanticWarning = null;
+    try {
+      semantic = await current.semanticIndex.enqueue(persisted.id);
+      if (semantic?.ok === false) {
+        semanticWarning = {
+          reason: 'semantic-enqueue-failed',
+          detail: semantic.detail || semantic.reason || 'Semantic indexing could not be queued',
+        };
+      }
+    } catch (error) {
+      semanticWarning = {
+        reason: 'semantic-enqueue-failed',
+        detail: error?.message || String(error),
+      };
+    }
     let video = null;
     if (!changed && isVideoSave(persisted)) {
       try {
@@ -290,7 +305,9 @@ function createVideoSemanticWorkflows({
       }
     }
     if (current.epoch === epoch) current.coordinator.wake();
-    return { ok: true, semantic, video };
+    return semanticWarning
+      ? { ok: true, semantic, video, semanticWarning }
+      : { ok: true, semantic, video };
   }
 
   function noteActivity() {
@@ -344,7 +361,7 @@ function createVideoSemanticWorkflows({
             reason: null,
             setupAction: null,
           };
-          emit('semantic-index:health', semanticHealth);
+          emit('semantic-index:status', semanticHealth);
         }
         return getSemanticHealth();
       })
@@ -357,7 +374,7 @@ function createVideoSemanticWorkflows({
             reason: error?.code || 'ollama_unavailable',
             setupAction: error?.setupAction || null,
           };
-          emit('semantic-index:health', semanticHealth);
+          emit('semantic-index:status', semanticHealth);
         }
         return getSemanticHealth();
       })

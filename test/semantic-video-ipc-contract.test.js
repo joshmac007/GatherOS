@@ -15,7 +15,15 @@ function functionModule(overrides = {}) {
   });
 }
 
-function loadIpc({ db = {}, settings = {}, notify = {}, storage = {}, windows = [] } = {}) {
+function loadIpc({
+  db = {},
+  settings = {},
+  notify = {},
+  storage = {},
+  openai = {},
+  dialog = {},
+  windows = [],
+} = {}) {
   const handlers = new Map();
   const listeners = new Map();
   const electron = {
@@ -24,7 +32,7 @@ function loadIpc({ db = {}, settings = {}, notify = {}, storage = {}, windows = 
       on: (channel, handler) => listeners.set(channel, handler),
     },
     shell: functionModule(),
-    dialog: functionModule(),
+    dialog: functionModule(dialog),
     BrowserWindow: {
       getAllWindows: () => windows,
       fromWebContents: () => null,
@@ -37,7 +45,7 @@ function loadIpc({ db = {}, settings = {}, notify = {}, storage = {}, windows = 
   const modules = {
     './db': functionModule(db),
     './settings': functionModule({ getPref: () => true, ...settings }),
-    './openai': functionModule({ hasSession: () => false }),
+    './openai': functionModule({ hasSession: () => false, ...openai }),
     './notify': functionModule(notify),
     './storage': functionModule(storage),
   };
@@ -203,6 +211,107 @@ test('canonical save and tag mutations enqueue incremental semantic work after s
   assert.deepEqual(enqueued, ['save-a', 'save-a', 'save-a']);
 });
 
+test('global tag mutations enqueue every affected save once', async () => {
+  const enqueued = [];
+  const affected = {
+    'tag-rename': ['save-a', 'save-b', 'save-a'],
+    'tag-delete': ['save-b', 'save-c'],
+  };
+  const { registerIpcHandlers, handlers } = loadIpc({
+    db: {
+      getSaveIdsForTag: (tagId) => affected[tagId] || [],
+      renameTag: () => ({ ok: true, tag: { id: 'tag-rename', name: 'renamed' } }),
+      deleteTag: () => ({ ok: true, removed: 2 }),
+    },
+  });
+  registerIpcHandlers({
+    semanticIndex: {
+      status: () => ({}),
+      queue: () => [],
+      enqueue: (saveId) => { enqueued.push(saveId); return { ok: true }; },
+    },
+  });
+
+  assert.equal((await handlers.get('tags:rename')(null, {
+    id: 'tag-rename', name: 'renamed',
+  })).ok, true);
+  assert.equal((await handlers.get('tags:delete')(null, 'tag-delete')).ok, true);
+
+  assert.deepEqual(enqueued, ['save-a', 'save-b', 'save-b', 'save-c']);
+});
+
+test('auto-tag enqueues its save once after committed tag mutations', async () => {
+  const enqueued = [];
+  const { registerIpcHandlers, handlers } = loadIpc({
+    db: {
+      getSave: () => ({ id: 'save-a', kind: 'image', file_path: '/tmp/a.png' }),
+      addTagToSave: ({ name }) => ({ ok: true, tag: { id: `tag-${name}`, name } }),
+    },
+    openai: {
+      hasSession: () => true,
+      autoTagImage: async () => ['aviation', 'cockpit'],
+    },
+  });
+  registerIpcHandlers({
+    semanticIndex: {
+      status: () => ({}),
+      queue: () => [],
+      enqueue: (saveId) => { enqueued.push(saveId); return { ok: true }; },
+    },
+  });
+
+  const result = await handlers.get('ai:auto-tag')(null, 'save-a');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.tags.length, 2);
+  assert.deepEqual(enqueued, ['save-a']);
+});
+
+test('semantic enqueue failures warn without rejecting committed mutations or broadcasts', async () => {
+  const suggestions = [{ id: 'one', save_id: 'save-a', state: 'suggested' }];
+  const { registerIpcHandlers, handlers } = loadIpc({
+    db: {
+      updateSave: () => ({ ok: true }),
+      addTagToSave: () => ({ ok: true, tag: { id: 'tag-a', name: 'aviation' } }),
+      removeTagFromSave: () => ({ ok: true }),
+      getSave: () => ({ id: 'save-a', kind: 'image', file_path: '/tmp/a.png' }),
+      getVideoAnalysis: () => ({ save_id: 'save-a', state: 'completed' }),
+      listVideoTagSuggestions: () => suggestions,
+      acceptVideoTagSuggestion: () => ({ ok: true, saveId: 'save-a' }),
+    },
+  });
+  registerIpcHandlers({
+    semanticIndex: {
+      status: () => ({}),
+      queue: () => [],
+      enqueue: () => { throw new Error('index queue unavailable'); },
+    },
+  });
+  const sent = senderEvents();
+
+  for (const [channel, payload] of [
+    ['saves:update', { id: 'save-a', title: 'Updated' }],
+    ['tags:add-to-save', { saveId: 'save-a', name: 'aviation' }],
+    ['tags:remove-from-save', { saveId: 'save-a', tagId: 'tag-a' }],
+  ]) {
+    const result = await handlers.get(channel)(null, payload);
+    assert.equal(result.ok, true, channel);
+    assert.equal(result.semanticWarning?.reason, 'semantic-enqueue-failed', channel);
+  }
+
+  const accepted = await handlers.get('video-analysis:accept')(sent.event, 'one');
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.semanticWarning?.reason, 'semantic-enqueue-failed');
+  assert.deepEqual(sent.events, [['video-analysis:updated', { saveId: 'save-a' }]]);
+
+  sent.events.length = 0;
+  const acceptedAll = await handlers.get('video-analysis:accept-all')(sent.event, 'save-a');
+  assert.equal(acceptedAll.ok, true);
+  assert.equal(acceptedAll.accepted, 1);
+  assert.equal(acceptedAll.semanticWarning?.reason, 'semantic-enqueue-failed');
+  assert.deepEqual(sent.events, [['video-analysis:updated', { saveId: 'save-a' }]]);
+});
+
 test('permanent delete reports success and broadcasts when derived cleanup fails', async () => {
   const broadcasts = [];
   let trayRefreshes = 0;
@@ -266,6 +375,30 @@ test('empty trash reports deleted count and broadcasts when derived cleanup fail
   assert.equal(trayRefreshes, 1);
 });
 
+test('wipe returns committed success with warning when derived cleanup fails', async () => {
+  const { registerIpcHandlers, handlers } = loadIpc({
+    db: {
+      wipeLibrary: () => ({
+        ok: true,
+        files: [{ filePath: '/tmp/a.png', thumbPath: '/tmp/a-thumb.png' }],
+      }),
+    },
+    dialog: { showMessageBox: async () => ({ response: 1 }) },
+    storage: { deleteImageFiles: () => undefined },
+  });
+  registerIpcHandlers({
+    backgroundRuntime: {
+      cleanupAllDerived: async () => { throw new Error('cache unavailable'); },
+    },
+  });
+
+  const result = await handlers.get('library:wipe-all')({ sender: {} });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.removed, 1);
+  assert.equal(result.cleanupWarning?.reason, 'derived-cleanup-failed');
+});
+
 test('preload exposes exact semantic and video APIs and allowed events', () => {
   const preload = fs.readFileSync(path.join(ROOT, 'src', 'main', 'preload.js'), 'utf8');
   for (const method of [
@@ -279,6 +412,14 @@ test('preload exposes exact semantic and video APIs and allowed events', () => {
     'semantic-index:status', 'semantic-index:progress', 'semantic-index:notice',
     'video-analysis:updated',
   ]) assert.match(preload, new RegExp(event));
+
+  const runtime = fs.readFileSync(
+    path.join(ROOT, 'src', 'main', 'video-semantic-workflows.js'), 'utf8',
+  );
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'App.jsx'), 'utf8');
+  assert.doesNotMatch(runtime, /emit\(['"]semantic-index:health['"]/);
+  assert.match(runtime, /emit\(['"]semantic-index:status['"]/);
+  assert.match(app, /on\?\.\(['"]semantic-index:status['"],\s*refreshSemanticStatus\)/);
 });
 
 test('ipc removes legacy embedding consumers and guards image-only AI for video', () => {

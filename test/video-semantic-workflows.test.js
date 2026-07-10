@@ -25,6 +25,7 @@ function createHarness({
   hasCodexSession = true,
   videoRun = null,
   videoPrepareError = null,
+  semanticEnqueueError = null,
   ollamaHealth = async () => ({ ok: true, model: 'embeddinggemma' }),
 } = {}) {
   const order = [];
@@ -87,6 +88,7 @@ function createHarness({
 
   const createSemanticIndexService = ({ coordinator }) => ({
     enqueue(saveId) {
+      if (semanticEnqueueError) throw semanticEnqueueError;
       incrementalQueue.push({ id: `semantic-${saveId}`, save_id: saveId });
       coordinator.wake();
       return { ok: true };
@@ -223,6 +225,20 @@ test('new save routes once while duplicate does not enqueue semantic or video wo
   assert.equal(harness.incrementalQueue.length, 1);
 });
 
+test('new save routing warns instead of rejecting after semantic enqueue failure', async () => {
+  const harness = createHarness({
+    semanticEnqueueError: new Error('semantic queue unavailable'),
+  });
+  const save = { id: 'committed-save', kind: 'image', file_path: '/tmp/image.png' };
+  harness.saves.set(save.id, save);
+  harness.runtime.start();
+
+  const result = await harness.runtime.routeSave(save);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.semanticWarning?.reason, 'semantic-enqueue-failed');
+});
+
 test('extension success response waits until durable background routing completes', async () => {
   const gate = deferred();
   const order = [];
@@ -312,6 +328,12 @@ test('semantic health is cached/nonblocking and cleanup/restore use lifecycle ru
   healthGate.resolve({ ok: true, model: 'embeddinggemma' });
   await harness.runtime.refreshSemanticHealth();
   assert.equal(harness.runtime.getSemanticHealth().status, 'connected');
+  assert.equal(
+    harness.events.some(({ event, payload }) => (
+      event === 'semantic-index:status' && payload.status === 'connected'
+    )),
+    true,
+  );
 
   await harness.runtime.cleanupSaveDerived('save-1');
   await harness.runtime.cleanupAllDerived();

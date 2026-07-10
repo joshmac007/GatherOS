@@ -3387,6 +3387,15 @@ function getTagsForSave(saveId) {
   `).all(saveId);
 }
 
+function getSaveIdsForTag(tagId) {
+  if (!tagId) return [];
+  return getDatabase().prepare(`
+    SELECT save_id FROM save_tags
+    WHERE tag_id = ?
+    ORDER BY save_id ASC
+  `).all(tagId).map((row) => row.save_id);
+}
+
 function addTagToSave({ saveId, name } = {}) {
   const trimmed = (name || '').trim().toLowerCase().replace(/^#+/, '');
   if (!trimmed || !saveId) return { ok: false };
@@ -3905,6 +3914,7 @@ module.exports = {
   removeSaveFromCollection,
   getAllTags,
   getTagsForSave,
+  getSaveIdsForTag,
   addTagToSave,
   removeTagFromSave,
   renameTag,
