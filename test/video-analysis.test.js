@@ -11,6 +11,7 @@ const {
   buildVideoAnalysisFingerprint,
   cleanupDerivedVideoCache,
   createVideoAnalysisService,
+  isValidContactSheet,
   resolveDerivedCacheDirectory,
   resolveDerivedCachePath,
   validateVideoTagSuggestions,
@@ -442,6 +443,71 @@ test('corrupt cached contact sheet is rebuilt atomically before Codex sees it', 
     assert.equal(result.status, 'completed');
     assert.equal(extractions, 1);
     assert.equal((await sharp(cachePath).metadata()).format, 'jpeg');
+    assert.deepEqual(fs.readdirSync(path.dirname(cachePath)).filter((name) => name.includes('.tmp-')), []);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('metadata-readable truncated JPEG cache is fully decoded then rebuilt atomically', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-video-truncated-cache-'));
+  try {
+    const completeJpeg = await sharp({
+      create: { width: 320, height: 180, channels: 3, background: '#7a4522' },
+    }).jpeg({ quality: 90 }).toBuffer();
+    let truncatedJpeg = null;
+    for (let length = 64; length < completeJpeg.length; length += 1) {
+      const candidate = completeJpeg.subarray(0, length);
+      try {
+        const metadata = await sharp(candidate).metadata();
+        if (metadata.format !== 'jpeg') continue;
+        try {
+          await sharp(candidate).raw().toBuffer();
+        } catch {
+          truncatedJpeg = candidate;
+          break;
+        }
+      } catch {
+        // Header not complete yet.
+      }
+    }
+    assert.ok(truncatedJpeg, 'could not construct metadata-readable truncated JPEG');
+
+    const save = saveFixture();
+    const fingerprint = fingerprintForSave(save);
+    const cachePath = resolveDerivedCachePath(directory, save.id, fingerprint);
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    fs.writeFileSync(cachePath, truncatedJpeg);
+    assert.equal((await sharp(cachePath).metadata()).format, 'jpeg');
+    assert.equal(await isValidContactSheet(cachePath), false);
+
+    const frame = await sharp({
+      create: { width: 48, height: 27, channels: 3, background: '#225588' },
+    }).jpeg().toBuffer();
+    const service = createVideoAnalysisService({
+      repository: { completeVideoAnalysis() { return { ok: true }; } },
+      frameExtractor: {
+        async extract() {
+          return { duration: 6, timestamps: [1, 2, 3, 4, 5, 5.5], frames: Array(6).fill(frame) };
+        },
+      },
+      codex: {
+        async generateVideoTagSuggestions(input, { imagePath }) {
+          const pixels = await sharp(imagePath).raw().toBuffer();
+          assert.equal(pixels.length > 0, true);
+          return { tags: [], warnings: [] };
+        },
+      },
+      derivedDir: directory,
+    });
+
+    const result = await service.run({
+      job: { id: 'truncated-cache-job', fingerprint, prompt_version: 1 },
+      save,
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.equal(await isValidContactSheet(cachePath), true);
     assert.deepEqual(fs.readdirSync(path.dirname(cachePath)).filter((name) => name.includes('.tmp-')), []);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });

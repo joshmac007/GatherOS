@@ -255,8 +255,7 @@ async function composeContactSheet({
         background: '#111827',
       },
     }).composite(composites).jpeg({ quality: 86, mozjpeg: true }).toFile(temporaryPath);
-    const metadata = await sharpFactory(temporaryPath).metadata();
-    if (metadata.format !== 'jpeg' || !metadata.width || !metadata.height) {
+    if (!(await isValidContactSheet(temporaryPath, sharpFactory))) {
       throw new Error('Derived contact sheet failed JPEG validation');
     }
     await fs.promises.rename(temporaryPath, outputPath);
@@ -270,7 +269,9 @@ async function composeContactSheet({
 async function isValidContactSheet(filePath, sharpFactory = require('sharp')) {
   try {
     const metadata = await sharpFactory(filePath).metadata();
-    return metadata.format === 'jpeg' && metadata.width > 0 && metadata.height > 0;
+    if (metadata.format !== 'jpeg' || !metadata.width || !metadata.height) return false;
+    const pixels = await sharpFactory(filePath).raw().toBuffer();
+    return pixels.length > 0;
   } catch {
     return false;
   }
