@@ -115,6 +115,18 @@ test('fingerprint supersession removes unresolved suggestions but preserves acce
     ['patio renovation', 'accepted'],
   ]);
   assert.equal(history.every((row) => row.fingerprint === 'fp-1'), true);
+
+  const remembered = db.enqueueVideoAnalysis({
+    id: 'job-3', saveId: 'video-save', fingerprint: 'fp-1', promptVersion: 1, now: 70,
+  });
+  assert.equal(remembered.id, 'job-1');
+  assert.equal(remembered.state, 'completed');
+  assert.equal(db.getVideoAnalysis('video-save').id, 'job-1');
+  assert.equal(db.getDatabase().prepare('SELECT COUNT(*) AS n FROM video_analysis_jobs').get().n, 2);
+  assert.deepEqual(db.listVideoTagSuggestions('video-save').map((row) => [row.name, row.state]), [
+    ['outdoor living', 'dismissed'],
+    ['patio renovation', 'accepted'],
+  ]);
 }));
 
 test('same fingerprint is coalesced and failures never mutate ordinary tags', withTempDb((db) => {

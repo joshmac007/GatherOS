@@ -55,6 +55,10 @@ function insertSave(db, id) {
   });
 }
 
+function floatBuffer(values) {
+  return Buffer.from(new Float32Array(values).buffer);
+}
+
 const DOMAIN_TABLES = [
   'semantic_index_state',
   'semantic_index_generations',
@@ -110,7 +114,7 @@ test('jobs coalesce to latest source identity while active vectors stay generati
     sourceHash: 'hash-old',
     model: 'embeddinggemma',
     dimension: 3,
-    vector: Buffer.from([1, 2, 3]),
+    vector: floatBuffer([1, 2, 3]),
     now: 40,
   });
 
@@ -146,7 +150,7 @@ test('jobs coalesce to latest source identity while active vectors stay generati
     sourceHash: 'hash-1',
     model: 'nomic-embed-text',
     dimension: 3,
-    vector: Buffer.from([9, 9, 9]),
+    vector: floatBuffer([9, 9, 9]),
     now: 75,
   }).reason, 'stale');
   assert.equal(db.getSemanticIndexStatus().waiting, 1);
@@ -164,7 +168,7 @@ test('jobs coalesce to latest source identity while active vectors stay generati
   assert.equal(activeVector.model, 'embeddinggemma');
   assert.equal(activeVector.dimension, 3);
   assert.equal(activeVector.source_hash, 'hash-old');
-  assert.deepEqual(activeVector.vector, Buffer.from([1, 2, 3]));
+  assert.deepEqual(activeVector.vector, floatBuffer([1, 2, 3]));
 
   db.enqueueSemanticIndexJob({
     generationId: active.id,
@@ -179,10 +183,56 @@ test('jobs coalesce to latest source identity while active vectors stay generati
     sourceHash: 'hash-wrong-dimension',
     model: 'embeddinggemma',
     dimension: 2,
-    vector: Buffer.from([4, 5]),
+    vector: floatBuffer([4, 5]),
     now: 100,
   }).reason, 'dimension_mismatch');
   assert.equal(db.getSemanticVector('save-1').source_hash, 'hash-old');
+}));
+
+test('rejects wrong-length and non-finite semantic vector payloads', withTempDb((db) => {
+  insertSave(db, 'save-invalid-vector');
+  const generation = db.createSemanticGeneration({
+    id: 'gen-invalid-vector',
+    model: 'embeddinggemma',
+    sourceVersion: 1,
+    status: 'active',
+    createdAt: 10,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: generation.id,
+    saveId: 'save-invalid-vector',
+    kind: 'incremental',
+    sourceHash: 'bad-length',
+    now: 20,
+  });
+  let job = db.claimSemanticIndexJob('incremental', 30);
+  assert.equal(db.completeSemanticIndexJob({
+    id: job.id,
+    sourceHash: 'bad-length',
+    model: 'embeddinggemma',
+    dimension: 2,
+    vector: Buffer.alloc(4),
+    now: 40,
+  }).reason, 'invalid_vector_payload');
+  assert.equal(db.getSemanticVector('save-invalid-vector'), undefined);
+
+  db.enqueueSemanticIndexJob({
+    generationId: generation.id,
+    saveId: 'save-invalid-vector',
+    kind: 'incremental',
+    sourceHash: 'non-finite',
+    now: 50,
+  });
+  job = db.claimSemanticIndexJob('incremental', 60);
+  assert.equal(db.completeSemanticIndexJob({
+    id: job.id,
+    sourceHash: 'non-finite',
+    model: 'embeddinggemma',
+    dimension: 2,
+    vector: floatBuffer([1, Number.NaN]),
+    now: 70,
+  }).reason, 'invalid_vector_payload');
+  assert.equal(db.getSemanticVector('save-invalid-vector'), undefined);
 }));
 
 test('pause, retry, dismiss, and crash recovery are durable queue operations', withTempDb((db) => {
@@ -228,6 +278,38 @@ test('pause, retry, dismiss, and crash recovery are durable queue operations', w
   assert.equal(dismissed[0].finished_at, 130);
 }));
 
+test('retryable semantic failures become claimable after durable backoff', withTempDb((db) => {
+  insertSave(db, 'save-transient');
+  const generation = db.createSemanticGeneration({
+    id: 'gen-transient', model: 'embeddinggemma', sourceVersion: 1, status: 'active', createdAt: 10,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: generation.id,
+    saveId: 'save-transient',
+    kind: 'incremental',
+    sourceHash: 'hash-transient',
+    now: 20,
+  });
+  const first = db.claimSemanticIndexJob('incremental', 30);
+  db.failSemanticIndexJob({
+    id: first.id,
+    error: 'ollama unavailable',
+    retryable: true,
+    retryAt: 100,
+    now: 40,
+  });
+
+  const waiting = db.listSemanticIndexJobs()[0];
+  assert.equal(waiting.state, 'pending');
+  assert.equal(waiting.retryable, 1);
+  assert.equal(waiting.retry_count, 1);
+  assert.equal(waiting.error, 'ollama unavailable');
+  assert.equal(db.claimSemanticIndexJob('incremental', 99), undefined);
+  const retry = db.claimSemanticIndexJob('incremental', 100);
+  assert.equal(retry.id, first.id);
+  assert.equal(retry.retry_count, 1);
+}));
+
 test('successful building generation activates atomically and cancellation keeps old active data', withTempDb((db) => {
   insertSave(db, 'save-1');
   const oldGeneration = db.createSemanticGeneration({
@@ -246,7 +328,7 @@ test('successful building generation activates atomically and cancellation keeps
     sourceHash: 'old-hash',
     model: 'embeddinggemma',
     dimension: 2,
-    vector: Buffer.from([1, 1]),
+    vector: floatBuffer([1, 1]),
     now: 40,
   });
 
@@ -266,7 +348,7 @@ test('successful building generation activates atomically and cancellation keeps
     sourceHash: 'cancel-hash',
     model: 'embeddinggemma',
     dimension: 2,
-    vector: Buffer.from([2, 2]),
+    vector: floatBuffer([2, 2]),
     now: 80,
     activate: false,
   });
@@ -295,7 +377,7 @@ test('successful building generation activates atomically and cancellation keeps
     sourceHash: 'new-hash',
     model: 'embeddinggemma',
     dimension: 2,
-    vector: Buffer.from([3, 3]),
+    vector: floatBuffer([3, 3]),
     now: 130,
   });
 
@@ -303,6 +385,73 @@ test('successful building generation activates atomically and cancellation keeps
   assert.equal(db.getSemanticIndexState().building_generation_id, null);
   assert.equal(db.getSemanticVector('save-1').source_hash, 'new-hash');
   assert.deepEqual(db.getActiveSemanticVectors().map((row) => row.save_id), ['save-1']);
+  assert.equal(db.cancelSemanticGeneration(oldGeneration.id, 140).reason, 'not_building');
+  assert.equal(db.getDatabase().prepare(
+    'SELECT COUNT(*) AS n FROM semantic_vectors WHERE generation_id = ?',
+  ).get(oldGeneration.id).n, 1);
+}));
+
+test('dismissed rebuild failures cannot activate a partial generation', withTempDb((db) => {
+  insertSave(db, 'save-a');
+  insertSave(db, 'save-b');
+  const active = db.createSemanticGeneration({
+    id: 'gen-complete', model: 'embeddinggemma', sourceVersion: 1, status: 'active', createdAt: 10,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: active.id,
+    saveId: 'save-a',
+    kind: 'incremental',
+    sourceHash: 'active-a',
+    now: 20,
+  });
+  let job = db.claimSemanticIndexJob('incremental', 30);
+  db.completeSemanticIndexJob({
+    id: job.id,
+    sourceHash: 'active-a',
+    model: 'embeddinggemma',
+    dimension: 2,
+    vector: floatBuffer([1, 0]),
+    now: 40,
+  });
+
+  const building = db.createSemanticGeneration({
+    id: 'gen-partial', model: 'embeddinggemma', sourceVersion: 2, status: 'building', createdAt: 50,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: building.id,
+    saveId: 'save-a',
+    kind: 'rebuild',
+    sourceHash: 'rebuild-a',
+    now: 60,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: building.id,
+    saveId: 'save-b',
+    kind: 'rebuild',
+    sourceHash: 'rebuild-b',
+    now: 61,
+  });
+  job = db.claimSemanticIndexJob('rebuild', 70);
+  db.failSemanticIndexJob({ id: job.id, error: 'permanent malformed input', now: 80 });
+  db.dismissSemanticFailures([job.id], 90);
+
+  job = db.claimSemanticIndexJob('rebuild', 100);
+  db.completeSemanticIndexJob({
+    id: job.id,
+    sourceHash: job.source_hash,
+    model: 'embeddinggemma',
+    dimension: 2,
+    vector: floatBuffer([0, 1]),
+    now: 110,
+  });
+
+  assert.equal(db.getSemanticIndexState().active_generation_id, active.id);
+  assert.equal(db.getSemanticIndexState().building_generation_id, building.id);
+  assert.equal(db.getDatabase().prepare(
+    'SELECT status FROM semantic_index_generations WHERE id = ?',
+  ).get(building.id).status, 'building');
+  assert.equal(db.getSemanticVector('save-a').source_hash, 'active-a');
+  assert.equal(db.listSemanticIndexJobs({ generationId: building.id, state: 'dismissed' }).length, 1);
 }));
 
 test('deleting a save cascades semantic vectors and jobs', withTempDb((db) => {
@@ -323,7 +472,7 @@ test('deleting a save cascades semantic vectors and jobs', withTempDb((db) => {
     sourceHash: 'hash-cascade',
     model: 'embeddinggemma',
     dimension: 1,
-    vector: Buffer.from([1]),
+    vector: floatBuffer([1]),
     now: 40,
   });
   db.enqueueSemanticIndexJob({

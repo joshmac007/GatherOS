@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS semantic_index_jobs (
   source_hash      TEXT NOT NULL,
   state            TEXT NOT NULL DEFAULT 'pending',
   retry_count      INTEGER NOT NULL DEFAULT 0,
+  retryable        INTEGER NOT NULL DEFAULT 0,
   available_at     INTEGER NOT NULL,
   error            TEXT,
   created_at       INTEGER NOT NULL,
@@ -71,7 +72,8 @@ CREATE TABLE IF NOT EXISTS semantic_index_jobs (
   UNIQUE (generation_id, save_id, kind),
   CHECK (kind IN ('incremental', 'rebuild')),
   CHECK (state IN ('pending', 'running', 'completed', 'failed', 'dismissed')),
-  CHECK (retry_count >= 0)
+  CHECK (retry_count >= 0),
+  CHECK (retryable IN (0, 1))
 );
 
 CREATE INDEX IF NOT EXISTS idx_semantic_jobs_ready
@@ -85,6 +87,7 @@ CREATE TABLE IF NOT EXISTS video_analysis_jobs (
   fingerprint      TEXT NOT NULL,
   prompt_version   INTEGER NOT NULL,
   state            TEXT NOT NULL DEFAULT 'pending',
+  superseded_from_state TEXT,
   retry_count      INTEGER NOT NULL DEFAULT 0,
   available_at     INTEGER NOT NULL,
   error            TEXT,
@@ -95,6 +98,8 @@ CREATE TABLE IF NOT EXISTS video_analysis_jobs (
   UNIQUE (save_id, fingerprint),
   CHECK (prompt_version > 0),
   CHECK (state IN ('pending', 'running', 'completed', 'failed', 'unavailable', 'superseded')),
+  CHECK (superseded_from_state IS NULL OR superseded_from_state IN
+    ('pending', 'completed', 'failed', 'unavailable')),
   CHECK (retry_count >= 0)
 );
 
@@ -2564,10 +2569,10 @@ function enqueueSemanticIndexJob({
   const timestamp = Number.isFinite(now) ? now : Date.now();
   database.prepare(`
     INSERT INTO semantic_index_jobs
-      (id, generation_id, save_id, kind, source_hash, state, retry_count,
+      (id, generation_id, save_id, kind, source_hash, state, retry_count, retryable,
        available_at, created_at, updated_at)
     VALUES
-      (@id, @generation_id, @save_id, @kind, @source_hash, 'pending', 0,
+      (@id, @generation_id, @save_id, @kind, @source_hash, 'pending', 0, 0,
        @available_at, @created_at, @updated_at)
     ON CONFLICT(generation_id, save_id, kind) DO UPDATE SET
       source_hash = excluded.source_hash,
@@ -2575,6 +2580,7 @@ function enqueueSemanticIndexJob({
       retry_count = CASE
         WHEN semantic_index_jobs.source_hash = excluded.source_hash
         THEN semantic_index_jobs.retry_count ELSE 0 END,
+      retryable = 0,
       available_at = excluded.available_at,
       error = NULL,
       updated_at = excluded.updated_at,
@@ -2617,7 +2623,8 @@ function claimSemanticIndexJob(kind, now = Date.now()) {
     if (!row) return undefined;
     const result = database.prepare(`
       UPDATE semantic_index_jobs
-         SET state = 'running', started_at = ?, updated_at = ?, error = NULL
+         SET state = 'running', retryable = 0,
+             started_at = ?, updated_at = ?, error = NULL
        WHERE id = ? AND state = 'pending'
     `).run(now, now, row.id);
     if (result.changes !== 1) return undefined;
@@ -2632,6 +2639,15 @@ function vectorBuffer(value) {
     return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
   }
   return null;
+}
+
+function isValidFloat32Vector(bytes, dimension) {
+  if (!bytes || !Number.isInteger(dimension) || dimension < 1) return false;
+  if (bytes.byteLength !== dimension * Float32Array.BYTES_PER_ELEMENT) return false;
+  for (let i = 0; i < dimension; i += 1) {
+    if (!Number.isFinite(bytes.readFloatLE(i * Float32Array.BYTES_PER_ELEMENT))) return false;
+  }
+  return true;
 }
 
 function completeSemanticIndexJob({
@@ -2656,8 +2672,11 @@ function completeSemanticIndexJob({
     const generation = database.prepare(
       'SELECT * FROM semantic_index_generations WHERE id = ?',
     ).get(job.generation_id);
-    if (!generation || generation.model !== model || !bytes || !Number.isInteger(dimension) || dimension < 1) {
+    if (!generation || generation.model !== model || !Number.isInteger(dimension) || dimension < 1) {
       return { ok: false, reason: 'invalid_vector_identity' };
+    }
+    if (!isValidFloat32Vector(bytes, dimension)) {
+      return { ok: false, reason: 'invalid_vector_payload' };
     }
     if (generation.dimension && generation.dimension !== dimension) {
       return { ok: false, reason: 'dimension_mismatch' };
@@ -2690,17 +2709,25 @@ function completeSemanticIndexJob({
     );
     database.prepare(`
       UPDATE semantic_index_jobs
-         SET state = 'completed', updated_at = ?, finished_at = ?, error = NULL
+         SET state = 'completed', retryable = 0,
+             updated_at = ?, finished_at = ?, error = NULL
        WHERE id = ?
     `).run(timestamp, timestamp, id);
 
     if (generation.status === 'building' && activate !== false) {
-      const remaining = database.prepare(`
+      const incomplete = database.prepare(`
         SELECT COUNT(*) AS n
-          FROM semantic_index_jobs
-         WHERE generation_id = ? AND state IN ('pending', 'running', 'failed')
-      `).get(generation.id).n;
-      if (remaining === 0) {
+          FROM semantic_index_jobs j
+          LEFT JOIN semantic_vectors v
+            ON v.generation_id = j.generation_id
+           AND v.save_id = j.save_id
+           AND v.source_hash = j.source_hash
+           AND v.model = ?
+           AND v.dimension = ?
+         WHERE j.generation_id = ?
+           AND (j.state != 'completed' OR v.save_id IS NULL)
+      `).get(generation.model, dimension, generation.id).n;
+      if (incomplete === 0) {
         database.prepare(`
           UPDATE semantic_index_generations
              SET status = 'retired'
@@ -2723,15 +2750,27 @@ function completeSemanticIndexJob({
   return complete();
 }
 
-function failSemanticIndexJob({ id, error, retryAt, now } = {}) {
+function failSemanticIndexJob({ id, error, retryable = false, retryAt, now } = {}) {
   const timestamp = Number.isFinite(now) ? now : Date.now();
   const availableAt = Number.isFinite(retryAt) ? retryAt : timestamp;
   const result = getDatabase().prepare(`
     UPDATE semantic_index_jobs
-       SET state = 'failed', retry_count = retry_count + 1,
-           available_at = ?, error = ?, updated_at = ?, finished_at = ?
+       SET state = ?, retry_count = retry_count + 1, retryable = ?,
+           available_at = ?, error = ?, updated_at = ?,
+           started_at = CASE WHEN ? = 1 THEN NULL ELSE started_at END,
+           finished_at = CASE WHEN ? = 1 THEN NULL ELSE ? END
      WHERE id = ? AND state = 'running'
-  `).run(availableAt, error || null, timestamp, timestamp, id);
+  `).run(
+    retryable ? 'pending' : 'failed',
+    retryable ? 1 : 0,
+    availableAt,
+    error || null,
+    timestamp,
+    retryable ? 1 : 0,
+    retryable ? 1 : 0,
+    timestamp,
+    id,
+  );
   return { ok: result.changes === 1 };
 }
 
@@ -2760,7 +2799,7 @@ function retrySemanticFailures(ids, now = Date.now()) {
   const result = getDatabase().prepare(`
     UPDATE semantic_index_jobs
        SET state = 'pending', available_at = ?, error = NULL,
-           updated_at = ?, started_at = NULL, finished_at = NULL
+           retryable = 0, updated_at = ?, started_at = NULL, finished_at = NULL
      WHERE state = 'failed' AND id IN (${placeholders})
   `).run(now, now, ...ids);
   return { ok: true, count: result.changes };
@@ -2784,7 +2823,7 @@ function cancelSemanticGeneration(generationId, now = Date.now()) {
       'SELECT status FROM semantic_index_generations WHERE id = ?',
     ).get(generationId);
     if (!generation) return { ok: false, reason: 'not_found' };
-    if (generation.status === 'active') return { ok: false, reason: 'active' };
+    if (generation.status !== 'building') return { ok: false, reason: 'not_building' };
     database.prepare('DELETE FROM semantic_index_jobs WHERE generation_id = ?').run(generationId);
     database.prepare('DELETE FROM semantic_vectors WHERE generation_id = ?').run(generationId);
     database.prepare(`
@@ -2877,10 +2916,19 @@ function enqueueVideoAnalysis({ id, saveId, fingerprint, promptVersion, now } = 
     `).get(saveId);
     if (current && current.fingerprint === fingerprint) return current;
 
+    const remembered = database.prepare(`
+      SELECT * FROM video_analysis_jobs
+       WHERE save_id = ? AND fingerprint = ?
+       LIMIT 1
+    `).get(saveId, fingerprint);
+
     if (current) {
       database.prepare(`
         UPDATE video_analysis_jobs
-           SET state = 'superseded', updated_at = ?, finished_at = COALESCE(finished_at, ?)
+           SET superseded_from_state = CASE
+                 WHEN state = 'running' THEN 'pending' ELSE state END,
+               state = 'superseded', updated_at = ?,
+               finished_at = COALESCE(finished_at, ?)
          WHERE id = ?
       `).run(timestamp, timestamp, current.id);
     }
@@ -2890,6 +2938,18 @@ function enqueueVideoAnalysis({ id, saveId, fingerprint, promptVersion, now } = 
       DELETE FROM video_tag_suggestions
        WHERE save_id = ? AND state = 'suggested'
     `).run(saveId);
+
+    if (remembered) {
+      const restoredState = remembered.superseded_from_state || 'pending';
+      database.prepare(`
+        UPDATE video_analysis_jobs
+           SET state = ?, superseded_from_state = NULL, updated_at = ?,
+               started_at = CASE WHEN ? = 'pending' THEN NULL ELSE started_at END,
+               finished_at = CASE WHEN ? = 'pending' THEN NULL ELSE finished_at END
+         WHERE id = ?
+      `).run(restoredState, timestamp, restoredState, restoredState, remembered.id);
+      return database.prepare('SELECT * FROM video_analysis_jobs WHERE id = ?').get(remembered.id);
+    }
 
     const record = {
       id: id || crypto.randomUUID(),
@@ -3002,7 +3062,7 @@ function recoverBackgroundJobs(now = Date.now()) {
   const recover = database.transaction(() => {
     const semantic = database.prepare(`
       UPDATE semantic_index_jobs
-         SET state = 'pending', started_at = NULL, updated_at = ?
+         SET state = 'pending', retryable = 0, started_at = NULL, updated_at = ?
        WHERE state = 'running'
     `).run(now).changes;
     const video = database.prepare(`
