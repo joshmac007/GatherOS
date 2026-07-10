@@ -21,10 +21,13 @@ function readAiConfig(env = process.env) {
         clean(env.GATHERLOCAL_LOCAL_VISION_MODEL) ||
         clean(env.GATHERLOCAL_LOCAL_CHAT_MODEL) ||
         'llama3.2-vision',
-      embedModel: clean(env.GATHERLOCAL_LOCAL_EMBED_MODEL) || 'nomic-embed-text',
       imageBaseUrl: clean(env.GATHERLOCAL_LOCAL_IMAGE_BASE_URL).replace(/\/+$/, ''),
       imageModel: clean(env.GATHERLOCAL_LOCAL_IMAGE_MODEL),
       token: clean(env.GATHERLOCAL_LOCAL_AI_TOKEN),
+    },
+    ollama: {
+      baseUrl: (clean(env.GATHERLOCAL_OLLAMA_BASE_URL) || 'http://127.0.0.1:11434').replace(/\/+$/, ''),
+      embedModel: clean(env.GATHERLOCAL_OLLAMA_EMBED_MODEL) || 'embeddinggemma',
     },
   };
 }

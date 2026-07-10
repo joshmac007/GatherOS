@@ -5,6 +5,7 @@
 const { readAiConfig } = require('./ai-provider-config');
 const { createCodexProvider } = require('./ai-codex-provider');
 const { createLocalProvider } = require('./ai-local-provider');
+const { createOllamaEmbedClient } = require('./ollama-embed-client');
 
 function createProvider() {
   const config = readAiConfig();
@@ -13,18 +14,10 @@ function createProvider() {
 }
 
 let provider = null;
-let localEmbeddingProvider = null;
 
 function getProvider() {
   if (!provider) provider = createProvider();
   return provider;
-}
-
-function getLocalEmbeddingProvider() {
-  if (!localEmbeddingProvider) {
-    localEmbeddingProvider = createLocalProvider(readAiConfig().local);
-  }
-  return localEmbeddingProvider;
 }
 
 function hasSession() {
@@ -67,16 +60,6 @@ async function generateSmartCategoryTaxonomyRefresh(input) {
   return active.generateSmartCategoryTaxonomyRefresh(input);
 }
 
-async function embedText(text) {
-  const active = getProvider();
-  try {
-    return await active.embedText(text);
-  } catch (err) {
-    if (err?.code !== 'embeddings_unavailable') throw err;
-  }
-  return getLocalEmbeddingProvider().embedText(text);
-}
-
 async function generateImage(prompt, options = {}) {
   return getProvider().generateImage(prompt, options);
 }
@@ -94,6 +77,6 @@ module.exports = {
   generateSmartCategoryMemberships,
   generateSmartCategoryTaxonomyRefresh,
   generateImage,
-  embedText,
+  createOllamaEmbedClient,
   getUsage,
 };

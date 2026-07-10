@@ -11,6 +11,10 @@ test('defaults to Codex subscription provider and never api.openai.com', () => {
   assert.equal(config.provider, 'codex');
   assert.equal(config.local.baseUrl, 'http://127.0.0.1:11434/v1');
   assert.equal(config.local.chatModel, 'llama3.2-vision');
+  assert.deepEqual(config.ollama, {
+    baseUrl: 'http://127.0.0.1:11434',
+    embedModel: 'embeddinggemma',
+  });
 });
 
 test('supports explicit local provider and model overrides', () => {
@@ -18,13 +22,26 @@ test('supports explicit local provider and model overrides', () => {
     GATHERLOCAL_AI_PROVIDER: 'local',
     GATHERLOCAL_LOCAL_AI_BASE_URL: 'http://127.0.0.1:1234/v1/',
     GATHERLOCAL_LOCAL_CHAT_MODEL: 'local-vision',
-    GATHERLOCAL_LOCAL_EMBED_MODEL: 'local-embed',
+    GATHERLOCAL_OLLAMA_BASE_URL: 'http://127.0.0.1:2345/',
+    GATHERLOCAL_OLLAMA_EMBED_MODEL: 'local-embed',
   });
 
   assert.equal(config.provider, 'local');
   assert.equal(config.local.baseUrl, 'http://127.0.0.1:1234/v1');
   assert.equal(config.local.chatModel, 'local-vision');
-  assert.equal(config.local.embedModel, 'local-embed');
+  assert.deepEqual(config.ollama, {
+    baseUrl: 'http://127.0.0.1:2345',
+    embedModel: 'local-embed',
+  });
+});
+
+test('active provider facade has no generic embedding fallback', () => {
+  const openai = require('../src/main/openai');
+  const local = require('../src/main/ai-local-provider');
+
+  assert.equal(openai.embedText, undefined);
+  assert.equal(local.createLocalProvider({}).embedText, undefined);
+  assert.equal(typeof openai.createOllamaEmbedClient, 'function');
 });
 
 test('falls back to Codex for invalid provider names', () => {

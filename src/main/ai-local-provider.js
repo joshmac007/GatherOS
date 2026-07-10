@@ -138,17 +138,6 @@ function createLocalProvider(config) {
         ? visionJson(config, imagePath, system, user, 700)
         : textJson(config, system, user, 700);
     },
-    async embedText(text) {
-      const input = (text || '').trim();
-      if (!input) throw new Error('Cannot embed empty text');
-      const data = await postJson(config, '/embeddings', {
-        model: config.embedModel,
-        input: input.slice(0, 8000),
-      });
-      const vec = data.data?.[0]?.embedding || data.embedding;
-      if (!Array.isArray(vec)) throw new Error('Local model returned no embedding');
-      return vec;
-    },
     async generateImage() {
       const err = new Error('Local image generation is not configured for GatherLocal yet');
       err.code = 'image_generation_unavailable';
