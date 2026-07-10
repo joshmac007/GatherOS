@@ -41,9 +41,11 @@ test('supports explicit local provider and model overrides', () => {
 test('active provider facade has no generic embedding fallback', () => {
   const openai = require('../src/main/openai');
   const local = require('../src/main/ai-local-provider');
+  const codex = createCodexProvider({}, { createSession: () => ({}) });
 
   assert.equal(openai.embedText, undefined);
   assert.equal(local.createLocalProvider({}).embedText, undefined);
+  assert.equal(codex.embedText, undefined);
   assert.equal(typeof openai.createOllamaEmbedClient, 'function');
 });
 

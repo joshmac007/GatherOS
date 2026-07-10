@@ -308,11 +308,6 @@ function createCodexProvider(config, { codexJson: codexJsonImpl = codexJson } = 
         `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
       );
     },
-    async embedText() {
-      const err = new Error('Codex provider does not expose embeddings. Use GATHERLOCAL_AI_PROVIDER=local with a local embedding model.');
-      err.code = 'embeddings_unavailable';
-      throw err;
-    },
     async generateImage() {
       const err = new Error('Codex provider does not expose image generation bytes. Use a local image model integration.');
       err.code = 'image_generation_unavailable';
