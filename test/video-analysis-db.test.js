@@ -129,7 +129,7 @@ test('fingerprint supersession removes unresolved suggestions but preserves acce
   ]);
 }));
 
-test('same fingerprint is coalesced and failures never mutate ordinary tags', withTempDb((db) => {
+test('same fingerprint is coalesced and retryable failures wait for capped backoff', withTempDb((db) => {
   insertVideo(db);
   db.addTagToSave({ saveId: 'video-save', name: 'existing' });
   const first = db.enqueueVideoAnalysis({
@@ -145,19 +145,70 @@ test('same fingerprint is coalesced and failures never mutate ordinary tags', wi
   db.failVideoAnalysis({
     id: claimed.id,
     error: 'Codex response was not valid JSON',
-    retryAt: 500,
+    retryable: true,
+    retryAt: Number.MAX_SAFE_INTEGER,
     now: 40,
   });
   const failed = db.getVideoAnalysis('video-save');
-  assert.equal(failed.state, 'failed');
+  assert.equal(failed.state, 'pending');
+  assert.equal(failed.retryable, 1);
   assert.equal(failed.retry_count, 1);
   assert.equal(failed.error, 'Codex response was not valid JSON');
-  assert.equal(db.claimVideoAnalysis(499), undefined);
-  const retry = db.claimVideoAnalysis(500);
+  assert.equal(failed.available_at, 40 + (15 * 60 * 1000));
+  assert.equal(db.claimVideoAnalysis(failed.available_at - 1), undefined);
+  const retry = db.claimVideoAnalysis(failed.available_at);
   assert.equal(retry.id, claimed.id);
   assert.equal(retry.retry_count, 1);
   assert.deepEqual(db.getTagsForSave('video-save').map((tag) => tag.name), ['existing']);
   assert.deepEqual(db.listVideoTagSuggestions('video-save'), []);
+}));
+
+test('permanent video failures stay inspectable and are never auto-claimed', withTempDb((db) => {
+  insertVideo(db, 'video-permanent');
+  db.enqueueVideoAnalysis({
+    id: 'job-permanent',
+    saveId: 'video-permanent',
+    fingerprint: 'fp-permanent',
+    promptVersion: 1,
+    now: 10,
+  });
+  const claimed = db.claimVideoAnalysis(20);
+  db.failVideoAnalysis({
+    id: claimed.id,
+    error: 'unsupported video evidence',
+    retryable: false,
+    retryAt: 30,
+    now: 25,
+  });
+
+  const failed = db.getVideoAnalysis('video-permanent');
+  assert.equal(failed.state, 'failed');
+  assert.equal(failed.retryable, 0);
+  assert.equal(failed.error, 'unsupported video evidence');
+  assert.equal(db.claimVideoAnalysis(Number.MAX_SAFE_INTEGER), undefined);
+}));
+
+test('interrupted A to B to A fingerprint sequence restores A as pending', withTempDb((db) => {
+  insertVideo(db, 'video-interrupted');
+  db.enqueueVideoAnalysis({
+    id: 'job-a', saveId: 'video-interrupted', fingerprint: 'fp-a', promptVersion: 1, now: 10,
+  });
+  assert.equal(db.claimVideoAnalysis(20).id, 'job-a');
+  db.enqueueVideoAnalysis({
+    id: 'job-b', saveId: 'video-interrupted', fingerprint: 'fp-b', promptVersion: 1, now: 30,
+  });
+  const restored = db.enqueueVideoAnalysis({
+    id: 'job-a-duplicate',
+    saveId: 'video-interrupted',
+    fingerprint: 'fp-a',
+    promptVersion: 1,
+    now: 40,
+  });
+
+  assert.equal(restored.id, 'job-a');
+  assert.equal(restored.state, 'pending');
+  assert.equal(db.getDatabase().prepare('SELECT COUNT(*) AS n FROM video_analysis_jobs').get().n, 2);
+  assert.equal(db.claimVideoAnalysis(50).id, 'job-a');
 }));
 
 test('suggestion resolution is idempotent and deleting a save cascades video state', withTempDb((db) => {

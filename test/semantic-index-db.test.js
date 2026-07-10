@@ -68,7 +68,7 @@ const DOMAIN_TABLES = [
   'video_tag_suggestions',
 ];
 
-test('fresh schema and one upgrade migration create all domain tables', withTempDb((db, userData) => {
+test('fresh schema and upgrade migrations create all domain tables', withTempDb((db, userData) => {
   const database = db.getDatabase();
   const targetVersion = database.pragma('user_version', { simple: true });
   const freshNames = database.prepare(
@@ -89,6 +89,105 @@ test('fresh schema and one upgrade migration create all domain tables', withTemp
   ).all().map((row) => row.name);
   for (const name of DOMAIN_TABLES) assert.ok(upgradedNames.includes(name), name);
   assert.equal(db.getDatabase().pragma('user_version', { simple: true }), targetVersion);
+}));
+
+test('compatibility migration upgrades the committed intermediate queue schema', withTempDb((db, userData) => {
+  const targetVersion = db.getDatabase().pragma('user_version', { simple: true });
+  db.closeDatabase();
+
+  const raw = new Database(sqlitePath(userData));
+  raw.pragma('foreign_keys = OFF');
+  raw.exec(`
+    DROP INDEX IF EXISTS idx_semantic_generations_one_building;
+    DROP TABLE video_tag_suggestions;
+    DROP TABLE video_analysis_jobs;
+    DROP TABLE semantic_index_jobs;
+
+    CREATE TABLE semantic_index_jobs (
+      id TEXT PRIMARY KEY,
+      generation_id TEXT NOT NULL REFERENCES semantic_index_generations(id) ON DELETE CASCADE,
+      save_id TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      source_hash TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'pending',
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      available_at INTEGER NOT NULL,
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER,
+      UNIQUE (generation_id, save_id, kind)
+    );
+    CREATE TABLE video_analysis_jobs (
+      id TEXT PRIMARY KEY,
+      save_id TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
+      fingerprint TEXT NOT NULL,
+      prompt_version INTEGER NOT NULL,
+      state TEXT NOT NULL DEFAULT 'pending',
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      available_at INTEGER NOT NULL,
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER,
+      UNIQUE (save_id, fingerprint)
+    );
+
+    INSERT INTO semantic_index_generations
+      (id, model, source_version, status, created_at)
+    VALUES
+      ('gen-older-build', 'embeddinggemma', 1, 'building', 10),
+      ('gen-current-build', 'embeddinggemma', 1, 'building', 20);
+    UPDATE semantic_index_state
+       SET building_generation_id = 'gen-current-build'
+     WHERE id = 1;
+    PRAGMA user_version = ${targetVersion - 1};
+  `);
+  raw.close();
+
+  db.initDatabase();
+  const semanticColumns = db.getDatabase().prepare(
+    'PRAGMA table_info(semantic_index_jobs)',
+  ).all().map((column) => column.name);
+  const videoColumns = db.getDatabase().prepare(
+    'PRAGMA table_info(video_analysis_jobs)',
+  ).all().map((column) => column.name);
+  assert.equal(semanticColumns.includes('retryable'), true);
+  assert.equal(videoColumns.includes('retryable'), true);
+  assert.equal(videoColumns.includes('superseded_from_state'), true);
+  assert.deepEqual(db.getDatabase().prepare(`
+    SELECT id FROM semantic_index_generations WHERE status = 'building'
+  `).all().map((row) => row.id), ['gen-current-build']);
+  assert.equal(db.getDatabase().prepare(`
+    SELECT status FROM semantic_index_generations WHERE id = 'gen-older-build'
+  `).get().status, 'cancelled');
+  assert.equal(db.getDatabase().prepare(`
+    SELECT COUNT(*) AS n FROM sqlite_master
+     WHERE type = 'index' AND name = 'idx_semantic_generations_one_building'
+  `).get().n, 1);
+}));
+
+test('only one building generation can exist and a second request is rejected', withTempDb((db) => {
+  const first = db.createSemanticGeneration({
+    id: 'gen-build-a', model: 'embeddinggemma', sourceVersion: 1, status: 'building', createdAt: 10,
+  });
+  const second = db.createSemanticGeneration({
+    id: 'gen-build-b', model: 'embeddinggemma', sourceVersion: 1, status: 'building', createdAt: 20,
+  });
+
+  assert.equal(first.id, 'gen-build-a');
+  assert.deepEqual(second, { ok: false, reason: 'building_exists', generationId: 'gen-build-a' });
+  assert.equal(db.getSemanticIndexState().building_generation_id, 'gen-build-a');
+  assert.deepEqual(db.getDatabase().prepare(`
+    SELECT id FROM semantic_index_generations WHERE status = 'building'
+  `).all().map((row) => row.id), ['gen-build-a']);
+  assert.throws(() => db.getDatabase().prepare(`
+    INSERT INTO semantic_index_generations
+      (id, model, source_version, status, created_at)
+    VALUES ('gen-build-direct', 'embeddinggemma', 1, 'building', 30)
+  `).run(), /UNIQUE constraint failed/);
 }));
 
 test('jobs coalesce to latest source identity while active vectors stay generation-scoped', withTempDb((db) => {
@@ -452,6 +551,100 @@ test('dismissed rebuild failures cannot activate a partial generation', withTemp
   ).get(building.id).status, 'building');
   assert.equal(db.getSemanticVector('save-a').source_hash, 'active-a');
   assert.equal(db.listSemanticIndexJobs({ generationId: building.id, state: 'dismissed' }).length, 1);
+}));
+
+test('rebuild claims and activation stay scoped to the current building pointer', withTempDb((db) => {
+  insertSave(db, 'save-pointer');
+  const active = db.createSemanticGeneration({
+    id: 'gen-pointer-active', model: 'embeddinggemma', sourceVersion: 1, status: 'active', createdAt: 10,
+  });
+  const building = db.createSemanticGeneration({
+    id: 'gen-pointer-a', model: 'embeddinggemma', sourceVersion: 2, status: 'building', createdAt: 20,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: building.id,
+    saveId: 'save-pointer',
+    kind: 'rebuild',
+    sourceHash: 'pointer-hash',
+    now: 30,
+  });
+  const running = db.claimSemanticIndexJob('rebuild', 40);
+  assert.equal(running.generation_id, building.id);
+
+  db.createSemanticGeneration({
+    id: 'gen-pointer-marker',
+    model: 'embeddinggemma',
+    sourceVersion: 2,
+    status: 'cancelled',
+    createdAt: 50,
+  });
+  db.getDatabase().prepare(`
+    UPDATE semantic_index_state
+       SET building_generation_id = 'gen-pointer-marker'
+     WHERE id = 1
+  `).run();
+  db.completeSemanticIndexJob({
+    id: running.id,
+    sourceHash: 'pointer-hash',
+    model: 'embeddinggemma',
+    dimension: 2,
+    vector: floatBuffer([1, 1]),
+    now: 60,
+  });
+
+  assert.equal(db.getSemanticIndexState().active_generation_id, active.id);
+  assert.equal(db.getSemanticIndexState().building_generation_id, 'gen-pointer-marker');
+  assert.equal(db.getDatabase().prepare(
+    'SELECT status FROM semantic_index_generations WHERE id = ?',
+  ).get(building.id).status, 'building');
+
+  db.enqueueSemanticIndexJob({
+    generationId: building.id,
+    saveId: 'save-pointer',
+    kind: 'rebuild',
+    sourceHash: 'pointer-hash-2',
+    now: 70,
+  });
+  assert.equal(db.claimSemanticIndexJob('rebuild', 80), undefined);
+}));
+
+test('semantic status excludes jobs from historical generations', withTempDb((db) => {
+  insertSave(db, 'save-status');
+  const historical = db.createSemanticGeneration({
+    id: 'gen-status-old', model: 'embeddinggemma', sourceVersion: 1, status: 'active', createdAt: 10,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: historical.id,
+    saveId: 'save-status',
+    kind: 'incremental',
+    sourceHash: 'old-hash',
+    now: 20,
+  });
+  const active = db.createSemanticGeneration({
+    id: 'gen-status-active', model: 'embeddinggemma', sourceVersion: 1, status: 'active', createdAt: 30,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: active.id,
+    saveId: 'save-status',
+    kind: 'incremental',
+    sourceHash: 'active-hash',
+    now: 40,
+  });
+  const building = db.createSemanticGeneration({
+    id: 'gen-status-building', model: 'embeddinggemma', sourceVersion: 2, status: 'building', createdAt: 50,
+  });
+  db.enqueueSemanticIndexJob({
+    generationId: building.id,
+    saveId: 'save-status',
+    kind: 'rebuild',
+    sourceHash: 'building-hash',
+    now: 60,
+  });
+
+  const status = db.getSemanticIndexStatus();
+  assert.equal(status.waiting, 2);
+  assert.equal(status.active_generation_id, active.id);
+  assert.equal(status.building_generation_id, building.id);
 }));
 
 test('deleting a save cascades semantic vectors and jobs', withTempDb((db) => {
