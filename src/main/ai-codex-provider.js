@@ -140,7 +140,7 @@ async function codexJson(config, imagePath, instructions) {
   return extractJsonObject(text);
 }
 
-function createCodexProvider(config) {
+function createCodexProvider(config, { codexJson: codexJsonImpl = codexJson } = {}) {
   return {
     name: 'codex',
     hasSession() {
@@ -273,6 +273,35 @@ function createCodexProvider(config) {
         '- Do not propose a rename for frozen_name categories.\n' +
         '- Do not merge/split without strong repeated evidence.\n' +
         '- Merge/split proposals are advisory only; application code will defer them.\n\n' +
+        `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
+      );
+    },
+    async generateVideoTagSuggestions(input, { imagePath } = {}) {
+      if (!imagePath) throw new Error('Video tag suggestions require a contact sheet or poster image');
+      return codexJsonImpl(
+        config,
+        imagePath,
+        'Analyze this visual evidence from one saved video and suggest specific tags.\n\n' +
+        'Return JSON only:\n' +
+        '{\n' +
+        '  "tags": [\n' +
+        '    {\n' +
+        '      "name": "concise normalized tag",\n' +
+        '      "confidence": "high",\n' +
+        '      "evidence": ["visual", "post_context"],\n' +
+        '      "conflict": false\n' +
+        '    }\n' +
+        '  ],\n' +
+        '  "warnings": []\n' +
+        '}\n\n' +
+        'Rules:\n' +
+        '- Return only high-confidence tags supported by visual evidence.\n' +
+        '- Include "visual" in evidence for every tag.\n' +
+        '- Use post context only when it agrees with the visual evidence.\n' +
+        '- Mark conflict true and omit the tag when text and visual evidence conflict.\n' +
+        '- Never infer a tag from text alone.\n' +
+        '- Do not repeat accepted tags.\n' +
+        '- Avoid generic tags such as video, clip, bookmark, image, design, or content.\n\n' +
         `Inputs:\n${JSON.stringify(input || {}, null, 2)}`,
       );
     },

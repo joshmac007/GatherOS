@@ -13,6 +13,19 @@ function createProvider() {
   return createCodexProvider(config.codex);
 }
 
+function createVideoTagSuggestionGenerator({
+  readConfig = readAiConfig,
+  createCodex = createCodexProvider,
+} = {}) {
+  let codexProvider = null;
+  return async function generateVideoTagSuggestions(input, options = {}) {
+    if (!codexProvider) codexProvider = createCodex(readConfig().codex);
+    return codexProvider.generateVideoTagSuggestions(input, options);
+  };
+}
+
+const generateVideoTagSuggestions = createVideoTagSuggestionGenerator();
+
 let provider = null;
 
 function getProvider() {
@@ -76,6 +89,8 @@ module.exports = {
   generateSaveTopicProfile,
   generateSmartCategoryMemberships,
   generateSmartCategoryTaxonomyRefresh,
+  generateVideoTagSuggestions,
+  createVideoTagSuggestionGenerator,
   generateImage,
   createOllamaEmbedClient,
   getUsage,

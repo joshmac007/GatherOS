@@ -3,7 +3,10 @@ const assert = require('node:assert/strict');
 
 const { readAiConfig } = require('../src/main/ai-provider-config');
 const { extractJsonObject: extractLocalJson } = require('../src/main/ai-local-provider');
-const { extractJsonObject: extractCodexJson } = require('../src/main/ai-codex-provider');
+const {
+  createCodexProvider,
+  extractJsonObject: extractCodexJson,
+} = require('../src/main/ai-codex-provider');
 
 test('defaults to Codex subscription provider and never api.openai.com', () => {
   const config = readAiConfig({});
@@ -82,4 +85,67 @@ test('Codex provider includes conservative taxonomy refresh contract', () => {
   assert.match(source, /Prefer aliases over renames/);
   assert.match(source, /Never rename for casing, punctuation, pluralization/);
   assert.match(source, /Merge\/split proposals are advisory only/);
+});
+
+test('Codex provider exposes one-image video suggestion contract', async () => {
+  const calls = [];
+  const provider = createCodexProvider({ bin: 'unused', timeoutMs: 1000 }, {
+    codexJson: async (...args) => {
+      calls.push(args);
+      return {
+        tags: [{ name: 'patio renovation', confidence: 'high', evidence: ['visual'] }],
+        warnings: [],
+      };
+    },
+  });
+
+  assert.equal(typeof provider.generateVideoTagSuggestions, 'function');
+  const result = await provider.generateVideoTagSuggestions({
+    duration: 30,
+    timestamps: [5, 10, 15],
+    evidenceMode: 'frames',
+    context: { title: 'Patio build' },
+    acceptedTags: ['woodworking'],
+  }, { imagePath: '/tmp/contact-sheet.jpg' });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1], '/tmp/contact-sheet.jpg');
+  assert.match(calls[0][2], /high/);
+  assert.match(calls[0][2], /visual/);
+  assert.match(calls[0][2], /conflict/i);
+  assert.deepEqual(result.tags[0].evidence, ['visual']);
+});
+
+test('dedicated video facade always constructs Codex provider, never active local provider', async () => {
+  const { createVideoTagSuggestionGenerator } = require('../src/main/openai');
+  let codexCreations = 0;
+  let localCalls = 0;
+  const generate = createVideoTagSuggestionGenerator({
+    readConfig: () => ({
+      provider: 'local',
+      codex: { bin: 'codex-subscription' },
+      local: { baseUrl: 'http://127.0.0.1:11434/v1' },
+    }),
+    createCodex: (config) => {
+      codexCreations += 1;
+      assert.equal(config.bin, 'codex-subscription');
+      return {
+        async generateVideoTagSuggestions(input, options) {
+          return { input, options, provider: 'codex' };
+        },
+      };
+    },
+    createLocal: () => ({
+      async generateVideoTagSuggestions() { localCalls += 1; },
+    }),
+  });
+
+  assert.equal(typeof generate, 'function');
+  const first = await generate({ duration: 10 }, { imagePath: '/tmp/sheet.jpg' });
+  const second = await generate({ duration: 20 }, { imagePath: '/tmp/sheet-2.jpg' });
+
+  assert.equal(first.provider, 'codex');
+  assert.equal(second.provider, 'codex');
+  assert.equal(codexCreations, 1);
+  assert.equal(localCalls, 0);
 });
