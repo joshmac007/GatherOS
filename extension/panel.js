@@ -1,4 +1,4 @@
-// In-page GatherOS panel, injected by the service worker on toolbar
+// In-page GatherLocal panel, injected by the service worker on toolbar
 // click (chrome.scripting.executeScript). Unlike a toolbar popup, an
 // injected panel is part of the page, so it can be rounded, shadowed,
 // and dragged — the CSS Peeper approach. Rendered inside a shadow root
@@ -93,7 +93,7 @@
       .brand { font-size:13px; font-weight:600; letter-spacing:-0.012em; }
       .ver { font-size:10px; color:var(--text-tertiary); font-variant-numeric:tabular-nums; margin-left:1px; }
       /* Status moved out of the header to a centered row under the
-         Open GatherOS button so the header doesn't get squished. */
+         Open GatherLocal button so the header doesn't get squished. */
       .status { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; font-size:11px; color:var(--text-secondary); }
       .dot { width:7px; height:7px; border-radius:50%; background:#c7c7c7; flex:none; }
       .dot.on { background:#34c759; box-shadow:0 0 0 3px rgba(52,199,89,0.18); }
@@ -138,7 +138,7 @@
     <div class="panel" part="panel">
       <div class="head" id="head">
         <img class="logo" src="${logoUrl}" alt="" draggable="false" />
-        <span class="brand">GatherOS</span>
+        <span class="brand">GatherLocal</span>
         <span class="ver" id="ver"></span>
         <button class="x" id="close" title="Close">${svg(ICONS.close, 14)}</button>
       </div>
@@ -180,7 +180,7 @@
           <div class="scope-msg" id="igMsg" hidden></div>
         </div>
       </div>
-      <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherOS</span></button>
+      <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherLocal</span></button>
       <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">Checking…</span></div>
     </div>
   `;
@@ -208,7 +208,7 @@
   });
 
   // Shared import-result handling: keep the panel open and surface any
-  // problem inline (signed out, GatherOS closed, …) instead of a system
+  // problem inline (signed out, GatherLocal closed, …) instead of a system
   // notification that's easy to miss. On success, close the panel.
   const clearMsg = (el) => { el.hidden = true; el.textContent = ''; };
   const showText = (el, text) => { el.textContent = text; el.hidden = false; };
@@ -228,7 +228,7 @@
     if (chrome.runtime.lastError) { showText(msgEl, 'Could not reach the extension. Reload it and try again.'); return; }
     if (!resp || resp.ok) { close(); return; } // success — import runs in the background
     if (resp.needsSignIn) { showSignIn(msgEl, label, url); return; }
-    if (resp.appClosed) { showText(msgEl, 'Open GatherOS first, then import.'); return; }
+    if (resp.appClosed) { showText(msgEl, 'Open GatherLocal first, then import.'); return; }
     if (resp.disabled) { showText(msgEl, 'Import is temporarily unavailable.'); return; }
     if (resp.busy) { showText(msgEl, 'An import is already running.'); return; }
     close();
@@ -350,8 +350,8 @@
     chrome.runtime.sendMessage({ type: 'gatheros:status' }, (resp) => {
       if (!document.getElementById(HOST_ID)) return;
       if (chrome.runtime.lastError || !resp || resp.hostMissing) { setStatus('off', 'Set up needed'); return; }
-      if (resp.appRunning) setStatus('on', 'GatherOS is open');
-      else setStatus('idle', 'GatherOS is closed');
+      if (resp.appRunning) setStatus('on', 'GatherLocal is open');
+      else setStatus('idle', 'GatherLocal is closed');
     });
   }
   function setStatus(state, text) {

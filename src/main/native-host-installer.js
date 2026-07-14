@@ -1,13 +1,13 @@
 // Writes the Chrome native messaging host manifest + a launcher
 // shell script into every Chromium-family browser's user dir on
-// macOS, so installing the GatherOS extension from any of them
+// macOS, so installing the GatherLocal extension from any of them
 // Just Works without the user touching the filesystem.
 //
 // We need a launcher because Chrome invokes the host binary with
 //   <binary> chrome-extension://<id>/ [--parent-window=...]
 // — there's no manifest field for extra args, so we can't pass
 // --native-host through the manifest alone. The launcher is a
-// 5-line shell script under ~/Library/Application Support/GatherOS/
+// launcher under GatherLocal's Electron user-data directory
 // that exec's the Electron binary with the right flags, then forwards
 // the rest of argv. In dev it also passes the project root so
 // Electron knows which app to load.
@@ -16,19 +16,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { app } = require('electron');
+const {
+  APP_NAME,
+  NATIVE_HOST_NAME: HOST_NAME,
+  EXTENSION_IDS: ALLOWED_EXTENSION_IDS,
+} = require('../shared/runtime-identity');
 
-const HOST_NAME = 'co.gatheros.host';
 const LAUNCHER_FILENAME = 'native-host';
-
-// Extension IDs allowed to invoke the host. The dev ID is fixed by
-// the public key in extension/manifest.json — same value whether
-// loaded unpacked on this machine or any other. When we publish to
-// the Chrome Web Store the store will assign a separate production
-// ID; add it to this list and ship a new desktop release.
-const ALLOWED_EXTENSION_IDS = [
-  'dopoibgdcokjffklnmechmboglnfihlc', // dev (key in extension/manifest.json)
-  'jflmnonpoapjncoeankehcmenldecojk', // Chrome Web Store (production)
-];
 
 // macOS Chromium-family browsers. Each ships its own NativeMessagingHosts
 // directory under ~/Library/Application Support/. Best-effort: missing
@@ -72,8 +66,9 @@ function launcherScript() {
   const hostScript = path.join(appRoot, 'src', 'main', 'native-host.js');
   return [
     '#!/bin/bash',
-    `export GATHEROS_BINARY=${JSON.stringify(electron)}`,
-    `export GATHEROS_APP_PATH=${JSON.stringify(appRoot)}`,
+    `export GATHERLOCAL_BINARY=${JSON.stringify(electron)}`,
+    `export GATHERLOCAL_APP_PATH=${JSON.stringify(appRoot)}`,
+    `export GATHERLOCAL_USER_DATA_DIR=${JSON.stringify(app.getPath('userData'))}`,
     'export ELECTRON_RUN_AS_NODE=1',
     `exec ${JSON.stringify(electron)} ${JSON.stringify(hostScript)}`,
     '',
@@ -97,7 +92,7 @@ function writeLauncherIfChanged() {
 function manifestPayload(launcher) {
   return {
     name: HOST_NAME,
-    description: 'GatherOS native messaging host',
+    description: `${APP_NAME} native messaging host`,
     path: launcher,
     type: 'stdio',
     allowed_origins: ALLOWED_EXTENSION_IDS.map((id) => `chrome-extension://${id}/`),
@@ -105,6 +100,8 @@ function manifestPayload(launcher) {
 }
 
 function install() {
+  if (process.env.GATHERLOCAL_SKIP_NATIVE_HOST_INSTALL === '1') return;
+
   if (process.platform !== 'darwin') {
     // Windows/Linux installers can land in a follow-up — paths
     // and registry handling are different on those platforms.

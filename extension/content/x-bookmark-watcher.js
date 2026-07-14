@@ -2,10 +2,10 @@
 // button anywhere on x.com / twitter.com, walks up to the enclosing
 // <article>, extracts the tweet permalink + image URLs from the
 // rendered DOM, and posts to the background service worker which
-// forwards to GatherOS via native messaging.
+// forwards to GatherLocal via native messaging.
 //
 // v1: only tweets with at least one image are synced. Dedup happens
-// GatherOS-side via content_hash, so re-bookmarking or scrolling past
+// GatherLocal-side via content_hash, so re-bookmarking or scrolling past
 // the same tweet twice is a silent no-op.
 //
 // If X ever changes the bookmark button's data-testid, this single
@@ -76,7 +76,7 @@ window.addEventListener('message', (event) => {
   // which owns the "seen" baseline in chrome.storage and routes any
   // new (not-yet-seen) tweet through the same /save pipeline the
   // click capture uses. End result: bookmarks made on iOS / web /
-  // any device land in GatherOS the next time the desktop browser
+  // any device land in GatherLocal the next time the desktop browser
   // pulls the bookmarks feed (visit x.com or /i/bookmarks).
   if (data.type === 'bookmark-batch' && Array.isArray(data.bookmarks)) {
     chrome.runtime.sendMessage({
@@ -213,7 +213,7 @@ function findBookmarkButton(target) {
 // "Remove Bookmark" (and localized equivalents). We want to fire only
 // on adds; ignore the remove action so re-clicking doesn't ping the
 // app. If the label is missing or unfamiliar we default to add and
-// let GatherOS's content_hash dedup catch any spurious duplicates.
+// let GatherLocal's content_hash dedup catch any spurious duplicates.
 function isBookmarkAddAction(button) {
   const label = (button.getAttribute('aria-label') || '').toLowerCase();
   if (!label) return true;
@@ -685,20 +685,20 @@ document.addEventListener('click', async (e) => {
 
   chrome.runtime.sendMessage(payload, (response) => {
     // Background hands back { ok, duplicate, offline, error } once the
-    // native host has answered. Stay silent when GatherOS isn't
+    // native host has answered. Stay silent when GatherLocal isn't
     // running (offline=true) — otherwise every bookmark click would
     // nag a user who isn't actively using the app this session.
     if (!response) return;
     if (response.ok) {
       showGatherToast(
-        response.duplicate ? 'Already in GatherOS' : 'Saved to GatherOS',
+        response.duplicate ? 'Already in GatherLocal' : 'Saved to GatherLocal',
         { tone: 'ok' },
       );
       return;
     }
     if (response.offline) return;
     showGatherToast(
-      `GatherOS save failed: ${response.error || 'unknown error'}`,
+      `GatherLocal save failed: ${response.error || 'unknown error'}`,
       { tone: 'error' },
     );
   });
