@@ -45,11 +45,11 @@ function parseTimestamp(name) {
   return Number.isFinite(ts) && ts > 0 ? ts : null;
 }
 
-// Pre-migration backups are dropped by db.js as siblings of the live
-// SQLite file, named `<dbname>.pre-v<N>.<iso-stamp>.bak`. They're our
-// safety-net if a migration corrupts the active DB, so we surface
-// them alongside the daily snapshots in the Backups list — restoring
-// either uses the same byte-for-byte copy path.
+// Pre-migration backups are siblings of the live SQLite file. Upstream
+// uses `<dbname>.pre-v<N>.<iso-stamp>.bak`; GatherLocal's named runner
+// uses `<dbname>.pre-local-migrate.<unique-stamp>.bak`. Both are surfaced
+// alongside daily snapshots, but their labels stay distinct because a
+// named local migration is not an upstream schema version.
 function listMigrationBackups() {
   const { getDatabasePath } = require('./db');
   let dbPath;
@@ -58,14 +58,17 @@ function listMigrationBackups() {
   if (!dbPath) return [];
   const dir = path.dirname(dbPath);
   const base = path.basename(dbPath);
-  const re = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.pre-v(\\d+)\\.(.+)\\.bak$`);
+  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const upstreamRe = new RegExp(`^${escapedBase}\\.pre-v(\\d+)\\.(.+)\\.bak$`);
+  const localRe = new RegExp(`^${escapedBase}\\.pre-local-migrate\\.(.+)\\.bak$`);
   let names;
   try { names = fs.readdirSync(dir); }
   catch { return []; }
   const out = [];
   for (const name of names) {
-    const m = name.match(re);
-    if (!m) continue;
+    const upstreamMatch = name.match(upstreamRe);
+    const localMatch = name.match(localRe);
+    if (!upstreamMatch && !localMatch) continue;
     const full = path.join(dir, name);
     try {
       const stat = fs.statSync(full);
@@ -76,8 +79,10 @@ function listMigrationBackups() {
         path: full,
         timestamp: stat.mtimeMs,
         size: stat.size,
-        kind: 'migration',
-        migrationToVersion: Number(m[1]),
+        kind: upstreamMatch ? 'migration' : 'local-migration',
+        ...(upstreamMatch
+          ? { migrationToVersion: Number(upstreamMatch[1]) }
+          : {}),
       });
     } catch {}
   }
