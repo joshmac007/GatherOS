@@ -27,11 +27,11 @@ const DEFAULT_APP = path.join(
   'dist',
   'build',
   os.arch() === 'arm64' ? 'mac-arm64' : 'mac',
-  'GatherOS.app',
+  'GatherLocal.app',
 );
 
 const APP_DIR = process.argv[2] || DEFAULT_APP;
-const BINARY = path.join(APP_DIR, 'Contents', 'MacOS', 'GatherOS');
+const BINARY = path.join(APP_DIR, 'Contents', 'MacOS', 'GatherLocal');
 const TIMEOUT_MS = 8000;
 
 if (!fs.existsSync(BINARY)) {
@@ -44,13 +44,20 @@ console.log(`[smoke-test] Launching ${BINARY}`);
 console.log(`[smoke-test] Watching stderr for ${TIMEOUT_MS / 1000}s…`);
 
 // Launch into a throwaway userData dir so the app's single-instance lock
-// can't collide with a GatherOS the developer already has running (dev or
+// can't collide with a GatherLocal the developer already has running (dev or
 // installed). Without this the new process quits cleanly on launch and
 // the test reads that exit as a failure even though the build is fine.
-const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'gatheros-smoke-'));
+const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-smoke-'));
+console.log(`[smoke-test] User data ${tmpUserData}`);
 
 const child = spawn(BINARY, [`--user-data-dir=${tmpUserData}`], {
-  env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' },
+  env: {
+    ...process.env,
+    ELECTRON_ENABLE_LOGGING: '1',
+    GATHERLOCAL_LOG_DIR: path.join(tmpUserData, 'logs'),
+    GATHERLOCAL_SKIP_NATIVE_HOST_INSTALL: '1',
+    GATHERLOCAL_SKIP_PROTOCOL_REGISTRATION: '1',
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 

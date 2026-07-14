@@ -13,6 +13,11 @@ const {
 const fs = require('node:fs');
 const path = require('node:path');
 const { Readable } = require('node:stream');
+const { BACKGROUND_LAUNCH_ARG } = require('../shared/runtime-identity');
+
+if (process.env.GATHERLOCAL_LOG_DIR) {
+  app.setAppLogsPath(process.env.GATHERLOCAL_LOG_DIR);
+}
 
 // Native messaging host short-circuit. When Chrome spawns this
 // binary as the extension's host (via the --native-host flag), we
@@ -24,7 +29,7 @@ if (process.argv.includes('--native-host')) {
   return;
 }
 
-// Tee console.* into ~/Library/Logs/GatherOS/main.log and capture
+// Tee console.* into GatherLocal's Electron logs directory and capture
 // uncaughtException / renderer crashes. Must run before the rest of
 // the module so any init-time throws are recorded.
 require('./logger').setup();
@@ -36,17 +41,17 @@ require('./logger').setup();
 if (!app.requestSingleInstanceLock()) {
   app.exit(0);
 }
-// The native messaging host wakes us with a --gatheros-bg sentinel
+// The native messaging host wakes us with a background-save sentinel
 // when it's launching us solely to persist a bookmark save. In that
 // case we must NOT pull the app in front of the user's browser — both
 // the initial window show (below) and the second-instance focus are
 // suppressed. Saving a bookmark is a background sync, never a foreground
 // interruption.
-const LAUNCHED_FOR_BG_SAVE = process.argv.includes('--gatheros-bg');
+const LAUNCHED_FOR_BG_SAVE = process.argv.includes(BACKGROUND_LAUNCH_ARG);
 app.on('second-instance', (_event, argv) => {
   // A relaunch carrying the sentinel is the host nudging an already-
   // running app for a save — leave focus where it is.
-  if (Array.isArray(argv) && argv.includes('--gatheros-bg')) return;
+  if (Array.isArray(argv) && argv.includes(BACKGROUND_LAUNCH_ARG)) return;
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     if (!mainWindow.isVisible()) mainWindow.show();
@@ -63,10 +68,12 @@ const licensing = require('./licensing');
 const { URL_SCHEME: LICENSE_URL_SCHEME } = require('../shared/licensing-config');
 
 // Register the custom URL scheme so the OS knows magic-link emails
-// (gatheros://auth/verify?token=…) should open this app. macOS
+// (gatherlocal://auth/verify?token=…) should open this app. macOS
 // dispatches the URL via the 'open-url' event; Windows / Linux pass
 // it through argv to a second-instance launch.
-if (process.defaultApp) {
+if (process.env.GATHERLOCAL_SKIP_PROTOCOL_REGISTRATION === '1') {
+  // Disposable smoke/rehearsal launches must not rewrite LaunchServices.
+} else if (process.defaultApp) {
   // Dev: when launched via `electron .`, defaultApp is true and we
   // need to pass the script path so single-instance forwarding works.
   if (process.argv.length >= 2) {
@@ -90,7 +97,7 @@ async function handleLicensingDeepLink(url) {
   } catch {
     return;
   }
-  // gatheros://auth/verify?token=…
+  // gatherlocal://auth/verify?token=…
   if (parsed.hostname !== 'auth' || parsed.pathname !== '/verify') return;
   const token = parsed.searchParams.get('token');
   if (!token) return;
@@ -282,7 +289,7 @@ async function handleDockDropUrl(url, deps) {
 app.on('open-url', (event, url) => {
   event.preventDefault();
   if (typeof url !== 'string') return;
-  // Magic-link bridge: gatheros://auth/verify?token=… — route to the
+  // Magic-link bridge: gatherlocal://auth/verify?token=… — route to the
   // licensing module instead of the image-save pipeline.
   if (url.startsWith(`${LICENSE_URL_SCHEME}://`)) {
     handleLicensingDeepLink(url);
@@ -764,7 +771,7 @@ function buildTrayMenuTemplate() {
     : [];
 
   return [
-    { label: 'Open GatherOS', click: () => {
+    { label: 'Open GatherLocal', click: () => {
       if (mainWindow) mainWindow.focus();
       else createMainWindow();
     }},
@@ -789,7 +796,7 @@ function rebuildTrayMenu() {
 
 function createTray() {
   tray = new Tray(buildTrayIcon());
-  tray.setToolTip('GatherOS');
+  tray.setToolTip('GatherLocal');
   tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()));
 
   tray.on('click', () => {

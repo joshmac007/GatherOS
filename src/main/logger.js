@@ -1,5 +1,5 @@
 // File-backed logger for the main process. Tees console.log/warn/error
-// to ~/Library/Logs/GatherOS/main.log so when a user emails support
+// to GatherLocal's Electron logs directory so support can inspect it
 // after a crash we can ask them to send the file via "Reveal Logs in
 // Finder" (Help menu).
 //
@@ -79,7 +79,7 @@ function setup() {
     if (app.isReady()) {
       try {
         dialog.showErrorBox(
-          'GatherOS encountered an unexpected error',
+          'GatherLocal encountered an unexpected error',
           `${err?.message || err}\n\nA log was written to:\n${getLogFilePath()}\n\nIf this keeps happening, send the log to support via Help → Reveal Logs in Finder.`
         );
       } catch {}
@@ -104,7 +104,7 @@ function setup() {
     });
   } catch {}
 
-  write('info', [`GatherOS ${app.getVersion()} starting on ${process.platform}-${process.arch}`]);
+  write('info', [`GatherLocal ${app.getVersion()} starting on ${process.platform}-${process.arch}`]);
 }
 
 module.exports = { setup, getLogFilePath };
