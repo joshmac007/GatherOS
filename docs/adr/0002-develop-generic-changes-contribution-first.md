@@ -1,0 +1,3 @@
+# Develop generic changes contribution-first
+
+GatherLocal prioritizes clean intake of Brett's upstream releases. Provider-neutral behavior therefore originates on a contribution branch rooted at exact `upstream/main`, then enters GatherLocal as a pending contribution patch; GatherLocal-only identity, migrations, providers, and composition remain in the personal overlay. Publishing a pull request is optional and requires the user's explicit action, but no advance maintainer permission gate—the clean branch exists first to keep upstream sync repeatable, with contribution as a useful secondary result.
