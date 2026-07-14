@@ -1,12 +1,14 @@
-// Service worker for the GatherOS browser extension.
+import { NATIVE_HOST_NAME } from './identity.mjs';
+
+// Service worker for the GatherLocal browser extension.
 //
-// v1 capture surface: right-click any image → "Save to GatherOS".
+// v1 capture surface: right-click any image → "Save to GatherLocal".
 // Talks to the desktop app via Chrome's native messaging protocol —
 // no localhost port, no token paste, no Options page. The desktop
 // app installs the native host manifest on first launch, so
 // installing the extension and the app in either order works.
 
-const HOST_NAME = 'co.gatheros.host';
+const HOST_NAME = NATIVE_HOST_NAME;
 const MENU_ID = 'gatheros-save-image';
 // chrome.alarms identifier for the recurring "check x.com for new
 // bookmarks" job. Two minutes balances "phone bookmarks appear
@@ -48,7 +50,7 @@ async function maybePollBookmarks() {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: MENU_ID,
-    title: 'Save to GatherOS',
+    title: 'Save to GatherLocal',
     contexts: ['image'],
   });
   // Register the polling alarm on install and on every browser
@@ -84,23 +86,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       //   - 401             → "invalid token" (prefs.json missing token)
       //   - 400             → "imageUrl required"
       const msg = response?.error || 'Save failed.';
-      if (msg === 'app not running' || msg === 'GatherOS is not installed or has never been launched.') {
-        notify('Open GatherOS first, then try again.');
+      if (msg === 'app not running' || msg === 'GatherLocal is not installed or has never been launched.') {
+        notify('Open GatherLocal first, then try again.');
       } else {
         notify(msg);
       }
       return;
     }
-    notify(response.duplicate ? 'Already in your library.' : 'Saved to GatherOS.');
+    notify(response.duplicate ? 'Already in your library.' : 'Saved to GatherLocal.');
   } catch (err) {
     // chrome.runtime.lastError surfaces here as the rejection.
     // Most common: host not found (manifest never installed),
     // which means the desktop app hasn't been launched yet.
     const msg = err?.message || String(err);
     if (msg.includes('host not found') || msg.includes('Specified native messaging host')) {
-      notify('Open GatherOS once to finish setup, then try again.');
+      notify('Open GatherLocal once to finish setup, then try again.');
     } else {
-      notify(`Couldn't reach GatherOS — ${msg}`);
+      notify(`Couldn't reach GatherLocal — ${msg}`);
     }
   }
 });
@@ -109,14 +111,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // (content/x-bookmark-watcher.js) detects clicks on the bookmark
 // button on x.com / twitter.com, extracts the tweet permalink +
 // image URL from the surrounding article DOM, and posts the result
-// here. We forward it to the GatherOS native host using the same
+// here. We forward it to the GatherLocal native host using the same
 // 'save' message type the right-click flow uses — the desktop
 // dedups by content_hash so re-bookmarking is a no-op.
 //
 // The content script reads the response back and renders an in-page
 // toast so the user gets confirmation without leaving x.com. Errors
 // route through the same channel; the content script decides what
-// to show (or to stay silent if GatherOS isn't running).
+// to show (or to stay silent if GatherLocal isn't running).
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return undefined;
   if (msg.type === 'gatheros:x-bookmark') {
@@ -233,7 +235,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['panel.js'] });
   } catch {
-    notify('Open the GatherOS panel on a normal web page (not this one).');
+    notify('Open the GatherLocal panel on a normal web page (not this one).');
   }
 });
 
@@ -255,14 +257,14 @@ function handleClickBookmark(msg, sendResponse) {
     });
     // Mark this tweet as seen so the bookmark-batch flow (cross-
     // device sync) doesn't re-import it later. We do this even on
-    // duplicate so the seen set stays in sync with what GatherOS
+    // duplicate so the seen set stays in sync with what GatherLocal
     // actually has.
     if (ok && msg.tweetId) {
       await markBookmarksSeen([msg.tweetId]);
     }
   }).catch((err) => {
     const text = err?.message || String(err);
-    // Distinguish "GatherOS isn't running / installed" from real
+    // Distinguish "GatherLocal isn't running / installed" from real
     // errors so the content script can stay quiet rather than nag.
     const offline = text.includes('host not found')
       || text.includes('Specified native messaging host');
@@ -440,7 +442,7 @@ async function handleImportBookmarks(msg) {
   // saves — every import would just fail. Tell the user to open it.
   const status = await pingApp();
   if (!status || status.hostMissing || !status.appRunning) {
-    notify('Open GatherOS first, then run Import bookmarks.');
+    notify('Open GatherLocal first, then run Import bookmarks.');
     return { ok: false, appClosed: true };
   }
 
@@ -765,7 +767,7 @@ async function syncBookmarkToGather(b, { force = false } = {}) {
 // bearer + the user's CSRF token (from cookies). Response goes through
 // the same extractor +
 // handleBookmarkBatch path the interceptor uses for in-page
-// captures, so phone-bookmarked tweets land in GatherOS without the
+// captures, so phone-bookmarked tweets land in GatherLocal without the
 // user needing to visit x.com on desktop.
 
 const STORAGE_TEMPLATE_KEY = 'gatherosBookmarkRefreshTemplate';
@@ -1148,7 +1150,7 @@ async function handleImportSaved(msg, sender) {
 
   const status = await pingApp();
   if (!status || status.hostMissing || !status.appRunning) {
-    notify('Open GatherOS first, then run Import saved.');
+    notify('Open GatherLocal first, then run Import saved.');
     return { ok: false, appClosed: true };
   }
 
@@ -1588,7 +1590,7 @@ function notify(message) {
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon.png',
-      title: 'GatherOS',
+      title: 'GatherLocal',
       message,
     });
   } catch {
@@ -1826,18 +1828,18 @@ async function finishCaptureSave(dataUrl, pageUrl, pageTitle) {
 function reportSaveResult(resp) {
   if (!resp || !resp.ok) {
     const msg = resp?.error || 'Save failed.';
-    notify(msg === 'app not running' ? 'Open GatherOS first, then try again.' : msg);
+    notify(msg === 'app not running' ? 'Open GatherLocal first, then try again.' : msg);
     return;
   }
-  notify(resp.duplicate ? 'Already in your library.' : 'Saved to GatherOS.');
+  notify(resp.duplicate ? 'Already in your library.' : 'Saved to GatherLocal.');
 }
 
 function reportNativeError(err) {
   const msg = err?.message || String(err);
   if (msg.includes('host not found') || msg.includes('Specified native messaging host')) {
-    notify('Open GatherOS once to finish setup, then try again.');
+    notify('Open GatherLocal once to finish setup, then try again.');
   } else {
-    notify(`Couldn't reach GatherOS — ${msg}`);
+    notify(`Couldn't reach GatherLocal — ${msg}`);
   }
 }
 

@@ -1,4 +1,4 @@
-// Localhost HTTP server that lets the GatherOS browser extension
+// Localhost HTTP server that lets the GatherLocal browser extension
 // push saves into the running app. Bound to 127.0.0.1 only and
 // gated on a shared token the user copies from Settings → Capture
 // into the extension's Options page. Lives on a fixed port so the
@@ -12,9 +12,12 @@
 
 const http = require('node:http');
 const crypto = require('node:crypto');
+const {
+  APP_NAME,
+  CAPTURE_HOST: HOST,
+  CAPTURE_PORT: PORT,
+} = require('../shared/runtime-identity');
 
-const PORT = 53247;
-const HOST = '127.0.0.1';
 // Big enough for a base64 screen-capture data URL (the extension's
 // "capture page / area"). The native-messaging bridge caps the source
 // payload at ~1 MB, so 2 MB here is comfortable headroom; ordinary
@@ -407,7 +410,7 @@ function start() {
       const settings = require('./settings');
       sendJson(res, 200, {
         ok: true,
-        app: 'GatherOS',
+        app: APP_NAME,
         syncX: settings.getPref('syncXEnabled', true) !== false,
         syncInstagram: settings.getPref('syncInstagramEnabled', true) !== false,
       });
