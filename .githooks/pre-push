@@ -1,0 +1,6 @@
+#!/bin/sh
+
+printf '%s\n' \
+  'GatherLocal-Workflow is local-only: pushes are disabled by repository policy.' >&2
+exit 1
+
