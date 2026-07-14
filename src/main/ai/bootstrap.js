@@ -1,7 +1,8 @@
 'use strict';
 
-const { createAiRuntime, CAPABILITIES } = require('./runtime');
+const { createAiRuntime } = require('./runtime');
 const { createGatherOsProxyAdapter } = require('./providers/gatheros-proxy');
+const { createGatherLocalRoutes } = require('../gatherlocal/ai');
 
 let cachedRuntime = null;
 
@@ -17,17 +18,15 @@ function createDefaultAiRuntime({
   proxyAdapter = null,
   routes = null,
   proxyOptions = {},
+  gatherLocalOptions = {},
 } = {}) {
   const proxy = proxyAdapter || createGatherOsProxyAdapter(proxyOptions);
   return createAiRuntime({
     authorize,
-    // One adapter may serve multiple capabilities. Image generation stays
-    // disabled until composition explicitly selects that route.
-    routes: routes || {
-      [CAPABILITIES.STRUCTURED_JSON]: proxy,
-      [CAPABILITIES.EMBEDDING]: proxy,
-      [CAPABILITIES.IMAGE_GENERATION]: null,
-    },
+    routes: routes || createGatherLocalRoutes({
+      ...gatherLocalOptions,
+      proxyAdapter: proxy,
+    }),
   });
 }
 
