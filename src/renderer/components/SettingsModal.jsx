@@ -1847,6 +1847,8 @@ export default function SettingsModal({
                         <span className={styles.snapshotWhen}>
                           {s.kind === 'migration'
                             ? `Pre-update backup (v${s.migrationToVersion})`
+                            : s.kind === 'local-migration'
+                              ? 'Pre-local update backup'
                             : formatRelativeTimestamp(s.timestamp)}
                         </span>
                         <span className={styles.snapshotSub}>
@@ -1988,4 +1990,3 @@ function formatBackupSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-
