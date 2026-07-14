@@ -25,6 +25,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { defaultUserDataDir } = require('../src/shared/runtime-identity');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_OUT = path.join(REPO_ROOT, 'src', 'main', 'starter-pack.zip');
@@ -39,24 +40,6 @@ const RECENT_FALLBACK_COUNT = Number.parseInt(process.env.COUNT || '24', 10);
 function fail(msg) {
   console.error(`\n[starter-pack] ${msg}\n`);
   process.exit(1);
-}
-
-// Mirror Electron's app.getPath('userData') resolution for the
-// product name 'GatherOS'. Brett runs macOS; covering linux as a
-// nice-to-have. Windows users can pass LIBRARY=... explicitly.
-function defaultUserDataDir() {
-  const productName = 'GatherOS';
-  if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', productName);
-  }
-  if (process.platform === 'linux') {
-    const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
-    return path.join(xdg, productName);
-  }
-  if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA || '', productName);
-  }
-  return null;
 }
 
 function resolveLibraryRoot() {
@@ -188,7 +171,7 @@ function buildZip({ saves, collections, items, boards, boardItems }) {
   // other side. saveId → staged filename lookup feeds the
   // manifest, which lets the installer recreate collections by
   // mapping each member back to the inserted save's new id.
-  const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'gatheros-starter-'));
+  const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-starter-'));
   const staged = [];
   const seen = new Set();
   const saveIdToFilename = new Map();

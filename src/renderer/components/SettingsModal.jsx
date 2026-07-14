@@ -667,7 +667,7 @@ function UpdatesPage({ prefs, updatePref }) {
   async function handleCheck() {
     setState({ checking: true, status: null });
     const result = await window.moodmark.updater.check?.();
-    if (!result) {
+    if (!result || result.unsupported) {
       setState({ checking: false, status: 'unsupported' });
       return;
     }
@@ -687,8 +687,7 @@ function UpdatesPage({ prefs, updatePref }) {
   return (
     <div className={styles.page}>
       <p className={styles.sectionHint}>
-        GatherOS checks for updates in the background and installs
-        them the next time you quit.
+        GatherLocal updates are installed through the reviewed upstream-sync workflow.
       </p>
 
       <div className={styles.toggleRow}>

@@ -5,6 +5,7 @@
 // env vars for staging and production builds.
 
 const env = (typeof process !== 'undefined' && process.env) || {};
+const { URL_SCHEME: DEFAULT_URL_SCHEME } = require('./runtime-identity');
 
 // Where the licensing + AI Worker lives. Defaults to the
 // production deploy in both dev and packaged builds — most
@@ -13,14 +14,14 @@ const env = (typeof process !== 'undefined' && process.env) || {};
 // GATHEROS_API_BASE_URL=http://localhost:8787 when running dev
 // against a local Worker.
 const API_BASE_URL =
+  env.GATHERLOCAL_API_BASE_URL ||
   env.GATHEROS_API_BASE_URL ||
   'https://api.gatheros.co';
 
-// Custom URL scheme registered by the desktop app — magic-link
-// emails redirect into `gatheros://auth/verify?token=…` and the
-// main process catches it via app.on('open-url') (macOS) or via
-// the second-instance argv (Windows / Linux).
-const URL_SCHEME = 'gatheros';
+// Custom URL scheme registered by GatherLocal. A compatible auth service
+// must redirect magic links to this scheme; GatherLocal must never claim
+// GatherOS's scheme as a fallback because both apps may be installed.
+const URL_SCHEME = env.GATHERLOCAL_URL_SCHEME || DEFAULT_URL_SCHEME;
 
 // How stale the cached /license/verify response can get before we
 // stop trusting it. Within this window an offline launch is fine;

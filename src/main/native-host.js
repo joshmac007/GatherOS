@@ -2,7 +2,7 @@
 // extension to the running desktop app's local HTTP server.
 //
 // Chrome spawns this script via the launcher that the desktop app
-// installs into ~/Library/Application Support/GatherOS/native-host.
+// installs into GatherLocal's Electron user-data directory.
 // In dev the launcher invokes us with `node`; in packaged builds it
 // invokes the Electron binary with --native-host (we'll swap that
 // for a tiny standalone binary before shipping).
@@ -11,9 +11,9 @@
 //
 //   1. Read a length-prefixed JSON message from stdin
 //   2. If the main app isn't running, launch it and wait for the
-//      local server to come up (GATHEROS_BINARY env var, set by
+//      local server to come up (GATHERLOCAL_BINARY env var, set by
 //      the launcher, tells us what to spawn)
-//   3. POST the save to http://127.0.0.1:53247/save with the
+//   3. POST the save to GatherLocal's dedicated local capture server
 //      user's extension token (read from prefs.json on disk)
 //   4. Write the response back to stdout
 //   5. When stdin closes (extension disconnected), exit
@@ -27,12 +27,16 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const http = require('node:http');
 const { spawn } = require('node:child_process');
+const {
+  APP_NAME,
+  CAPTURE_HOST: SERVER_HOST,
+  CAPTURE_PORT: SERVER_PORT,
+  BACKGROUND_LAUNCH_ARG,
+  defaultUserDataDir,
+} = require('../shared/runtime-identity');
 
-const SERVER_HOST = '127.0.0.1';
-const SERVER_PORT = 53247;
 const MAX_MSG = 1024 * 1024;
 const LAUNCH_TIMEOUT_MS = 20_000;
 const LAUNCH_POLL_MS = 300;
@@ -42,13 +46,7 @@ const LAUNCH_POLL_MS = 300;
 // worker output. A tail-able file in the user's support dir is much
 // easier to read when a save mysteriously fails.
 function appSupportDir() {
-  if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'GatherOS');
-  }
-  if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA || '', 'GatherOS');
-  }
-  return path.join(os.homedir(), '.config', 'GatherOS');
+  return process.env.GATHERLOCAL_USER_DATA_DIR || defaultUserDataDir();
 }
 
 function debug(...parts) {
@@ -114,7 +112,7 @@ function appBundleFor(binaryPath) {
   return m ? m[1] : null;
 }
 
-// Launch the main GatherOS app via macOS's `open` command and wait
+// Launch the main GatherLocal app via macOS's `open` command and wait
 // until the local server responds to /ping. We can't just spawn the
 // binary directly: a detached child from this stdin-driven helper
 // doesn't get LaunchServices activation, so the new process runs
@@ -123,19 +121,19 @@ function appBundleFor(binaryPath) {
 // supported path for launching a GUI app programmatically.
 //
 // `background: true` (the save path) adds `open -g` so the launch
-// doesn't pull GatherOS in front of the user's browser, and tags the
-// launch with a --gatheros-bg sentinel the app reads to stay out of
+// doesn't pull GatherLocal in front of the user's browser, and tags the
+// launch with a background-save sentinel the app reads to stay out of
 // the foreground (see index.js). Saving a bookmark must never steal
-// focus; only the explicit "Open GatherOS" action foregrounds.
+// focus; only the explicit "Open GatherLocal" action foregrounds.
 async function ensureAppRunning({ background = false } = {}) {
   if (await ping()) {
     debug('ensureAppRunning: ping ok, app already running');
     return true;
   }
 
-  const bin = process.env.GATHEROS_BINARY;
+  const bin = process.env.GATHERLOCAL_BINARY;
   if (!bin) {
-    debug('ensureAppRunning: GATHEROS_BINARY not set, giving up');
+    debug('ensureAppRunning: GATHERLOCAL_BINARY not set, giving up');
     return false;
   }
 
@@ -152,24 +150,24 @@ async function ensureAppRunning({ background = false } = {}) {
       // -g launches without bringing the app to the foreground, so a
       // save-triggered cold launch doesn't pop over the browser. Only
       // the save path passes background:true; the explicit "Open
-      // GatherOS" action still foregrounds as the user expects.
+      // GatherLocal" action still foregrounds as the user expects.
       const args = background ? ['-g', '-a', bundle] : ['-a', bundle];
       const passthrough = [];
-      const appPath = process.env.GATHEROS_APP_PATH;
+      const appPath = process.env.GATHERLOCAL_APP_PATH;
       if (appPath) passthrough.push(appPath);
       // Sentinel the app checks to suppress its initial window + the
       // second-instance focus when it was woken solely to save.
-      if (background) passthrough.push('--gatheros-bg');
+      if (background) passthrough.push(BACKGROUND_LAUNCH_ARG);
       if (passthrough.length) args.push('--args', ...passthrough);
       debug('ensureAppRunning: open', args.join(' '));
       spawn('/usr/bin/open', args, { detached: true, stdio: 'ignore', env }).unref();
     } else {
       // Fallback: direct spawn. Should never trigger in practice
       // since the installer always derives the binary from an .app.
-      const appPath = process.env.GATHEROS_APP_PATH;
+      const appPath = process.env.GATHERLOCAL_APP_PATH;
       const args = [];
       if (appPath) args.push(appPath);
-      if (background) args.push('--gatheros-bg');
+      if (background) args.push(BACKGROUND_LAUNCH_ARG);
       debug('ensureAppRunning: fallback spawn', bin, args.join(' '));
       spawn(bin, args, { detached: true, stdio: 'ignore', env }).unref();
     }
@@ -242,7 +240,7 @@ async function handleMessage(msg) {
     const info = await ping();
     writeMessage({
       ok: true,
-      app: 'GatherOS',
+      app: APP_NAME,
       appRunning: !!info,
       // Sync switches (default on when the app is down or pre-update).
       syncX: info ? info.syncX !== false : true,
@@ -251,25 +249,25 @@ async function handleMessage(msg) {
     return;
   }
   if (msg.type === 'open') {
-    // Launch / focus GatherOS without saving anything — backs the
-    // extension popup's "Open GatherOS" button.
+    // Launch / focus GatherLocal without saving anything — backs the
+    // extension popup's "Open GatherLocal" button.
     const ok = await ensureAppRunning();
     writeMessage({ ok, appRunning: ok });
     return;
   }
   if (msg.type === 'save') {
-    // Background launch: a bookmark save must never pull GatherOS in
+    // Background launch: a bookmark save must never pull GatherLocal in
     // front of the browser. If the app is already up this is a no-op
     // ping; if it's down it cold-launches hidden via `open -g`.
     const ready = await ensureAppRunning({ background: true });
     if (!ready) {
-      writeMessage({ ok: false, error: 'Could not launch GatherOS. Try opening it manually.' });
+      writeMessage({ ok: false, error: `Could not launch ${APP_NAME}. Try opening it manually.` });
       return;
     }
     const token = readToken();
     if (!token) {
       debug('handleMessage: no token in prefs.json');
-      writeMessage({ ok: false, error: 'GatherOS is not installed or has never been launched.' });
+      writeMessage({ ok: false, error: `${APP_NAME} is not installed or has never been launched.` });
       return;
     }
     const result = await postToApp(
@@ -300,7 +298,7 @@ async function handleMessage(msg) {
 }
 
 function run() {
-  debug('run: native-host started, pid', process.pid, 'GATHEROS_BINARY', process.env.GATHEROS_BINARY || '(unset)');
+  debug('run: native-host started, pid', process.pid, 'GATHERLOCAL_BINARY', process.env.GATHERLOCAL_BINARY || '(unset)');
   let buffer = Buffer.alloc(0);
 
   process.stdin.on('data', async (chunk) => {
