@@ -14,14 +14,16 @@
 //      with "Unexpected token 'E'".
 //
 // Going through @electron/notarize directly with keychainProfile
-// avoids both: credentials live in the macOS keychain (set up via
-// `xcrun notarytool store-credentials "GatherOS-Notarize" ...`),
-// and we get cleaner error reporting.
+// avoids both while keeping GatherLocal credentials separate.
 
 const { notarize } = require('@electron/notarize');
 
 exports.default = async function notarizing(context) {
   if (context.electronPlatformName !== 'darwin') return;
+  if (process.env.GATHERLOCAL_NOTARIZE !== '1') {
+    console.log('[notarize] GatherLocal notarization disabled');
+    return;
+  }
   // Escape hatch for fast local builds where you don't want the
   // ~2-3 minute round-trip to Apple's notary service. Set
   // SKIP_NOTARIZE=1 to ship an unsigned-by-Apple build.
@@ -35,7 +37,7 @@ exports.default = async function notarizing(context) {
   await notarize({
     tool: 'notarytool',
     appPath,
-    keychainProfile: 'GatherOS-Notarize',
+    keychainProfile: process.env.GATHERLOCAL_NOTARIZE_PROFILE || 'GatherLocal-Notarize',
   });
   console.log('[notarize] complete');
 };

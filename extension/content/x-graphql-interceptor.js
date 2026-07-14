@@ -206,7 +206,7 @@
   }
 
   // Walk the bookmark timeline response and extract a flat array of
-  // tweet objects in the shape GatherOS expects. Twitter returns its
+  // tweet objects in the shape GatherLocal expects. Twitter returns its
   // bookmark feed inside data.bookmark_timeline_v2.timeline.
   // instructions[].entries[] — each entry that's a tweet has an
   // entryId starting with "tweet-" and the tweet payload at

@@ -169,7 +169,7 @@
     return { type: 'image', url: bestImageUrl(node) || '' };
   }
 
-  // Normalize a saved post into the GatherOS save shape. `media` is an
+  // Normalize a saved post into the GatherLocal save shape. `media` is an
   // explicit ordered list (locked default #1: one save per post, extra
   // media in metadata) that can hold multiple videos — the renderer
   // pages through it and streams secondary videos so they play instead
