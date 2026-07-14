@@ -2,7 +2,7 @@
 
 set -eu
 
-repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+repo_root=$(CDPATH= cd -P -- "$(dirname -- "$0")/.." && pwd -P)
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
