@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { app } = require('electron');
 const Database = require('better-sqlite3');
+const { migrateWithLocalOverlay } = require('./gatherlocal/local-migrations');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS saves (
@@ -102,7 +103,13 @@ function initDatabase() {
   // existing DBs but bootstraps fresh ones. Then run versioned
   // migrations on top to bring any older shape up to current.
   db.exec(SCHEMA);
-  migrate();
+  migrateWithLocalOverlay({
+    database: db,
+    upstream: {
+      targetVersion: MIGRATIONS.length,
+      apply: migrate,
+    },
+  });
   // Cheap insurance against the SQLite-corruption stories that haunt
   // local-first apps. Result is cached so the renderer can pull it on
   // mount and surface a recoverable warning if anything turned up.

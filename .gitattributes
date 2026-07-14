@@ -1,0 +1,2 @@
+src/main/gatherlocal/local-migrations/manifest.js text eol=lf
+src/main/gatherlocal/local-migrations/migrations/*.js text eol=lf
