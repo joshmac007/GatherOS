@@ -1,0 +1,1372 @@
+From 4619c8bca793a38d736f2c81500856885b2b4af3 Mon Sep 17 00:00:00 2001
+From: joshmac007 <joshmcswain007@gmail.com>
+Date: Tue, 14 Jul 2026 02:57:20 -0500
+Subject: [PATCH 3/5] Add GatherLocal personal AI providers
+
+---
+ src/main/ai/bootstrap.js                     |  15 +-
+ src/main/gatherlocal/ai/codex-structured.js  | 310 +++++++++++++++++++
+ src/main/gatherlocal/ai/config.js            | 119 +++++++
+ src/main/gatherlocal/ai/index.js             |  64 ++++
+ src/main/gatherlocal/ai/local-structured.js  | 164 ++++++++++
+ src/main/gatherlocal/ai/ollama-embeddings.js | 160 ++++++++++
+ src/main/gatherlocal/ai/transport-utils.js   | 202 ++++++++++++
+ test/gatherlocal-ai-adapters.test.js         | 185 +++++++++++
+ test/gatherlocal-ai-bootstrap.test.js        |  58 ++++
+ 9 files changed, 1269 insertions(+), 8 deletions(-)
+ create mode 100644 src/main/gatherlocal/ai/codex-structured.js
+ create mode 100644 src/main/gatherlocal/ai/config.js
+ create mode 100644 src/main/gatherlocal/ai/index.js
+ create mode 100644 src/main/gatherlocal/ai/local-structured.js
+ create mode 100644 src/main/gatherlocal/ai/ollama-embeddings.js
+ create mode 100644 src/main/gatherlocal/ai/transport-utils.js
+ create mode 100644 test/gatherlocal-ai-adapters.test.js
+ create mode 100644 test/gatherlocal-ai-bootstrap.test.js
+
+diff --git a/src/main/ai/bootstrap.js b/src/main/ai/bootstrap.js
+index a10c8e01726a7d9636412f0e2956a92149b422f4..1852258bc3e9915d2a1828c391226d154c08e8a4 100644
+--- a/src/main/ai/bootstrap.js
++++ b/src/main/ai/bootstrap.js
+@@ -1,7 +1,8 @@
+ 'use strict';
+ 
+-const { createAiRuntime, CAPABILITIES } = require('./runtime');
++const { createAiRuntime } = require('./runtime');
+ const { createGatherOsProxyAdapter } = require('./providers/gatheros-proxy');
++const { createGatherLocalRoutes } = require('../gatherlocal/ai');
+ 
+ let cachedRuntime = null;
+ 
+@@ -17,17 +18,15 @@ function createDefaultAiRuntime({
+   proxyAdapter = null,
+   routes = null,
+   proxyOptions = {},
++  gatherLocalOptions = {},
+ } = {}) {
+   const proxy = proxyAdapter || createGatherOsProxyAdapter(proxyOptions);
+   return createAiRuntime({
+     authorize,
+-    // One adapter may serve multiple capabilities. Image generation stays
+-    // disabled until composition explicitly selects that route.
+-    routes: routes || {
+-      [CAPABILITIES.STRUCTURED_JSON]: proxy,
+-      [CAPABILITIES.EMBEDDING]: proxy,
+-      [CAPABILITIES.IMAGE_GENERATION]: null,
+-    },
++    routes: routes || createGatherLocalRoutes({
++      ...gatherLocalOptions,
++      proxyAdapter: proxy,
++    }),
+   });
+ }
+ 
+diff --git a/src/main/gatherlocal/ai/codex-structured.js b/src/main/gatherlocal/ai/codex-structured.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..09537b93691bc4acb96b48e14d6a39e342d624a4
+--- /dev/null
++++ b/src/main/gatherlocal/ai/codex-structured.js
+@@ -0,0 +1,310 @@
++'use strict';
++
++const { spawn: defaultSpawn, spawnSync: defaultSpawnSync } = require('node:child_process');
++const { CAPABILITIES } = require('./config');
++const { parseJsonObject, runtimeError, timeoutValue } = require('./transport-utils');
++
++const PROVIDER = 'codex';
++
++function preflight(config, dependencies = {}) {
++  const spawnSync = dependencies.spawnSync || defaultSpawnSync;
++  let result;
++  try {
++    result = spawnSync(config.bin, ['login', 'status'], {
++      cwd: config.cwd,
++      env: config.env || process.env,
++      encoding: 'utf8',
++      timeout: Math.min(timeoutValue(config.timeoutMs, 120000), 5000),
++    });
++  } catch (cause) {
++    throw runtimeError('AI_PROVIDER_UNAVAILABLE', 'Codex login status could not be checked', {
++      capability: CAPABILITIES.STRUCTURED_JSON,
++      provider: PROVIDER,
++      retryable: true,
++      cause,
++    });
++  }
++  if (result?.error?.code === 'ENOENT') {
++    throw runtimeError('AI_PROVIDER_UNAVAILABLE', 'Codex CLI was not found', {
++      capability: CAPABILITIES.STRUCTURED_JSON,
++      provider: PROVIDER,
++      retryable: false,
++      cause: result.error,
++    });
++  }
++  if (result?.error) {
++    throw runtimeError('AI_AUTH_REQUIRED', 'Codex login is required', {
++      capability: CAPABILITIES.STRUCTURED_JSON,
++      provider: PROVIDER,
++      retryable: false,
++      cause: result.error,
++    });
++  }
++  if (result?.status !== 0) {
++    throw runtimeError('AI_AUTH_REQUIRED', 'Codex login is required', {
++      capability: CAPABILITIES.STRUCTURED_JSON,
++      provider: PROVIDER,
++      retryable: false,
++    });
++  }
++  return true;
++}
++
++function messageText(message) {
++  const item = message?.params?.item;
++  if (!item) return '';
++  if (typeof item.text === 'string') return item.text;
++  if (typeof item.message === 'string') return item.message;
++  if (Array.isArray(item.content)) {
++    return item.content.map((part) => typeof part === 'string' ? part : part?.text || '').join('');
++  }
++  if (Array.isArray(item.message?.content)) {
++    return item.message.content.map((part) => typeof part === 'string' ? part : part?.text || '').join('');
++  }
++  return '';
++}
++
++function createCodexStructuredAdapter(config = {}, dependencies = {}) {
++  const bin = typeof config.bin === 'string' && config.bin.trim() ? config.bin.trim() : 'codex';
++  const model = typeof config.model === 'string' ? config.model.trim() : '';
++  const cwd = typeof config.cwd === 'string' && config.cwd.trim() ? config.cwd : process.cwd();
++  const timeoutMs = timeoutValue(config.timeoutMs, 120000);
++  const spawn = dependencies.spawn || defaultSpawn;
++
++  function configured() {
++    return Boolean(bin);
++  }
++
++  async function runTurn({ system = '', input = '', imagePath, signal } = {}) {
++    if (signal?.aborted) {
++      throw runtimeError('AI_ABORTED', 'Codex request was aborted', {
++        capability: CAPABILITIES.STRUCTURED_JSON,
++        provider: PROVIDER,
++        retryable: false,
++      });
++    }
++    preflight({ bin, cwd, model, timeoutMs, env: config.env }, dependencies);
++    if (signal?.aborted) {
++      throw runtimeError('AI_ABORTED', 'Codex request was aborted', {
++        capability: CAPABILITIES.STRUCTURED_JSON,
++        provider: PROVIDER,
++        retryable: false,
++      });
++    }
++
++    return new Promise((resolve, reject) => {
++      let proc;
++      try {
++        proc = spawn(bin, ['app-server'], {
++          cwd,
++          env: config.env || process.env,
++          stdio: ['pipe', 'pipe', 'pipe'],
++        });
++      } catch (cause) {
++        reject(runtimeError('AI_PROVIDER_UNAVAILABLE', 'Codex app-server could not start', {
++          capability: CAPABILITIES.STRUCTURED_JSON,
++          provider: PROVIDER,
++          retryable: true,
++          cause,
++        }));
++        return;
++      }
++
++      let nextId = 1;
++      let threadId = null;
++      let output = '';
++      let sawDelta = false;
++      let stderr = '';
++      let lineBuffer = '';
++      let settled = false;
++      const pending = new Map();
++      const timer = setTimeout(() => finish(runtimeError('AI_TIMEOUT', 'Codex request timed out', {
++        capability: CAPABILITIES.STRUCTURED_JSON,
++        provider: PROVIDER,
++        retryable: true,
++      })), timeoutMs);
++
++      function cleanup() {
++        clearTimeout(timer);
++        if (signal && typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', onAbort);
++      }
++
++      function terminate() {
++        try { proc.kill('SIGTERM'); } catch {}
++      }
++
++      function finish(error, value) {
++        if (settled) return;
++        settled = true;
++        cleanup();
++        for (const waiter of pending.values()) waiter.reject(error || new Error('Codex request finished'));
++        pending.clear();
++        terminate();
++        if (error) reject(error);
++        else resolve(value);
++      }
++
++      function onAbort() {
++        finish(runtimeError('AI_ABORTED', 'Codex request was aborted', {
++          capability: CAPABILITIES.STRUCTURED_JSON,
++          provider: PROVIDER,
++          retryable: false,
++        }));
++      }
++
++      function send(message) {
++        try {
++          proc.stdin.write(`${JSON.stringify(message)}\n`);
++        } catch (cause) {
++          finish(runtimeError('AI_PROVIDER_UNAVAILABLE', 'Codex app-server write failed', {
++            capability: CAPABILITIES.STRUCTURED_JSON,
++            provider: PROVIDER,
++            retryable: true,
++            cause,
++          }));
++        }
++      }
++
++      function request(method, params = {}) {
++        const id = nextId++;
++        const promise = new Promise((resolveRequest, rejectRequest) => {
++          pending.set(id, { resolve: resolveRequest, reject: rejectRequest });
++        });
++        send({ method, id, params });
++        return promise;
++      }
++
++      function notify(method, params = {}) {
++        send({ method, params });
++      }
++
++      function handle(message) {
++        if (typeof message.id === 'number') {
++          const waiter = pending.get(message.id);
++          if (!waiter) return;
++          pending.delete(message.id);
++          if (message.error) waiter.reject(runtimeError('AI_PROVIDER_UNAVAILABLE', message.error.message || 'Codex RPC error', {
++            capability: CAPABILITIES.STRUCTURED_JSON,
++            provider: PROVIDER,
++            retryable: true,
++          }));
++          else waiter.resolve(message.result || {});
++          return;
++        }
++        if (message.method === 'item/agentMessage/delta' && typeof message.params?.delta === 'string') {
++          sawDelta = true;
++          output += message.params.delta;
++          return;
++        }
++        if (message.method === 'item/completed' && !sawDelta) output += messageText(message);
++        if (message.method === 'turn/completed') {
++          const turn = message.params?.turn || message.params || {};
++          if (turn.threadId && threadId && turn.threadId !== threadId) return;
++          if (turn.status === 'failed' || turn.status === 'error') {
++            finish(runtimeError('AI_PROVIDER_UNAVAILABLE', turn.error?.message || 'Codex turn failed', {
++              capability: CAPABILITIES.STRUCTURED_JSON,
++              provider: PROVIDER,
++              retryable: true,
++            }));
++          } else {
++            const turnOutput = typeof turn.output === 'string' ? turn.output : '';
++            finish(null, output || turnOutput);
++          }
++        }
++      }
++
++      function onData(chunk) {
++        lineBuffer += chunk.toString();
++        const lines = lineBuffer.split(/\r?\n/);
++        lineBuffer = lines.pop() || '';
++        for (const line of lines) {
++          if (!line.trim()) continue;
++          try { handle(JSON.parse(line)); } catch {}
++        }
++      }
++
++      signal?.addEventListener?.('abort', onAbort, { once: true });
++      proc.stdout?.on?.('data', onData);
++      proc.stderr?.on?.('data', (chunk) => { stderr += chunk.toString(); });
++      proc.on?.('error', (cause) => finish(runtimeError('AI_PROVIDER_UNAVAILABLE', 'Codex app-server failed', {
++        capability: CAPABILITIES.STRUCTURED_JSON,
++        provider: PROVIDER,
++        retryable: true,
++        cause,
++      })));
++      proc.on?.('exit', (code) => {
++        if (settled) return;
++        if (code !== 0) finish(runtimeError('AI_PROVIDER_UNAVAILABLE', stderr.trim() || `Codex exited with code ${code}`, {
++          capability: CAPABILITIES.STRUCTURED_JSON,
++          provider: PROVIDER,
++          retryable: true,
++        }));
++        else finish(runtimeError('AI_INVALID_RESPONSE', 'Codex app-server ended before completing turn', {
++          capability: CAPABILITIES.STRUCTURED_JSON,
++          provider: PROVIDER,
++          retryable: false,
++        }));
++      });
++
++      (async () => {
++        try {
++          await request('initialize', {
++            clientInfo: { name: 'gatherlocal', title: 'GatherLocal', version: '0.1.0' },
++          });
++          notify('initialized');
++          const threadParams = {
++            cwd,
++            approvalPolicy: 'never',
++            sandbox: 'read-only',
++            serviceName: 'gatherlocal',
++            ephemeral: true,
++          };
++          if (model) threadParams.model = model;
++          const thread = await request('thread/start', threadParams);
++          threadId = thread.thread?.id;
++          if (!threadId) throw runtimeError('AI_INVALID_RESPONSE', 'Codex did not return a thread id', {
++            capability: CAPABILITIES.STRUCTURED_JSON,
++            provider: PROVIDER,
++            retryable: false,
++          });
++          const text = typeof input === 'string' ? input : JSON.stringify(input ?? '');
++          const instruction = typeof system === 'string' && system ? `${system}\n\n${text}` : text;
++          await request('turn/start', {
++            threadId,
++            input: [
++              { type: 'text', text: instruction },
++              ...(imagePath ? [{ type: 'localImage', path: imagePath }] : []),
++            ],
++          });
++        } catch (cause) {
++          if (cause?.name === 'AiRuntimeError' || typeof cause?.code === 'string' && cause.code.startsWith('AI_')) finish(cause);
++          else finish(runtimeError('AI_PROVIDER_UNAVAILABLE', 'Codex turn could not start', {
++            capability: CAPABILITIES.STRUCTURED_JSON,
++            provider: PROVIDER,
++            retryable: true,
++            cause,
++          }));
++        }
++      })();
++    });
++  }
++
++  return {
++    id: PROVIDER,
++    model,
++    isConfigured: configured,
++    async health() {
++      preflight({ bin, cwd, model, timeoutMs, env: config.env }, dependencies);
++      return { ok: true, provider: PROVIDER, model: model || null };
++    },
++    async completeJson(args = {}) {
++      const text = await runTurn(args);
++      return parseJsonObject(text, PROVIDER, CAPABILITIES.STRUCTURED_JSON);
++    },
++  };
++}
++
++module.exports = {
++  createCodexStructuredAdapter,
++  preflightCodexLogin: preflight,
++};
+diff --git a/src/main/gatherlocal/ai/config.js b/src/main/gatherlocal/ai/config.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..f78a0e6ab73ff650d812dae867d84659cdbd0074
+--- /dev/null
++++ b/src/main/gatherlocal/ai/config.js
+@@ -0,0 +1,119 @@
++'use strict';
++
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const { CAPABILITIES } = require('../../ai/runtime');
++
++const STRUCTURED_PROVIDERS = new Set(['codex', 'local', 'proxy']);
++const EMBEDDING_PROVIDERS = new Set(['ollama', 'proxy']);
++const IMAGE_PROVIDERS = new Set(['disabled', 'proxy']);
++
++function clean(value) {
++  return typeof value === 'string' ? value.trim() : '';
++}
++
++function positiveInteger(value, fallback) {
++  const parsed = Number(value);
++  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
++}
++
++function url(value, fallback) {
++  return (clean(value) || fallback).replace(/\/+$/, '');
++}
++
++function selected(env, name, allowed, fallback) {
++  const requested = clean(env[name]);
++  if (!requested) return fallback;
++  const normalized = requested.toLowerCase();
++  if (!allowed.has(normalized)) {
++    throw new TypeError(`${name} must be one of: ${Array.from(allowed).join(', ')}`);
++  }
++  return normalized;
++}
++
++function executable(filePath) {
++  try {
++    fs.accessSync(filePath, fs.constants.X_OK);
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++function codexBin(env) {
++  const configured = clean(env.GATHERLOCAL_CODEX_BIN);
++  if (configured) return configured;
++  if (process.platform === 'darwin') {
++    const bundledCandidates = [
++      '/Applications/ChatGPT.app/Contents/Resources/codex',
++      path.join(os.homedir(), 'Applications/ChatGPT.app/Contents/Resources/codex'),
++    ];
++    const bundled = bundledCandidates.find(executable);
++    if (bundled) return bundled;
++  }
++  return 'codex';
++}
++
++/**
++ * Read GatherLocal's private capability overlay.
++ *
++ * Route selectors are deliberately independent. One provider enum cannot
++ * describe this runtime.
++ */
++function readGatherLocalAiConfig(env = process.env) {
++  const source = env || {};
++  const structuredProvider = selected(
++    source,
++    'GATHERLOCAL_AI_STRUCTURED_PROVIDER',
++    STRUCTURED_PROVIDERS,
++    'codex',
++  );
++  const embeddingProvider = selected(
++    source,
++    'GATHERLOCAL_AI_EMBEDDING_PROVIDER',
++    EMBEDDING_PROVIDERS,
++    'ollama',
++  );
++  const imageProvider = selected(
++    source,
++    'GATHERLOCAL_AI_IMAGE_PROVIDER',
++    IMAGE_PROVIDERS,
++    'disabled',
++  );
++
++  return {
++    routes: {
++      [CAPABILITIES.STRUCTURED_JSON]: structuredProvider,
++      [CAPABILITIES.EMBEDDING]: embeddingProvider,
++      [CAPABILITIES.IMAGE_GENERATION]: imageProvider,
++    },
++    codex: {
++      bin: codexBin(source),
++      model: clean(source.GATHERLOCAL_CODEX_MODEL),
++      cwd: clean(source.GATHERLOCAL_CODEX_CWD) || process.cwd(),
++      timeoutMs: positiveInteger(source.GATHERLOCAL_CODEX_TIMEOUT_MS, 120000),
++    },
++    local: {
++      baseUrl: url(source.GATHERLOCAL_LOCAL_AI_BASE_URL, 'http://127.0.0.1:11434/v1'),
++      chatModel:
++        clean(source.GATHERLOCAL_LOCAL_VISION_MODEL) ||
++        clean(source.GATHERLOCAL_LOCAL_CHAT_MODEL) ||
++        'llama3.2-vision',
++      token: clean(source.GATHERLOCAL_LOCAL_AI_TOKEN),
++      timeoutMs: positiveInteger(source.GATHERLOCAL_LOCAL_AI_TIMEOUT_MS, 120000),
++      maxImageBytes: positiveInteger(source.GATHERLOCAL_LOCAL_AI_MAX_IMAGE_BYTES, 2 * 1024 * 1024),
++    },
++    ollama: {
++      baseUrl: url(source.GATHERLOCAL_OLLAMA_BASE_URL, 'http://127.0.0.1:11434'),
++      embedModel: clean(source.GATHERLOCAL_OLLAMA_EMBED_MODEL) || 'embeddinggemma',
++      timeoutMs: positiveInteger(source.GATHERLOCAL_OLLAMA_TIMEOUT_MS, 30000),
++      expectedDimension: positiveInteger(source.GATHERLOCAL_OLLAMA_EMBED_DIMENSION, null),
++    },
++  };
++}
++
++module.exports = {
++  CAPABILITIES,
++  readGatherLocalAiConfig,
++};
+diff --git a/src/main/gatherlocal/ai/index.js b/src/main/gatherlocal/ai/index.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..5376db1bd3772fdb0e7df29fd680ba943ccbba42
+--- /dev/null
++++ b/src/main/gatherlocal/ai/index.js
+@@ -0,0 +1,64 @@
++'use strict';
++
++const {
++  CAPABILITIES,
++  readGatherLocalAiConfig,
++} = require('./config');
++const { createCodexStructuredAdapter } = require('./codex-structured');
++const { createLocalStructuredAdapter } = require('./local-structured');
++const { createOllamaEmbeddingAdapter } = require('./ollama-embeddings');
++
++function selector(config, capability, fallback) {
++  const value = config?.routes?.[capability];
++  return typeof value === 'string' ? value.trim().toLowerCase() || fallback : fallback;
++}
++
++function proxyRoute(proxyAdapter, capability) {
++  if (!proxyAdapter) return null;
++  if (capability === CAPABILITIES.STRUCTURED_JSON && typeof proxyAdapter.completeJson === 'function') return proxyAdapter;
++  if (capability === CAPABILITIES.EMBEDDING && typeof proxyAdapter.embed === 'function') return proxyAdapter;
++  if (capability === CAPABILITIES.IMAGE_GENERATION && typeof proxyAdapter.generateImage === 'function') return proxyAdapter;
++  return null;
++}
++
++function createGatherLocalRoutes({ config, proxyAdapter = null, dependencies = {} } = {}) {
++  const resolved = config || readGatherLocalAiConfig();
++  const structured = selector(
++    resolved,
++    CAPABILITIES.STRUCTURED_JSON,
++    'codex',
++  );
++  const embedding = selector(
++    resolved,
++    CAPABILITIES.EMBEDDING,
++    'ollama',
++  );
++  const image = selector(
++    resolved,
++    CAPABILITIES.IMAGE_GENERATION,
++    'disabled',
++  );
++
++  const routes = {
++    [CAPABILITIES.STRUCTURED_JSON]: structured === 'codex'
++      ? createCodexStructuredAdapter(resolved.codex, dependencies.codex || {})
++      : structured === 'local'
++        ? createLocalStructuredAdapter(resolved.local, dependencies.local || {})
++        : structured === 'proxy'
++          ? proxyRoute(proxyAdapter, CAPABILITIES.STRUCTURED_JSON)
++          : null,
++    [CAPABILITIES.EMBEDDING]: embedding === 'ollama'
++      ? createOllamaEmbeddingAdapter(resolved.ollama, dependencies.ollama || {})
++      : embedding === 'proxy'
++        ? proxyRoute(proxyAdapter, CAPABILITIES.EMBEDDING)
++        : null,
++    [CAPABILITIES.IMAGE_GENERATION]: image === 'proxy'
++      ? proxyRoute(proxyAdapter, CAPABILITIES.IMAGE_GENERATION)
++      : null,
++  };
++  return routes;
++}
++
++module.exports = {
++  createGatherLocalRoutes,
++};
+diff --git a/src/main/gatherlocal/ai/local-structured.js b/src/main/gatherlocal/ai/local-structured.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..050773c4bbbefe86996432c4f88423e9a694f728
+--- /dev/null
++++ b/src/main/gatherlocal/ai/local-structured.js
+@@ -0,0 +1,164 @@
++'use strict';
++
++const fs = require('node:fs');
++const { CAPABILITIES } = require('./config');
++const { requestJson, parseJsonObject, runtimeError, timeoutValue } = require('./transport-utils');
++
++const PROVIDER = 'local';
++
++function authHeaders(config) {
++  return config.token ? { Authorization: `Bearer ${config.token}` } : {};
++}
++
++function loadSharp(dependencies) {
++  if (typeof dependencies.sharp === 'function') return dependencies.sharp;
++  try { return require('sharp'); } catch (cause) {
++    throw runtimeError('AI_PROVIDER_UNAVAILABLE', 'Local image transport requires JPEG encoding', {
++      capability: CAPABILITIES.STRUCTURED_JSON,
++      provider: PROVIDER,
++      retryable: false,
++      cause,
++    });
++  }
++}
++
++async function boundedJpegDataUrl(filePath, config, dependencies = {}) {
++  if (typeof dependencies.imageToDataUrl === 'function') {
++    return dependencies.imageToDataUrl(filePath, { maxBytes: config.maxImageBytes });
++  }
++  const imageToJpeg = dependencies.imageToJpeg;
++  if (typeof imageToJpeg === 'function') {
++    const encoded = await imageToJpeg(filePath, { maxBytes: config.maxImageBytes });
++    const buffer = Buffer.isBuffer(encoded) ? encoded : Buffer.from(encoded);
++    if (buffer.length > config.maxImageBytes) {
++      throw runtimeError('AI_INVALID_RESPONSE', 'Local image exceeds transport size limit', {
++        capability: CAPABILITIES.STRUCTURED_JSON,
++        provider: PROVIDER,
++        retryable: false,
++      });
++    }
++    return `data:image/jpeg;base64,${buffer.toString('base64')}`;
++  }
++  if (!filePath || !fs.existsSync(filePath)) {
++    throw runtimeError('AI_INVALID_RESPONSE', 'Local image file not found', {
++      capability: CAPABILITIES.STRUCTURED_JSON,
++      provider: PROVIDER,
++      retryable: false,
++    });
++  }
++
++  const sharp = loadSharp(dependencies);
++  const maxBytes = timeoutValue(config.maxImageBytes, 2 * 1024 * 1024);
++  let best;
++  for (const quality of [85, 75, 65, 55, 45, 35]) {
++    const buffer = await sharp(filePath)
++      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
++      .jpeg({ quality })
++      .toBuffer();
++    best = buffer;
++    if (buffer.length <= maxBytes) break;
++  }
++  if (!best || best.length > maxBytes) {
++    throw runtimeError('AI_INVALID_RESPONSE', 'Local image exceeds transport size limit', {
++      capability: CAPABILITIES.STRUCTURED_JSON,
++      provider: PROVIDER,
++      retryable: false,
++    });
++  }
++  return `data:image/jpeg;base64,${best.toString('base64')}`;
++}
++
++function contentFromResponse(data) {
++  const content = data?.choices?.[0]?.message?.content;
++  if (Array.isArray(content)) {
++    return content.map((part) => typeof part === 'string' ? part : part?.text || '').join('');
++  }
++  return content;
++}
++
++function createLocalStructuredAdapter(config = {}, dependencies = {}) {
++  const baseUrl = String(config.baseUrl || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
++  const model = typeof config.chatModel === 'string' ? config.chatModel.trim() : '';
++  const timeoutMs = timeoutValue(config.timeoutMs, 120000);
++  const maxImageBytes = timeoutValue(config.maxImageBytes, 2 * 1024 * 1024);
++  const fetchImpl = dependencies.fetch || globalThis.fetch;
++
++  function configured() {
++    return Boolean(baseUrl && model);
++  }
++
++  async function request(body, signal) {
++    const data = await requestJson({
++      fetchImpl,
++      url: `${baseUrl}/chat/completions`,
++      options: {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json', ...authHeaders(config) },
++        body: JSON.stringify(body),
++      },
++      timeoutMs,
++      signal,
++      capability: CAPABILITIES.STRUCTURED_JSON,
++      provider: PROVIDER,
++      dependencies,
++    });
++    return parseJsonObject(contentFromResponse(data), PROVIDER, CAPABILITIES.STRUCTURED_JSON);
++  }
++
++  return {
++    id: PROVIDER,
++    model,
++    isConfigured: configured,
++    async health({ signal } = {}) {
++      if (!configured()) {
++        throw runtimeError('AI_CAPABILITY_UNCONFIGURED', 'Local structured model is not configured', {
++          capability: CAPABILITIES.STRUCTURED_JSON,
++          provider: PROVIDER,
++          retryable: false,
++        });
++      }
++      await requestJson({
++        fetchImpl,
++        url: `${baseUrl}/models`,
++        options: { method: 'GET', headers: authHeaders(config) },
++        timeoutMs,
++        signal,
++        capability: CAPABILITIES.STRUCTURED_JSON,
++        provider: PROVIDER,
++        dependencies,
++      });
++      return { ok: true, provider: PROVIDER, model };
++    },
++    async completeJson({ system = '', input = '', imagePath, maxOutputTokens, signal } = {}) {
++      if (!configured()) {
++        throw runtimeError('AI_CAPABILITY_UNCONFIGURED', 'Local structured model is not configured', {
++          capability: CAPABILITIES.STRUCTURED_JSON,
++          provider: PROVIDER,
++          retryable: false,
++        });
++      }
++      const inputText = typeof input === 'string' ? input : JSON.stringify(input ?? '');
++      const userContent = imagePath
++        ? [
++          { type: 'text', text: inputText },
++          { type: 'image_url', image_url: { url: await boundedJpegDataUrl(imagePath, { ...config, maxImageBytes }, dependencies), detail: 'low' } },
++        ]
++        : inputText;
++      const body = {
++        model,
++        messages: [
++          { role: 'system', content: typeof system === 'string' ? system : JSON.stringify(system ?? '') },
++          { role: 'user', content: userContent },
++        ],
++        response_format: { type: 'json_object' },
++      };
++      if (Number.isInteger(maxOutputTokens) && maxOutputTokens > 0) body.max_tokens = maxOutputTokens;
++      return request(body, signal);
++    },
++  };
++}
++
++module.exports = {
++  createLocalStructuredAdapter,
++  boundedJpegDataUrl,
++};
+diff --git a/src/main/gatherlocal/ai/ollama-embeddings.js b/src/main/gatherlocal/ai/ollama-embeddings.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..961e9e2ae5d973297700d093f0b54872c2274192
+--- /dev/null
++++ b/src/main/gatherlocal/ai/ollama-embeddings.js
+@@ -0,0 +1,160 @@
++'use strict';
++
++const { CAPABILITIES } = require('./config');
++const { requestJson, runtimeError, timeoutValue } = require('./transport-utils');
++
++const PROVIDER = 'ollama';
++
++function clean(value) {
++  return typeof value === 'string' ? value.trim() : '';
++}
++
++function modelMatches(installedName, requestedName) {
++  const installed = clean(installedName);
++  const requested = clean(requestedName);
++  if (!installed || !requested) return false;
++  if (requested.includes(':')) return installed === requested;
++  return installed === requested || installed === `${requested}:latest`;
++}
++
++function invalidVector(vector, expectedDimension) {
++  if (!Array.isArray(vector) || vector.length === 0 ||
++      !vector.every((value) => typeof value === 'number' && Number.isFinite(value)) ||
++      !vector.some((value) => value !== 0)) {
++    throw runtimeError('AI_INVALID_RESPONSE', 'Ollama returned an invalid embedding vector', {
++      capability: CAPABILITIES.EMBEDDING,
++      provider: PROVIDER,
++      retryable: false,
++    });
++  }
++  if (expectedDimension != null && vector.length !== expectedDimension) {
++    throw runtimeError(
++      'AI_EMBEDDING_DIMENSION_MISMATCH',
++      `Ollama embedding dimension mismatch: expected ${expectedDimension}, received ${vector.length}`,
++      {
++        capability: CAPABILITIES.EMBEDDING,
++        provider: PROVIDER,
++        retryable: false,
++        expectedDimension,
++        actualDimension: vector.length,
++      },
++    );
++  }
++  return vector;
++}
++
++function createOllamaEmbeddingAdapter(config = {}, dependencies = {}) {
++  const baseUrl = String(config.baseUrl || 'http://127.0.0.1:11434').replace(/\/+$/, '');
++  const model = clean(config.embedModel || config.model);
++  const timeoutMs = timeoutValue(config.timeoutMs, 30000);
++  let observedDimension = Number.isInteger(config.expectedDimension) && config.expectedDimension > 0
++    ? config.expectedDimension
++    : null;
++  const fetchImpl = dependencies.fetch || globalThis.fetch;
++
++  function configured() {
++    return Boolean(baseUrl && model);
++  }
++
++  function modelMissing() {
++    return runtimeError('AI_MODEL_MISSING', `Ollama model ${model || '(empty)'} is not installed`, {
++      capability: CAPABILITIES.EMBEDDING,
++      provider: PROVIDER,
++      retryable: false,
++      setupAction: model ? `ollama pull ${model}` : undefined,
++    });
++  }
++
++  async function tags(signal) {
++    if (!configured()) {
++      throw runtimeError('AI_CAPABILITY_UNCONFIGURED', 'Ollama embedding model is not configured', {
++        capability: CAPABILITIES.EMBEDDING,
++        provider: PROVIDER,
++        retryable: false,
++        setupAction: model ? `ollama pull ${model}` : undefined,
++      });
++    }
++    const data = await requestJson({
++      fetchImpl,
++      url: `${baseUrl}/api/tags`,
++      options: { method: 'GET' },
++      timeoutMs,
++      signal,
++      capability: CAPABILITIES.EMBEDDING,
++      provider: PROVIDER,
++      dependencies,
++    });
++    const installed = Array.isArray(data?.models)
++      ? data.models.some((entry) => modelMatches(entry?.name || entry?.model, model))
++      : false;
++    if (!installed) throw modelMissing();
++    return data;
++  }
++
++  return {
++    id: PROVIDER,
++    model,
++    isConfigured: configured,
++    async health({ signal } = {}) {
++      await tags(signal);
++      return { ok: true, provider: PROVIDER, model, dimension: observedDimension };
++    },
++    async embed({ text, expectedDimension = null, signal } = {}) {
++      if (!configured()) {
++        throw runtimeError('AI_CAPABILITY_UNCONFIGURED', 'Ollama embedding model is not configured', {
++          capability: CAPABILITIES.EMBEDDING,
++          provider: PROVIDER,
++          retryable: false,
++          setupAction: model ? `ollama pull ${model}` : undefined,
++        });
++      }
++      const input = clean(text);
++      if (!input) {
++        throw runtimeError('AI_INVALID_RESPONSE', 'Cannot embed empty text', {
++          capability: CAPABILITIES.EMBEDDING,
++          provider: PROVIDER,
++          retryable: false,
++        });
++      }
++      let data;
++      try {
++        data = await requestJson({
++          fetchImpl,
++          url: `${baseUrl}/api/embed`,
++          options: {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ model, input }),
++          },
++          timeoutMs,
++          signal,
++          capability: CAPABILITIES.EMBEDDING,
++          provider: PROVIDER,
++          dependencies,
++        });
++      } catch (error) {
++        if (error?.status === 404) {
++          const missing = modelMissing();
++          missing.cause = error;
++          throw missing;
++        }
++        throw error;
++      }
++      const vector = invalidVector(data?.embeddings?.[0], expectedDimension);
++      if (observedDimension == null) observedDimension = vector.length;
++      invalidVector(vector, observedDimension);
++      return {
++        vector,
++        provider: PROVIDER,
++        model,
++        dimension: vector.length,
++      };
++    },
++  };
++}
++
++module.exports = {
++  createOllamaEmbeddingAdapter,
++  modelMatches,
++  validateVector: invalidVector,
++};
+diff --git a/src/main/gatherlocal/ai/transport-utils.js b/src/main/gatherlocal/ai/transport-utils.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..ef5c18bc43d7a026b088261c6183be2f74456f67
+--- /dev/null
++++ b/src/main/gatherlocal/ai/transport-utils.js
+@@ -0,0 +1,202 @@
++'use strict';
++
++const { AiRuntimeError } = require('../../ai/errors');
++
++function runtimeError(code, message, details = {}) {
++  return new AiRuntimeError(code, message, details);
++}
++
++function timeoutValue(value, fallback) {
++  const parsed = Number(value);
++  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
++}
++
++function composeSignal(signal, timeoutMs, dependencies = {}) {
++  const AbortControllerImpl = dependencies.AbortController || AbortController;
++  const setTimeoutImpl = dependencies.setTimeout || setTimeout;
++  const clearTimeoutImpl = dependencies.clearTimeout || clearTimeout;
++  const controller = new AbortControllerImpl();
++  let timedOut = false;
++  let callerAborted = Boolean(signal?.aborted);
++  let timeoutId = null;
++  let removeListener = () => {};
++
++  if (callerAborted) {
++    controller.abort(signal.reason);
++  } else if (signal && typeof signal.addEventListener === 'function') {
++    const onAbort = () => {
++      callerAborted = true;
++      controller.abort(signal.reason);
++    };
++    signal.addEventListener('abort', onAbort, { once: true });
++    removeListener = () => signal.removeEventListener('abort', onAbort);
++  }
++
++  const duration = timeoutValue(timeoutMs, 30000);
++  timeoutId = setTimeoutImpl(() => {
++    timedOut = true;
++    controller.abort(new Error('timeout'));
++  }, duration);
++
++  return {
++    signal: controller.signal,
++    get timedOut() { return timedOut; },
++    get callerAborted() { return callerAborted; },
++    cleanup() {
++      if (timeoutId !== null) clearTimeoutImpl(timeoutId);
++      removeListener();
++    },
++  };
++}
++
++function abortError(context, composed) {
++  if (composed.timedOut) {
++    return runtimeError(
++      'AI_TIMEOUT',
++      `${context.provider} request timed out`,
++      { capability: context.capability, provider: context.provider, retryable: true },
++    );
++  }
++  if (composed.callerAborted) {
++    return runtimeError(
++      'AI_ABORTED',
++      `${context.provider} request was aborted`,
++      { capability: context.capability, provider: context.provider, retryable: false },
++    );
++  }
++  return null;
++}
++
++async function responseBody(response) {
++  if (typeof response?.text === 'function') {
++    const raw = await response.text();
++    if (!raw) return { data: null, raw, invalidJson: false };
++    try {
++      return { data: JSON.parse(raw), raw, invalidJson: false };
++    } catch {
++      return { data: null, raw, invalidJson: true };
++    }
++  }
++  try {
++    return { data: await response.json(), raw: '', invalidJson: false };
++  } catch {
++    return { data: null, raw: '', invalidJson: true };
++  }
++}
++
++function httpCode(status) {
++  if (status === 401 || status === 403) return 'AI_AUTH_REQUIRED';
++  if (status === 408 || status === 429 || status >= 500) return 'AI_PROVIDER_UNAVAILABLE';
++  return 'AI_INVALID_RESPONSE';
++}
++
++async function requestJson({
++  fetchImpl = globalThis.fetch,
++  url,
++  options = {},
++  timeoutMs,
++  signal,
++  capability,
++  provider,
++  dependencies = {},
++}) {
++  if (typeof fetchImpl !== 'function') {
++    throw runtimeError('AI_PROVIDER_UNAVAILABLE', 'AI transport requires fetch', {
++      capability,
++      provider,
++      retryable: false,
++    });
++  }
++  const composed = composeSignal(signal, timeoutMs, dependencies);
++  try {
++    const response = await fetchImpl(url, { ...options, signal: composed.signal });
++    const body = await responseBody(response);
++    if (!response.ok) {
++      const detail = String(body.data?.error?.message || body.data?.error || body.raw || `HTTP ${response.status}`);
++      const code = httpCode(response.status);
++      throw runtimeError(code, `${provider} request failed: ${detail}`, {
++        capability,
++        provider,
++        retryable: code === 'AI_PROVIDER_UNAVAILABLE',
++        status: response.status,
++      });
++    }
++    if (body.invalidJson) {
++      throw runtimeError('AI_INVALID_RESPONSE', `${provider} returned invalid JSON`, {
++        capability,
++        provider,
++        retryable: false,
++      });
++    }
++    return body.data;
++  } catch (cause) {
++    const aborted = abortError({ capability, provider }, composed);
++    if (aborted) {
++      aborted.cause = cause;
++      throw aborted;
++    }
++    if (cause?.name === 'AbortError') {
++      throw runtimeError('AI_ABORTED', `${provider} request was aborted`, {
++        capability,
++        provider,
++        retryable: false,
++        cause,
++      });
++    }
++    if (cause?.name === 'AiRuntimeError' || typeof cause?.code === 'string' && cause.code.startsWith('AI_')) {
++      throw cause;
++    }
++    throw runtimeError('AI_PROVIDER_UNAVAILABLE', `${provider} is unavailable`, {
++      capability,
++      provider,
++      retryable: true,
++      cause,
++    });
++  } finally {
++    composed.cleanup();
++  }
++}
++
++function parseJsonObject(value, provider, capability) {
++  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
++  const raw = typeof value === 'string' ? value.trim() : '';
++  if (!raw) {
++    throw runtimeError('AI_INVALID_RESPONSE', `${provider} returned an empty response`, {
++      capability,
++      provider,
++      retryable: false,
++    });
++  }
++  let parsed;
++  try {
++    parsed = JSON.parse(raw);
++  } catch {
++    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
++    if (fenced) {
++      try { parsed = JSON.parse(fenced[1]); } catch { parsed = null; }
++    }
++    if (!parsed) {
++      const start = raw.indexOf('{');
++      const end = raw.lastIndexOf('}');
++      if (start >= 0 && end > start) {
++        try { parsed = JSON.parse(raw.slice(start, end + 1)); } catch { parsed = null; }
++      }
++    }
++  }
++  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
++    throw runtimeError('AI_INVALID_RESPONSE', `${provider} response was not a JSON object`, {
++      capability,
++      provider,
++      retryable: false,
++    });
++  }
++  return parsed;
++}
++
++module.exports = {
++  runtimeError,
++  timeoutValue,
++  composeSignal,
++  requestJson,
++  parseJsonObject,
++};
+diff --git a/test/gatherlocal-ai-adapters.test.js b/test/gatherlocal-ai-adapters.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..b5dfd5368310c862d342a9d859ec7acb6c424f68
+--- /dev/null
++++ b/test/gatherlocal-ai-adapters.test.js
+@@ -0,0 +1,185 @@
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const { EventEmitter } = require('node:events');
++
++const {
++  CAPABILITIES,
++  readGatherLocalAiConfig,
++} = require('../src/main/gatherlocal/ai/config');
++const { createGatherLocalRoutes } = require('../src/main/gatherlocal/ai');
++const { createCodexStructuredAdapter } = require('../src/main/gatherlocal/ai/codex-structured');
++const { createLocalStructuredAdapter } = require('../src/main/gatherlocal/ai/local-structured');
++const { createOllamaEmbeddingAdapter } = require('../src/main/gatherlocal/ai/ollama-embeddings');
++
++function response(payload, status = 200) {
++  return {
++    ok: status >= 200 && status < 300,
++    status,
++    async text() { return JSON.stringify(payload); },
++  };
++}
++
++test('per-capability config defaults independently', () => {
++  const config = readGatherLocalAiConfig({});
++  assert.equal(config.routes[CAPABILITIES.STRUCTURED_JSON], 'codex');
++  assert.equal(config.routes[CAPABILITIES.EMBEDDING], 'ollama');
++  assert.equal(config.routes[CAPABILITIES.IMAGE_GENERATION], 'disabled');
++  assert.equal(typeof config.codex.bin, 'string');
++  assert.notEqual(config.codex.bin, '');
++  assert.equal(readGatherLocalAiConfig({ GATHERLOCAL_CODEX_BIN: '/custom/codex' }).codex.bin, '/custom/codex');
++  assert.throws(
++    () => readGatherLocalAiConfig({ GATHERLOCAL_AI_STRUCTURED_PROVIDER: 'typo' }),
++    /GATHERLOCAL_AI_STRUCTURED_PROVIDER must be one of/,
++  );
++});
++
++test('route composition keeps Codex structured and Ollama embedding simultaneous', () => {
++  const routes = createGatherLocalRoutes({
++    config: {
++      routes: {
++        [CAPABILITIES.STRUCTURED_JSON]: 'codex',
++        [CAPABILITIES.EMBEDDING]: 'ollama',
++        [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
++      },
++      codex: { bin: 'codex' },
++      ollama: { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
++    },
++    dependencies: {
++      codex: { spawnSync: () => ({ status: 0 }) },
++      ollama: { fetch: async () => response({ embeddings: [[1, 0]] }) },
++    },
++  });
++  assert.deepEqual(Object.keys(routes), Object.values(CAPABILITIES));
++  assert.equal(routes[CAPABILITIES.STRUCTURED_JSON].id, 'codex');
++  assert.equal(routes[CAPABILITIES.EMBEDDING].id, 'ollama');
++  assert.equal(routes[CAPABILITIES.IMAGE_GENERATION], null);
++});
++
++test('proxy selected only when explicitly configured', () => {
++  const proxyStructured = { provider: 'proxy', completeJson: async () => ({ ok: true }) };
++  const routes = createGatherLocalRoutes({
++    config: {
++      routes: {
++        [CAPABILITIES.STRUCTURED_JSON]: 'proxy',
++        [CAPABILITIES.EMBEDDING]: 'ollama',
++        [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
++      },
++      ollama: { embedModel: 'embeddinggemma' },
++    },
++    proxyAdapter: proxyStructured,
++  });
++  assert.equal(routes[CAPABILITIES.STRUCTURED_JSON], proxyStructured);
++  assert.equal(routes[CAPABILITIES.IMAGE_GENERATION], null);
++});
++
++test('local structured adapter sends JSON response format and bounded JPEG data URL', async () => {
++  let request;
++  const adapter = createLocalStructuredAdapter(
++    { baseUrl: 'http://local/v1', chatModel: 'vision', timeoutMs: 1000, maxImageBytes: 100 },
++    {
++      imageToDataUrl: async () => 'data:image/jpeg;base64,ZmFrZQ==',
++      fetch: async (_url, options) => {
++        request = JSON.parse(options.body);
++        return response({ choices: [{ message: { content: '{"answer":true}' } }] });
++      },
++    },
++  );
++  assert.deepEqual(await adapter.completeJson({ system: 'system', input: 'input', imagePath: '/tmp/x.jpg' }), { answer: true });
++  assert.equal(request.model, 'vision');
++  assert.deepEqual(request.response_format, { type: 'json_object' });
++  assert.equal(request.messages[1].content[1].image_url.url.startsWith('data:image/jpeg;'), true);
++});
++
++test('Ollama adapter validates vector identity and dimension', async () => {
++  const calls = [];
++  const adapter = createOllamaEmbeddingAdapter(
++    { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
++    {
++      fetch: async (url) => {
++        calls.push(url);
++        return response({ embeddings: [[1, 0, 0]] });
++      },
++    },
++  );
++  const result = await adapter.embed({ text: 'hello' });
++  assert.deepEqual(result, {
++    vector: [1, 0, 0],
++    provider: 'ollama',
++    model: 'embeddinggemma',
++    dimension: 3,
++  });
++  assert.deepEqual(calls, ['http://ollama/api/embed']);
++  await assert.rejects(
++    adapter.embed({ text: 'hello', expectedDimension: 2 }),
++    (error) => error.code === 'AI_EMBEDDING_DIMENSION_MISMATCH',
++  );
++});
++
++test('local transport distinguishes caller cancellation from timeout', async () => {
++  function waitingFetch(_url, options) {
++    return new Promise((_resolve, reject) => {
++      options.signal.addEventListener('abort', () => {
++        const error = new Error('aborted');
++        error.name = 'AbortError';
++        reject(error);
++      }, { once: true });
++    });
++  }
++
++  const adapter = createLocalStructuredAdapter(
++    { baseUrl: 'http://local/v1', chatModel: 'vision', timeoutMs: 1000 },
++    { fetch: waitingFetch },
++  );
++  const controller = new AbortController();
++  const cancelled = adapter.completeJson({ input: 'input', signal: controller.signal });
++  controller.abort();
++  await assert.rejects(cancelled, (error) => error.code === 'AI_ABORTED');
++
++  const timedOut = createLocalStructuredAdapter(
++    { baseUrl: 'http://local/v1', chatModel: 'vision', timeoutMs: 5 },
++    { fetch: waitingFetch },
++  ).completeJson({ input: 'input' });
++  await assert.rejects(timedOut, (error) => error.code === 'AI_TIMEOUT');
++});
++
++test('Codex cancellation terminates its app-server process', async () => {
++  const controller = new AbortController();
++  const process = new EventEmitter();
++  process.stdout = new EventEmitter();
++  process.stderr = new EventEmitter();
++  let killed = false;
++  const requests = [];
++  process.kill = () => { killed = true; };
++  process.stdin = {
++    write(line) {
++      const message = JSON.parse(line);
++      requests.push(message);
++      const reply = (result) => queueMicrotask(() => {
++        process.stdout.emit('data', `${JSON.stringify({ id: message.id, result })}\n`);
++      });
++      if (message.method === 'initialize') reply({});
++      if (message.method === 'thread/start') reply({ thread: { id: 'thread-1' } });
++      if (message.method === 'turn/start') {
++        reply({ turn: { id: 'turn-1' } });
++        queueMicrotask(() => controller.abort());
++      }
++    },
++  };
++
++  const adapter = createCodexStructuredAdapter(
++    { bin: 'codex', cwd: '/tmp', timeoutMs: 1000 },
++    {
++      spawnSync: () => ({ status: 0 }),
++      spawn: () => process,
++    },
++  );
++  await assert.rejects(
++    adapter.completeJson({ input: 'input', signal: controller.signal }),
++    (error) => error.code === 'AI_ABORTED',
++  );
++  assert.equal(killed, true);
++  assert.equal(requests.find((request) => request.method === 'thread/start').params.ephemeral, true);
++  assert.equal(requests.find((request) => request.method === 'thread/start').params.sandbox, 'read-only');
++});
+diff --git a/test/gatherlocal-ai-bootstrap.test.js b/test/gatherlocal-ai-bootstrap.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..425b3cbc5d345cbc24f3717070a0298005ee4fc7
+--- /dev/null
++++ b/test/gatherlocal-ai-bootstrap.test.js
+@@ -0,0 +1,58 @@
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++const { createDefaultAiRuntime } = require('../src/main/ai/bootstrap');
++const { CAPABILITIES } = require('../src/main/ai/runtime');
++
++test('default runtime composes the selected GatherLocal capability routes', () => {
++  const runtime = createDefaultAiRuntime({
++    authorize: () => true,
++    gatherLocalOptions: {
++      config: {
++        routes: {
++          [CAPABILITIES.STRUCTURED_JSON]: 'codex',
++          [CAPABILITIES.EMBEDDING]: 'ollama',
++          [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
++        },
++        codex: { bin: 'codex' },
++        ollama: { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
++      },
++      dependencies: {
++        codex: { spawnSync: () => ({ status: 0 }) },
++        ollama: { fetch: async () => ({ ok: true, text: async () => '{"embeddings":[[1,0]]}' }) },
++      },
++    },
++  });
++
++  assert.equal(runtime.providerFor(CAPABILITIES.STRUCTURED_JSON), 'codex');
++  assert.equal(runtime.providerFor(CAPABILITIES.EMBEDDING), 'ollama');
++  assert.equal(runtime.providerFor(CAPABILITIES.IMAGE_GENERATION), null);
++});
++
++test('entitlement denial blocks personal providers before transport', async () => {
++  let calls = 0;
++  const runtime = createDefaultAiRuntime({
++    authorize: () => false,
++    gatherLocalOptions: {
++      config: {
++        routes: {
++          [CAPABILITIES.STRUCTURED_JSON]: 'local',
++          [CAPABILITIES.EMBEDDING]: 'ollama',
++          [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
++        },
++        local: { baseUrl: 'http://local/v1', chatModel: 'vision' },
++        ollama: { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
++      },
++      dependencies: {
++        local: { fetch: async () => { calls += 1; } },
++        ollama: { fetch: async () => { calls += 1; } },
++      },
++    },
++  });
++
++  await assert.rejects(runtime.completeJson({ input: 'x' }), (error) => error.code === 'AI_NOT_ENTITLED');
++  await assert.rejects(runtime.embed({ text: 'x' }), (error) => error.code === 'AI_NOT_ENTITLED');
++  assert.equal(calls, 0);
++});

@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "stack_id": "gatherlocal-personal-overlay",
+  "upstream": {
+    "repository": "https://github.com/BrettfromDJ/GatherOS.git",
+    "remote": "upstream",
+    "branch": "main",
+    "release_floor": "6b742da673fb1fd2d032efe9dc5b3e5461514a4b",
+    "tested_base": "527f92639aaa897458a6502dc0f49e2d0c2aade6"
+  },
+  "source": {
+    "repository_sibling": "GatherLocal-Next",
+    "branch": "codex/personal-overlay-0.7",
+    "tip": "d2cd3ab8e6ace434265dbecd785cc3d7f1e4aaef",
+    "resulting_tree": "e4cdbcc1d14b147553c5444f09d505a93aa846c0"
+  },
+  "acceptance": {
+    "personal_policy": "never-auto-drop",
+    "pending_contribution_policy": "exact-upstream-or-reviewed-contract",
+    "automatic_pending_evidence": [
+      "source-commit-is-ancestor-of-target",
+      "stable-patch-id-reachable-from-target"
+    ],
+    "reviewed_pending_evidence": [
+      "contract-tests-pass-without-patch",
+      "source-inspection-confirms-upstream-ownership"
+    ],
+    "never_adoption_evidence": [
+      "apply-conflict",
+      "empty-application",
+      "file-overlap",
+      "reverse-apply"
+    ]
+  },
+  "patches": [
+    {
+      "order": 10,
+      "id": "personal.local-migrations",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Isolate GatherLocal schema migrations",
+      "source_commit": "68bb69faafbfb83021305070e0b2f5bf4ba84eaf",
+      "source_parent": "527f92639aaa897458a6502dc0f49e2d0c2aade6",
+      "source_tree": "3d0c80a4bb9dcde78f6e4508ac519b0ab0c038b2",
+      "logical_dependencies": [],
+      "patch_id_stable": "76512b397959131c80eae980c3ebd97a65e45933",
+      "canonical_diff_sha256": "42b82f740bde0662deb9a4c7a7c2a9ffb0de7b98be47be8c8ed1574bdaec0d2b",
+      "artifact": "patches/0010-personal.local-migrations.patch",
+      "artifact_sha256": "28e716846e8031c664bda7178daa3019f2e6aec028ab3cc23086d2859bfbb8fb",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "local-migration-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/local-migration-artifacts.test.js",
+            "test/local-migration-backup-discovery.test.js",
+            "test/local-migration-engine.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 20,
+      "id": "pending.ai-capability-runtime",
+      "revision": 1,
+      "class": "pending-contribution",
+      "contribution_state": "pending-local-only",
+      "subject": "Add provider-neutral AI capability runtime",
+      "source_commit": "ca87c9dc5e0a19c8f7876c00929fccfee24d3bc3",
+      "source_parent": "68bb69faafbfb83021305070e0b2f5bf4ba84eaf",
+      "source_tree": "5c463ad14fcb7628a46daea4165e0f180f87102c",
+      "logical_dependencies": [],
+      "patch_id_stable": "14521bd82d1532028afe3f675975ad1b77c0d494",
+      "canonical_diff_sha256": "32b4aa335e99dad0d1cdcb9c7d162dd098dcfe6b84c09d43e4de83402b2c7468",
+      "artifact": "patches/0020-pending.ai-capability-runtime.patch",
+      "artifact_sha256": "bb33ced9133d1171790a87b076ef2dd09b23b227a342649b368903728a1c4c98",
+      "acceptance_policy": "exact-upstream-or-reviewed-contract",
+      "checks": [
+        {
+          "id": "ai-capability-runtime-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/ai-runtime.test.js",
+            "test/gatheros-proxy-adapter.test.js",
+            "test/openai-runtime-compat.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 30,
+      "id": "personal.ai-providers",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Add GatherLocal personal AI providers",
+      "source_commit": "4619c8bca793a38d736f2c81500856885b2b4af3",
+      "source_parent": "ca87c9dc5e0a19c8f7876c00929fccfee24d3bc3",
+      "source_tree": "dc0af45553ef5548a0ef65ea6dbe8b059a674425",
+      "logical_dependencies": [
+        "pending.ai-capability-runtime"
+      ],
+      "patch_id_stable": "67ec8c40bfd8e109aa245c8b5627b94857ecb5a0",
+      "canonical_diff_sha256": "474e7558474661b241be1a6d38486988e1c879bf8431981c5ae40881ded1bc9c",
+      "artifact": "patches/0030-personal.ai-providers.patch",
+      "artifact_sha256": "29f7c089c050e65c2a29fe41ccb1fe80214dbd910b5e39a58ef568afdd41aa98",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "personal-ai-provider-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/gatherlocal-ai-adapters.test.js",
+            "test/gatherlocal-ai-bootstrap.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 40,
+      "id": "personal.runtime-identity",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Isolate GatherLocal runtime identity",
+      "source_commit": "ae1f22da2031a0269c219bd9902bf47516669717",
+      "source_parent": "4619c8bca793a38d736f2c81500856885b2b4af3",
+      "source_tree": "0b2511982e5f0583fbd3f6d4efb7f4dac49e10a0",
+      "logical_dependencies": [],
+      "patch_id_stable": "df4268a780bbde510c0cfd3de2f4d715adcdd83b",
+      "canonical_diff_sha256": "5f71d6dba29f3e24d00e563af43c3b985364707a72460cf868675f327b1c005f",
+      "artifact": "patches/0040-personal.runtime-identity.patch",
+      "artifact_sha256": "d441ff8cc08fea99fb7d7a150a724f44d5fc3bb6a67d0e8cce20a82dad4617b4",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "runtime-identity-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/runtime-identity.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 50,
+      "id": "personal.workflow-docs",
+      "revision": 1,
+      "class": "personal-support",
+      "subject": "Document contribution-first workflow",
+      "source_commit": "d2cd3ab8e6ace434265dbecd785cc3d7f1e4aaef",
+      "source_parent": "ae1f22da2031a0269c219bd9902bf47516669717",
+      "source_tree": "e4cdbcc1d14b147553c5444f09d505a93aa846c0",
+      "logical_dependencies": [
+        "personal.runtime-identity"
+      ],
+      "patch_id_stable": "7450583e678648743fbd82ee7b82fab6052b4f2f",
+      "canonical_diff_sha256": "2b17cda096c0872b046d7dfab83fad9d7341045a52cfd88ac6045c0e123e6487",
+      "artifact": "patches/0050-personal.workflow-docs.patch",
+      "artifact_sha256": "b49c8b52d227d1937d06b0b6f5b4b4cb2d5a0e6c069830fe39100dea441cdaaf",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "patch-whitespace",
+          "argv": [
+            "git",
+            "diff",
+            "--check",
+            "HEAD^",
+            "HEAD"
+          ]
+        }
+      ]
+    }
+  ]
+}

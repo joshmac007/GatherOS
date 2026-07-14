@@ -38,3 +38,31 @@ Run:
 The check fails if this repository gains a remote, loses its push lockout, uses
 an untracked hook path, or no longer rejects a synthetic push invocation.
 
+## Overlay manifest
+
+`manifests/overlay.v1.json` is the source of truth for the current ordered patch
+stack. Logical IDs survive rebases; revisions change when patch behavior changes.
+Artifact checksums protect exported bytes, canonical-diff checksums bind current
+source evidence, and stable patch IDs support equivalence checks without being
+treated as integrity hashes.
+
+Patch-scoped application tests run through Electron's Node mode because native
+dependencies are built for the app's Electron ABI, not the shell's Node ABI.
+
+Verify manifest artifacts and current reconstruction evidence:
+
+```sh
+node scripts/check-manifest.mjs --source ../GatherLocal-Next
+```
+
+Replay every artifact from the tested upstream base in a disposable independent
+clone and prove each intermediate tree:
+
+```sh
+node scripts/replay-manifest.mjs \
+  --upstream ../GatherOS-Upstream \
+  --source ../GatherLocal-Next
+```
+
+The replay probe deletes a passing candidate unless `--keep` is supplied. A
+failed candidate is always preserved and printed for diagnosis.

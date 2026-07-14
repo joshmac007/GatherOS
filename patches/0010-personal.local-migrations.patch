@@ -1,0 +1,2248 @@
+From 68bb69faafbfb83021305070e0b2f5bf4ba84eaf Mon Sep 17 00:00:00 2001
+From: joshmac007 <joshmcswain007@gmail.com>
+Date: Tue, 14 Jul 2026 02:07:06 -0500
+Subject: [PATCH 1/5] Isolate GatherLocal schema migrations
+
+---
+ .gitattributes                                |   2 +
+ src/main/backup.js                            |  25 +-
+ src/main/db.js                                |   9 +-
+ .../gatherlocal/local-migrations/backup.js    |  91 ++++
+ .../gatherlocal/local-migrations/errors.js    |  19 +
+ .../gatherlocal/local-migrations/index.js     | 340 +++++++++++++
+ .../local-migrations/legacy-adoption.js       | 122 +++++
+ .../gatherlocal/local-migrations/manifest.js  |  33 ++
+ .../001-smart-categories-foundation.js        | 152 ++++++
+ .../002-smart-category-run-metadata.js        |  20 +
+ .../migrations/003-semantic-video-domain.js   | 203 ++++++++
+ .../004-semantic-video-queue-compatibility.js | 114 +++++
+ .../migrations/005-save-background-routing.js |  38 ++
+ .../006-x-tweet-created-at-repair.js          |  65 +++
+ .../migrations/007-social-source-key.js       |  87 ++++
+ src/renderer/components/SettingsModal.jsx     |   3 +-
+ test/local-migration-artifacts.test.js        | 180 +++++++
+ test/local-migration-backup-discovery.test.js |  73 +++
+ test/local-migration-engine.test.js           | 470 ++++++++++++++++++
+ 19 files changed, 2034 insertions(+), 12 deletions(-)
+ create mode 100644 .gitattributes
+ create mode 100644 src/main/gatherlocal/local-migrations/backup.js
+ create mode 100644 src/main/gatherlocal/local-migrations/errors.js
+ create mode 100644 src/main/gatherlocal/local-migrations/index.js
+ create mode 100644 src/main/gatherlocal/local-migrations/legacy-adoption.js
+ create mode 100644 src/main/gatherlocal/local-migrations/manifest.js
+ create mode 100644 src/main/gatherlocal/local-migrations/migrations/001-smart-categories-foundation.js
+ create mode 100644 src/main/gatherlocal/local-migrations/migrations/002-smart-category-run-metadata.js
+ create mode 100644 src/main/gatherlocal/local-migrations/migrations/003-semantic-video-domain.js
+ create mode 100644 src/main/gatherlocal/local-migrations/migrations/004-semantic-video-queue-compatibility.js
+ create mode 100644 src/main/gatherlocal/local-migrations/migrations/005-save-background-routing.js
+ create mode 100644 src/main/gatherlocal/local-migrations/migrations/006-x-tweet-created-at-repair.js
+ create mode 100644 src/main/gatherlocal/local-migrations/migrations/007-social-source-key.js
+ create mode 100644 test/local-migration-artifacts.test.js
+ create mode 100644 test/local-migration-backup-discovery.test.js
+ create mode 100644 test/local-migration-engine.test.js
+
+diff --git a/.gitattributes b/.gitattributes
+new file mode 100644
+index 0000000000000000000000000000000000000000..665eb76c2cd7e0035a0839ee0ff507aceb4fb384
+--- /dev/null
++++ b/.gitattributes
+@@ -0,0 +1,2 @@
++src/main/gatherlocal/local-migrations/manifest.js text eol=lf
++src/main/gatherlocal/local-migrations/migrations/*.js text eol=lf
+diff --git a/src/main/backup.js b/src/main/backup.js
+index 4bc7febc9c99625063375a739c968bcf339fc181..e85e49b3f6dc544a291e9979e1b1ced9de9f1014 100644
+--- a/src/main/backup.js
++++ b/src/main/backup.js
+@@ -45,11 +45,11 @@ function parseTimestamp(name) {
+   return Number.isFinite(ts) && ts > 0 ? ts : null;
+ }
+ 
+-// Pre-migration backups are dropped by db.js as siblings of the live
+-// SQLite file, named `<dbname>.pre-v<N>.<iso-stamp>.bak`. They're our
+-// safety-net if a migration corrupts the active DB, so we surface
+-// them alongside the daily snapshots in the Backups list — restoring
+-// either uses the same byte-for-byte copy path.
++// Pre-migration backups are siblings of the live SQLite file. Upstream
++// uses `<dbname>.pre-v<N>.<iso-stamp>.bak`; GatherLocal's named runner
++// uses `<dbname>.pre-local-migrate.<unique-stamp>.bak`. Both are surfaced
++// alongside daily snapshots, but their labels stay distinct because a
++// named local migration is not an upstream schema version.
+ function listMigrationBackups() {
+   const { getDatabasePath } = require('./db');
+   let dbPath;
+@@ -58,14 +58,17 @@ function listMigrationBackups() {
+   if (!dbPath) return [];
+   const dir = path.dirname(dbPath);
+   const base = path.basename(dbPath);
+-  const re = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.pre-v(\\d+)\\.(.+)\\.bak$`);
++  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
++  const upstreamRe = new RegExp(`^${escapedBase}\\.pre-v(\\d+)\\.(.+)\\.bak$`);
++  const localRe = new RegExp(`^${escapedBase}\\.pre-local-migrate\\.(.+)\\.bak$`);
+   let names;
+   try { names = fs.readdirSync(dir); }
+   catch { return []; }
+   const out = [];
+   for (const name of names) {
+-    const m = name.match(re);
+-    if (!m) continue;
++    const upstreamMatch = name.match(upstreamRe);
++    const localMatch = name.match(localRe);
++    if (!upstreamMatch && !localMatch) continue;
+     const full = path.join(dir, name);
+     try {
+       const stat = fs.statSync(full);
+@@ -76,8 +79,10 @@ function listMigrationBackups() {
+         path: full,
+         timestamp: stat.mtimeMs,
+         size: stat.size,
+-        kind: 'migration',
+-        migrationToVersion: Number(m[1]),
++        kind: upstreamMatch ? 'migration' : 'local-migration',
++        ...(upstreamMatch
++          ? { migrationToVersion: Number(upstreamMatch[1]) }
++          : {}),
+       });
+     } catch {}
+   }
+diff --git a/src/main/db.js b/src/main/db.js
+index 85b0c0fae0664eac4d0094557c7fe5415a68df3b..54a36a627cf49a865d27dcea74140c7158c2678c 100644
+--- a/src/main/db.js
++++ b/src/main/db.js
+@@ -3,6 +3,7 @@ const fs = require('node:fs');
+ const crypto = require('node:crypto');
+ const { app } = require('electron');
+ const Database = require('better-sqlite3');
++const { migrateWithLocalOverlay } = require('./gatherlocal/local-migrations');
+ 
+ const SCHEMA = `
+ CREATE TABLE IF NOT EXISTS saves (
+@@ -102,7 +103,13 @@ function initDatabase() {
+   // existing DBs but bootstraps fresh ones. Then run versioned
+   // migrations on top to bring any older shape up to current.
+   db.exec(SCHEMA);
+-  migrate();
++  migrateWithLocalOverlay({
++    database: db,
++    upstream: {
++      targetVersion: MIGRATIONS.length,
++      apply: migrate,
++    },
++  });
+   // Cheap insurance against the SQLite-corruption stories that haunt
+   // local-first apps. Result is cached so the renderer can pull it on
+   // mount and surface a recoverable warning if anything turned up.
+diff --git a/src/main/gatherlocal/local-migrations/backup.js b/src/main/gatherlocal/local-migrations/backup.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..e0d1ca446e3cf9e0979f7034dafad3b175b85b4b
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/backup.js
+@@ -0,0 +1,91 @@
++'use strict';
++
++const fs = require('node:fs');
++const path = require('node:path');
++const crypto = require('node:crypto');
++const Database = require('better-sqlite3');
++
++const USER_DATA_TABLES = Object.freeze([
++  'saves',
++  'collections',
++  'collection_items',
++  'tags',
++  'save_tags',
++  'boards',
++  'board_items',
++  'dismissed_tweets',
++  'smart_categories',
++  'smart_category_aliases',
++  'smart_category_members',
++  'save_topic_profiles',
++  'smart_category_runs',
++  'semantic_index_generations',
++  'semantic_vectors',
++  'semantic_index_jobs',
++  'video_analysis_jobs',
++  'video_tag_suggestions',
++  'save_background_routes',
++]);
++
++function databaseFile(database) {
++  const name = typeof database?.name === 'string' ? database.name : '';
++  if (!name || name === ':memory:' || name.startsWith('file::memory:')) return null;
++  return path.resolve(name);
++}
++
++function hasUserRows(database) {
++  const present = new Set(database.prepare(`
++    SELECT name FROM sqlite_schema WHERE type = 'table'
++  `).all().map((row) => row.name));
++
++  for (const table of USER_DATA_TABLES) {
++    if (!present.has(table)) continue;
++    const quoted = `"${table.replace(/"/g, '""')}"`;
++    if (database.prepare(`SELECT 1 FROM ${quoted} LIMIT 1`).get()) return true;
++  }
++  return false;
++}
++
++function uniqueBackupPath(file) {
++  for (;;) {
++    const suffix = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
++    const candidate = `${file}.pre-local-migrate.${suffix}.bak`;
++    if (!fs.existsSync(candidate)) return candidate;
++  }
++}
++
++function assertBackupIntegrity(file) {
++  let backup;
++  try {
++    backup = new Database(file, { readonly: true, fileMustExist: true });
++    const rows = backup.prepare('PRAGMA quick_check').all();
++    if (rows.length !== 1 || rows[0].quick_check !== 'ok') {
++      const details = rows.map((row) => row.quick_check).filter(Boolean).join('; ');
++      throw new Error(`backup quick_check failed${details ? `: ${details}` : ''}`);
++    }
++  } finally {
++    if (backup) backup.close();
++  }
++}
++
++function createVerifiedBackup(database, { force = false } = {}) {
++  const file = databaseFile(database);
++  if (!file) return null;
++  if (!force && !hasUserRows(database)) return null;
++
++  const backupPath = uniqueBackupPath(file);
++  try {
++    database.prepare('VACUUM INTO ?').run(backupPath);
++    assertBackupIntegrity(backupPath);
++    return backupPath;
++  } catch (error) {
++    try { fs.unlinkSync(backupPath); } catch {}
++    error.backupPath = backupPath;
++    throw error;
++  }
++}
++
++module.exports = {
++  createVerifiedBackup,
++  hasUserRows,
++};
+diff --git a/src/main/gatherlocal/local-migrations/errors.js b/src/main/gatherlocal/local-migrations/errors.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..64381cc07ba36ab4dcee2b880788ddc59c566f73
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/errors.js
+@@ -0,0 +1,19 @@
++'use strict';
++
++class LocalMigrationError extends Error {
++  constructor(code, message, {
++    phase,
++    migrationId,
++    cause,
++    backupPath,
++  } = {}) {
++    super(message, cause === undefined ? undefined : { cause });
++    this.name = 'LocalMigrationError';
++    this.code = code;
++    this.phase = phase || null;
++    this.migrationId = migrationId || null;
++    this.backupPath = backupPath || null;
++  }
++}
++
++module.exports = { LocalMigrationError };
+diff --git a/src/main/gatherlocal/local-migrations/index.js b/src/main/gatherlocal/local-migrations/index.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..a9541566971529d62d797f8fb8f020d79da83a8f
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/index.js
+@@ -0,0 +1,340 @@
++'use strict';
++
++const { loadManifest } = require('./manifest');
++const { createVerifiedBackup } = require('./backup');
++const {
++  inspectLegacyState,
++  createLedger,
++  adoptLegacyPrefix,
++} = require('./legacy-adoption');
++const { LocalMigrationError } = require('./errors');
++
++const CODES = Object.freeze({
++  manifest: 'LOCAL_MIGRATION_MANIFEST_INVALID',
++  ahead: 'LOCAL_MIGRATION_AHEAD',
++  drift: 'LOCAL_MIGRATION_DRIFT',
++  ambiguous: 'LOCAL_MIGRATION_LEGACY_AMBIGUOUS',
++  backup: 'LOCAL_MIGRATION_BACKUP_FAILED',
++  upstream: 'LOCAL_MIGRATION_UPSTREAM_FAILED',
++  mismatch: 'LOCAL_MIGRATION_UPSTREAM_MISMATCH',
++  failed: 'LOCAL_MIGRATION_FAILED',
++  verify: 'LOCAL_MIGRATION_VERIFY_FAILED',
++  integrity: 'LOCAL_MIGRATION_INTEGRITY_FAILED',
++});
++
++function migrationError(code, message, details) {
++  return new LocalMigrationError(code, message, details);
++}
++
++function validateInputs(database, upstream) {
++  if (!database || typeof database.prepare !== 'function'
++    || typeof database.transaction !== 'function'
++    || typeof database.pragma !== 'function') {
++    throw migrationError(CODES.manifest, 'invalid database handle', { phase: 'manifest' });
++  }
++  if (!upstream || !Number.isInteger(upstream.targetVersion)
++    || upstream.targetVersion < 0 || typeof upstream.apply !== 'function') {
++    throw migrationError(CODES.manifest, 'invalid upstream migration contract', {
++      phase: 'manifest',
++    });
++  }
++}
++
++function validateManifest(manifest) {
++  if (!Array.isArray(manifest)) {
++    throw migrationError(CODES.manifest, 'manifest must be an array', { phase: 'manifest' });
++  }
++  const ids = new Set();
++  const checksums = new Set();
++  for (let index = 0; index < manifest.length; index += 1) {
++    const entry = manifest[index];
++    const ordinal = index + 1;
++    if (!entry || entry.ordinal !== ordinal
++      || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.id || '')
++      || !/^[a-f0-9]{64}$/.test(entry.checksum || '')
++      || typeof entry.apply !== 'function'
++      || typeof entry.verify !== 'function'
++      || ids.has(entry.id)
++      || checksums.has(entry.checksum)) {
++      throw migrationError(CODES.manifest, `invalid manifest entry at ordinal ${ordinal}`, {
++        phase: 'manifest',
++        migrationId: entry?.id,
++      });
++    }
++    ids.add(entry.id);
++    checksums.add(entry.checksum);
++  }
++}
++
++function loadValidatedManifest() {
++  let manifest;
++  try {
++    manifest = loadManifest();
++  } catch (cause) {
++    if (cause instanceof LocalMigrationError) throw cause;
++    throw migrationError(CODES.manifest, 'failed to load local migration manifest', {
++      phase: 'manifest',
++      cause,
++    });
++  }
++  validateManifest(manifest);
++  return manifest;
++}
++
++function ledgerExists(database) {
++  return Boolean(database.prepare(`
++    SELECT 1 FROM sqlite_schema
++     WHERE type = 'table' AND name = 'gatherlocal_migrations'
++  `).get());
++}
++
++function readAndValidateLedger(database, manifest) {
++  let rows;
++  try {
++    rows = database.prepare(`
++      SELECT ordinal, id, checksum, origin, applied_at
++        FROM gatherlocal_migrations
++       ORDER BY ordinal ASC
++    `).all();
++  } catch (cause) {
++    throw migrationError(CODES.drift, 'local migration ledger schema is invalid', {
++      phase: 'history',
++      cause,
++    });
++  }
++
++  if (rows.length > manifest.length) {
++    throw migrationError(CODES.ahead, 'local migration history is newer than this app', {
++      phase: 'history',
++      migrationId: rows[manifest.length]?.id,
++    });
++  }
++
++  const manifestIds = new Set(manifest.map((entry) => entry.id));
++  for (let index = 0; index < rows.length; index += 1) {
++    const row = rows[index];
++    const entry = manifest[index];
++    const expectedOrdinal = index + 1;
++    if (row.ordinal !== expectedOrdinal || row.id !== entry.id) {
++      if (!manifestIds.has(row.id)) {
++        throw migrationError(CODES.ahead, 'local migration history contains an unknown migration', {
++          phase: 'history',
++          migrationId: row.id,
++        });
++      }
++      throw migrationError(CODES.drift, 'local migration history is not an exact manifest prefix', {
++        phase: 'history',
++        migrationId: row.id,
++      });
++    }
++    if (row.checksum !== entry.checksum) {
++      throw migrationError(CODES.drift, `checksum drift for local migration ${entry.id}`, {
++        phase: 'history',
++        migrationId: entry.id,
++      });
++    }
++    if (row.origin !== 'applied' && !/^legacy-user-version-(?:1[6-9]|2[0-2])$/.test(row.origin)) {
++      throw migrationError(CODES.drift, `invalid origin for local migration ${entry.id}`, {
++        phase: 'history',
++        migrationId: entry.id,
++      });
++    }
++    if (!Number.isInteger(row.applied_at) || row.applied_at < 0) {
++      throw migrationError(CODES.drift, `invalid timestamp for local migration ${entry.id}`, {
++        phase: 'history',
++        migrationId: entry.id,
++      });
++    }
++  }
++  return rows;
++}
++
++function getUserVersion(database) {
++  const value = database.pragma('user_version', { simple: true });
++  return Number(value);
++}
++
++function createBackupOrThrow(database, force) {
++  try {
++    return createVerifiedBackup(database, { force });
++  } catch (cause) {
++    throw migrationError(CODES.backup, 'failed to create verified local migration backup', {
++      phase: 'backup',
++      cause,
++      backupPath: cause?.backupPath,
++    });
++  }
++}
++
++function callUpstream(database, upstream, backupPath) {
++  const from = getUserVersion(database);
++  try {
++    upstream.apply();
++  } catch (cause) {
++    throw migrationError(CODES.upstream, 'upstream migration failed', {
++      phase: 'upstream',
++      cause,
++      backupPath,
++    });
++  }
++  const to = getUserVersion(database);
++  if (to !== upstream.targetVersion) {
++    throw migrationError(
++      CODES.mismatch,
++      `upstream migration ended at user_version ${to}; expected ${upstream.targetVersion}`,
++      { phase: 'upstream', backupPath },
++    );
++  }
++  return { from, to };
++}
++
++function applyMigration(database, entry, backupPath) {
++  let phase = 'apply';
++  let verifyCause;
++  try {
++    const run = database.transaction(() => {
++      entry.apply(database);
++      phase = 'verify';
++      let verified;
++      try {
++        verified = entry.verify(database);
++      } catch (cause) {
++        verifyCause = cause;
++        throw cause;
++      }
++      if (verified !== true) {
++        verifyCause = new Error(`postcondition returned ${String(verified)}`);
++        throw verifyCause;
++      }
++      phase = 'ledger';
++      database.prepare(`
++        INSERT INTO gatherlocal_migrations
++          (ordinal, id, checksum, origin, applied_at)
++        VALUES (?, ?, ?, 'applied', ?)
++      `).run(entry.ordinal, entry.id, entry.checksum, Date.now());
++    });
++    run();
++  } catch (cause) {
++    if (phase === 'verify') {
++      throw migrationError(CODES.verify, `verification failed for local migration ${entry.id}`, {
++        phase: 'verify',
++        migrationId: entry.id,
++        cause: verifyCause || cause,
++        backupPath,
++      });
++    }
++    throw migrationError(CODES.failed, `local migration ${entry.id} failed`, {
++      phase,
++      migrationId: entry.id,
++      cause,
++      backupPath,
++    });
++  }
++}
++
++function assertIntegrity(database, backupPath) {
++  let rows;
++  try {
++    rows = database.prepare('PRAGMA quick_check').all();
++  } catch (cause) {
++    throw migrationError(CODES.integrity, 'local migration integrity check failed', {
++      phase: 'integrity',
++      cause,
++      backupPath,
++    });
++  }
++  if (rows.length !== 1 || rows[0].quick_check !== 'ok') {
++    const details = rows.map((row) => row.quick_check).filter(Boolean).join('; ');
++    throw migrationError(
++      CODES.integrity,
++      `local migration integrity check failed${details ? `: ${details}` : ''}`,
++      { phase: 'integrity', backupPath },
++    );
++  }
++}
++
++function migrateWithLocalOverlay({ database, upstream } = {}) {
++  validateInputs(database, upstream);
++  const manifest = loadValidatedManifest();
++  const initialUserVersion = getUserVersion(database);
++  let ledgerRows = [];
++  let backupPath = null;
++  let adopted = [];
++
++  if (ledgerExists(database)) {
++    ledgerRows = readAndValidateLedger(database, manifest);
++    if (initialUserVersion > upstream.targetVersion) {
++      throw migrationError(CODES.ahead, 'upstream cursor is newer than this app', {
++        phase: 'history',
++      });
++    }
++  } else {
++    let legacy;
++    try {
++      legacy = inspectLegacyState(
++        database,
++        manifest,
++        initialUserVersion,
++        upstream.targetVersion,
++      );
++    } catch (cause) {
++      throw migrationError(CODES.ambiguous, 'failed to verify legacy GatherLocal state', {
++        phase: 'legacy-adoption',
++        cause,
++      });
++    }
++    if (legacy.kind === 'ahead') {
++      throw migrationError(CODES.ahead, legacy.reason, { phase: 'history' });
++    }
++    if (legacy.kind === 'ambiguous') {
++      throw migrationError(CODES.ambiguous, legacy.reason, { phase: 'legacy-adoption' });
++    }
++    if (legacy.kind === 'legacy') {
++      backupPath = createBackupOrThrow(database, true);
++      try {
++        adoptLegacyPrefix(database, legacy);
++      } catch (cause) {
++        throw migrationError(CODES.ambiguous, 'legacy GatherLocal adoption failed', {
++          phase: 'legacy-adoption',
++          cause,
++          backupPath,
++        });
++      }
++      adopted = legacy.verifiedEntries.map((entry) => entry.id);
++      ledgerRows = readAndValidateLedger(database, manifest);
++    }
++  }
++
++  const upstreamReport = callUpstream(database, upstream, backupPath);
++  const pending = manifest.slice(ledgerRows.length);
++  if (pending.length > 0 && backupPath === null) {
++    backupPath = createBackupOrThrow(database, false);
++  }
++  if (pending.length > 0 && !ledgerExists(database)) {
++    try {
++      createLedger(database);
++    } catch (cause) {
++      throw migrationError(CODES.failed, 'failed to create local migration ledger', {
++        phase: 'ledger',
++        cause,
++        backupPath,
++      });
++    }
++  }
++
++  const applied = [];
++  for (const entry of pending) {
++    applyMigration(database, entry, backupPath);
++    applied.push(entry.id);
++  }
++
++  assertIntegrity(database, backupPath);
++  return {
++    upstream: upstreamReport,
++    adopted,
++    applied,
++    backupPath,
++  };
++}
++
++module.exports = { migrateWithLocalOverlay };
+diff --git a/src/main/gatherlocal/local-migrations/legacy-adoption.js b/src/main/gatherlocal/local-migrations/legacy-adoption.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..7f6c107ad6af93d570e539c1bb62cd1149aed731
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/legacy-adoption.js
+@@ -0,0 +1,122 @@
++'use strict';
++
++const LEGACY_UPSTREAM_BASE = 15;
++const LEGACY_MIN_VERSION = 16;
++const LEGACY_MAX_VERSION = 22;
++
++const FOUNDATION_TABLES = Object.freeze([
++  'smart_categories',
++  'smart_category_aliases',
++  'smart_category_members',
++  'save_topic_profiles',
++  'smart_category_runs',
++]);
++
++const KNOWN_LOCAL_TABLES = Object.freeze([
++  ...FOUNDATION_TABLES,
++  'semantic_index_generations',
++  'semantic_index_state',
++  'semantic_vectors',
++  'semantic_index_jobs',
++  'video_analysis_jobs',
++  'video_tag_suggestions',
++  'save_background_routes',
++]);
++
++const LEDGER_SQL = `
++  CREATE TABLE IF NOT EXISTS gatherlocal_migrations (
++    ordinal     INTEGER PRIMARY KEY CHECK (ordinal > 0),
++    id          TEXT NOT NULL UNIQUE,
++    checksum    TEXT NOT NULL,
++    origin      TEXT NOT NULL,
++    applied_at  INTEGER NOT NULL
++  ) WITHOUT ROWID;
++
++  CREATE TRIGGER IF NOT EXISTS gatherlocal_migrations_no_update
++  BEFORE UPDATE ON gatherlocal_migrations
++  BEGIN
++    SELECT RAISE(ABORT, 'gatherlocal migration history is immutable');
++  END;
++
++  CREATE TRIGGER IF NOT EXISTS gatherlocal_migrations_no_delete
++  BEFORE DELETE ON gatherlocal_migrations
++  BEGIN
++    SELECT RAISE(ABORT, 'gatherlocal migration history is immutable');
++  END;
++`;
++
++function tableNames(database) {
++  return new Set(database.prepare(`
++    SELECT name FROM sqlite_schema WHERE type = 'table'
++  `).all().map((row) => row.name));
++}
++
++function inspectLegacyState(database, manifest, userVersion, upstreamTargetVersion) {
++  const tables = tableNames(database);
++  const anyLocalTable = KNOWN_LOCAL_TABLES.some((name) => tables.has(name));
++  const hasFoundationTables = FOUNDATION_TABLES.every((name) => tables.has(name));
++  const firstPostcondition = hasFoundationTables && manifest.length > 0
++    ? manifest[0].verify(database) === true
++    : false;
++
++  if (!anyLocalTable) {
++    if (userVersion > upstreamTargetVersion) {
++      return { kind: 'ahead', reason: 'upstream cursor is newer than this app' };
++    }
++    return { kind: 'ordinary' };
++  }
++
++  if (!hasFoundationTables || !firstPostcondition) {
++    return { kind: 'ambiguous', reason: 'partial or contradictory GatherLocal fingerprint' };
++  }
++  if (userVersion < LEGACY_MIN_VERSION || userVersion > LEGACY_MAX_VERSION) {
++    return { kind: 'ambiguous', reason: 'GatherLocal fingerprint has unknown legacy cursor' };
++  }
++
++  const claimedCount = userVersion - LEGACY_UPSTREAM_BASE;
++  if (claimedCount > manifest.length) {
++    return { kind: 'ahead', reason: 'legacy history is newer than this manifest' };
++  }
++
++  const verifiedEntries = [];
++  for (let index = 0; index < claimedCount; index += 1) {
++    const entry = manifest[index];
++    if (entry.verify(database) !== true) break;
++    verifiedEntries.push(entry);
++  }
++
++  return {
++    kind: 'legacy',
++    originalUserVersion: userVersion,
++    verifiedEntries,
++  };
++}
++
++function createLedger(database) {
++  database.exec(LEDGER_SQL);
++}
++
++function adoptLegacyPrefix(database, legacy) {
++  const adopt = database.transaction(() => {
++    createLedger(database);
++    const insert = database.prepare(`
++      INSERT INTO gatherlocal_migrations
++        (ordinal, id, checksum, origin, applied_at)
++      VALUES (?, ?, ?, ?, ?)
++    `);
++    const now = Date.now();
++    const origin = `legacy-user-version-${legacy.originalUserVersion}`;
++    for (const entry of legacy.verifiedEntries) {
++      insert.run(entry.ordinal, entry.id, entry.checksum, origin, now);
++    }
++    database.pragma(`user_version = ${LEGACY_UPSTREAM_BASE}`);
++  });
++  adopt();
++}
++
++module.exports = {
++  LEGACY_UPSTREAM_BASE,
++  inspectLegacyState,
++  createLedger,
++  adoptLegacyPrefix,
++};
+diff --git a/src/main/gatherlocal/local-migrations/manifest.js b/src/main/gatherlocal/local-migrations/manifest.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..3e81fae961b5baba3b856a510ccc7dc8fff24969
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/manifest.js
+@@ -0,0 +1,33 @@
++const crypto = require('node:crypto');
++const fs = require('node:fs');
++const path = require('node:path');
++
++const MIGRATION_SPECS = Object.freeze([
++  Object.freeze({ ordinal: 1, id: 'smart-categories-foundation', file: '001-smart-categories-foundation.js' }),
++  Object.freeze({ ordinal: 2, id: 'smart-category-run-metadata', file: '002-smart-category-run-metadata.js' }),
++  Object.freeze({ ordinal: 3, id: 'semantic-video-domain', file: '003-semantic-video-domain.js' }),
++  Object.freeze({ ordinal: 4, id: 'semantic-video-queue-compatibility', file: '004-semantic-video-queue-compatibility.js' }),
++  Object.freeze({ ordinal: 5, id: 'save-background-routing', file: '005-save-background-routing.js' }),
++  Object.freeze({ ordinal: 6, id: 'x-tweet-created-at-repair', file: '006-x-tweet-created-at-repair.js' }),
++  Object.freeze({ ordinal: 7, id: 'social-source-key', file: '007-social-source-key.js' }),
++]);
++
++function checksumArtifact(filePath) {
++  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
++}
++
++function loadManifest() {
++  const entries = MIGRATION_SPECS.map(({ ordinal, id, file }) => {
++    const filePath = path.join(__dirname, 'migrations', file);
++    const checksum = checksumArtifact(filePath);
++    delete require.cache[require.resolve(filePath)];
++    const artifact = require(filePath);
++    if (!artifact || typeof artifact.apply !== 'function' || typeof artifact.verify !== 'function') {
++      throw new TypeError(`Invalid local migration artifact: ${file}`);
++    }
++    return Object.freeze({ ordinal, id, checksum, apply: artifact.apply, verify: artifact.verify });
++  });
++  return Object.freeze(entries);
++}
++
++module.exports = { loadManifest, checksumArtifact };
+diff --git a/src/main/gatherlocal/local-migrations/migrations/001-smart-categories-foundation.js b/src/main/gatherlocal/local-migrations/migrations/001-smart-categories-foundation.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..c6b5f8fc0374cb5dce6ae9b9e2a95cdd06daf96d
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/migrations/001-smart-categories-foundation.js
+@@ -0,0 +1,152 @@
++// Frozen from the migration introduced by 59bdda6.
++const SQL = `
++CREATE TABLE IF NOT EXISTS smart_categories (
++  id                  TEXT PRIMARY KEY,
++  name                TEXT NOT NULL,
++  description         TEXT,
++  status              TEXT NOT NULL DEFAULT 'candidate',
++  parent_id           TEXT REFERENCES smart_categories(id) ON DELETE SET NULL,
++  centroid_embedding  BLOB,
++  visibility_score    REAL NOT NULL DEFAULT 0,
++  member_count        INTEGER NOT NULL DEFAULT 0,
++  created_at          INTEGER NOT NULL,
++  updated_at          INTEGER NOT NULL,
++  last_changed_at     INTEGER,
++  change_kind         TEXT,
++  frozen_name         INTEGER NOT NULL DEFAULT 0,
++  CHECK (status IN ('candidate', 'visible', 'hidden', 'archived')),
++  CHECK (change_kind IS NULL OR change_kind IN ('created', 'renamed', 'merged', 'split')),
++  CHECK (frozen_name IN (0, 1))
++);
++CREATE INDEX IF NOT EXISTS idx_smart_categories_status
++  ON smart_categories(status, updated_at DESC);
++CREATE INDEX IF NOT EXISTS idx_smart_categories_parent_id
++  ON smart_categories(parent_id);
++
++CREATE TABLE IF NOT EXISTS smart_category_aliases (
++  id           TEXT PRIMARY KEY,
++  category_id  TEXT NOT NULL REFERENCES smart_categories(id) ON DELETE CASCADE,
++  alias        TEXT NOT NULL,
++  source       TEXT NOT NULL DEFAULT 'model_synonym',
++  created_at   INTEGER NOT NULL,
++  UNIQUE(category_id, alias)
++);
++CREATE INDEX IF NOT EXISTS idx_smart_category_aliases_alias
++  ON smart_category_aliases(alias);
++
++CREATE TABLE IF NOT EXISTS smart_category_members (
++  category_id  TEXT NOT NULL REFERENCES smart_categories(id) ON DELETE CASCADE,
++  save_id      TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
++  weight       REAL NOT NULL,
++  evidence     TEXT,
++  assigned_at  INTEGER NOT NULL,
++  updated_at   INTEGER NOT NULL,
++  PRIMARY KEY (category_id, save_id),
++  CHECK (weight >= 0 AND weight <= 1)
++);
++CREATE INDEX IF NOT EXISTS idx_smart_category_members_save
++  ON smart_category_members(save_id, weight DESC);
++CREATE INDEX IF NOT EXISTS idx_smart_category_members_category_weight
++  ON smart_category_members(category_id, weight DESC);
++
++CREATE TABLE IF NOT EXISTS save_topic_profiles (
++  save_id       TEXT PRIMARY KEY REFERENCES saves(id) ON DELETE CASCADE,
++  concepts      TEXT NOT NULL DEFAULT '[]',
++  content_type  TEXT,
++  intent_guess  TEXT,
++  summary       TEXT,
++  embedding     BLOB,
++  confidence    REAL NOT NULL DEFAULT 0,
++  updated_at    INTEGER NOT NULL,
++  CHECK (confidence >= 0 AND confidence <= 1)
++);
++
++CREATE TABLE IF NOT EXISTS smart_category_runs (
++  id                TEXT PRIMARY KEY,
++  run_type          TEXT NOT NULL,
++  started_at        INTEGER NOT NULL,
++  finished_at       INTEGER,
++  input_save_count  INTEGER NOT NULL DEFAULT 0,
++  created_count     INTEGER NOT NULL DEFAULT 0,
++  renamed_count     INTEGER NOT NULL DEFAULT 0,
++  merged_count      INTEGER NOT NULL DEFAULT 0,
++  split_count       INTEGER NOT NULL DEFAULT 0,
++  failed_count      INTEGER NOT NULL DEFAULT 0,
++  provider          TEXT,
++  error             TEXT
++);
++CREATE INDEX IF NOT EXISTS idx_smart_category_runs_started
++  ON smart_category_runs(started_at DESC);
++`;
++
++const TABLES = Object.freeze([
++  'smart_categories',
++  'smart_category_aliases',
++  'smart_category_members',
++  'save_topic_profiles',
++  'smart_category_runs',
++]);
++
++const REQUIRED_COLUMNS = Object.freeze({
++  smart_categories: Object.freeze([
++    'id', 'name', 'description', 'status', 'parent_id', 'centroid_embedding',
++    'visibility_score', 'member_count', 'created_at', 'updated_at',
++    'last_changed_at', 'change_kind', 'frozen_name',
++  ]),
++  smart_category_aliases: Object.freeze(['id', 'category_id', 'alias', 'source', 'created_at']),
++  smart_category_members: Object.freeze([
++    'category_id', 'save_id', 'weight', 'evidence', 'assigned_at', 'updated_at',
++  ]),
++  save_topic_profiles: Object.freeze([
++    'save_id', 'concepts', 'content_type', 'intent_guess', 'summary', 'embedding',
++    'confidence', 'updated_at',
++  ]),
++  smart_category_runs: Object.freeze([
++    'id', 'run_type', 'started_at', 'finished_at', 'input_save_count',
++    'created_count', 'renamed_count', 'merged_count', 'split_count',
++    'failed_count', 'provider', 'error',
++  ]),
++});
++
++const INDEXES = Object.freeze([
++  'idx_smart_categories_status',
++  'idx_smart_categories_parent_id',
++  'idx_smart_category_aliases_alias',
++  'idx_smart_category_members_save',
++  'idx_smart_category_members_category_weight',
++  'idx_smart_category_runs_started',
++]);
++
++function apply(database) {
++  database.exec(SQL);
++}
++
++function verify(database) {
++  try {
++    for (const table of TABLES) {
++      const definition = database.prepare(
++        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
++      ).get(table);
++      if (!definition?.sql) return false;
++      const actual = new Set(database.prepare(`PRAGMA table_info(${table})`).all().map((row) => row.name));
++      if (REQUIRED_COLUMNS[table].some((column) => !actual.has(column))) return false;
++    }
++    const indexes = new Set(database.prepare(
++      "SELECT name FROM sqlite_master WHERE type = 'index'",
++    ).all().map((row) => row.name));
++    if (INDEXES.some((name) => !indexes.has(name))) return false;
++    const categorySql = database.prepare(
++      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'smart_categories'",
++    ).get().sql;
++    const memberSql = database.prepare(
++      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'smart_category_members'",
++    ).get().sql;
++    return /status IN \('candidate', 'visible', 'hidden', 'archived'\)/i.test(categorySql)
++      && /PRIMARY KEY \(category_id, save_id\)/i.test(memberSql)
++      && /weight >= 0 AND weight <= 1/i.test(memberSql);
++  } catch {
++    return false;
++  }
++}
++
++module.exports = Object.freeze({ apply, verify });
+diff --git a/src/main/gatherlocal/local-migrations/migrations/002-smart-category-run-metadata.js b/src/main/gatherlocal/local-migrations/migrations/002-smart-category-run-metadata.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..03dca79b76c1df9683caf6d7104889ecf8046145
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/migrations/002-smart-category-run-metadata.js
+@@ -0,0 +1,20 @@
++// Frozen from the migration introduced by a40406f.
++function hasColumn(database, table, name) {
++  return database.prepare(`PRAGMA table_info(${table})`).all().some((column) => column.name === name);
++}
++
++function apply(database) {
++  if (!hasColumn(database, 'smart_category_runs', 'metadata')) {
++    database.exec('ALTER TABLE smart_category_runs ADD COLUMN metadata TEXT');
++  }
++}
++
++function verify(database) {
++  try {
++    return hasColumn(database, 'smart_category_runs', 'metadata');
++  } catch {
++    return false;
++  }
++}
++
++module.exports = Object.freeze({ apply, verify });
+diff --git a/src/main/gatherlocal/local-migrations/migrations/003-semantic-video-domain.js b/src/main/gatherlocal/local-migrations/migrations/003-semantic-video-domain.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..d45d7f93c68bac62bd19a9b8f39d3795d51218d1
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/migrations/003-semantic-video-domain.js
+@@ -0,0 +1,203 @@
++// Frozen from AI_DOMAIN_SCHEMA as introduced by 42677c2. Do not replace with
++// the evolved runtime schema: migration 004 owns later compatibility changes.
++const SQL = `
++CREATE TABLE IF NOT EXISTS semantic_index_generations (
++  id              TEXT PRIMARY KEY,
++  model           TEXT NOT NULL,
++  dimension       INTEGER,
++  source_version  INTEGER NOT NULL,
++  status          TEXT NOT NULL DEFAULT 'building',
++  created_at      INTEGER NOT NULL,
++  activated_at    INTEGER,
++  completed_at    INTEGER,
++  cancelled_at    INTEGER,
++  CHECK (dimension IS NULL OR dimension > 0),
++  CHECK (status IN ('building', 'active', 'retired', 'cancelled', 'failed'))
++);
++
++CREATE INDEX IF NOT EXISTS idx_semantic_generations_status
++  ON semantic_index_generations(status, created_at DESC);
++
++CREATE TABLE IF NOT EXISTS semantic_index_state (
++  id                      INTEGER PRIMARY KEY CHECK (id = 1),
++  active_generation_id    TEXT REFERENCES semantic_index_generations(id) ON DELETE SET NULL,
++  building_generation_id  TEXT REFERENCES semantic_index_generations(id) ON DELETE SET NULL,
++  paused                  INTEGER NOT NULL DEFAULT 0,
++  pause_reason            TEXT,
++  paused_at               INTEGER,
++  updated_at              INTEGER NOT NULL DEFAULT 0,
++  CHECK (paused IN (0, 1))
++);
++
++INSERT OR IGNORE INTO semantic_index_state (id, updated_at) VALUES (1, 0);
++
++CREATE TABLE IF NOT EXISTS semantic_vectors (
++  generation_id  TEXT NOT NULL REFERENCES semantic_index_generations(id) ON DELETE CASCADE,
++  save_id        TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
++  model          TEXT NOT NULL,
++  dimension      INTEGER NOT NULL,
++  source_hash    TEXT NOT NULL,
++  vector         BLOB NOT NULL,
++  created_at     INTEGER NOT NULL,
++  updated_at     INTEGER NOT NULL,
++  PRIMARY KEY (generation_id, save_id),
++  CHECK (dimension > 0)
++);
++
++CREATE INDEX IF NOT EXISTS idx_semantic_vectors_save
++  ON semantic_vectors(save_id, generation_id);
++
++CREATE TABLE IF NOT EXISTS semantic_index_jobs (
++  id              TEXT PRIMARY KEY,
++  generation_id   TEXT NOT NULL REFERENCES semantic_index_generations(id) ON DELETE CASCADE,
++  save_id          TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
++  kind             TEXT NOT NULL,
++  source_hash      TEXT NOT NULL,
++  state            TEXT NOT NULL DEFAULT 'pending',
++  retry_count      INTEGER NOT NULL DEFAULT 0,
++  available_at     INTEGER NOT NULL,
++  error            TEXT,
++  created_at       INTEGER NOT NULL,
++  updated_at       INTEGER NOT NULL,
++  started_at       INTEGER,
++  finished_at      INTEGER,
++  UNIQUE (generation_id, save_id, kind),
++  CHECK (kind IN ('incremental', 'rebuild')),
++  CHECK (state IN ('pending', 'running', 'completed', 'failed', 'dismissed')),
++  CHECK (retry_count >= 0)
++);
++
++CREATE INDEX IF NOT EXISTS idx_semantic_jobs_ready
++  ON semantic_index_jobs(state, kind, available_at, created_at);
++CREATE INDEX IF NOT EXISTS idx_semantic_jobs_generation
++  ON semantic_index_jobs(generation_id, state);
++
++CREATE TABLE IF NOT EXISTS video_analysis_jobs (
++  id              TEXT PRIMARY KEY,
++  save_id          TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
++  fingerprint      TEXT NOT NULL,
++  prompt_version   INTEGER NOT NULL,
++  state            TEXT NOT NULL DEFAULT 'pending',
++  retry_count      INTEGER NOT NULL DEFAULT 0,
++  available_at     INTEGER NOT NULL,
++  error            TEXT,
++  created_at       INTEGER NOT NULL,
++  updated_at       INTEGER NOT NULL,
++  started_at       INTEGER,
++  finished_at      INTEGER,
++  UNIQUE (save_id, fingerprint),
++  CHECK (prompt_version > 0),
++  CHECK (state IN ('pending', 'running', 'completed', 'failed', 'unavailable', 'superseded')),
++  CHECK (retry_count >= 0)
++);
++
++CREATE INDEX IF NOT EXISTS idx_video_analysis_ready
++  ON video_analysis_jobs(state, available_at, created_at);
++CREATE INDEX IF NOT EXISTS idx_video_analysis_save
++  ON video_analysis_jobs(save_id, updated_at DESC);
++
++CREATE TABLE IF NOT EXISTS video_tag_suggestions (
++  id            TEXT PRIMARY KEY,
++  job_id        TEXT NOT NULL REFERENCES video_analysis_jobs(id) ON DELETE CASCADE,
++  save_id       TEXT NOT NULL REFERENCES saves(id) ON DELETE CASCADE,
++  fingerprint   TEXT NOT NULL,
++  name          TEXT NOT NULL,
++  confidence    TEXT NOT NULL DEFAULT 'high',
++  evidence      TEXT NOT NULL DEFAULT '[]',
++  state         TEXT NOT NULL DEFAULT 'suggested',
++  created_at    INTEGER NOT NULL,
++  resolved_at   INTEGER,
++  UNIQUE (job_id, name),
++  CHECK (confidence IN ('high', 'medium', 'low')),
++  CHECK (state IN ('suggested', 'accepted', 'dismissed'))
++);
++
++CREATE INDEX IF NOT EXISTS idx_video_suggestions_save
++  ON video_tag_suggestions(save_id, state, created_at);
++`;
++
++const TABLES = Object.freeze([
++  'semantic_index_generations',
++  'semantic_index_state',
++  'semantic_vectors',
++  'semantic_index_jobs',
++  'video_analysis_jobs',
++  'video_tag_suggestions',
++]);
++
++const REQUIRED_COLUMNS = Object.freeze({
++  semantic_index_generations: Object.freeze([
++    'id', 'model', 'dimension', 'source_version', 'status', 'created_at',
++    'activated_at', 'completed_at', 'cancelled_at',
++  ]),
++  semantic_index_state: Object.freeze([
++    'id', 'active_generation_id', 'building_generation_id', 'paused',
++    'pause_reason', 'paused_at', 'updated_at',
++  ]),
++  semantic_vectors: Object.freeze([
++    'generation_id', 'save_id', 'model', 'dimension', 'source_hash', 'vector',
++    'created_at', 'updated_at',
++  ]),
++  semantic_index_jobs: Object.freeze([
++    'id', 'generation_id', 'save_id', 'kind', 'source_hash', 'state',
++    'retry_count', 'available_at', 'error', 'created_at', 'updated_at',
++    'started_at', 'finished_at',
++  ]),
++  video_analysis_jobs: Object.freeze([
++    'id', 'save_id', 'fingerprint', 'prompt_version', 'state', 'retry_count',
++    'available_at', 'error', 'created_at', 'updated_at', 'started_at', 'finished_at',
++  ]),
++  video_tag_suggestions: Object.freeze([
++    'id', 'job_id', 'save_id', 'fingerprint', 'name', 'confidence', 'evidence',
++    'state', 'created_at', 'resolved_at',
++  ]),
++});
++
++const INDEXES = Object.freeze([
++  'idx_semantic_generations_status',
++  'idx_semantic_vectors_save',
++  'idx_semantic_jobs_ready',
++  'idx_semantic_jobs_generation',
++  'idx_video_analysis_ready',
++  'idx_video_analysis_save',
++  'idx_video_suggestions_save',
++]);
++
++function apply(database) {
++  database.exec(SQL);
++}
++
++function verify(database) {
++  try {
++    for (const table of TABLES) {
++      const definition = database.prepare(
++        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
++      ).get(table);
++      if (!definition?.sql) return false;
++      const actual = new Set(database.prepare(`PRAGMA table_info(${table})`).all().map((row) => row.name));
++      if (REQUIRED_COLUMNS[table].some((column) => !actual.has(column))) return false;
++    }
++    const indexes = new Set(database.prepare(
++      "SELECT name FROM sqlite_master WHERE type = 'index'",
++    ).all().map((row) => row.name));
++    if (INDEXES.some((name) => !indexes.has(name))) return false;
++    const state = database.prepare('SELECT id FROM semantic_index_state WHERE id = 1').get();
++    const generationSql = database.prepare(
++      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'semantic_index_generations'",
++    ).get().sql;
++    const semanticJobSql = database.prepare(
++      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'semantic_index_jobs'",
++    ).get().sql;
++    const videoJobSql = database.prepare(
++      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'video_analysis_jobs'",
++    ).get().sql;
++    return state?.id === 1
++      && /status IN \('building', 'active', 'retired', 'cancelled', 'failed'\)/i.test(generationSql)
++      && /UNIQUE \(generation_id, save_id, kind\)/i.test(semanticJobSql)
++      && /UNIQUE \(save_id, fingerprint\)/i.test(videoJobSql);
++  } catch {
++    return false;
++  }
++}
++
++module.exports = Object.freeze({ apply, verify });
+diff --git a/src/main/gatherlocal/local-migrations/migrations/004-semantic-video-queue-compatibility.js b/src/main/gatherlocal/local-migrations/migrations/004-semantic-video-queue-compatibility.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..da39f4af5715a2a2e76f805994345266f6a8aad9
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/migrations/004-semantic-video-queue-compatibility.js
+@@ -0,0 +1,114 @@
++// Frozen from the compatibility migration completed by 7a1edbc and retained
++// through f732fbd. It upgrades migration 003's deliberately older schema.
++function hasColumn(database, table, name) {
++  return database.prepare(`PRAGMA table_info(${table})`).all().some((column) => column.name === name);
++}
++
++function addColumnIfMissing(database, table, name, type) {
++  if (!hasColumn(database, table, name)) {
++    database.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
++  }
++}
++
++function apply(database) {
++  addColumnIfMissing(
++    database,
++    'semantic_index_jobs',
++    'retryable',
++    'INTEGER NOT NULL DEFAULT 0 CHECK (retryable IN (0, 1))',
++  );
++  addColumnIfMissing(
++    database,
++    'video_analysis_jobs',
++    'retryable',
++    'INTEGER NOT NULL DEFAULT 0 CHECK (retryable IN (0, 1))',
++  );
++  addColumnIfMissing(
++    database,
++    'video_analysis_jobs',
++    'superseded_from_state',
++    `TEXT CHECK (superseded_from_state IS NULL OR superseded_from_state IN
++      ('pending', 'completed', 'failed', 'unavailable'))`,
++  );
++
++  const state = database.prepare(`
++    SELECT building_generation_id FROM semantic_index_state WHERE id = 1
++  `).get();
++  const pointed = state && state.building_generation_id
++    ? database.prepare(`
++        SELECT id FROM semantic_index_generations
++         WHERE id = ? AND status = 'building'
++      `).get(state.building_generation_id)
++    : null;
++  const survivor = pointed || database.prepare(`
++    SELECT id FROM semantic_index_generations
++     WHERE status = 'building'
++     ORDER BY created_at DESC, id DESC
++     LIMIT 1
++  `).get();
++
++  if (survivor) {
++    database.prepare(`
++      DELETE FROM semantic_index_jobs
++       WHERE generation_id IN (
++         SELECT id FROM semantic_index_generations
++          WHERE status = 'building' AND id != ?
++       )
++    `).run(survivor.id);
++    database.prepare(`
++      DELETE FROM semantic_vectors
++       WHERE generation_id IN (
++         SELECT id FROM semantic_index_generations
++          WHERE status = 'building' AND id != ?
++       )
++    `).run(survivor.id);
++    database.prepare(`
++      UPDATE semantic_index_generations
++         SET status = 'cancelled',
++             cancelled_at = COALESCE(cancelled_at, created_at),
++             completed_at = COALESCE(completed_at, created_at)
++       WHERE status = 'building' AND id != ?
++    `).run(survivor.id);
++    database.prepare(`
++      UPDATE semantic_index_state SET building_generation_id = ? WHERE id = 1
++    `).run(survivor.id);
++  } else {
++    database.prepare(`
++      UPDATE semantic_index_state SET building_generation_id = NULL WHERE id = 1
++    `).run();
++  }
++  database.exec(`
++    CREATE UNIQUE INDEX IF NOT EXISTS idx_semantic_generations_one_building
++      ON semantic_index_generations(status) WHERE status = 'building';
++  `);
++}
++
++function verify(database) {
++  try {
++    const semanticColumns = database.prepare('PRAGMA table_info(semantic_index_jobs)').all();
++    const videoColumns = database.prepare('PRAGMA table_info(video_analysis_jobs)').all();
++    const index = database.prepare(`
++      SELECT sql FROM sqlite_master
++       WHERE type = 'index' AND name = 'idx_semantic_generations_one_building'
++    `).get();
++    const building = database.prepare(`
++      SELECT COUNT(*) AS count FROM semantic_index_generations WHERE status = 'building'
++    `).get();
++    const state = database.prepare(`
++      SELECT building_generation_id FROM semantic_index_state WHERE id = 1
++    `).get();
++    const pointerValid = state?.building_generation_id == null || !!database.prepare(`
++      SELECT 1 FROM semantic_index_generations WHERE id = ? AND status = 'building'
++    `).get(state.building_generation_id);
++    return semanticColumns.some((column) => column.name === 'retryable')
++      && videoColumns.some((column) => column.name === 'retryable')
++      && videoColumns.some((column) => column.name === 'superseded_from_state')
++      && /UNIQUE INDEX/i.test(index?.sql || '')
++      && building.count <= 1
++      && pointerValid;
++  } catch {
++    return false;
++  }
++}
++
++module.exports = Object.freeze({ apply, verify });
+diff --git a/src/main/gatherlocal/local-migrations/migrations/005-save-background-routing.js b/src/main/gatherlocal/local-migrations/migrations/005-save-background-routing.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..24cf081973cff5036696562a04f7f5d0ab61154f
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/migrations/005-save-background-routing.js
+@@ -0,0 +1,38 @@
++// Frozen from the migration introduced by 8056d21.
++const SQL = `
++CREATE TABLE IF NOT EXISTS save_background_routes (
++  save_id       TEXT PRIMARY KEY REFERENCES saves(id) ON DELETE CASCADE,
++  state         TEXT NOT NULL DEFAULT 'pending',
++  retry_count   INTEGER NOT NULL DEFAULT 0,
++  available_at  INTEGER NOT NULL,
++  error         TEXT,
++  created_at    INTEGER NOT NULL,
++  updated_at    INTEGER NOT NULL,
++  started_at    INTEGER,
++  finished_at   INTEGER,
++  CHECK (state IN ('pending', 'running', 'completed')),
++  CHECK (retry_count >= 0)
++);
++CREATE INDEX IF NOT EXISTS idx_save_background_routes_ready
++  ON save_background_routes(state, available_at, created_at);
++`;
++
++function apply(database) {
++  database.exec(SQL);
++}
++
++function verify(database) {
++  try {
++    const table = database.prepare(`
++      SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'save_background_routes'
++    `).get();
++    const index = database.prepare(`
++      SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_save_background_routes_ready'
++    `).get();
++    return !!table && !!index;
++  } catch {
++    return false;
++  }
++}
++
++module.exports = Object.freeze({ apply, verify });
+diff --git a/src/main/gatherlocal/local-migrations/migrations/006-x-tweet-created-at-repair.js b/src/main/gatherlocal/local-migrations/migrations/006-x-tweet-created-at-repair.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..da8c26a08e7b7d1ce1660ecfdc32618c16fde1a3
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/migrations/006-x-tweet-created-at-repair.js
+@@ -0,0 +1,65 @@
++// Frozen dirty transition 20 -> 21. Helper is owned here so future runtime
++// tweet-date changes cannot alter already-recorded migration behavior.
++const X_SNOWFLAKE_EPOCH_MS = 1288834974657n;
++
++function deriveXTweetCreatedAt(pageUrl) {
++  if (typeof pageUrl !== 'string') return null;
++  const match = pageUrl.match(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/[^/]+\/status\/(\d+)(?:[/?#]|$)/i);
++  if (!match) return null;
++  try {
++    const timestamp = Number((BigInt(match[1]) >> 22n) + X_SNOWFLAKE_EPOCH_MS);
++    return Number.isSafeInteger(timestamp) && timestamp > Number(X_SNOWFLAKE_EPOCH_MS)
++      ? timestamp
++      : null;
++  } catch {
++    return null;
++  }
++}
++
++function parseObject(value) {
++  try {
++    const parsed = value ? JSON.parse(value) : {};
++    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
++  } catch {
++    return null;
++  }
++}
++
++function eligibleRows(database) {
++  return database.prepare(`
++    SELECT id, source_url, tweet_meta
++      FROM saves
++     WHERE source != 'instagram'
++       AND source_url LIKE '%/status/%'
++  `).all();
++}
++
++function apply(database) {
++  const update = database.prepare('UPDATE saves SET tweet_meta = ? WHERE id = ?');
++  for (const row of eligibleRows(database)) {
++    const meta = parseObject(row.tweet_meta);
++    if (!meta) continue;
++    const existing = Number(meta.tweetCreatedAt);
++    if (Number.isFinite(existing) && existing > 0) continue;
++    const derived = deriveXTweetCreatedAt(row.source_url);
++    if (derived === null) continue;
++    update.run(JSON.stringify({ ...meta, tweetCreatedAt: derived }), row.id);
++  }
++}
++
++function verify(database) {
++  try {
++    for (const row of eligibleRows(database)) {
++      const meta = parseObject(row.tweet_meta);
++      const derived = deriveXTweetCreatedAt(row.source_url);
++      if (!meta || derived === null) continue;
++      const actual = Number(meta.tweetCreatedAt);
++      if (!Number.isFinite(actual) || actual <= 0) return false;
++    }
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++module.exports = Object.freeze({ apply, verify });
+diff --git a/src/main/gatherlocal/local-migrations/migrations/007-social-source-key.js b/src/main/gatherlocal/local-migrations/migrations/007-social-source-key.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..6ca2ad746675cbf0375633bfc40f70aa129d6ecd
+--- /dev/null
++++ b/src/main/gatherlocal/local-migrations/migrations/007-social-source-key.js
+@@ -0,0 +1,87 @@
++// Frozen dirty transition 21 -> 22. Duplicate social saves are retained; only
++// oldest active row receives canonical key enforced by partial unique index.
++function hasColumn(database, table, name) {
++  return database.prepare(`PRAGMA table_info(${table})`).all().some((column) => column.name === name);
++}
++
++function tweetKeyFromUrl(url) {
++  if (typeof url !== 'string') return null;
++  const match = url.match(/(?:twitter\.com|x\.com)\/[^/]+\/status\/(\d+)/i);
++  return match ? `tw:${match[1]}` : null;
++}
++
++function instagramKeyFromUrl(url) {
++  if (typeof url !== 'string') return null;
++  const match = url.match(/instagram\.com\/(?:p|reel|tv)\/([^/?#]+)/i);
++  return match ? `ig:${match[1]}` : null;
++}
++
++function sourceKeyFromUrl(url) {
++  return tweetKeyFromUrl(url) || instagramKeyFromUrl(url);
++}
++
++function activeSocialRows(database) {
++  return database.prepare(`
++    SELECT id, source_url, source_key
++      FROM saves
++     WHERE deleted_at IS NULL
++       AND source_url IS NOT NULL
++       AND tweet_meta IS NOT NULL
++     ORDER BY created_at ASC, id ASC
++  `).all();
++}
++
++function apply(database) {
++  if (!hasColumn(database, 'saves', 'source_key')) {
++    database.exec('ALTER TABLE saves ADD COLUMN source_key TEXT');
++  }
++
++  const rows = activeSocialRows(database);
++  const clear = database.prepare('UPDATE saves SET source_key = NULL WHERE id = ?');
++  for (const row of rows) {
++    if (sourceKeyFromUrl(row.source_url) && row.source_key !== null) clear.run(row.id);
++  }
++
++  const claimed = new Set();
++  const assign = database.prepare('UPDATE saves SET source_key = ? WHERE id = ?');
++  for (const row of rows) {
++    const key = sourceKeyFromUrl(row.source_url);
++    if (!key || claimed.has(key)) continue;
++    claimed.add(key);
++    assign.run(key, row.id);
++  }
++
++  database.exec(`
++    CREATE UNIQUE INDEX IF NOT EXISTS idx_saves_active_source_key
++      ON saves(source_key)
++     WHERE deleted_at IS NULL AND source_key IS NOT NULL;
++  `);
++}
++
++function verify(database) {
++  try {
++    if (!hasColumn(database, 'saves', 'source_key')) return false;
++    const index = database.prepare(`
++      SELECT sql FROM sqlite_master
++       WHERE type = 'index' AND name = 'idx_saves_active_source_key'
++    `).get();
++    if (!/UNIQUE INDEX/i.test(index?.sql || '') || !/deleted_at IS NULL/i.test(index.sql)) return false;
++
++    const seen = new Set();
++    for (const row of activeSocialRows(database)) {
++      const expected = sourceKeyFromUrl(row.source_url);
++      if (!expected) continue;
++      if (!seen.has(expected)) {
++        if (row.source_key !== expected) return false;
++        seen.add(expected);
++      } else if (row.source_key !== null) {
++        return false;
++      }
++    }
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++module.exports = Object.freeze({ apply, verify });
+diff --git a/src/renderer/components/SettingsModal.jsx b/src/renderer/components/SettingsModal.jsx
+index 6f8732758aa627e7cde8cb8c69f23a441fbb7289..22f7e27f1ad96bb78d7f0f86b6821c248fbb0e64 100644
+--- a/src/renderer/components/SettingsModal.jsx
++++ b/src/renderer/components/SettingsModal.jsx
+@@ -1847,6 +1847,8 @@ export default function SettingsModal({
+                         <span className={styles.snapshotWhen}>
+                           {s.kind === 'migration'
+                             ? `Pre-update backup (v${s.migrationToVersion})`
++                            : s.kind === 'local-migration'
++                              ? 'Pre-local update backup'
+                             : formatRelativeTimestamp(s.timestamp)}
+                         </span>
+                         <span className={styles.snapshotSub}>
+@@ -1988,4 +1990,3 @@ function formatBackupSize(bytes) {
+   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+ }
+-
+diff --git a/test/local-migration-artifacts.test.js b/test/local-migration-artifacts.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b482aa09e22bbf590798739a59fa4848c502e04
+--- /dev/null
++++ b/test/local-migration-artifacts.test.js
+@@ -0,0 +1,180 @@
++const assert = require('node:assert/strict');
++const crypto = require('node:crypto');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const test = require('node:test');
++const Database = require('better-sqlite3');
++
++const {
++  loadManifest,
++  checksumArtifact,
++} = require('../src/main/gatherlocal/local-migrations/manifest');
++
++const EXPECTED_IDS = Object.freeze([
++  'smart-categories-foundation',
++  'smart-category-run-metadata',
++  'semantic-video-domain',
++  'semantic-video-queue-compatibility',
++  'save-background-routing',
++  'x-tweet-created-at-repair',
++  'social-source-key',
++]);
++
++const UPSTREAM_SCHEMA = `
++CREATE TABLE saves (
++  id          TEXT PRIMARY KEY,
++  file_path   TEXT NOT NULL,
++  thumb_path  TEXT NOT NULL,
++  title       TEXT,
++  source_url  TEXT,
++  source      TEXT NOT NULL DEFAULT 'x',
++  tweet_meta  TEXT,
++  deleted_at  INTEGER,
++  created_at  INTEGER NOT NULL
++);
++PRAGMA user_version = 15;
++`;
++
++function freshUpstreamDatabase() {
++  const database = new Database(':memory:');
++  database.pragma('foreign_keys = ON');
++  database.exec(UPSTREAM_SCHEMA);
++  return database;
++}
++
++function artifactPath(ordinal, id) {
++  return path.join(
++    __dirname,
++    '..',
++    'src',
++    'main',
++    'gatherlocal',
++    'local-migrations',
++    'migrations',
++    `${String(ordinal).padStart(3, '0')}-${id}.js`,
++  );
++}
++
++test('manifest is one frozen, unique, byte-checksummed linear history', () => {
++  const manifest = loadManifest();
++  assert.equal(Object.isFrozen(manifest), true);
++  assert.deepEqual(manifest.map((entry) => entry.ordinal), [1, 2, 3, 4, 5, 6, 7]);
++  assert.deepEqual(manifest.map((entry) => entry.id), EXPECTED_IDS);
++  assert.equal(new Set(manifest.map((entry) => entry.id)).size, manifest.length);
++
++  for (const entry of manifest) {
++    assert.equal(Object.isFrozen(entry), true);
++    const file = artifactPath(entry.ordinal, entry.id);
++    const expected = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
++    assert.equal(entry.checksum, expected);
++    assert.equal(entry.checksum, checksumArtifact(file));
++    assert.match(entry.checksum, /^[a-f0-9]{64}$/);
++  }
++});
++
++test('checksum helper changes when one artifact byte changes', (t) => {
++  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-artifact-'));
++  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
++  const source = artifactPath(1, EXPECTED_IDS[0]);
++  const copy = path.join(directory, 'artifact.js');
++  fs.copyFileSync(source, copy);
++  const before = checksumArtifact(copy);
++  fs.appendFileSync(copy, ' ');
++  assert.notEqual(checksumArtifact(copy), before);
++});
++
++test('fresh upstream schema reaches all seven postconditions idempotently', (t) => {
++  const database = freshUpstreamDatabase();
++  t.after(() => database.close());
++
++  const tweetId = '1800000000000000000';
++  database.prepare(`
++    INSERT INTO saves
++      (id, file_path, thumb_path, source_url, source, tweet_meta, deleted_at, created_at)
++    VALUES
++      ('old', '/old', '/old-thumb', ?, 'x', '{}', NULL, 10),
++      ('new', '/new', '/new-thumb', ?, 'x', '{}', NULL, 20)
++  `).run(`https://x.com/user/status/${tweetId}`, `https://twitter.com/user/status/${tweetId}`);
++
++  const manifest = loadManifest();
++  for (const entry of manifest) {
++    entry.apply(database);
++    assert.equal(entry.verify(database), true, entry.id);
++    entry.apply(database);
++    assert.equal(entry.verify(database), true, `${entry.id} after second apply`);
++  }
++
++  assert.equal(database.pragma('user_version', { simple: true }), 15);
++  assert.equal(
++    database.prepare('SELECT source_key FROM saves WHERE id = ?').get('old').source_key,
++    `tw:${tweetId}`,
++  );
++  assert.equal(database.prepare('SELECT source_key FROM saves WHERE id = ?').get('new').source_key, null);
++  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM saves').get().count, 2);
++  assert.ok(JSON.parse(database.prepare('SELECT tweet_meta FROM saves WHERE id = ?').get('old').tweet_meta).tweetCreatedAt > 0);
++});
++
++test('preserved version-21 shape proves exactly first six artifacts', (t) => {
++  const database = freshUpstreamDatabase();
++  t.after(() => database.close());
++  const manifest = loadManifest();
++
++  for (const entry of manifest.slice(0, 6)) entry.apply(database);
++  database.pragma('user_version = 21');
++
++  assert.deepEqual(manifest.map((entry) => entry.verify(database)), [
++    true,
++    true,
++    true,
++    true,
++    true,
++    true,
++    false,
++  ]);
++  assert.equal(
++    database.prepare("SELECT 1 FROM pragma_table_info('saves') WHERE name = 'source_key'").get(),
++    undefined,
++  );
++});
++
++test('partial lookalike schemas do not satisfy adoption fingerprints', (t) => {
++  const database = freshUpstreamDatabase();
++  t.after(() => database.close());
++  database.exec(`
++    CREATE TABLE smart_categories (id TEXT PRIMARY KEY, name TEXT NOT NULL);
++    CREATE TABLE semantic_index_generations (id TEXT PRIMARY KEY, status TEXT);
++  `);
++  const manifest = loadManifest();
++  assert.equal(manifest[0].verify(database), false);
++  assert.equal(manifest[2].verify(database), false);
++});
++
++test('social source key keeps duplicate saves and assigns oldest active canonical', (t) => {
++  const database = freshUpstreamDatabase();
++  t.after(() => database.close());
++  const migration = loadManifest()[6];
++  database.prepare(`
++    INSERT INTO saves
++      (id, file_path, thumb_path, source_url, source, tweet_meta, deleted_at, created_at)
++    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
++  `).run('deleted', '/d', '/dt', 'https://x.com/u/status/99', 'x', '{}', 1, 1);
++  database.prepare(`
++    INSERT INTO saves
++      (id, file_path, thumb_path, source_url, source, tweet_meta, deleted_at, created_at)
++    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
++  `).run('oldest', '/o', '/ot', 'https://x.com/u/status/99', 'x', '{}', null, 2);
++  database.prepare(`
++    INSERT INTO saves
++      (id, file_path, thumb_path, source_url, source, tweet_meta, deleted_at, created_at)
++    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
++  `).run('duplicate', '/n', '/nt', 'https://twitter.com/u/status/99', 'x', '{}', null, 3);
++
++  migration.apply(database);
++
++  assert.equal(migration.verify(database), true);
++  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM saves').get().count, 3);
++  assert.equal(database.prepare('SELECT source_key FROM saves WHERE id = ?').get('deleted').source_key, null);
++  assert.equal(database.prepare('SELECT source_key FROM saves WHERE id = ?').get('oldest').source_key, 'tw:99');
++  assert.equal(database.prepare('SELECT source_key FROM saves WHERE id = ?').get('duplicate').source_key, null);
++});
+diff --git a/test/local-migration-backup-discovery.test.js b/test/local-migration-backup-discovery.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..a2e0df021f6974ea582b48f0e965edc672f72b8b
+--- /dev/null
++++ b/test/local-migration-backup-discovery.test.js
+@@ -0,0 +1,73 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++
++function loadBackupModule(root, databasePath) {
++  const backupPath = require.resolve('../src/main/backup');
++  const registryPath = require.resolve('../src/main/library-registry');
++  const dbPath = require.resolve('../src/main/db');
++
++  require.cache[registryPath] = {
++    id: registryPath,
++    filename: registryPath,
++    loaded: true,
++    exports: { getActiveLibraryRoot: () => root },
++  };
++  require.cache[dbPath] = {
++    id: dbPath,
++    filename: dbPath,
++    loaded: true,
++    exports: { getDatabasePath: () => databasePath },
++  };
++  delete require.cache[backupPath];
++  return {
++    backup: require(backupPath),
++    cleanup() {
++      delete require.cache[backupPath];
++      delete require.cache[registryPath];
++      delete require.cache[dbPath];
++    },
++  };
++}
++
++test('backup discovery distinguishes upstream versions from named local migrations', () => {
++  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-backup-list-'));
++  const databasePath = path.join(root, 'moodmark.db');
++  const upstreamBackup = `${databasePath}.pre-v16.2026-07-14.bak`;
++  const localBackup = `${databasePath}.pre-local-migrate.2026-07-14-abcdef.bak`;
++  const ignored = `${databasePath}.pre-something-else.bak`;
++  fs.writeFileSync(upstreamBackup, 'upstream');
++  fs.writeFileSync(localBackup, 'local');
++  fs.writeFileSync(ignored, 'ignored');
++
++  const loaded = loadBackupModule(root, databasePath);
++  try {
++    const migrations = loaded.backup.listSnapshots()
++      .filter((entry) => entry.kind !== 'snapshot');
++    assert.equal(migrations.length, 2);
++    assert.deepEqual(
++      migrations.map((entry) => ({
++        name: path.basename(entry.path),
++        kind: entry.kind,
++        migrationToVersion: entry.migrationToVersion,
++      })).sort((a, b) => a.name.localeCompare(b.name)),
++      [
++        {
++          name: path.basename(localBackup),
++          kind: 'local-migration',
++          migrationToVersion: undefined,
++        },
++        {
++          name: path.basename(upstreamBackup),
++          kind: 'migration',
++          migrationToVersion: 16,
++        },
++      ],
++    );
++  } finally {
++    loaded.cleanup();
++    fs.rmSync(root, { recursive: true, force: true });
++  }
++});
+diff --git a/test/local-migration-engine.test.js b/test/local-migration-engine.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..76b8fe915fe63115b433d0ab92d1d22a5d384d1f
+--- /dev/null
++++ b/test/local-migration-engine.test.js
+@@ -0,0 +1,470 @@
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const Database = require('better-sqlite3');
++
++const MODULE_DIR = path.join(
++  __dirname,
++  '..',
++  'src',
++  'main',
++  'gatherlocal',
++  'local-migrations',
++);
++const INDEX_PATH = path.join(MODULE_DIR, 'index.js');
++const MANIFEST_PATH = path.join(MODULE_DIR, 'manifest.js');
++const BACKUP_PATH = path.join(MODULE_DIR, 'backup.js');
++
++const BASE_SCHEMA = `
++  CREATE TABLE saves (
++    id          TEXT PRIMARY KEY,
++    file_path   TEXT NOT NULL,
++    thumb_path  TEXT NOT NULL,
++    source_url  TEXT,
++    tweet_meta  TEXT,
++    source      TEXT NOT NULL DEFAULT 'x',
++    deleted_at  INTEGER,
++    created_at  INTEGER NOT NULL
++  );
++  CREATE TABLE collections (
++    id TEXT PRIMARY KEY,
++    name TEXT NOT NULL,
++    color TEXT NOT NULL,
++    created_at INTEGER NOT NULL
++  );
++  CREATE TABLE collection_items (
++    collection_id TEXT,
++    save_id TEXT,
++    added_at INTEGER NOT NULL,
++    PRIMARY KEY (collection_id, save_id)
++  );
++  CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL);
++  CREATE TABLE save_tags (
++    save_id TEXT,
++    tag_id TEXT,
++    PRIMARY KEY (save_id, tag_id)
++  );
++  CREATE TABLE boards (
++    id TEXT PRIMARY KEY,
++    name TEXT NOT NULL,
++    created_at INTEGER NOT NULL,
++    updated_at INTEGER NOT NULL
++  );
++  CREATE TABLE board_items (
++    id TEXT PRIMARY KEY,
++    board_id TEXT NOT NULL,
++    type TEXT NOT NULL,
++    x REAL NOT NULL,
++    y REAL NOT NULL,
++    data TEXT NOT NULL DEFAULT '{}',
++    created_at INTEGER NOT NULL,
++    updated_at INTEGER NOT NULL
++  );
++  CREATE TABLE dismissed_tweets (
++    tweet_key TEXT PRIMARY KEY,
++    dismissed_at INTEGER NOT NULL
++  );
++`;
++
++function makeDatabase(file = ':memory:') {
++  const database = new Database(file);
++  database.pragma('foreign_keys = ON');
++  database.exec(BASE_SCHEMA);
++  return database;
++}
++
++function setVersion(database, version) {
++  database.pragma(`user_version = ${version}`);
++}
++
++function version(database) {
++  return database.pragma('user_version', { simple: true });
++}
++
++function upstream(database, targetVersion = 15, apply) {
++  return {
++    targetVersion,
++    apply: apply || (() => setVersion(database, targetVersion)),
++  };
++}
++
++function ledger(database) {
++  return database.prepare(`
++    SELECT ordinal, id, checksum, origin
++      FROM gatherlocal_migrations
++     ORDER BY ordinal
++  `).all();
++}
++
++function tableExists(database, name) {
++  return Boolean(database.prepare(`
++    SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?
++  `).get(name));
++}
++
++function loadEngineWith({ manifest, createVerifiedBackup } = {}) {
++  const manifestModule = require(MANIFEST_PATH);
++  const backupModule = require(BACKUP_PATH);
++  const savedManifestExports = require.cache[require.resolve(MANIFEST_PATH)].exports;
++  const savedBackupExports = require.cache[require.resolve(BACKUP_PATH)].exports;
++
++  if (manifest) {
++    require.cache[require.resolve(MANIFEST_PATH)].exports = {
++      ...manifestModule,
++      loadManifest: () => manifest,
++    };
++  }
++  if (createVerifiedBackup) {
++    require.cache[require.resolve(BACKUP_PATH)].exports = {
++      ...backupModule,
++      createVerifiedBackup,
++    };
++  }
++
++  delete require.cache[require.resolve(INDEX_PATH)];
++  const loaded = require(INDEX_PATH);
++  require.cache[require.resolve(MANIFEST_PATH)].exports = savedManifestExports;
++  require.cache[require.resolve(BACKUP_PATH)].exports = savedBackupExports;
++  delete require.cache[require.resolve(INDEX_PATH)];
++  return loaded.migrateWithLocalOverlay;
++}
++
++const migrateWithLocalOverlay = loadEngineWith();
++const { loadManifest } = require(MANIFEST_PATH);
++
++function withTempDatabase(callback) {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-migrations-'));
++  const file = path.join(dir, 'library.db');
++  const database = makeDatabase(file);
++  try {
++    return callback(database, file);
++  } finally {
++    database.close();
++    fs.rmSync(dir, { recursive: true, force: true });
++  }
++}
++
++test('fresh upstream DB applies named history; second startup is no-op', () => {
++  const database = makeDatabase();
++  try {
++    const first = migrateWithLocalOverlay({ database, upstream: upstream(database) });
++    assert.equal(version(database), 15);
++    assert.deepEqual(first.adopted, []);
++    assert.deepEqual(first.applied, loadManifest().map((entry) => entry.id));
++    assert.equal(first.backupPath, null);
++    assert.equal(ledger(database).length, 7);
++
++    let upstreamCalls = 0;
++    const second = migrateWithLocalOverlay({
++      database,
++      upstream: upstream(database, 15, () => { upstreamCalls += 1; }),
++    });
++    assert.equal(upstreamCalls, 1);
++    assert.deepEqual(second.applied, []);
++    assert.deepEqual(second.adopted, []);
++    assert.equal(second.backupPath, null);
++  } finally {
++    database.close();
++  }
++});
++
++test('implementation and verifier failures roll back domain work and ledger row', () => {
++  const checksum = 'a'.repeat(64);
++  const database = makeDatabase();
++  setVersion(database, 15);
++  try {
++    const throwingManifest = [{
++      ordinal: 1,
++      id: 'rollback-probe',
++      checksum,
++      apply(db) {
++        db.exec('CREATE TABLE rollback_probe (id INTEGER); INSERT INTO rollback_probe VALUES (1)');
++        throw new Error('boom');
++      },
++      verify: () => true,
++    }];
++    const throwingEngine = loadEngineWith({ manifest: throwingManifest });
++    assert.throws(
++      () => throwingEngine({ database, upstream: upstream(database, 15, () => {}) }),
++      (error) => error.code === 'LOCAL_MIGRATION_FAILED'
++        && error.migrationId === 'rollback-probe',
++    );
++    assert.equal(tableExists(database, 'rollback_probe'), false);
++    assert.equal(ledger(database).length, 0);
++
++    const verifierManifest = [{
++      ordinal: 1,
++      id: 'rollback-probe',
++      checksum,
++      apply(db) {
++        db.exec('CREATE TABLE rollback_probe (id INTEGER); INSERT INTO rollback_probe VALUES (1)');
++      },
++      verify: () => false,
++    }];
++    const verifierEngine = loadEngineWith({ manifest: verifierManifest });
++    assert.throws(
++      () => verifierEngine({ database, upstream: upstream(database, 15, () => {}) }),
++      (error) => error.code === 'LOCAL_MIGRATION_VERIFY_FAILED'
++        && error.migrationId === 'rollback-probe',
++    );
++    assert.equal(tableExists(database, 'rollback_probe'), false);
++    assert.equal(ledger(database).length, 0);
++
++    const retryManifest = [{
++      ordinal: 1,
++      id: 'rollback-probe',
++      checksum,
++      apply(db) { db.exec('CREATE TABLE rollback_probe (id INTEGER)'); },
++      verify: (db) => tableExists(db, 'rollback_probe'),
++    }];
++    const retryEngine = loadEngineWith({ manifest: retryManifest });
++    const report = retryEngine({ database, upstream: upstream(database, 15, () => {}) });
++    assert.deepEqual(report.applied, ['rollback-probe']);
++    assert.equal(ledger(database).length, 1);
++  } finally {
++    database.close();
++  }
++});
++
++test('drift and ahead history fail before upstream writes', () => {
++  for (const kind of ['drift', 'ahead']) {
++    const database = makeDatabase();
++    try {
++      migrateWithLocalOverlay({ database, upstream: upstream(database) });
++      database.exec(`
++        DROP TRIGGER gatherlocal_migrations_no_update;
++        DROP TRIGGER gatherlocal_migrations_no_delete;
++      `);
++      if (kind === 'drift') {
++        database.prepare(`
++          UPDATE gatherlocal_migrations SET checksum = ? WHERE ordinal = 1
++        `).run('f'.repeat(64));
++      } else {
++        database.prepare(`
++          UPDATE gatherlocal_migrations SET id = 'future-local-history' WHERE ordinal = 7
++        `).run();
++      }
++      let upstreamCalled = false;
++      const expected = kind === 'drift' ? 'LOCAL_MIGRATION_DRIFT' : 'LOCAL_MIGRATION_AHEAD';
++      assert.throws(
++        () => migrateWithLocalOverlay({
++          database,
++          upstream: upstream(database, 15, () => { upstreamCalled = true; }),
++        }),
++        (error) => error.code === expected,
++      );
++      assert.equal(upstreamCalled, false);
++    } finally {
++      database.close();
++    }
++  }
++});
++
++test('invalid manifest fails before upstream or database writes', () => {
++  const database = makeDatabase();
++  try {
++    const checksum = 'b'.repeat(64);
++    const invalidManifest = [
++      { ordinal: 1, id: 'first', checksum, apply() {}, verify: () => true },
++      { ordinal: 2, id: 'second', checksum, apply() {}, verify: () => true },
++    ];
++    const invalidEngine = loadEngineWith({ manifest: invalidManifest });
++    let upstreamCalled = false;
++    assert.throws(
++      () => invalidEngine({
++        database,
++        upstream: upstream(database, 15, () => { upstreamCalled = true; }),
++      }),
++      (error) => error.code === 'LOCAL_MIGRATION_MANIFEST_INVALID',
++    );
++    assert.equal(upstreamCalled, false);
++    assert.equal(version(database), 0);
++    assert.equal(tableExists(database, 'gatherlocal_migrations'), false);
++  } finally {
++    database.close();
++  }
++});
++
++test('upstream failure and cursor mismatch block local work', () => {
++  for (const kind of ['failure', 'mismatch']) {
++    const database = makeDatabase();
++    try {
++      const apply = kind === 'failure'
++        ? () => { throw new Error('future upstream failed'); }
++        : () => setVersion(database, 14);
++      const expected = kind === 'failure'
++        ? 'LOCAL_MIGRATION_UPSTREAM_FAILED'
++        : 'LOCAL_MIGRATION_UPSTREAM_MISMATCH';
++      assert.throws(
++        () => migrateWithLocalOverlay({ database, upstream: upstream(database, 15, apply) }),
++        (error) => error.code === expected,
++      );
++      assert.equal(tableExists(database, 'gatherlocal_migrations'), false);
++      assert.equal(tableExists(database, 'smart_categories'), false);
++    } finally {
++      database.close();
++    }
++  }
++});
++
++test('legacy cursors 16 through 22 adopt exact verified prefix and apply suffix', () => {
++  const manifest = loadManifest();
++  for (let cursor = 16; cursor <= 22; cursor += 1) {
++    const database = makeDatabase();
++    try {
++      const claimed = cursor - 15;
++      for (const entry of manifest.slice(0, claimed)) entry.apply(database);
++      setVersion(database, cursor);
++
++      const report = migrateWithLocalOverlay({ database, upstream: upstream(database) });
++      assert.deepEqual(report.adopted, manifest.slice(0, claimed).map((entry) => entry.id));
++      assert.deepEqual(report.applied, manifest.slice(claimed).map((entry) => entry.id));
++      assert.equal(version(database), 15);
++      assert.equal(ledger(database).length, 7);
++    } finally {
++      database.close();
++    }
++  }
++});
++
++test('legacy repair restores base 15 before future upstream callback', () => {
++  const database = makeDatabase();
++  const manifest = loadManifest();
++  try {
++    for (const entry of manifest.slice(0, 6)) entry.apply(database);
++    setVersion(database, 21);
++    let observedVersion;
++    const report = migrateWithLocalOverlay({
++      database,
++      upstream: upstream(database, 16, () => {
++        observedVersion = version(database);
++        database.exec('ALTER TABLE saves ADD COLUMN future_upstream TEXT');
++        setVersion(database, 16);
++      }),
++    });
++    assert.equal(observedVersion, 15);
++    assert.deepEqual(report.upstream, { from: 15, to: 16 });
++    assert.deepEqual(report.adopted, manifest.slice(0, 6).map((entry) => entry.id));
++    assert.deepEqual(report.applied, ['social-source-key']);
++    assert.equal(version(database), 16);
++  } finally {
++    database.close();
++  }
++});
++
++test('pure future-upstream cursor without local fingerprint is ordinary', () => {
++  const database = makeDatabase();
++  try {
++    setVersion(database, 16);
++    let callbackCalls = 0;
++    const report = migrateWithLocalOverlay({
++      database,
++      upstream: upstream(database, 16, () => { callbackCalls += 1; }),
++    });
++    assert.equal(callbackCalls, 1);
++    assert.deepEqual(report.upstream, { from: 16, to: 16 });
++    assert.deepEqual(report.adopted, []);
++    assert.equal(report.applied.length, 7);
++    assert.equal(version(database), 16);
++  } finally {
++    database.close();
++  }
++});
++
++test('WAL-resident user row exists in verified local backup', () => {
++  withTempDatabase((database) => {
++    database.pragma('journal_mode = WAL');
++    database.prepare(`
++      INSERT INTO saves (id, file_path, thumb_path, source, created_at)
++      VALUES ('wal-row', '/original', '/thumb', 'x', 1)
++    `).run();
++
++    const report = migrateWithLocalOverlay({ database, upstream: upstream(database) });
++    assert.ok(report.backupPath);
++    assert.match(path.basename(report.backupPath), /\.pre-local-migrate\.[^.]+\.bak$/);
++
++    const backup = new Database(report.backupPath, { readonly: true, fileMustExist: true });
++    try {
++      assert.equal(backup.prepare(`SELECT COUNT(*) AS n FROM saves WHERE id = 'wal-row'`).get().n, 1);
++      assert.equal(backup.pragma('quick_check', { simple: true }), 'ok');
++    } finally {
++      backup.close();
++    }
++  });
++});
++
++test('backup failure blocks all local mutation', () => {
++  withTempDatabase((database) => {
++    setVersion(database, 15);
++    database.prepare(`
++      INSERT INTO collections (id, name, color, created_at)
++      VALUES ('collection-only', 'Only collection', '#000', 1)
++    `).run();
++    const failedBackupEngine = loadEngineWith({
++      createVerifiedBackup() { throw new Error('forced backup failure'); },
++    });
++
++    assert.throws(
++      () => failedBackupEngine({ database, upstream: upstream(database, 15, () => {}) }),
++      (error) => error.code === 'LOCAL_MIGRATION_BACKUP_FAILED'
++        && error.cause?.message === 'forced backup failure',
++    );
++    assert.equal(version(database), 15);
++    assert.equal(tableExists(database, 'gatherlocal_migrations'), false);
++    assert.equal(tableExists(database, 'smart_categories'), false);
++    assert.equal(database.prepare('SELECT COUNT(*) AS n FROM collections').get().n, 1);
++  });
++});
++
++test('failed VACUUM removes partial backup while retaining attempted path', () => {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-backup-failure-'));
++  const file = path.join(dir, 'library.db');
++  fs.writeFileSync(file, 'live');
++  const { createVerifiedBackup } = require(BACKUP_PATH);
++  const fakeDatabase = {
++    name: file,
++    prepare(sql) {
++      assert.equal(sql, 'VACUUM INTO ?');
++      return {
++        run(target) {
++          fs.writeFileSync(target, 'partial');
++          throw new Error('simulated disk failure');
++        },
++      };
++    },
++  };
++  try {
++    let attemptedPath;
++    assert.throws(
++      () => createVerifiedBackup(fakeDatabase, { force: true }),
++      (error) => {
++        attemptedPath = error.backupPath;
++        return error.message === 'simulated disk failure' && Boolean(error.backupPath);
++      },
++    );
++    assert.equal(fs.existsSync(attemptedPath), false);
++  } finally {
++    fs.rmSync(dir, { recursive: true, force: true });
++  }
++});
++
++test('ledger update and delete are rejected', () => {
++  const database = makeDatabase();
++  try {
++    migrateWithLocalOverlay({ database, upstream: upstream(database) });
++    assert.throws(
++      () => database.prepare('UPDATE gatherlocal_migrations SET checksum = checksum').run(),
++      /immutable/,
++    );
++    assert.throws(
++      () => database.prepare('DELETE FROM gatherlocal_migrations WHERE ordinal = 7').run(),
++      /immutable/,
++    );
++  } finally {
++    database.close();
++  }
++});

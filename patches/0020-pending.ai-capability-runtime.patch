@@ -1,0 +1,1204 @@
+From ca87c9dc5e0a19c8f7876c00929fccfee24d3bc3 Mon Sep 17 00:00:00 2001
+From: joshmac007 <joshmcswain007@gmail.com>
+Date: Tue, 14 Jul 2026 02:47:26 -0500
+Subject: [PATCH 2/5] Add provider-neutral AI capability runtime
+
+---
+ src/main/ai/bootstrap.js                |  42 +++
+ src/main/ai/errors.js                   | 106 ++++++++
+ src/main/ai/providers/gatheros-proxy.js | 295 +++++++++++++++++++++
+ src/main/ai/runtime.js                  | 147 +++++++++++
+ src/main/openai.js                      | 332 ++++++++----------------
+ test/ai-runtime.test.js                 |  78 ++++++
+ test/gatheros-proxy-adapter.test.js     |  74 ++++++
+ test/openai-runtime-compat.test.js      |  41 +++
+ 8 files changed, 897 insertions(+), 218 deletions(-)
+ create mode 100644 src/main/ai/bootstrap.js
+ create mode 100644 src/main/ai/errors.js
+ create mode 100644 src/main/ai/providers/gatheros-proxy.js
+ create mode 100644 src/main/ai/runtime.js
+ create mode 100644 test/ai-runtime.test.js
+ create mode 100644 test/gatheros-proxy-adapter.test.js
+ create mode 100644 test/openai-runtime-compat.test.js
+
+diff --git a/src/main/ai/bootstrap.js b/src/main/ai/bootstrap.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..a10c8e01726a7d9636412f0e2956a92149b422f4
+--- /dev/null
++++ b/src/main/ai/bootstrap.js
+@@ -0,0 +1,42 @@
++'use strict';
++
++const { createAiRuntime, CAPABILITIES } = require('./runtime');
++const { createGatherOsProxyAdapter } = require('./providers/gatheros-proxy');
++
++let cachedRuntime = null;
++
++function defaultAuthorize() {
++  // Require lazily: this module is also loaded by Node-focused tests where
++  // Electron's licensing client is intentionally unavailable.
++  const { getEntitlement } = require('../entitlement');
++  return Boolean(getEntitlement()?.proUnlocked);
++}
++
++function createDefaultAiRuntime({
++  authorize = defaultAuthorize,
++  proxyAdapter = null,
++  routes = null,
++  proxyOptions = {},
++} = {}) {
++  const proxy = proxyAdapter || createGatherOsProxyAdapter(proxyOptions);
++  return createAiRuntime({
++    authorize,
++    // One adapter may serve multiple capabilities. Image generation stays
++    // disabled until composition explicitly selects that route.
++    routes: routes || {
++      [CAPABILITIES.STRUCTURED_JSON]: proxy,
++      [CAPABILITIES.EMBEDDING]: proxy,
++      [CAPABILITIES.IMAGE_GENERATION]: null,
++    },
++  });
++}
++
++function getAiRuntime(options) {
++  if (!cachedRuntime) cachedRuntime = createDefaultAiRuntime(options);
++  return cachedRuntime;
++}
++
++module.exports = {
++  createDefaultAiRuntime,
++  getAiRuntime,
++};
+diff --git a/src/main/ai/errors.js b/src/main/ai/errors.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..4f6004913ff18b0bbc232ffe5680d2d90315cbb6
+--- /dev/null
++++ b/src/main/ai/errors.js
+@@ -0,0 +1,106 @@
++'use strict';
++
++const CODES = Object.freeze({
++  NOT_ENTITLED: 'AI_NOT_ENTITLED',
++  CAPABILITY_UNCONFIGURED: 'AI_CAPABILITY_UNCONFIGURED',
++  AUTH_REQUIRED: 'AI_AUTH_REQUIRED',
++  PROVIDER_UNAVAILABLE: 'AI_PROVIDER_UNAVAILABLE',
++  MODEL_MISSING: 'AI_MODEL_MISSING',
++  TIMEOUT: 'AI_TIMEOUT',
++  ABORTED: 'AI_ABORTED',
++  INVALID_RESPONSE: 'AI_INVALID_RESPONSE',
++  EMBEDDING_DIMENSION_MISMATCH: 'AI_EMBEDDING_DIMENSION_MISMATCH',
++});
++
++const KNOWN_CODES = new Set(Object.values(CODES));
++
++class AiRuntimeError extends Error {
++  constructor(code, message, details = {}) {
++    const {
++      capability = null,
++      provider = null,
++      retryable = false,
++      setupAction = null,
++      cause = null,
++      ...metadata
++    } = details;
++    super(message || code, cause ? { cause } : undefined);
++    this.name = 'AiRuntimeError';
++    this.code = code;
++    this.capability = capability;
++    this.provider = provider;
++    this.retryable = Boolean(retryable);
++    if (setupAction) this.setupAction = setupAction;
++    if (cause) this.cause = cause;
++    Object.assign(this, metadata);
++  }
++}
++
++function isAiRuntimeError(error) {
++  return error instanceof AiRuntimeError || (
++    error && error.name === 'AiRuntimeError' && KNOWN_CODES.has(error.code)
++  );
++}
++
++function codeFromError(error) {
++  if (KNOWN_CODES.has(error?.code)) return error.code;
++  switch (error?.code) {
++    case 'unauthenticated':
++    case 'auth_required':
++      return CODES.AUTH_REQUIRED;
++    case 'not_entitled':
++      return CODES.NOT_ENTITLED;
++    case 'monthly_cap_reached':
++      return CODES.PROVIDER_UNAVAILABLE;
++    case 'ollama_model_missing':
++    case 'model_missing':
++      return CODES.MODEL_MISSING;
++    case 'ollama_embedding_dimension_mismatch':
++    case 'embedding_dimension_mismatch':
++      return CODES.EMBEDDING_DIMENSION_MISMATCH;
++    case 'ollama_timeout':
++    case 'timeout':
++      return CODES.TIMEOUT;
++    case 'ollama_unavailable':
++    case 'local_ai_error':
++    case 'upstream_network':
++    case 'upstream_error':
++      return CODES.PROVIDER_UNAVAILABLE;
++    case 'ollama_invalid_response':
++    case 'ollama_invalid_embedding':
++    case 'upstream_response':
++      return CODES.INVALID_RESPONSE;
++    default:
++      break;
++  }
++  if (error?.name === 'AbortError') return CODES.ABORTED;
++  return null;
++}
++
++function toAiRuntimeError(error, context = {}) {
++  if (isAiRuntimeError(error)) {
++    if (error.capability || !context.capability) return error;
++    return new AiRuntimeError(error.code, error.message, {
++      capability: context.capability,
++      provider: error.provider || context.provider || null,
++      retryable: error.retryable,
++      setupAction: error.setupAction,
++      cause: error.cause || error,
++    });
++  }
++  const code = codeFromError(error) || CODES.PROVIDER_UNAVAILABLE;
++  return new AiRuntimeError(code, error?.message || String(error), {
++    capability: context.capability || null,
++    provider: context.provider || null,
++    retryable: code === CODES.TIMEOUT || code === CODES.PROVIDER_UNAVAILABLE,
++    setupAction: error?.setupAction || null,
++    cause: error,
++  });
++}
++
++module.exports = {
++  AiRuntimeError,
++  CODES,
++  isAiRuntimeError,
++  toAiRuntimeError,
++};
+diff --git a/src/main/ai/providers/gatheros-proxy.js b/src/main/ai/providers/gatheros-proxy.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..8bb6ce03c11e5483a03a9f3b9dd3b7a03628fa58
+--- /dev/null
++++ b/src/main/ai/providers/gatheros-proxy.js
+@@ -0,0 +1,295 @@
++'use strict';
++
++const fs = require('node:fs');
++const { API_BASE_URL } = require('../../../shared/licensing-config');
++const {
++  AiRuntimeError,
++  CODES,
++} = require('../errors');
++
++const DEFAULT_CHAT_MODEL = 'gpt-4o-mini';
++const DEFAULT_EMBED_MODEL = 'text-embedding-3-small';
++const DEFAULT_IMAGE_MODEL = 'gpt-image-1';
++
++function clean(value) {
++  return typeof value === 'string' ? value.trim() : '';
++}
++
++function responseError(message, code, details = {}) {
++  return new AiRuntimeError(code, message, details);
++}
++
++function parseJsonObject(raw) {
++  if (raw && typeof raw === 'object') return raw;
++  const text = clean(raw);
++  if (!text) throw responseError('AI proxy returned empty JSON', CODES.INVALID_RESPONSE);
++  try { return JSON.parse(text); } catch { /* fenced/extra prose below */ }
++  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
++  if (fenced) {
++    try { return JSON.parse(fenced[1]); } catch { /* fall through */ }
++  }
++  const start = text.indexOf('{');
++  const end = text.lastIndexOf('}');
++  if (start >= 0 && end > start) {
++    try { return JSON.parse(text.slice(start, end + 1)); } catch { /* fall through */ }
++  }
++  throw responseError('AI proxy returned invalid JSON', CODES.INVALID_RESPONSE);
++}
++
++function parseDataUrl(value) {
++  const match = typeof value === 'string' && value.match(/^data:([^;,]+)?;base64,(.+)$/s);
++  if (!match) return null;
++  return { mimeType: match[1] || 'image/jpeg', b64: match[2] };
++}
++
++async function defaultEncodeImage(filePath) {
++  if (!filePath || !fs.existsSync(filePath)) {
++    throw new Error('Image file not found');
++  }
++  try {
++    const sharp = require('sharp');
++    const bytes = await sharp(filePath)
++      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
++      .jpeg({ quality: 85 })
++      .toBuffer();
++    return { b64: bytes.toString('base64'), mimeType: 'image/jpeg' };
++  } catch (error) {
++    throw responseError('AI image encoding failed', CODES.PROVIDER_UNAVAILABLE, {
++      retryable: false,
++      cause: error,
++    });
++  }
++}
++
++function createAbortController(signal, timeoutMs) {
++  const controller = new AbortController();
++  let timedOut = false;
++  const onAbort = () => controller.abort(signal?.reason);
++  if (signal) {
++    if (signal.aborted) controller.abort(signal.reason);
++    else signal.addEventListener('abort', onAbort, { once: true });
++  }
++  const timeoutId = setTimeout(() => {
++    timedOut = true;
++    controller.abort(new Error('AI proxy request timed out'));
++  }, timeoutMs);
++  return {
++    signal: controller.signal,
++    timedOut: () => timedOut,
++    dispose() {
++      clearTimeout(timeoutId);
++      signal?.removeEventListener('abort', onAbort);
++    },
++  };
++}
++
++function createGatherOsProxyAdapter({
++  baseUrl = API_BASE_URL,
++  getSessionToken = null,
++  fetchImpl = globalThis.fetch,
++  encodeImage = defaultEncodeImage,
++  timeoutMs = 30000,
++  chatModel = DEFAULT_CHAT_MODEL,
++  embedModel = DEFAULT_EMBED_MODEL,
++  imageModel = DEFAULT_IMAGE_MODEL,
++} = {}) {
++  const rootUrl = clean(baseUrl).replace(/\/+$/, '');
++  let tokenReader = getSessionToken;
++  function sessionToken() {
++    if (!tokenReader) {
++      tokenReader = require('../../licensing').getSessionToken;
++    }
++    return clean(typeof tokenReader === 'function' ? tokenReader() : tokenReader);
++  }
++
++  function isConfigured() {
++    return Boolean(rootUrl && typeof fetchImpl === 'function' && hasSession());
++  }
++
++  function hasSession() {
++    return Boolean(sessionToken());
++  }
++
++  async function request(route, { method = 'POST', body, signal } = {}) {
++    const token = sessionToken();
++    if (!token) throw responseError('AI proxy session is required', CODES.AUTH_REQUIRED);
++    const controller = createAbortController(signal, Number(timeoutMs) > 0 ? Number(timeoutMs) : 30000);
++    try {
++      const response = await fetchImpl(`${rootUrl}${route}`, {
++        method,
++        headers: {
++          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
++          Authorization: `Bearer ${token}`,
++        },
++        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
++        signal: controller.signal,
++      });
++      const raw = typeof response.text === 'function'
++        ? await response.text()
++        : JSON.stringify(await response.json().catch(() => ({})));
++      let data = {};
++      try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
++      if (!response.ok || data.ok === false) {
++        const status = Number(response.status) || 0;
++        const reason = clean(data.error) || `http_${status || 'unknown'}`;
++        const code = status === 401 || reason === 'unauthenticated'
++          ? CODES.AUTH_REQUIRED
++          : status === 402 || reason === 'not_entitled'
++            ? CODES.NOT_ENTITLED
++            : status === 408 || status === 429 || status >= 500
++              ? CODES.PROVIDER_UNAVAILABLE
++              : CODES.INVALID_RESPONSE;
++        throw responseError(`AI proxy ${reason}${data.detail ? `: ${data.detail}` : ''}`, code, {
++          retryable: code === CODES.PROVIDER_UNAVAILABLE,
++        });
++      }
++      return data;
++    } catch (error) {
++      if (error instanceof AiRuntimeError) throw error;
++      if (controller.timedOut()) {
++        throw responseError(`AI proxy request timed out after ${timeoutMs}ms`, CODES.TIMEOUT, {
++          retryable: true,
++          cause: error,
++        });
++      }
++      if (signal?.aborted || error?.name === 'AbortError') {
++        throw responseError('AI proxy request aborted', CODES.ABORTED, { cause: error });
++      }
++      throw responseError('AI proxy is unavailable', CODES.PROVIDER_UNAVAILABLE, {
++        retryable: true,
++        cause: error,
++      });
++    } finally {
++      controller.dispose();
++    }
++  }
++
++  async function completeJson({
++    system = '',
++    input = '',
++    imagePath = null,
++    maxOutputTokens,
++    maxTokens,
++    model = chatModel,
++    signal,
++  } = {}) {
++    let userContent = String(input ?? '');
++    if (imagePath) {
++      const encoded = await encodeImage(imagePath);
++      const dataUrl = encoded?.dataUrl || (
++        encoded?.b64 ? `data:${encoded.mimeType || 'image/jpeg'};base64,${encoded.b64}` : encoded
++      );
++      if (typeof dataUrl !== 'string') throw responseError('AI image encoding failed', CODES.INVALID_RESPONSE);
++      userContent = [
++        { type: 'text', text: userContent },
++        { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
++      ];
++    }
++    const payload = await request('/ai/chat', {
++      signal,
++      body: {
++        model: model || DEFAULT_CHAT_MODEL,
++        messages: [
++          { role: 'system', content: String(system || '') },
++          { role: 'user', content: userContent },
++        ],
++        response_format: { type: 'json_object' },
++        max_tokens: maxOutputTokens ?? maxTokens,
++      },
++    });
++    const content = payload.choices?.[0]?.message?.content;
++    if (typeof content !== 'string' && (!content || typeof content !== 'object')) {
++      throw responseError('AI proxy returned no JSON content', CODES.INVALID_RESPONSE);
++    }
++    return parseJsonObject(content);
++  }
++
++  async function embed({ text, expectedDimension = null, signal, model = embedModel } = {}) {
++    const input = clean(text);
++    if (!input) throw new TypeError('Cannot embed empty text');
++    const payload = await request('/ai/embed', {
++      signal,
++      body: { input: input.slice(0, 8000) },
++    });
++    const vector = payload.data?.[0]?.embedding;
++    if (!Array.isArray(vector) || vector.length === 0 ||
++      !vector.every((value) => typeof value === 'number' && Number.isFinite(value)) ||
++      !vector.some((value) => value !== 0)) {
++      throw responseError('AI proxy returned an invalid embedding vector', CODES.INVALID_RESPONSE);
++    }
++    if (expectedDimension != null && vector.length !== expectedDimension) {
++      throw responseError(
++        `AI embedding dimension mismatch: expected ${expectedDimension}, received ${vector.length}`,
++        CODES.EMBEDDING_DIMENSION_MISMATCH,
++      );
++    }
++    return {
++      vector,
++      provider: 'gatheros-proxy',
++      model: model || DEFAULT_EMBED_MODEL,
++      dimension: vector.length,
++    };
++  }
++
++  async function generateImage({
++    prompt,
++    size = 'auto',
++    quality = 'medium',
++    imagePath = null,
++    sourceFilePath = null,
++    signal,
++  } = {}) {
++    const cleanPrompt = clean(prompt);
++    if (!cleanPrompt) throw new TypeError('Image generation prompt is required');
++    const source = imagePath || sourceFilePath;
++    const body = { prompt: cleanPrompt, size, quality };
++    if (source) {
++      const encoded = await encodeImage(source);
++      const parsed = encoded?.dataUrl ? parseDataUrl(encoded.dataUrl) : null;
++      body.image_b64 = encoded?.b64 || parsed?.b64 || encoded;
++      body.image_mime = encoded?.mimeType || parsed?.mimeType || 'image/jpeg';
++      if (typeof body.image_b64 !== 'string') throw responseError('AI image encoding failed', CODES.INVALID_RESPONSE);
++    }
++    const payload = await request('/ai/image', { signal, body });
++    const b64 = payload.image?.b64_json || payload.data?.[0]?.b64_json;
++    if (typeof b64 !== 'string' || !b64) throw responseError('AI proxy returned no image bytes', CODES.INVALID_RESPONSE);
++    return {
++      bytes: Buffer.from(b64, 'base64'),
++      mimeType: 'image/png',
++      provider: 'gatheros-proxy',
++      model: imageModel || DEFAULT_IMAGE_MODEL,
++      usage: payload.usage,
++      quota: payload.quota,
++    };
++  }
++
++  async function health({ signal } = {}) {
++    await request('/ai/usage', { method: 'GET', signal });
++    return { ok: true, provider: 'gatheros-proxy' };
++  }
++
++  async function getUsage({ signal } = {}) {
++    if (!sessionToken()) return null;
++    try {
++      return await request('/ai/usage', { method: 'GET', signal });
++    } catch {
++      return null;
++    }
++  }
++
++  return {
++    id: 'gatheros-proxy',
++    isConfigured,
++    hasSession,
++    health,
++    completeJson,
++    embed,
++    generateImage,
++    getUsage,
++  };
++}
++
++module.exports = {
++  createGatherOsProxyAdapter,
++  parseJsonObject,
++};
+diff --git a/src/main/ai/runtime.js b/src/main/ai/runtime.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..44434593c0527ec4c5889a25685ab60e0982edcf
+--- /dev/null
++++ b/src/main/ai/runtime.js
+@@ -0,0 +1,147 @@
++'use strict';
++
++const {
++  AiRuntimeError,
++  CODES,
++  toAiRuntimeError,
++} = require('./errors');
++
++const CAPABILITIES = Object.freeze({
++  STRUCTURED_JSON: 'structured-json',
++  EMBEDDING: 'embedding',
++  IMAGE_GENERATION: 'image-generation',
++});
++
++const CAPABILITY_LIST = Object.values(CAPABILITIES);
++
++function providerId(adapter) {
++  return adapter?.id || null;
++}
++
++function assertCapability(capability) {
++  if (!CAPABILITY_LIST.includes(capability)) {
++    throw new TypeError(`Unknown AI capability: ${capability}`);
++  }
++}
++
++function createAiRuntime({ authorize, routes = {} } = {}) {
++  if (typeof authorize !== 'function') {
++    throw new TypeError('AI runtime requires an authorization function');
++  }
++  const routeMap = Object.create(null);
++  for (const capability of CAPABILITY_LIST) {
++    routeMap[capability] = routes?.[capability] || null;
++  }
++
++  function routeFor(capability) {
++    assertCapability(capability);
++    return routeMap[capability];
++  }
++
++  function isConfigured(capability) {
++    const adapter = routeFor(capability);
++    if (!adapter) return false;
++    try {
++      return typeof adapter.isConfigured === 'function' ? Boolean(adapter.isConfigured()) : true;
++    } catch {
++      return false;
++    }
++  }
++
++  function providerFor(capability) {
++    return providerId(routeFor(capability));
++  }
++
++  function unconfigured(capability, adapter = routeFor(capability)) {
++    return new AiRuntimeError(CODES.CAPABILITY_UNCONFIGURED, `AI capability ${capability} is not configured`, {
++      capability,
++      provider: providerId(adapter),
++    });
++  }
++
++  async function health(capability, options = {}) {
++    const adapter = routeFor(capability);
++    if (!adapter || !isConfigured(capability)) throw unconfigured(capability, adapter);
++    if (typeof adapter.health !== 'function') {
++      return { ok: true, capability, provider: providerId(adapter) };
++    }
++    try {
++      const result = await adapter.health(options);
++      if (result === true || result == null) return { ok: true, capability, provider: providerId(adapter) };
++      if (typeof result === 'object') {
++        return { ...result, ok: result.ok !== false, capability, provider: result.provider || providerId(adapter) };
++      }
++      return { ok: Boolean(result), capability, provider: providerId(adapter) };
++    } catch (error) {
++      throw toAiRuntimeError(error, { capability, provider: providerId(adapter) });
++    }
++  }
++
++  async function authorizeExecution(capability, adapter) {
++    try {
++      const decision = await authorize({ capability, provider: providerId(adapter) });
++      const allowed = typeof decision === 'object' && decision !== null
++        ? decision.proUnlocked ?? decision.allowed ?? decision.entitled
++        : decision;
++      if (allowed === false) {
++        throw new AiRuntimeError(CODES.NOT_ENTITLED, 'AI use requires an entitled account', {
++          capability,
++          provider: providerId(adapter),
++        });
++      }
++      if (allowed == null) {
++        throw new AiRuntimeError(CODES.NOT_ENTITLED, 'AI use requires an entitled account', {
++          capability,
++          provider: providerId(adapter),
++        });
++      }
++    } catch (error) {
++      throw toAiRuntimeError(error, { capability, provider: providerId(adapter) });
++    }
++  }
++
++  async function execute(capability, method, request) {
++    const adapter = routeFor(capability);
++    if (!adapter || !isConfigured(capability)) throw unconfigured(capability, adapter);
++    if (typeof adapter[method] !== 'function') {
++      throw unconfigured(capability, adapter);
++    }
++    await authorizeExecution(capability, adapter);
++    try {
++      return await adapter[method](request || {});
++    } catch (error) {
++      throw toAiRuntimeError(error, { capability, provider: providerId(adapter) });
++    }
++  }
++
++  async function getUsage(capability = CAPABILITIES.STRUCTURED_JSON, options = {}) {
++    // Usage is inspection, not inference: it remains available for health/UI
++    // surfaces without entitlement. It still follows exactly one explicit
++    // capability route; never silently switch providers/capabilities.
++    const adapter = routeFor(capability);
++    if (!adapter || typeof adapter.getUsage !== 'function' || !isConfigured(capability)) return null;
++    try {
++      return await adapter.getUsage(options);
++    } catch (error) {
++      throw toAiRuntimeError(error, { capability, provider: providerId(adapter) });
++    }
++  }
++
++  const runtime = {
++    capabilities: CAPABILITIES,
++    isConfigured,
++    providerFor,
++    health,
++    completeJson: (request) => execute(CAPABILITIES.STRUCTURED_JSON, 'completeJson', request),
++    embed: (request) => execute(CAPABILITIES.EMBEDDING, 'embed', request),
++    generateImage: (request) => execute(CAPABILITIES.IMAGE_GENERATION, 'generateImage', request),
++    getUsage,
++  };
++
++  return runtime;
++}
++
++module.exports = {
++  CAPABILITIES,
++  createAiRuntime,
++};
+diff --git a/src/main/openai.js b/src/main/openai.js
+index 0a13842799d124a52bb9807ff9429856ecb86489..ad9d638877f5bbcd65c2d800ddd6e72e0f56fccf 100644
+--- a/src/main/openai.js
++++ b/src/main/openai.js
+@@ -1,237 +1,133 @@
+-// Thin client for the GatherOS AI proxy. The Worker holds the master
+-// OpenAI key and gates every call on a valid licensed session, so we
+-// only need to forward the body shape OpenAI expects (chat / embed)
+-// plus the bearer session token.
+-//
+-// Each public helper signs the request with the current session token
+-// (read on demand from licensing.js) and unwraps the proxy envelope
+-// before returning the OpenAI-shaped body the rest of the app expects.
++'use strict';
+ 
+-const fs = require('node:fs');
+-const { API_BASE_URL } = require('../shared/licensing-config');
+-const { getSessionToken } = require('./licensing');
++// Product-facing AI facade. Existing main-process and IPC callers stay on
++// this module; transport, provider selection, and entitlement enforcement
++// live behind the capability runtime.
+ 
+-// Public so callers can short-circuit feature toggles without making
+-// a network round-trip when the user isn't signed in yet.
+-function hasSession() {
+-  return !!getSessionToken();
+-}
++const { getAiRuntime } = require('./ai/bootstrap');
++const { CAPABILITIES } = require('./ai/runtime');
+ 
+-async function postProxy(path, body) {
+-  const token = getSessionToken();
+-  if (!token) {
+-    const err = new Error('Not signed in');
+-    err.code = 'unauthenticated';
+-    throw err;
++function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
++  function hasSession() {
++    // Compatibility name: callers use this as "AI can be used", while
++    // account-session state remains owned by licensing:has-session.
++    return runtime.isConfigured(CAPABILITIES.STRUCTURED_JSON);
+   }
+-  const res = await fetch(`${API_BASE_URL}${path}`, {
+-    method: 'POST',
+-    headers: {
+-      'Content-Type': 'application/json',
+-      Authorization: `Bearer ${token}`,
+-    },
+-    body: JSON.stringify(body),
+-  });
+-  const data = await res.json().catch(() => ({}));
+-  if (!res.ok || !data.ok) {
+-    const reason = data.error || `http_${res.status}`;
+-    const err = new Error(`AI proxy ${reason}${data.detail ? `: ${data.detail}` : ''}`);
+-    err.code = reason;
+-    throw err;
++
++  async function autoTagImage(filePath, { signal } = {}) {
++    const parsed = await runtime.completeJson({
++      system:
++        'You suggest short, useful tags for visual inspiration. Return JSON only: ' +
++        '{"tags": ["tag1", "tag2", ...]}. Provide 3-6 lowercase tags. ' +
++        'Use single words or hyphenated phrases. Focus on style, content, ' +
++        'mood, or use case. Avoid generic words like "image", "design", "art".',
++      input: 'Tag this image.',
++      imagePath: filePath,
++      maxOutputTokens: 120,
++      signal,
++    });
++    const raw = Array.isArray(parsed?.tags) ? parsed.tags : [];
++    return raw
++      .filter((tag) => typeof tag === 'string')
++      .map((tag) => tag.trim().toLowerCase().replace(/^#+/, ''))
++      .filter(Boolean)
++      .slice(0, 6);
+   }
+-  return data;
+-}
+ 
+-// ── Image preprocessing helpers ────────────────────────────────────
++  async function analyzeImage(filePath, { signal } = {}) {
++    const parsed = await runtime.completeJson({
++      system:
++        'You write designer-friendly metadata for visual inspiration. ' +
++        'Return JSON: {"title": "...", "description": "...", "text": "..."}. ' +
++        'title: 2-6 words, Title Case, capture subject/style/mood. ' +
++        'description: ONE sentence packed with concrete searchable nouns ' +
++        'and adjectives. Cover (a) every notable object or subject visible ' +
++        '(e.g. statue, mountain, person, button, logo, sky, clouds, water, ' +
++        'building, chart), (b) the visual style or art movement (e.g. ' +
++        'minimalist, brutalist, Renaissance, illustration, photograph, 3D ' +
++        'render, vaporwave), (c) the dominant colors, (d) the mood, and ' +
++        '(e) the likely use case ("landing page", "poster", "UI screenshot"). ' +
++        'Prefer concrete nouns over abstract framing. No quotes, no emoji. ' +
++        'text: every word that appears IN the image — UI labels, headlines, ' +
++        'body copy, button text, signage, captions. Preserve original wording ' +
++        'and capitalization. Separate distinct lines with " | ". Empty string ' +
++        'if no text is visible.',
++      input: 'Analyze this image.',
++      imagePath: filePath,
++      maxOutputTokens: 800,
++      signal,
++    });
+ 
+-async function imageToDataUrl(filePath) {
+-  if (!filePath || !fs.existsSync(filePath)) {
+-    throw new Error('Image file not found');
++    const title = typeof parsed?.title === 'string'
++      ? parsed.title.trim().replace(/^["'`]+|["'`]+$/g, '').slice(0, 80)
++      : '';
++    const description = typeof parsed?.description === 'string'
++      ? parsed.description.trim().replace(/^["'`]+|["'`]+$/g, '').slice(0, 600)
++      : '';
++    const text = typeof parsed?.text === 'string'
++      ? parsed.text.trim().slice(0, 4000)
++      : '';
++    return {
++      title: title || null,
++      description: description || null,
++      text: text || null,
++    };
+   }
+-  const sharp = require('sharp');
+-  const resized = await sharp(filePath)
+-    .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+-    .jpeg({ quality: 85 })
+-    .toBuffer();
+-  return `data:image/jpeg;base64,${resized.toString('base64')}`;
+-}
+ 
+-// ── Chat / vision helpers ──────────────────────────────────────────
+-
+-async function chat({ messages, model = 'gpt-4o-mini', responseFormat, maxTokens }) {
+-  const body = { model, messages };
+-  if (responseFormat) body.response_format = responseFormat;
+-  if (maxTokens) body.max_tokens = maxTokens;
+-  const data = await postProxy('/ai/chat', body);
+-  const content = data.choices?.[0]?.message?.content;
+-  if (!content) throw new Error('No content in proxy response');
+-  return content;
+-}
++  async function generateImagePrompt(filePath, { signal } = {}) {
++    const parsed = await runtime.completeJson({
++      system:
++        'You write image-generation prompts that recreate the visual ' +
++        'style and content of a reference image. The prompts are used ' +
++        'with Midjourney, DALL-E, Stable Diffusion, and similar tools.\n\n' +
++        'Return JSON: {"prompt": "..."}.\n\n' +
++        'The prompt must:\n' +
++        '- Be a single paragraph, 35-75 words\n' +
++        '- Describe subjects, composition, camera framing, lighting, ' +
++        'color palette, texture, style/medium, and mood\n' +
++        '- Use flowing natural language, not comma-stuffed keyword lists\n' +
++        '- Not include tool-specific parameter syntax (--ar, --v, /imagine)\n' +
++        '- Not name copyrighted characters, real people, or real brands\n' +
++        '- Not start with "An image of" or "A picture of" — describe directly',
++      input: 'Write a prompt that recreates this image.',
++      imagePath: filePath,
++      maxOutputTokens: 280,
++      signal,
++    });
++    const prompt = typeof parsed?.prompt === 'string'
++      ? parsed.prompt.trim().replace(/^["'`]+|["'`]+$/g, '')
++      : '';
++    return prompt || null;
++  }
+ 
+-async function autoTagImage(filePath) {
+-  const dataUrl = await imageToDataUrl(filePath);
+-  const content = await chat({
+-    messages: [
+-      {
+-        role: 'system',
+-        content:
+-          'You suggest short, useful tags for visual inspiration. Return JSON only: ' +
+-          '{"tags": ["tag1", "tag2", ...]}. Provide 3-6 lowercase tags. ' +
+-          'Use single words or hyphenated phrases. Focus on style, content, ' +
+-          'mood, or use case. Avoid generic words like "image", "design", "art".',
+-      },
+-      {
+-        role: 'user',
+-        content: [
+-          { type: 'text', text: 'Tag this image.' },
+-          { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
+-        ],
+-      },
+-    ],
+-    responseFormat: { type: 'json_object' },
+-    maxTokens: 120,
+-  });
+-  let parsed;
+-  try { parsed = JSON.parse(content); }
+-  catch { throw new Error('AI response was not valid JSON'); }
+-  const raw = Array.isArray(parsed.tags) ? parsed.tags : [];
+-  return raw
+-    .filter((t) => typeof t === 'string')
+-    .map((t) => t.trim().toLowerCase().replace(/^#+/, ''))
+-    .filter(Boolean)
+-    .slice(0, 6);
+-}
++  async function embedText(text, { expectedDimension = null, signal } = {}) {
++    const trimmed = (text || '').trim();
++    if (!trimmed) throw new Error('Cannot embed empty text');
++    const result = await runtime.embed({
++      text: trimmed.slice(0, 8000),
++      expectedDimension,
++      signal,
++    });
++    return result.vector;
++  }
+ 
+-async function analyzeImage(filePath) {
+-  const dataUrl = await imageToDataUrl(filePath);
+-  const content = await chat({
+-    messages: [
+-      {
+-        role: 'system',
+-        content:
+-          'You write designer-friendly metadata for visual inspiration. ' +
+-          'Return JSON: {"title": "...", "description": "...", "text": "..."}. ' +
+-          'title: 2-6 words, Title Case, capture subject/style/mood. ' +
+-          'description: ONE sentence packed with concrete searchable nouns ' +
+-          'and adjectives. Cover (a) every notable object or subject visible ' +
+-          '(e.g. statue, mountain, person, button, logo, sky, clouds, water, ' +
+-          'building, chart), (b) the visual style or art movement (e.g. ' +
+-          'minimalist, brutalist, Renaissance, illustration, photograph, 3D ' +
+-          'render, vaporwave), (c) the dominant colors, (d) the mood, and ' +
+-          '(e) the likely use case ("landing page", "poster", "UI screenshot"). ' +
+-          'Prefer concrete nouns over abstract framing. No quotes, no emoji. ' +
+-          'text: every word that appears IN the image — UI labels, headlines, ' +
+-          'body copy, button text, signage, captions. Preserve original wording ' +
+-          'and capitalization. Separate distinct lines with " | ". Empty string ' +
+-          'if no text is visible.',
+-      },
+-      {
+-        role: 'user',
+-        content: [
+-          { type: 'text', text: 'Analyze this image.' },
+-          { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
+-        ],
+-      },
+-    ],
+-    responseFormat: { type: 'json_object' },
+-    maxTokens: 800,
+-  });
+-  let parsed;
+-  try { parsed = JSON.parse(content); }
+-  catch { throw new Error('AI response was not valid JSON'); }
++  async function getUsage({ signal } = {}) {
++    return runtime.getUsage(CAPABILITIES.STRUCTURED_JSON, { signal });
++  }
+ 
+-  const title = typeof parsed.title === 'string'
+-    ? parsed.title.trim().replace(/^["'`]+|["'`]+$/g, '').slice(0, 80)
+-    : '';
+-  const description = typeof parsed.description === 'string'
+-    ? parsed.description.trim().replace(/^["'`]+|["'`]+$/g, '').slice(0, 600)
+-    : '';
+-  const text = typeof parsed.text === 'string'
+-    ? parsed.text.trim().slice(0, 4000)
+-    : '';
+   return {
+-    title: title || null,
+-    description: description || null,
+-    text: text || null,
++    hasSession,
++    autoTagImage,
++    analyzeImage,
++    generateImagePrompt,
++    embedText,
++    getUsage,
+   };
+ }
+ 
+-async function generateImagePrompt(filePath) {
+-  const dataUrl = await imageToDataUrl(filePath);
+-  const content = await chat({
+-    messages: [
+-      {
+-        role: 'system',
+-        content:
+-          'You write image-generation prompts that recreate the visual ' +
+-          'style and content of a reference image. The prompts are used ' +
+-          'with Midjourney, DALL-E, Stable Diffusion, and similar tools.\n\n' +
+-          'Return JSON: {"prompt": "..."}.\n\n' +
+-          'The prompt must:\n' +
+-          '- Be a single paragraph, 35-75 words\n' +
+-          '- Describe subjects, composition, camera framing, lighting, ' +
+-          'color palette, texture, style/medium, and mood\n' +
+-          '- Use flowing natural language, not comma-stuffed keyword lists\n' +
+-          '- Not include tool-specific parameter syntax (--ar, --v, /imagine)\n' +
+-          '- Not name copyrighted characters, real people, or real brands\n' +
+-          '- Not start with "An image of" or "A picture of" — describe directly',
+-      },
+-      {
+-        role: 'user',
+-        content: [
+-          { type: 'text', text: 'Write a prompt that recreates this image.' },
+-          { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
+-        ],
+-      },
+-    ],
+-    responseFormat: { type: 'json_object' },
+-    maxTokens: 280,
+-  });
+-  let parsed;
+-  try { parsed = JSON.parse(content); }
+-  catch { throw new Error('AI response was not valid JSON'); }
+-  const prompt = typeof parsed.prompt === 'string'
+-    ? parsed.prompt.trim().replace(/^["'`]+|["'`]+$/g, '')
+-    : '';
+-  return prompt || null;
+-}
+-
+-// ── Embedding ──────────────────────────────────────────────────────
+-
+-async function embedText(text) {
+-  const trimmed = (text || '').trim();
+-  if (!trimmed) throw new Error('Cannot embed empty text');
+-  const data = await postProxy('/ai/embed', {
+-    input: trimmed.slice(0, 8000),
+-  });
+-  const vec = data.data?.[0]?.embedding;
+-  if (!Array.isArray(vec)) throw new Error('No embedding in proxy response');
+-  return vec;
+-}
+-
+-// ── Usage / quota ──────────────────────────────────────────────────
+-
+-async function getUsage() {
+-  const token = getSessionToken();
+-  if (!token) return null;
+-  try {
+-    const res = await fetch(`${API_BASE_URL}/ai/usage`, {
+-      headers: { Authorization: `Bearer ${token}` },
+-    });
+-    const data = await res.json().catch(() => ({}));
+-    if (!res.ok || !data.ok) return null;
+-    return data;
+-  } catch (err) {
+-    console.error('[ai] getUsage failed:', err);
+-    return null;
+-  }
+-}
++const facade = createOpenAiFacade();
+ 
+ module.exports = {
+-  hasSession,
+-  autoTagImage,
+-  analyzeImage,
+-  generateImagePrompt,
+-  embedText,
+-  getUsage,
++  ...facade,
++  createOpenAiFacade,
+ };
+diff --git a/test/ai-runtime.test.js b/test/ai-runtime.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..a3daae724a3d168d33a8dcaac634d3116e62a2f7
+--- /dev/null
++++ b/test/ai-runtime.test.js
+@@ -0,0 +1,78 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++const { createAiRuntime, CAPABILITIES } = require('../src/main/ai/runtime');
++const { AiRuntimeError, CODES } = require('../src/main/ai/errors');
++
++function adapter(id, overrides = {}) {
++  return {
++    id,
++    isConfigured: () => true,
++    health: async () => ({ ok: true }),
++    completeJson: async () => ({ ok: true }),
++    embed: async () => ({ vector: [1], provider: id, model: 'm', dimension: 1 }),
++    generateImage: async () => ({ bytes: Buffer.from('x'), mimeType: 'image/png', provider: id, model: 'm' }),
++    getUsage: async () => ({ ok: true, provider: id }),
++    ...overrides,
++  };
++}
++
++test('runtime routes each capability independently', async () => {
++  const structured = adapter('codex');
++  const embedding = adapter('ollama');
++  const runtime = createAiRuntime({
++    authorize: () => true,
++    routes: {
++      [CAPABILITIES.STRUCTURED_JSON]: structured,
++      [CAPABILITIES.EMBEDDING]: embedding,
++      [CAPABILITIES.IMAGE_GENERATION]: null,
++    },
++  });
++
++  assert.equal(runtime.providerFor(CAPABILITIES.STRUCTURED_JSON), 'codex');
++  assert.equal(runtime.providerFor(CAPABILITIES.EMBEDDING), 'ollama');
++  assert.equal(runtime.isConfigured(CAPABILITIES.IMAGE_GENERATION), false);
++  assert.deepEqual(await runtime.completeJson({ input: 'x' }), { ok: true });
++  assert.deepEqual(await runtime.embed({ text: 'x' }), { vector: [1], provider: 'ollama', model: 'm', dimension: 1 });
++});
++
++test('runtime blocks every execution when entitlement is false', async () => {
++  let calls = 0;
++  const route = adapter('proxy', {
++    completeJson: async () => { calls += 1; return {}; },
++    embed: async () => { calls += 1; return {}; },
++    generateImage: async () => { calls += 1; return {}; },
++  });
++  const runtime = createAiRuntime({
++    authorize: () => false,
++    routes: {
++      [CAPABILITIES.STRUCTURED_JSON]: route,
++      [CAPABILITIES.EMBEDDING]: route,
++      [CAPABILITIES.IMAGE_GENERATION]: route,
++    },
++  });
++
++  for (const action of [
++    () => runtime.completeJson({}),
++    () => runtime.embed({ text: 'x' }),
++    () => runtime.generateImage({ prompt: 'x' }),
++  ]) {
++    await assert.rejects(action, (error) => {
++      assert.ok(error instanceof AiRuntimeError);
++      assert.equal(error.code, CODES.NOT_ENTITLED);
++      return true;
++    });
++  }
++  assert.equal(calls, 0);
++});
++
++test('runtime never falls back when route is missing', async () => {
++  const runtime = createAiRuntime({
++    authorize: () => true,
++    routes: { [CAPABILITIES.STRUCTURED_JSON]: adapter('one') },
++  });
++  await assert.rejects(
++    () => runtime.embed({ text: 'x' }),
++    (error) => error.code === CODES.CAPABILITY_UNCONFIGURED && error.capability === CAPABILITIES.EMBEDDING,
++  );
++});
+diff --git a/test/gatheros-proxy-adapter.test.js b/test/gatheros-proxy-adapter.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..16fcc63a9cebde161aaca4e3bd8706cc7653f9c8
+--- /dev/null
++++ b/test/gatheros-proxy-adapter.test.js
+@@ -0,0 +1,74 @@
++'use strict';
++
++const assert = require('node:assert/strict');
++const test = require('node:test');
++
++const { createGatherOsProxyAdapter } = require('../src/main/ai/providers/gatheros-proxy');
++
++function response(body, { status = 200 } = {}) {
++  return {
++    ok: status >= 200 && status < 300,
++    status,
++    async text() { return JSON.stringify(body); },
++  };
++}
++
++test('GatherOS proxy preserves chat and embedding request contracts', async () => {
++  const calls = [];
++  const adapter = createGatherOsProxyAdapter({
++    baseUrl: 'https://proxy.test',
++    getSessionToken: () => 'session-token',
++    encodeImage: async () => ({ b64: 'aW1hZ2U=', mimeType: 'image/jpeg' }),
++    fetchImpl: async (url, options) => {
++      calls.push({ url, options, body: options.body ? JSON.parse(options.body) : null });
++      if (url.endsWith('/ai/chat')) {
++        return response({
++          ok: true,
++          choices: [{ message: { content: '{"tags":["aviation"]}' } }],
++        });
++      }
++      return response({
++        ok: true,
++        data: [{ embedding: [0.25, 0.75] }],
++      });
++    },
++  });
++
++  assert.equal(adapter.isConfigured(), true);
++  assert.deepEqual(await adapter.completeJson({
++    system: 'Return JSON.',
++    input: 'Tag this image.',
++    imagePath: '/tmp/reference.jpg',
++    maxOutputTokens: 120,
++  }), { tags: ['aviation'] });
++  assert.deepEqual(await adapter.embed({ text: '  visual query  ' }), {
++    vector: [0.25, 0.75],
++    provider: 'gatheros-proxy',
++    model: 'text-embedding-3-small',
++    dimension: 2,
++  });
++
++  assert.equal(calls[0].url, 'https://proxy.test/ai/chat');
++  assert.equal(calls[0].options.headers.Authorization, 'Bearer session-token');
++  assert.equal(calls[0].body.model, 'gpt-4o-mini');
++  assert.equal(calls[0].body.max_tokens, 120);
++  assert.deepEqual(calls[0].body.response_format, { type: 'json_object' });
++  assert.equal(calls[0].body.messages[1].content[1].type, 'image_url');
++  assert.equal(calls[1].url, 'https://proxy.test/ai/embed');
++  assert.deepEqual(calls[1].body, { input: 'visual query' });
++});
++
++test('GatherOS proxy is unconfigured without licensing session', async () => {
++  let calls = 0;
++  const adapter = createGatherOsProxyAdapter({
++    getSessionToken: () => null,
++    fetchImpl: async () => { calls += 1; return response({ ok: true }); },
++  });
++
++  assert.equal(adapter.isConfigured(), false);
++  await assert.rejects(
++    () => adapter.completeJson({ input: 'never sent' }),
++    (error) => error.code === 'AI_AUTH_REQUIRED',
++  );
++  assert.equal(calls, 0);
++});
+diff --git a/test/openai-runtime-compat.test.js b/test/openai-runtime-compat.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..ce379c8c3bb50c74d7bb3e7c1bf3cf0c8eba33a3
+--- /dev/null
++++ b/test/openai-runtime-compat.test.js
+@@ -0,0 +1,41 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++const { createOpenAiFacade } = require('../src/main/openai');
++
++test('openai facade preserves image tag normalization while using runtime', async () => {
++  const calls = [];
++  const facade = createOpenAiFacade({
++    runtime: {
++      isConfigured: () => true,
++      providerFor: () => 'codex',
++      completeJson: async (request) => {
++        calls.push(request);
++        return { tags: [' #UI ', 'BRUTALIST', null, 'art'] };
++      },
++    },
++  });
++  assert.deepEqual(await facade.autoTagImage('/tmp/image.jpg'), ['ui', 'brutalist', 'art']);
++  assert.equal(calls[0].imagePath, '/tmp/image.jpg');
++  assert.equal(calls[0].maxOutputTokens, 120);
++  assert.match(calls[0].system, /style, content/);
++});
++
++test('openai facade preserves embedding vector compatibility', async () => {
++  let request = null;
++  const facade = createOpenAiFacade({
++    runtime: {
++      isConfigured: () => true,
++      embed: async (value) => {
++        request = value;
++        return { vector: [0.25, 0.75], provider: 'proxy', model: 'test', dimension: 2 };
++      },
++    },
++  });
++  const result = await facade.embedText('  visual query  ', {
++    expectedDimension: 2,
++  });
++  assert.deepEqual(result, [0.25, 0.75]);
++  assert.equal(request.text, 'visual query');
++  assert.equal(request.expectedDimension, 2);
++});

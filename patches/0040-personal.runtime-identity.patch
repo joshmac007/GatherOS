@@ -1,0 +1,1658 @@
+From ae1f22da2031a0269c219bd9902bf47516669717 Mon Sep 17 00:00:00 2001
+From: joshmac007 <joshmcswain007@gmail.com>
+Date: Tue, 14 Jul 2026 14:05:57 -0500
+Subject: [PATCH 4/5] Isolate GatherLocal runtime identity
+
+---
+ CONTEXT.md                                    |  29 ++++
+ ...te-gatherlocal-browser-capture-identity.md |   9 ++
+ electron-builder.yml                          |  23 ++--
+ extension/background.js                       |  46 ++++---
+ extension/content/ig-interceptor.js           |   2 +-
+ extension/content/x-bookmark-watcher.js       |  14 +-
+ extension/content/x-graphql-interceptor.js    |   2 +-
+ extension/identity.mjs                        |   2 +
+ extension/manifest.json                       |   8 +-
+ extension/panel.js                            |  16 +--
+ package.json                                  |  10 +-
+ scripts/build-starter-pack.js                 |  21 +--
+ scripts/check-release-version.js              |  74 +---------
+ scripts/notarize.js                           |  10 +-
+ scripts/pack-extension.js                     |  27 +---
+ scripts/predev.js                             |  17 +--
+ scripts/ship.js                               |  48 +------
+ scripts/smoke-test.js                         |  17 ++-
+ src/main/extension-server.js                  |  11 +-
+ src/main/index.js                             |  27 ++--
+ src/main/logger.js                            |   6 +-
+ src/main/native-host-installer.js             |  29 ++--
+ src/main/native-host.js                       |  60 ++++-----
+ src/main/updater.js                           | 119 ++--------------
+ src/renderer/components/SettingsModal.jsx     |   5 +-
+ src/shared/licensing-config.js                |  11 +-
+ src/shared/runtime-identity.js                |  42 ++++++
+ test/runtime-identity.test.js                 | 127 ++++++++++++++++++
+ 28 files changed, 398 insertions(+), 414 deletions(-)
+ create mode 100644 CONTEXT.md
+ create mode 100644 docs/adr/0001-isolate-gatherlocal-browser-capture-identity.md
+ create mode 100644 extension/identity.mjs
+ create mode 100644 src/shared/runtime-identity.js
+ create mode 100644 test/runtime-identity.test.js
+
+diff --git a/CONTEXT.md b/CONTEXT.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..af37a5c1b3fa045e6cb2280259c5cfebe11e8329
+--- /dev/null
++++ b/CONTEXT.md
+@@ -0,0 +1,29 @@
++# GatherLocal
++
++GatherLocal is a personal downstream application that tracks GatherOS source releases while owning separate runtime identity, data, and provider composition.
++
++## Language
++
++**Upstream**:
++BrettfromDJ/GatherOS source used as the unmodified release base.
++_Avoid_: Vendor tree, original files
++
++**Contribution lane**:
++Clean branches based directly on upstream, containing only changes suitable for an upstream pull request.
++_Avoid_: Fork branch, shared patch
++
++**Personal overlay**:
++Ordered GatherLocal-only commits replayed above an upstream release.
++_Avoid_: Local fork, custom build
++
++**Runtime identity**:
++Externally visible identifiers that determine which desktop app, extension, native host, local endpoint, and user-data root own an operation.
++_Avoid_: Branding, rename
++
++**GatherLocal extension**:
++Browser extension whose stable ID and native-host route belong only to GatherLocal.
++_Avoid_: Modified GatherOS extension, shared extension
++
++**Sync**:
++Integration of a new upstream source release followed by personal-overlay replay and rebuild.
++_Avoid_: Binary patch, update merge
+diff --git a/docs/adr/0001-isolate-gatherlocal-browser-capture-identity.md b/docs/adr/0001-isolate-gatherlocal-browser-capture-identity.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..4ad857d6bb87a5ceb579ab0784dcf071e79923f9
+--- /dev/null
++++ b/docs/adr/0001-isolate-gatherlocal-browser-capture-identity.md
+@@ -0,0 +1,9 @@
++# Isolate GatherLocal browser capture identity
++
++GatherLocal ships a distinct browser extension, native-messaging host, capture port, deep-link scheme, app ID, and user-data root. A shared extension with target selection was rejected because it couples GatherLocal to upstream and makes install order or mutable router state decide which library receives a save; fixed one-to-one identities let GatherOS and GatherLocal coexist without rewriting or reading each other's state.
++
++## Consequences
++
++GatherLocal uses its own committed extension public key and stable ID, `co.gatherlocal.host`, `127.0.0.1:53248`, `gatherlocal://`, `com.gatherlocal.app`, and Electron's `GatherLocal` data/log roots. Internal extension message names may retain `gatheros:*` protocol vocabulary because distinct extension origins isolate them.
++
++Fresh magic-link sign-in also requires an auth callback that explicitly supports `gatherlocal://`; GatherLocal will not claim `gatheros://` as a compatibility fallback. Existing upstream-session verification and callback provisioning are separate concerns.
+diff --git a/electron-builder.yml b/electron-builder.yml
+index 0cd35b5645c003394c8efada59256c12d27795d3..1d1087570f5a3e47e1c33526c6e8d27e71d9b166 100644
+--- a/electron-builder.yml
++++ b/electron-builder.yml
+@@ -1,5 +1,5 @@
+-appId: com.gatheros.app
+-productName: GatherOS
++appId: com.gatherlocal.app
++productName: GatherLocal
+ afterPack: scripts/strip-gendered-locales.js
+ afterSign: scripts/notarize.js
+ directories:
+@@ -104,12 +104,16 @@ mac:
+         LSItemContentTypes:
+           - public.image
+     CFBundleURLTypes:
++      - CFBundleURLName: GatherLocal
++        CFBundleURLSchemes:
++          - gatherlocal
++        CFBundleTypeRole: Viewer
+       - CFBundleURLName: HTTP/HTTPS Image Drop
+         CFBundleURLSchemes:
+           - http
+           - https
+         LSHandlerRank: None
+-    # macOS Services menu — registers a "Save to GatherOS" item that
++    # macOS Services menu — registers a "Save to GatherLocal" item that
+     # appears under Services in any app's menu / right-click when the
+     # selection is an image or URL. The runtime handler reads the
+     # incoming pasteboard via NSApplication's openFile / openURL
+@@ -118,9 +122,9 @@ mac:
+     # exactly like a Finder drag-on-Dock.
+     NSServices:
+       - NSMenuItem:
+-          default: Save to GatherOS
+-        NSMessage: saveToGatherOS
+-        NSPortName: GatherOS
++          default: Save to GatherLocal
++        NSMessage: saveToGatherLocal
++        NSPortName: GatherLocal
+         NSSendTypes:
+           - public.image
+           - public.url
+@@ -139,7 +143,7 @@ mac:
+ # background image. UDZO produces a slightly larger file (~5%) but
+ # the background reliably shows up.
+ #
+-# DO NOT specify path: GatherOS.app on the type:file entry —
++# DO NOT specify path: GatherLocal.app on the type:file entry —
+ # electron-builder auto-resolves the .app path internally and
+ # rejects the build with "cannot find specified resource" when the
+ # path is given explicitly.
+@@ -158,7 +162,4 @@ dmg:
+       y: 170
+       type: link
+       path: /Applications
+-publish:
+-  provider: github
+-  owner: BrettfromDJ
+-  repo: gatheros
++publish: null
+diff --git a/extension/background.js b/extension/background.js
+index 6657e9f3a6405cde20463f72033b4e1511e428e4..c06418289965a48be75db5a50af200e4c8e9bbc8 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -1,12 +1,14 @@
+-// Service worker for the GatherOS browser extension.
++import { NATIVE_HOST_NAME } from './identity.mjs';
++
++// Service worker for the GatherLocal browser extension.
+ //
+-// v1 capture surface: right-click any image → "Save to GatherOS".
++// v1 capture surface: right-click any image → "Save to GatherLocal".
+ // Talks to the desktop app via Chrome's native messaging protocol —
+ // no localhost port, no token paste, no Options page. The desktop
+ // app installs the native host manifest on first launch, so
+ // installing the extension and the app in either order works.
+ 
+-const HOST_NAME = 'co.gatheros.host';
++const HOST_NAME = NATIVE_HOST_NAME;
+ const MENU_ID = 'gatheros-save-image';
+ // chrome.alarms identifier for the recurring "check x.com for new
+ // bookmarks" job. Two minutes balances "phone bookmarks appear
+@@ -48,7 +50,7 @@ async function maybePollBookmarks() {
+ chrome.runtime.onInstalled.addListener(() => {
+   chrome.contextMenus.create({
+     id: MENU_ID,
+-    title: 'Save to GatherOS',
++    title: 'Save to GatherLocal',
+     contexts: ['image'],
+   });
+   // Register the polling alarm on install and on every browser
+@@ -84,23 +86,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+       //   - 401             → "invalid token" (prefs.json missing token)
+       //   - 400             → "imageUrl required"
+       const msg = response?.error || 'Save failed.';
+-      if (msg === 'app not running' || msg === 'GatherOS is not installed or has never been launched.') {
+-        notify('Open GatherOS first, then try again.');
++      if (msg === 'app not running' || msg === 'GatherLocal is not installed or has never been launched.') {
++        notify('Open GatherLocal first, then try again.');
+       } else {
+         notify(msg);
+       }
+       return;
+     }
+-    notify(response.duplicate ? 'Already in your library.' : 'Saved to GatherOS.');
++    notify(response.duplicate ? 'Already in your library.' : 'Saved to GatherLocal.');
+   } catch (err) {
+     // chrome.runtime.lastError surfaces here as the rejection.
+     // Most common: host not found (manifest never installed),
+     // which means the desktop app hasn't been launched yet.
+     const msg = err?.message || String(err);
+     if (msg.includes('host not found') || msg.includes('Specified native messaging host')) {
+-      notify('Open GatherOS once to finish setup, then try again.');
++      notify('Open GatherLocal once to finish setup, then try again.');
+     } else {
+-      notify(`Couldn't reach GatherOS — ${msg}`);
++      notify(`Couldn't reach GatherLocal — ${msg}`);
+     }
+   }
+ });
+@@ -109,14 +111,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+ // (content/x-bookmark-watcher.js) detects clicks on the bookmark
+ // button on x.com / twitter.com, extracts the tweet permalink +
+ // image URL from the surrounding article DOM, and posts the result
+-// here. We forward it to the GatherOS native host using the same
++// here. We forward it to the GatherLocal native host using the same
+ // 'save' message type the right-click flow uses — the desktop
+ // dedups by content_hash so re-bookmarking is a no-op.
+ //
+ // The content script reads the response back and renders an in-page
+ // toast so the user gets confirmation without leaving x.com. Errors
+ // route through the same channel; the content script decides what
+-// to show (or to stay silent if GatherOS isn't running).
++// to show (or to stay silent if GatherLocal isn't running).
+ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+   if (!msg) return undefined;
+   if (msg.type === 'gatheros:x-bookmark') {
+@@ -233,7 +235,7 @@ chrome.action.onClicked.addListener(async (tab) => {
+   try {
+     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['panel.js'] });
+   } catch {
+-    notify('Open the GatherOS panel on a normal web page (not this one).');
++    notify('Open the GatherLocal panel on a normal web page (not this one).');
+   }
+ });
+ 
+@@ -255,14 +257,14 @@ function handleClickBookmark(msg, sendResponse) {
+     });
+     // Mark this tweet as seen so the bookmark-batch flow (cross-
+     // device sync) doesn't re-import it later. We do this even on
+-    // duplicate so the seen set stays in sync with what GatherOS
++    // duplicate so the seen set stays in sync with what GatherLocal
+     // actually has.
+     if (ok && msg.tweetId) {
+       await markBookmarksSeen([msg.tweetId]);
+     }
+   }).catch((err) => {
+     const text = err?.message || String(err);
+-    // Distinguish "GatherOS isn't running / installed" from real
++    // Distinguish "GatherLocal isn't running / installed" from real
+     // errors so the content script can stay quiet rather than nag.
+     const offline = text.includes('host not found')
+       || text.includes('Specified native messaging host');
+@@ -440,7 +442,7 @@ async function handleImportBookmarks(msg) {
+   // saves — every import would just fail. Tell the user to open it.
+   const status = await pingApp();
+   if (!status || status.hostMissing || !status.appRunning) {
+-    notify('Open GatherOS first, then run Import bookmarks.');
++    notify('Open GatherLocal first, then run Import bookmarks.');
+     return { ok: false, appClosed: true };
+   }
+ 
+@@ -765,7 +767,7 @@ async function syncBookmarkToGather(b, { force = false } = {}) {
+ // bearer + the user's CSRF token (from cookies). Response goes through
+ // the same extractor +
+ // handleBookmarkBatch path the interceptor uses for in-page
+-// captures, so phone-bookmarked tweets land in GatherOS without the
++// captures, so phone-bookmarked tweets land in GatherLocal without the
+ // user needing to visit x.com on desktop.
+ 
+ const STORAGE_TEMPLATE_KEY = 'gatherosBookmarkRefreshTemplate';
+@@ -1148,7 +1150,7 @@ async function handleImportSaved(msg, sender) {
+ 
+   const status = await pingApp();
+   if (!status || status.hostMissing || !status.appRunning) {
+-    notify('Open GatherOS first, then run Import saved.');
++    notify('Open GatherLocal first, then run Import saved.');
+     return { ok: false, appClosed: true };
+   }
+ 
+@@ -1588,7 +1590,7 @@ function notify(message) {
+     chrome.notifications.create({
+       type: 'basic',
+       iconUrl: 'icons/icon.png',
+-      title: 'GatherOS',
++      title: 'GatherLocal',
+       message,
+     });
+   } catch {
+@@ -1826,18 +1828,18 @@ async function finishCaptureSave(dataUrl, pageUrl, pageTitle) {
+ function reportSaveResult(resp) {
+   if (!resp || !resp.ok) {
+     const msg = resp?.error || 'Save failed.';
+-    notify(msg === 'app not running' ? 'Open GatherOS first, then try again.' : msg);
++    notify(msg === 'app not running' ? 'Open GatherLocal first, then try again.' : msg);
+     return;
+   }
+-  notify(resp.duplicate ? 'Already in your library.' : 'Saved to GatherOS.');
++  notify(resp.duplicate ? 'Already in your library.' : 'Saved to GatherLocal.');
+ }
+ 
+ function reportNativeError(err) {
+   const msg = err?.message || String(err);
+   if (msg.includes('host not found') || msg.includes('Specified native messaging host')) {
+-    notify('Open GatherOS once to finish setup, then try again.');
++    notify('Open GatherLocal once to finish setup, then try again.');
+   } else {
+-    notify(`Couldn't reach GatherOS — ${msg}`);
++    notify(`Couldn't reach GatherLocal — ${msg}`);
+   }
+ }
+ 
+diff --git a/extension/content/ig-interceptor.js b/extension/content/ig-interceptor.js
+index 75fb74f47177a1e0a5ea0e1692bf4c70316475d9..d1a178e16f94e0a20c8a4a67249cf664cc7a5871 100644
+--- a/extension/content/ig-interceptor.js
++++ b/extension/content/ig-interceptor.js
+@@ -169,7 +169,7 @@
+     return { type: 'image', url: bestImageUrl(node) || '' };
+   }
+ 
+-  // Normalize a saved post into the GatherOS save shape. `media` is an
++  // Normalize a saved post into the GatherLocal save shape. `media` is an
+   // explicit ordered list (locked default #1: one save per post, extra
+   // media in metadata) that can hold multiple videos — the renderer
+   // pages through it and streams secondary videos so they play instead
+diff --git a/extension/content/x-bookmark-watcher.js b/extension/content/x-bookmark-watcher.js
+index 34cb7d9b7e0bad38fada3cd5d133f370bc23730a..5673f9e4cecd484c4d5b80651066d830e3d1b81b 100644
+--- a/extension/content/x-bookmark-watcher.js
++++ b/extension/content/x-bookmark-watcher.js
+@@ -2,10 +2,10 @@
+ // button anywhere on x.com / twitter.com, walks up to the enclosing
+ // <article>, extracts the tweet permalink + image URLs from the
+ // rendered DOM, and posts to the background service worker which
+-// forwards to GatherOS via native messaging.
++// forwards to GatherLocal via native messaging.
+ //
+ // v1: only tweets with at least one image are synced. Dedup happens
+-// GatherOS-side via content_hash, so re-bookmarking or scrolling past
++// GatherLocal-side via content_hash, so re-bookmarking or scrolling past
+ // the same tweet twice is a silent no-op.
+ //
+ // If X ever changes the bookmark button's data-testid, this single
+@@ -76,7 +76,7 @@ window.addEventListener('message', (event) => {
+   // which owns the "seen" baseline in chrome.storage and routes any
+   // new (not-yet-seen) tweet through the same /save pipeline the
+   // click capture uses. End result: bookmarks made on iOS / web /
+-  // any device land in GatherOS the next time the desktop browser
++  // any device land in GatherLocal the next time the desktop browser
+   // pulls the bookmarks feed (visit x.com or /i/bookmarks).
+   if (data.type === 'bookmark-batch' && Array.isArray(data.bookmarks)) {
+     chrome.runtime.sendMessage({
+@@ -213,7 +213,7 @@ function findBookmarkButton(target) {
+ // "Remove Bookmark" (and localized equivalents). We want to fire only
+ // on adds; ignore the remove action so re-clicking doesn't ping the
+ // app. If the label is missing or unfamiliar we default to add and
+-// let GatherOS's content_hash dedup catch any spurious duplicates.
++// let GatherLocal's content_hash dedup catch any spurious duplicates.
+ function isBookmarkAddAction(button) {
+   const label = (button.getAttribute('aria-label') || '').toLowerCase();
+   if (!label) return true;
+@@ -685,20 +685,20 @@ document.addEventListener('click', async (e) => {
+ 
+   chrome.runtime.sendMessage(payload, (response) => {
+     // Background hands back { ok, duplicate, offline, error } once the
+-    // native host has answered. Stay silent when GatherOS isn't
++    // native host has answered. Stay silent when GatherLocal isn't
+     // running (offline=true) — otherwise every bookmark click would
+     // nag a user who isn't actively using the app this session.
+     if (!response) return;
+     if (response.ok) {
+       showGatherToast(
+-        response.duplicate ? 'Already in GatherOS' : 'Saved to GatherOS',
++        response.duplicate ? 'Already in GatherLocal' : 'Saved to GatherLocal',
+         { tone: 'ok' },
+       );
+       return;
+     }
+     if (response.offline) return;
+     showGatherToast(
+-      `GatherOS save failed: ${response.error || 'unknown error'}`,
++      `GatherLocal save failed: ${response.error || 'unknown error'}`,
+       { tone: 'error' },
+     );
+   });
+diff --git a/extension/content/x-graphql-interceptor.js b/extension/content/x-graphql-interceptor.js
+index 9bc714fb2e9d9de952b8dfb2f048cb6fa30cc650..c54b9dfd3e03fb5732b157bc90ae62dc00c5b123 100644
+--- a/extension/content/x-graphql-interceptor.js
++++ b/extension/content/x-graphql-interceptor.js
+@@ -206,7 +206,7 @@
+   }
+ 
+   // Walk the bookmark timeline response and extract a flat array of
+-  // tweet objects in the shape GatherOS expects. Twitter returns its
++  // tweet objects in the shape GatherLocal expects. Twitter returns its
+   // bookmark feed inside data.bookmark_timeline_v2.timeline.
+   // instructions[].entries[] — each entry that's a tweet has an
+   // entryId starting with "tweet-" and the tweet payload at
+diff --git a/extension/identity.mjs b/extension/identity.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b79a52d3e367798f5fe9a422b0f7e3873fba860
+--- /dev/null
++++ b/extension/identity.mjs
+@@ -0,0 +1,2 @@
++export const APP_NAME = 'GatherLocal';
++export const NATIVE_HOST_NAME = 'co.gatherlocal.host';
+diff --git a/extension/manifest.json b/extension/manifest.json
+index 1882bf796559bc8d3fe00d64dae2e19d8bcfe9e4..3a4bffb8031750816cb00cc7238b8ae93042a026 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,9 +1,9 @@
+ {
+   "manifest_version": 3,
+-  "name": "GatherOS",
++  "name": "GatherLocal",
+   "version": "0.13.2",
+-  "description": "Save tweets, threads, and images from X and Instagram — plus anything on the web — into your local GatherOS library.",
+-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoQLQcXoPXdHNwpE4T/ulEog9Ra0lRenCjWGfIoeLIL/VIngu2a5J4Y/CMml3dD7FTBDlOaUMQuvqICQq41x1B5brcO4Qq3/vwgoUpgP81GDY9iVd71ps0IRrmS8MIQgGtXSTjxuB27pyFKJiME1MRjdPuni+koCmcuu1X2/OiP7fRIfLmE0wrBNVw9sjGth84Gb/qXbUVo40/XVtBs9AYL0isTBWSHCAuNT7xlLIcPFzvzP8pPF7AF+fCkooy4RzBq5PMZfRtOdvWGjl/i2N5Y1EghAfY6QeT/zhE9bLJeIG7gEQAClAfWpaHlVK9zx/t5KWsc3+NvpXKEKaHULWkwIDAQAB",
++  "description": "Save tweets, threads, and images from X and Instagram — plus anything on the web — into your local GatherLocal library.",
++  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAulKWidzmpcwu0zFtFNc4KzTBCW0b2bXyDH/05LxBzqeC9/DWgXlqkrxrMFGBqKPxTh+pI+SFbBLbDHvQ/64wzOFxWv1lNPRTwz9zNmm9GiqV6QZxB997Y+czp3D11ukkA7JiockkqGcLupHroIzIfDZSQMl127rmAdLFX/popuOsQhl4A468/PlEOcDJo1ZK1AGCGC7PFowkF+QUhbhnXdPYP/wFUKUB0bPwDNkMlu19SbtZciaNLgSJHHNZSiw5aEdvDIQP8sbe4Kv/76isGyUjIVnv3ipn4IwiqK2KLFqph+gZqaQr0fU2N2u9v+kaPFDRuDQ31fE4xiDzN7sN9QIDAQAB",
+   "permissions": ["contextMenus", "nativeMessaging", "notifications", "storage", "alarms", "cookies", "activeTab", "scripting"],
+   "host_permissions": [
+     "https://x.com/*",
+@@ -40,7 +40,7 @@
+     }
+   ],
+   "action": {
+-    "default_title": "GatherOS",
++    "default_title": "GatherLocal",
+     "default_icon": {
+       "16": "icons/icon.png",
+       "48": "icons/icon.png",
+diff --git a/extension/panel.js b/extension/panel.js
+index a90db80413a86b58f7756a99d42e63eb78f1f2f5..c66458c3f859a058eac1e41d161a657ec53c4374 100644
+--- a/extension/panel.js
++++ b/extension/panel.js
+@@ -1,4 +1,4 @@
+-// In-page GatherOS panel, injected by the service worker on toolbar
++// In-page GatherLocal panel, injected by the service worker on toolbar
+ // click (chrome.scripting.executeScript). Unlike a toolbar popup, an
+ // injected panel is part of the page, so it can be rounded, shadowed,
+ // and dragged — the CSS Peeper approach. Rendered inside a shadow root
+@@ -93,7 +93,7 @@
+       .brand { font-size:13px; font-weight:600; letter-spacing:-0.012em; }
+       .ver { font-size:10px; color:var(--text-tertiary); font-variant-numeric:tabular-nums; margin-left:1px; }
+       /* Status moved out of the header to a centered row under the
+-         Open GatherOS button so the header doesn't get squished. */
++         Open GatherLocal button so the header doesn't get squished. */
+       .status { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; font-size:11px; color:var(--text-secondary); }
+       .dot { width:7px; height:7px; border-radius:50%; background:#c7c7c7; flex:none; }
+       .dot.on { background:#34c759; box-shadow:0 0 0 3px rgba(52,199,89,0.18); }
+@@ -138,7 +138,7 @@
+     <div class="panel" part="panel">
+       <div class="head" id="head">
+         <img class="logo" src="${logoUrl}" alt="" draggable="false" />
+-        <span class="brand">GatherOS</span>
++        <span class="brand">GatherLocal</span>
+         <span class="ver" id="ver"></span>
+         <button class="x" id="close" title="Close">${svg(ICONS.close, 14)}</button>
+       </div>
+@@ -180,7 +180,7 @@
+           <div class="scope-msg" id="igMsg" hidden></div>
+         </div>
+       </div>
+-      <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherOS</span></button>
++      <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherLocal</span></button>
+       <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">Checking…</span></div>
+     </div>
+   `;
+@@ -208,7 +208,7 @@
+   });
+ 
+   // Shared import-result handling: keep the panel open and surface any
+-  // problem inline (signed out, GatherOS closed, …) instead of a system
++  // problem inline (signed out, GatherLocal closed, …) instead of a system
+   // notification that's easy to miss. On success, close the panel.
+   const clearMsg = (el) => { el.hidden = true; el.textContent = ''; };
+   const showText = (el, text) => { el.textContent = text; el.hidden = false; };
+@@ -228,7 +228,7 @@
+     if (chrome.runtime.lastError) { showText(msgEl, 'Could not reach the extension. Reload it and try again.'); return; }
+     if (!resp || resp.ok) { close(); return; } // success — import runs in the background
+     if (resp.needsSignIn) { showSignIn(msgEl, label, url); return; }
+-    if (resp.appClosed) { showText(msgEl, 'Open GatherOS first, then import.'); return; }
++    if (resp.appClosed) { showText(msgEl, 'Open GatherLocal first, then import.'); return; }
+     if (resp.disabled) { showText(msgEl, 'Import is temporarily unavailable.'); return; }
+     if (resp.busy) { showText(msgEl, 'An import is already running.'); return; }
+     close();
+@@ -350,8 +350,8 @@
+     chrome.runtime.sendMessage({ type: 'gatheros:status' }, (resp) => {
+       if (!document.getElementById(HOST_ID)) return;
+       if (chrome.runtime.lastError || !resp || resp.hostMissing) { setStatus('off', 'Set up needed'); return; }
+-      if (resp.appRunning) setStatus('on', 'GatherOS is open');
+-      else setStatus('idle', 'GatherOS is closed');
++      if (resp.appRunning) setStatus('on', 'GatherLocal is open');
++      else setStatus('idle', 'GatherLocal is closed');
+     });
+   }
+   function setStatus(state, text) {
+diff --git a/package.json b/package.json
+index 27889c5ff134e141b9202645b10d12a5080058d4..1497b0db4f4c905834af0c9c4edcbf8a543a7504 100644
+--- a/package.json
++++ b/package.json
+@@ -1,12 +1,12 @@
+ {
+-  "name": "moodmark",
+-  "productName": "GatherOS",
+-  "version": "0.7.0",
++  "name": "gatherlocal",
++  "productName": "GatherLocal",
++  "version": "0.7.0-local.1",
+   "description": "A local-first macOS app for saving, browsing, and organizing visual inspiration.",
+   "private": true,
+   "main": "src/main/index.js",
+   "author": {
+-    "name": "GatherOS"
++    "name": "GatherLocal"
+   },
+   "scripts": {
+     "predev": "node scripts/predev.js",
+@@ -22,7 +22,7 @@
+     "smoke-test": "node scripts/smoke-test.js",
+     "pack:extension": "node scripts/pack-extension.js",
+     "pack:starter": "ELECTRON_RUN_AS_NODE=1 electron scripts/build-starter-pack.js",
+-    "release": "rm -rf dist/build && mkdir -p dist && touch dist/.metadata_never_index && vite build && electron-builder --publish never && node scripts/smoke-test.js && electron-builder --publish always",
++    "release": "rm -rf dist/build && mkdir -p dist && touch dist/.metadata_never_index && vite build && electron-builder --publish never && node scripts/smoke-test.js",
+     "ship": "node scripts/ship.js",
+     "postrelease": "electron-builder install-app-deps",
+     "version:patch": "npm version patch",
+diff --git a/scripts/build-starter-pack.js b/scripts/build-starter-pack.js
+index 8d1f99cfca91b07787b5379f9359de91873e5ca0..f7ab798ab4c0b1e7f296f3ab99fbcd062fcba57b 100644
+--- a/scripts/build-starter-pack.js
++++ b/scripts/build-starter-pack.js
+@@ -25,6 +25,7 @@ const fs = require('node:fs');
+ const os = require('node:os');
+ const path = require('node:path');
+ const { execFileSync } = require('node:child_process');
++const { defaultUserDataDir } = require('../src/shared/runtime-identity');
+ 
+ const REPO_ROOT = path.resolve(__dirname, '..');
+ const DEFAULT_OUT = path.join(REPO_ROOT, 'src', 'main', 'starter-pack.zip');
+@@ -41,24 +42,6 @@ function fail(msg) {
+   process.exit(1);
+ }
+ 
+-// Mirror Electron's app.getPath('userData') resolution for the
+-// product name 'GatherOS'. Brett runs macOS; covering linux as a
+-// nice-to-have. Windows users can pass LIBRARY=... explicitly.
+-function defaultUserDataDir() {
+-  const productName = 'GatherOS';
+-  if (process.platform === 'darwin') {
+-    return path.join(os.homedir(), 'Library', 'Application Support', productName);
+-  }
+-  if (process.platform === 'linux') {
+-    const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+-    return path.join(xdg, productName);
+-  }
+-  if (process.platform === 'win32') {
+-    return path.join(process.env.APPDATA || '', productName);
+-  }
+-  return null;
+-}
+-
+ function resolveLibraryRoot() {
+   if (process.env.LIBRARY) return path.resolve(process.env.LIBRARY);
+   const userData = defaultUserDataDir();
+@@ -188,7 +171,7 @@ function buildZip({ saves, collections, items, boards, boardItems }) {
+   // other side. saveId → staged filename lookup feeds the
+   // manifest, which lets the installer recreate collections by
+   // mapping each member back to the inserted save's new id.
+-  const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'gatheros-starter-'));
++  const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-starter-'));
+   const staged = [];
+   const seen = new Set();
+   const saveIdToFilename = new Map();
+diff --git a/scripts/check-release-version.js b/scripts/check-release-version.js
+index b685eea6136b69cf95b0700d5be749e1401681e7..6e23023c2c3ade9c8ae8b62d5200e733362c6cbe 100644
+--- a/scripts/check-release-version.js
++++ b/scripts/check-release-version.js
+@@ -1,72 +1,4 @@
+-// Pre-flight guard for `npm run release`. Checks GitHub's Releases
+-// API for the version currently in package.json. If a release with
+-// that tag already exists, fail fast — the build would otherwise
+-// finish, then silently skip every upload because electron-builder
+-// refuses to overwrite a published release.
+-//
+-// Skips when GH_TOKEN is unset (let electron-builder produce its
+-// usual error) or on network errors (don't block local-only builds).
++#!/usr/bin/env node
++'use strict';
+ 
+-const fs = require('node:fs');
+-const https = require('node:https');
+-
+-const REPO = 'BrettfromDJ/gatheros';
+-
+-function readVersion() {
+-  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+-  return pkg.version;
+-}
+-
+-function checkRelease(version, token) {
+-  return new Promise((resolve) => {
+-    const req = https.request({
+-      hostname: 'api.github.com',
+-      path: `/repos/${REPO}/releases/tags/v${version}`,
+-      method: 'GET',
+-      headers: {
+-        Authorization: `Bearer ${token}`,
+-        'User-Agent': 'gatheros-release-check',
+-        Accept: 'application/vnd.github+json',
+-      },
+-    }, (res) => {
+-      // Drain — we only need the status code.
+-      res.on('data', () => {});
+-      res.on('end', () => resolve(res.statusCode));
+-    });
+-    req.on('error', () => resolve(null));
+-    req.end();
+-  });
+-}
+-
+-(async () => {
+-  const version = readVersion();
+-  const token = process.env.GH_TOKEN;
+-  if (!token) {
+-    console.warn('[release-check] GH_TOKEN not set — skipping pre-flight.');
+-    process.exit(0);
+-  }
+-
+-  const status = await checkRelease(version, token);
+-  if (status === 404) {
+-    console.log(`[release-check] v${version} is fresh — proceeding.`);
+-    process.exit(0);
+-  }
+-  if (status === 200) {
+-    console.error('');
+-    console.error('  ✖  Cannot release.');
+-    console.error(`     v${version} already exists on https://github.com/${REPO}/releases`);
+-    console.error('     Bump the version first:');
+-    console.error('');
+-    console.error(`         npm version <next-version> --no-git-tag-version`);
+-    console.error(`         git add package.json && git commit -m "release: v<next>"`);
+-    console.error(`         git tag v<next> && git push origin v<next>`);
+-    console.error('');
+-    process.exit(1);
+-  }
+-  if (status === 401) {
+-    console.error('[release-check] GH_TOKEN is invalid or revoked — replace it before running release.');
+-    process.exit(1);
+-  }
+-  console.warn(`[release-check] unexpected status ${status ?? 'network-error'} — proceeding anyway.`);
+-  process.exit(0);
+-})();
++console.log('[release-check] skipped: GatherLocal publishing is disabled for local builds.');
+diff --git a/scripts/notarize.js b/scripts/notarize.js
+index b2d8560d63bcfc308ce0bee2b3d6b01cce3ec93b..1a54f30d209a4aaf6fff99439e992c2b863c8dd2 100644
+--- a/scripts/notarize.js
++++ b/scripts/notarize.js
+@@ -14,14 +14,16 @@
+ //      with "Unexpected token 'E'".
+ //
+ // Going through @electron/notarize directly with keychainProfile
+-// avoids both: credentials live in the macOS keychain (set up via
+-// `xcrun notarytool store-credentials "GatherOS-Notarize" ...`),
+-// and we get cleaner error reporting.
++// avoids both while keeping GatherLocal credentials separate.
+ 
+ const { notarize } = require('@electron/notarize');
+ 
+ exports.default = async function notarizing(context) {
+   if (context.electronPlatformName !== 'darwin') return;
++  if (process.env.GATHERLOCAL_NOTARIZE !== '1') {
++    console.log('[notarize] GatherLocal notarization disabled');
++    return;
++  }
+   // Escape hatch for fast local builds where you don't want the
+   // ~2-3 minute round-trip to Apple's notary service. Set
+   // SKIP_NOTARIZE=1 to ship an unsigned-by-Apple build.
+@@ -35,7 +37,7 @@ exports.default = async function notarizing(context) {
+   await notarize({
+     tool: 'notarytool',
+     appPath,
+-    keychainProfile: 'GatherOS-Notarize',
++    keychainProfile: process.env.GATHERLOCAL_NOTARIZE_PROFILE || 'GatherLocal-Notarize',
+   });
+   console.log('[notarize] complete');
+ };
+diff --git a/scripts/pack-extension.js b/scripts/pack-extension.js
+index 0835e73881cb119bfb798ccecda7f029cb08476a..1439eef7b3d18039e42f71255dce62b8dfa32b24 100644
+--- a/scripts/pack-extension.js
++++ b/scripts/pack-extension.js
+@@ -1,18 +1,12 @@
+ #!/usr/bin/env node
+ //
+-// Pack extension/ into a Chrome Web Store-uploadable zip.
+-//
+-// Strips the `key` field from manifest.json on the way out. The key
+-// is required in the unpacked dev extension to pin the dev ID
+-// (dopoibgdcokjffklnmechmboglnfihlc) — but the Chrome Web Store
+-// rejects uploads that contain it, since the store generates IDs
+-// itself. Keeping the key in the repo and stripping it here means
+-// both flows work without manual file shuffling.
++// Pack extension/ into a local-install zip. The committed public key
++// remains in manifest.json so every unpacked install keeps GatherLocal's
++// dedicated extension ID.
+ //
+ // Usage:
+ //   npm run pack:extension
+-//   → writes dist/gatheros-extension.zip
+-//   → upload that file in the Web Store Developer Dashboard
++//   → writes dist/gatherlocal-extension.zip
+ 
+ const fs = require('node:fs');
+ const path = require('node:path');
+@@ -22,7 +16,7 @@ const ROOT = path.resolve(__dirname, '..');
+ const SRC = path.join(ROOT, 'extension');
+ const OUT_DIR = path.join(ROOT, 'dist');
+ const STAGE = path.join(OUT_DIR, 'extension-staging');
+-const OUT_ZIP = path.join(OUT_DIR, 'gatheros-extension.zip');
++const OUT_ZIP = path.join(OUT_DIR, 'gatherlocal-extension.zip');
+ 
+ if (!fs.existsSync(SRC)) {
+   console.error(`[pack-extension] not found: ${SRC}`);
+@@ -34,15 +28,6 @@ fs.rmSync(STAGE, { recursive: true, force: true });
+ fs.mkdirSync(STAGE, { recursive: true });
+ fs.cpSync(SRC, STAGE, { recursive: true });
+ 
+-// Strip the dev-only `key` field. The store rejects uploads with it.
+-const manifestPath = path.join(STAGE, 'manifest.json');
+-const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+-if ('key' in manifest) {
+-  delete manifest.key;
+-  console.log('[pack-extension] stripped `key` field from manifest');
+-}
+-fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+-
+ // Clean previous zip + zip from inside the staging dir so the zip's
+ // top level is manifest.json + the rest (no parent folder, which
+ // some uploaders treat as a packaging error).
+@@ -62,4 +47,4 @@ if (result.status !== 0) {
+ 
+ const size = fs.statSync(OUT_ZIP).size;
+ console.log(`[pack-extension] wrote ${OUT_ZIP} (${Math.round(size / 1024)} KB)`);
+-console.log('[pack-extension] upload this file in the Chrome Web Store Developer Dashboard.');
++console.log('[pack-extension] unzip, then load the folder from chrome://extensions.');
+diff --git a/scripts/predev.js b/scripts/predev.js
+index 38b04a8f1433feeddba572d851349bf9ba54bb11..9bf9936d5eb23de22ab06b0e1e68d7790e98f659 100644
+--- a/scripts/predev.js
++++ b/scripts/predev.js
+@@ -1,14 +1,8 @@
+ // Pre-dev cleanup: free the single-instance lock before `npm run dev`.
+ //
+-// Both the dev Electron instance AND the packaged GatherOS.app call
+-// app.requestSingleInstanceLock(), so if either is already running the
+-// dev build sees the lock, quits immediately, and exits 0 — which then
+-// makes `concurrently -k` tear Vite down too. (That's the "electron
+-// exited with code 0" + a wall of "service was stopped" Vite errors.)
+-//
+-// So kill the dev Electron and quit/kill the packaged app before
+-// starting. All best-effort: pkill/osascript exit non-zero when nothing
+-// matches, which is fine.
++// A packaged GatherLocal.app can own the same single-instance lock as
++// the dev app. Stop only GatherLocal-owned processes; never kill generic
++// Electron processes because a separate GatherOS checkout may be running.
+ const { execSync } = require('node:child_process');
+ 
+ function quiet(cmd) {
+@@ -16,6 +10,5 @@ function quiet(cmd) {
+ }
+ 
+ // Graceful first, then force.
+-quiet('osascript -e \'quit app "GatherOS"\'');
+-quiet('pkill -f "GatherOS.app/Contents/MacOS/GatherOS"');
+-quiet('pkill -f "Electron.app/Contents/MacOS/Electron"');
++quiet('osascript -e \'quit app "GatherLocal"\'');
++quiet('pkill -f "GatherLocal.app/Contents/MacOS/GatherLocal"');
+diff --git a/scripts/ship.js b/scripts/ship.js
+index 8edf1c627165b13abfd6f7d429cce59516d4ff42..20f55e429883d153454b0a1333de56b26fab3dda 100644
+--- a/scripts/ship.js
++++ b/scripts/ship.js
+@@ -1,47 +1,5 @@
+ #!/usr/bin/env node
+-// Single-command release: kill running app instances (so the
+-// smoke-test doesn't bail on the single-instance lock), bump
+-// the patch version (commits + tags), push main + the new tag,
+-// then run the existing release pipeline. Stop on first
+-// failure. GH_TOKEN must be in the environment (the project's
+-// ~/.zshrc setup pulls it from macOS Keychain).
+-//
+-//   npm run ship                  # patch bump (0.2.2 → 0.2.3)
+-//   npm run ship -- minor         # minor bump (0.2.2 → 0.3.0)
+-//   npm run ship -- major         # major bump
++'use strict';
+ 
+-const { execSync } = require('node:child_process');
+-
+-function step(label, cmd, opts = {}) {
+-  process.stdout.write(`\n▸ ${label}\n  $ ${cmd}\n`);
+-  execSync(cmd, { stdio: 'inherit', ...opts });
+-}
+-
+-function quietKill(pattern) {
+-  try { execSync(`pkill -f ${JSON.stringify(pattern)}`, { stdio: 'ignore' }); }
+-  catch { /* pkill exits non-zero if nothing matched — fine */ }
+-}
+-
+-if (!process.env.GH_TOKEN) {
+-  console.error('\n✗ GH_TOKEN not set. Open a fresh terminal — your ~/.zshrc should auto-load it from Keychain.\n');
+-  process.exit(1);
+-}
+-
+-const bumpKind = process.argv[2] || 'patch';
+-if (!['patch', 'minor', 'major'].includes(bumpKind)) {
+-  console.error(`\n✗ unknown bump kind: ${bumpKind}. Use patch, minor, or major.\n`);
+-  process.exit(1);
+-}
+-
+-// Kill any running GatherOS instance so the smoke test step in
+-// `npm run release` doesn't trip on the single-instance lock.
+-quietKill('GatherOS.app');
+-quietKill('Electron.app/Contents/MacOS/Electron');
+-try { execSync('osascript -e \'quit app "GatherOS"\'', { stdio: 'ignore' }); }
+-catch { /* not running — fine */ }
+-
+-step('bump version', `npm version ${bumpKind}`);
+-step('push main + tag', 'git push origin main --follow-tags');
+-step('build, notarize, publish', 'npm run release');
+-
+-console.log('\n✓ release published.\n');
++console.error('\nGatherLocal public ship is disabled. Use `npm run release` for a local --publish never build.\n');
++process.exit(1);
+diff --git a/scripts/smoke-test.js b/scripts/smoke-test.js
+index 7cf8bfe72d67df91b85d9f15798c2b0eeb9a4ca0..683eab99d22ef14f444333947f4ab31e8e68b5ef 100644
+--- a/scripts/smoke-test.js
++++ b/scripts/smoke-test.js
+@@ -27,11 +27,11 @@ const DEFAULT_APP = path.join(
+   'dist',
+   'build',
+   os.arch() === 'arm64' ? 'mac-arm64' : 'mac',
+-  'GatherOS.app',
++  'GatherLocal.app',
+ );
+ 
+ const APP_DIR = process.argv[2] || DEFAULT_APP;
+-const BINARY = path.join(APP_DIR, 'Contents', 'MacOS', 'GatherOS');
++const BINARY = path.join(APP_DIR, 'Contents', 'MacOS', 'GatherLocal');
+ const TIMEOUT_MS = 8000;
+ 
+ if (!fs.existsSync(BINARY)) {
+@@ -44,13 +44,20 @@ console.log(`[smoke-test] Launching ${BINARY}`);
+ console.log(`[smoke-test] Watching stderr for ${TIMEOUT_MS / 1000}s…`);
+ 
+ // Launch into a throwaway userData dir so the app's single-instance lock
+-// can't collide with a GatherOS the developer already has running (dev or
++// can't collide with a GatherLocal the developer already has running (dev or
+ // installed). Without this the new process quits cleanly on launch and
+ // the test reads that exit as a failure even though the build is fine.
+-const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'gatheros-smoke-'));
++const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-smoke-'));
++console.log(`[smoke-test] User data ${tmpUserData}`);
+ 
+ const child = spawn(BINARY, [`--user-data-dir=${tmpUserData}`], {
+-  env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' },
++  env: {
++    ...process.env,
++    ELECTRON_ENABLE_LOGGING: '1',
++    GATHERLOCAL_LOG_DIR: path.join(tmpUserData, 'logs'),
++    GATHERLOCAL_SKIP_NATIVE_HOST_INSTALL: '1',
++    GATHERLOCAL_SKIP_PROTOCOL_REGISTRATION: '1',
++  },
+   stdio: ['ignore', 'pipe', 'pipe'],
+ });
+ 
+diff --git a/src/main/extension-server.js b/src/main/extension-server.js
+index 2eabe9c1136bc931a6468caded629d498ee8871d..3b3610d328fadc2deaa2c033305b6565bd45f181 100644
+--- a/src/main/extension-server.js
++++ b/src/main/extension-server.js
+@@ -1,4 +1,4 @@
+-// Localhost HTTP server that lets the GatherOS browser extension
++// Localhost HTTP server that lets the GatherLocal browser extension
+ // push saves into the running app. Bound to 127.0.0.1 only and
+ // gated on a shared token the user copies from Settings → Capture
+ // into the extension's Options page. Lives on a fixed port so the
+@@ -12,9 +12,12 @@
+ 
+ const http = require('node:http');
+ const crypto = require('node:crypto');
++const {
++  APP_NAME,
++  CAPTURE_HOST: HOST,
++  CAPTURE_PORT: PORT,
++} = require('../shared/runtime-identity');
+ 
+-const PORT = 53247;
+-const HOST = '127.0.0.1';
+ // Big enough for a base64 screen-capture data URL (the extension's
+ // "capture page / area"). The native-messaging bridge caps the source
+ // payload at ~1 MB, so 2 MB here is comfortable headroom; ordinary
+@@ -407,7 +410,7 @@ function start() {
+       const settings = require('./settings');
+       sendJson(res, 200, {
+         ok: true,
+-        app: 'GatherOS',
++        app: APP_NAME,
+         syncX: settings.getPref('syncXEnabled', true) !== false,
+         syncInstagram: settings.getPref('syncInstagramEnabled', true) !== false,
+       });
+diff --git a/src/main/index.js b/src/main/index.js
+index 3797e1e8f1a11f8ed18ec5c9e6b327bd8b12674d..53cec0ad83a8f3a04eac7992e409a6436398f8bf 100644
+--- a/src/main/index.js
++++ b/src/main/index.js
+@@ -13,6 +13,11 @@ const {
+ const fs = require('node:fs');
+ const path = require('node:path');
+ const { Readable } = require('node:stream');
++const { BACKGROUND_LAUNCH_ARG } = require('../shared/runtime-identity');
++
++if (process.env.GATHERLOCAL_LOG_DIR) {
++  app.setAppLogsPath(process.env.GATHERLOCAL_LOG_DIR);
++}
+ 
+ // Native messaging host short-circuit. When Chrome spawns this
+ // binary as the extension's host (via the --native-host flag), we
+@@ -24,7 +29,7 @@ if (process.argv.includes('--native-host')) {
+   return;
+ }
+ 
+-// Tee console.* into ~/Library/Logs/GatherOS/main.log and capture
++// Tee console.* into GatherLocal's Electron logs directory and capture
+ // uncaughtException / renderer crashes. Must run before the rest of
+ // the module so any init-time throws are recorded.
+ require('./logger').setup();
+@@ -36,17 +41,17 @@ require('./logger').setup();
+ if (!app.requestSingleInstanceLock()) {
+   app.exit(0);
+ }
+-// The native messaging host wakes us with a --gatheros-bg sentinel
++// The native messaging host wakes us with a background-save sentinel
+ // when it's launching us solely to persist a bookmark save. In that
+ // case we must NOT pull the app in front of the user's browser — both
+ // the initial window show (below) and the second-instance focus are
+ // suppressed. Saving a bookmark is a background sync, never a foreground
+ // interruption.
+-const LAUNCHED_FOR_BG_SAVE = process.argv.includes('--gatheros-bg');
++const LAUNCHED_FOR_BG_SAVE = process.argv.includes(BACKGROUND_LAUNCH_ARG);
+ app.on('second-instance', (_event, argv) => {
+   // A relaunch carrying the sentinel is the host nudging an already-
+   // running app for a save — leave focus where it is.
+-  if (Array.isArray(argv) && argv.includes('--gatheros-bg')) return;
++  if (Array.isArray(argv) && argv.includes(BACKGROUND_LAUNCH_ARG)) return;
+   if (mainWindow) {
+     if (mainWindow.isMinimized()) mainWindow.restore();
+     if (!mainWindow.isVisible()) mainWindow.show();
+@@ -63,10 +68,12 @@ const licensing = require('./licensing');
+ const { URL_SCHEME: LICENSE_URL_SCHEME } = require('../shared/licensing-config');
+ 
+ // Register the custom URL scheme so the OS knows magic-link emails
+-// (gatheros://auth/verify?token=…) should open this app. macOS
++// (gatherlocal://auth/verify?token=…) should open this app. macOS
+ // dispatches the URL via the 'open-url' event; Windows / Linux pass
+ // it through argv to a second-instance launch.
+-if (process.defaultApp) {
++if (process.env.GATHERLOCAL_SKIP_PROTOCOL_REGISTRATION === '1') {
++  // Disposable smoke/rehearsal launches must not rewrite LaunchServices.
++} else if (process.defaultApp) {
+   // Dev: when launched via `electron .`, defaultApp is true and we
+   // need to pass the script path so single-instance forwarding works.
+   if (process.argv.length >= 2) {
+@@ -90,7 +97,7 @@ async function handleLicensingDeepLink(url) {
+   } catch {
+     return;
+   }
+-  // gatheros://auth/verify?token=…
++  // gatherlocal://auth/verify?token=…
+   if (parsed.hostname !== 'auth' || parsed.pathname !== '/verify') return;
+   const token = parsed.searchParams.get('token');
+   if (!token) return;
+@@ -282,7 +289,7 @@ async function handleDockDropUrl(url, deps) {
+ app.on('open-url', (event, url) => {
+   event.preventDefault();
+   if (typeof url !== 'string') return;
+-  // Magic-link bridge: gatheros://auth/verify?token=… — route to the
++  // Magic-link bridge: gatherlocal://auth/verify?token=… — route to the
+   // licensing module instead of the image-save pipeline.
+   if (url.startsWith(`${LICENSE_URL_SCHEME}://`)) {
+     handleLicensingDeepLink(url);
+@@ -764,7 +771,7 @@ function buildTrayMenuTemplate() {
+     : [];
+ 
+   return [
+-    { label: 'Open GatherOS', click: () => {
++    { label: 'Open GatherLocal', click: () => {
+       if (mainWindow) mainWindow.focus();
+       else createMainWindow();
+     }},
+@@ -789,7 +796,7 @@ function rebuildTrayMenu() {
+ 
+ function createTray() {
+   tray = new Tray(buildTrayIcon());
+-  tray.setToolTip('GatherOS');
++  tray.setToolTip('GatherLocal');
+   tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()));
+ 
+   tray.on('click', () => {
+diff --git a/src/main/logger.js b/src/main/logger.js
+index f817da85675841e086ef8deaf33e7ca32c0fbfba..e396a4c9d5f0f9b80356f4d05c7fd4a0721cc2f7 100644
+--- a/src/main/logger.js
++++ b/src/main/logger.js
+@@ -1,5 +1,5 @@
+ // File-backed logger for the main process. Tees console.log/warn/error
+-// to ~/Library/Logs/GatherOS/main.log so when a user emails support
++// to GatherLocal's Electron logs directory so support can inspect it
+ // after a crash we can ask them to send the file via "Reveal Logs in
+ // Finder" (Help menu).
+ //
+@@ -79,7 +79,7 @@ function setup() {
+     if (app.isReady()) {
+       try {
+         dialog.showErrorBox(
+-          'GatherOS encountered an unexpected error',
++          'GatherLocal encountered an unexpected error',
+           `${err?.message || err}\n\nA log was written to:\n${getLogFilePath()}\n\nIf this keeps happening, send the log to support via Help → Reveal Logs in Finder.`
+         );
+       } catch {}
+@@ -104,7 +104,7 @@ function setup() {
+     });
+   } catch {}
+ 
+-  write('info', [`GatherOS ${app.getVersion()} starting on ${process.platform}-${process.arch}`]);
++  write('info', [`GatherLocal ${app.getVersion()} starting on ${process.platform}-${process.arch}`]);
+ }
+ 
+ module.exports = { setup, getLogFilePath };
+diff --git a/src/main/native-host-installer.js b/src/main/native-host-installer.js
+index 16ac2220f410babeac4b071101f72681560f3cb3..3d63cc545ad1725040f103047eb0db689f2c8e97 100644
+--- a/src/main/native-host-installer.js
++++ b/src/main/native-host-installer.js
+@@ -1,13 +1,13 @@
+ // Writes the Chrome native messaging host manifest + a launcher
+ // shell script into every Chromium-family browser's user dir on
+-// macOS, so installing the GatherOS extension from any of them
++// macOS, so installing the GatherLocal extension from any of them
+ // Just Works without the user touching the filesystem.
+ //
+ // We need a launcher because Chrome invokes the host binary with
+ //   <binary> chrome-extension://<id>/ [--parent-window=...]
+ // — there's no manifest field for extra args, so we can't pass
+ // --native-host through the manifest alone. The launcher is a
+-// 5-line shell script under ~/Library/Application Support/GatherOS/
++// launcher under GatherLocal's Electron user-data directory
+ // that exec's the Electron binary with the right flags, then forwards
+ // the rest of argv. In dev it also passes the project root so
+ // Electron knows which app to load.
+@@ -16,20 +16,14 @@ const fs = require('node:fs');
+ const path = require('node:path');
+ const os = require('node:os');
+ const { app } = require('electron');
++const {
++  APP_NAME,
++  NATIVE_HOST_NAME: HOST_NAME,
++  EXTENSION_IDS: ALLOWED_EXTENSION_IDS,
++} = require('../shared/runtime-identity');
+ 
+-const HOST_NAME = 'co.gatheros.host';
+ const LAUNCHER_FILENAME = 'native-host';
+ 
+-// Extension IDs allowed to invoke the host. The dev ID is fixed by
+-// the public key in extension/manifest.json — same value whether
+-// loaded unpacked on this machine or any other. When we publish to
+-// the Chrome Web Store the store will assign a separate production
+-// ID; add it to this list and ship a new desktop release.
+-const ALLOWED_EXTENSION_IDS = [
+-  'dopoibgdcokjffklnmechmboglnfihlc', // dev (key in extension/manifest.json)
+-  'jflmnonpoapjncoeankehcmenldecojk', // Chrome Web Store (production)
+-];
+-
+ // macOS Chromium-family browsers. Each ships its own NativeMessagingHosts
+ // directory under ~/Library/Application Support/. Best-effort: missing
+ // parent directories mean the browser isn't installed, which we silently
+@@ -72,8 +66,9 @@ function launcherScript() {
+   const hostScript = path.join(appRoot, 'src', 'main', 'native-host.js');
+   return [
+     '#!/bin/bash',
+-    `export GATHEROS_BINARY=${JSON.stringify(electron)}`,
+-    `export GATHEROS_APP_PATH=${JSON.stringify(appRoot)}`,
++    `export GATHERLOCAL_BINARY=${JSON.stringify(electron)}`,
++    `export GATHERLOCAL_APP_PATH=${JSON.stringify(appRoot)}`,
++    `export GATHERLOCAL_USER_DATA_DIR=${JSON.stringify(app.getPath('userData'))}`,
+     'export ELECTRON_RUN_AS_NODE=1',
+     `exec ${JSON.stringify(electron)} ${JSON.stringify(hostScript)}`,
+     '',
+@@ -97,7 +92,7 @@ function writeLauncherIfChanged() {
+ function manifestPayload(launcher) {
+   return {
+     name: HOST_NAME,
+-    description: 'GatherOS native messaging host',
++    description: `${APP_NAME} native messaging host`,
+     path: launcher,
+     type: 'stdio',
+     allowed_origins: ALLOWED_EXTENSION_IDS.map((id) => `chrome-extension://${id}/`),
+@@ -105,6 +100,8 @@ function manifestPayload(launcher) {
+ }
+ 
+ function install() {
++  if (process.env.GATHERLOCAL_SKIP_NATIVE_HOST_INSTALL === '1') return;
++
+   if (process.platform !== 'darwin') {
+     // Windows/Linux installers can land in a follow-up — paths
+     // and registry handling are different on those platforms.
+diff --git a/src/main/native-host.js b/src/main/native-host.js
+index 4f7bb7ad1637c8eb28bf5b435025f41b91b676c5..d95ab001a40a0772f1718eaad7be92dfc7800939 100644
+--- a/src/main/native-host.js
++++ b/src/main/native-host.js
+@@ -2,7 +2,7 @@
+ // extension to the running desktop app's local HTTP server.
+ //
+ // Chrome spawns this script via the launcher that the desktop app
+-// installs into ~/Library/Application Support/GatherOS/native-host.
++// installs into GatherLocal's Electron user-data directory.
+ // In dev the launcher invokes us with `node`; in packaged builds it
+ // invokes the Electron binary with --native-host (we'll swap that
+ // for a tiny standalone binary before shipping).
+@@ -11,9 +11,9 @@
+ //
+ //   1. Read a length-prefixed JSON message from stdin
+ //   2. If the main app isn't running, launch it and wait for the
+-//      local server to come up (GATHEROS_BINARY env var, set by
++//      local server to come up (GATHERLOCAL_BINARY env var, set by
+ //      the launcher, tells us what to spawn)
+-//   3. POST the save to http://127.0.0.1:53247/save with the
++//   3. POST the save to GatherLocal's dedicated local capture server
+ //      user's extension token (read from prefs.json on disk)
+ //   4. Write the response back to stdout
+ //   5. When stdin closes (extension disconnected), exit
+@@ -27,12 +27,16 @@
+ 
+ const fs = require('node:fs');
+ const path = require('node:path');
+-const os = require('node:os');
+ const http = require('node:http');
+ const { spawn } = require('node:child_process');
++const {
++  APP_NAME,
++  CAPTURE_HOST: SERVER_HOST,
++  CAPTURE_PORT: SERVER_PORT,
++  BACKGROUND_LAUNCH_ARG,
++  defaultUserDataDir,
++} = require('../shared/runtime-identity');
+ 
+-const SERVER_HOST = '127.0.0.1';
+-const SERVER_PORT = 53247;
+ const MAX_MSG = 1024 * 1024;
+ const LAUNCH_TIMEOUT_MS = 20_000;
+ const LAUNCH_POLL_MS = 300;
+@@ -42,13 +46,7 @@ const LAUNCH_POLL_MS = 300;
+ // worker output. A tail-able file in the user's support dir is much
+ // easier to read when a save mysteriously fails.
+ function appSupportDir() {
+-  if (process.platform === 'darwin') {
+-    return path.join(os.homedir(), 'Library', 'Application Support', 'GatherOS');
+-  }
+-  if (process.platform === 'win32') {
+-    return path.join(process.env.APPDATA || '', 'GatherOS');
+-  }
+-  return path.join(os.homedir(), '.config', 'GatherOS');
++  return process.env.GATHERLOCAL_USER_DATA_DIR || defaultUserDataDir();
+ }
+ 
+ function debug(...parts) {
+@@ -114,7 +112,7 @@ function appBundleFor(binaryPath) {
+   return m ? m[1] : null;
+ }
+ 
+-// Launch the main GatherOS app via macOS's `open` command and wait
++// Launch the main GatherLocal app via macOS's `open` command and wait
+ // until the local server responds to /ping. We can't just spawn the
+ // binary directly: a detached child from this stdin-driven helper
+ // doesn't get LaunchServices activation, so the new process runs
+@@ -123,19 +121,19 @@ function appBundleFor(binaryPath) {
+ // supported path for launching a GUI app programmatically.
+ //
+ // `background: true` (the save path) adds `open -g` so the launch
+-// doesn't pull GatherOS in front of the user's browser, and tags the
+-// launch with a --gatheros-bg sentinel the app reads to stay out of
++// doesn't pull GatherLocal in front of the user's browser, and tags the
++// launch with a background-save sentinel the app reads to stay out of
+ // the foreground (see index.js). Saving a bookmark must never steal
+-// focus; only the explicit "Open GatherOS" action foregrounds.
++// focus; only the explicit "Open GatherLocal" action foregrounds.
+ async function ensureAppRunning({ background = false } = {}) {
+   if (await ping()) {
+     debug('ensureAppRunning: ping ok, app already running');
+     return true;
+   }
+ 
+-  const bin = process.env.GATHEROS_BINARY;
++  const bin = process.env.GATHERLOCAL_BINARY;
+   if (!bin) {
+-    debug('ensureAppRunning: GATHEROS_BINARY not set, giving up');
++    debug('ensureAppRunning: GATHERLOCAL_BINARY not set, giving up');
+     return false;
+   }
+ 
+@@ -152,24 +150,24 @@ async function ensureAppRunning({ background = false } = {}) {
+       // -g launches without bringing the app to the foreground, so a
+       // save-triggered cold launch doesn't pop over the browser. Only
+       // the save path passes background:true; the explicit "Open
+-      // GatherOS" action still foregrounds as the user expects.
++      // GatherLocal" action still foregrounds as the user expects.
+       const args = background ? ['-g', '-a', bundle] : ['-a', bundle];
+       const passthrough = [];
+-      const appPath = process.env.GATHEROS_APP_PATH;
++      const appPath = process.env.GATHERLOCAL_APP_PATH;
+       if (appPath) passthrough.push(appPath);
+       // Sentinel the app checks to suppress its initial window + the
+       // second-instance focus when it was woken solely to save.
+-      if (background) passthrough.push('--gatheros-bg');
++      if (background) passthrough.push(BACKGROUND_LAUNCH_ARG);
+       if (passthrough.length) args.push('--args', ...passthrough);
+       debug('ensureAppRunning: open', args.join(' '));
+       spawn('/usr/bin/open', args, { detached: true, stdio: 'ignore', env }).unref();
+     } else {
+       // Fallback: direct spawn. Should never trigger in practice
+       // since the installer always derives the binary from an .app.
+-      const appPath = process.env.GATHEROS_APP_PATH;
++      const appPath = process.env.GATHERLOCAL_APP_PATH;
+       const args = [];
+       if (appPath) args.push(appPath);
+-      if (background) args.push('--gatheros-bg');
++      if (background) args.push(BACKGROUND_LAUNCH_ARG);
+       debug('ensureAppRunning: fallback spawn', bin, args.join(' '));
+       spawn(bin, args, { detached: true, stdio: 'ignore', env }).unref();
+     }
+@@ -242,7 +240,7 @@ async function handleMessage(msg) {
+     const info = await ping();
+     writeMessage({
+       ok: true,
+-      app: 'GatherOS',
++      app: APP_NAME,
+       appRunning: !!info,
+       // Sync switches (default on when the app is down or pre-update).
+       syncX: info ? info.syncX !== false : true,
+@@ -251,25 +249,25 @@ async function handleMessage(msg) {
+     return;
+   }
+   if (msg.type === 'open') {
+-    // Launch / focus GatherOS without saving anything — backs the
+-    // extension popup's "Open GatherOS" button.
++    // Launch / focus GatherLocal without saving anything — backs the
++    // extension popup's "Open GatherLocal" button.
+     const ok = await ensureAppRunning();
+     writeMessage({ ok, appRunning: ok });
+     return;
+   }
+   if (msg.type === 'save') {
+-    // Background launch: a bookmark save must never pull GatherOS in
++    // Background launch: a bookmark save must never pull GatherLocal in
+     // front of the browser. If the app is already up this is a no-op
+     // ping; if it's down it cold-launches hidden via `open -g`.
+     const ready = await ensureAppRunning({ background: true });
+     if (!ready) {
+-      writeMessage({ ok: false, error: 'Could not launch GatherOS. Try opening it manually.' });
++      writeMessage({ ok: false, error: `Could not launch ${APP_NAME}. Try opening it manually.` });
+       return;
+     }
+     const token = readToken();
+     if (!token) {
+       debug('handleMessage: no token in prefs.json');
+-      writeMessage({ ok: false, error: 'GatherOS is not installed or has never been launched.' });
++      writeMessage({ ok: false, error: `${APP_NAME} is not installed or has never been launched.` });
+       return;
+     }
+     const result = await postToApp(
+@@ -300,7 +298,7 @@ async function handleMessage(msg) {
+ }
+ 
+ function run() {
+-  debug('run: native-host started, pid', process.pid, 'GATHEROS_BINARY', process.env.GATHEROS_BINARY || '(unset)');
++  debug('run: native-host started, pid', process.pid, 'GATHERLOCAL_BINARY', process.env.GATHERLOCAL_BINARY || '(unset)');
+   let buffer = Buffer.alloc(0);
+ 
+   process.stdin.on('data', async (chunk) => {
+diff --git a/src/main/updater.js b/src/main/updater.js
+index 29a170ebb6551eef27d4bc84cf5152c918dc8ef1..83f68207881fb8b4617a28ef916579391c86e186 100644
+--- a/src/main/updater.js
++++ b/src/main/updater.js
+@@ -1,121 +1,28 @@
+-// Auto-update via electron-updater pointed at GitHub Releases (the
+-// release channel is configured in electron-builder.yml). Skipped in
+-// dev because checkForUpdates won't find a manifest there anyway.
+-//
+-// Flow:
+-//   1. App launches → waits ~4s so we don't fight startup IO
+-//   2. autoUpdater.checkForUpdates() fires; if there's a newer
+-//      release tagged on GitHub it downloads in the background
+-//   3. On 'update-downloaded', we ping the renderer with
+-//      'update-ready' so the UI can surface a "Restart to update"
+-//      pill. The user clicks Restart → updater:install IPC →
+-//      autoUpdater.quitAndInstall().
+-//   4. autoInstallOnAppQuit is left on as a fallback so even if the
+-//      user ignores the pill, the next clean quit applies the update.
+-//
+-// Re-checks every 30 minutes for long-lived sessions.
++'use strict';
+ 
+-const { autoUpdater } = require('electron-updater');
+-const { app } = require('electron');
+-const settings = require('./settings');
++// GatherLocal updates by replaying its personal overlay onto a reviewed
++// upstream source release. Binary auto-update remains disabled until a
++// GatherLocal-owned signing and release target exists.
+ 
+-let mainWin = null;
++const DISABLED = Object.freeze({
++  unsupported: true,
++  reason: 'source_sync_only',
++});
+ 
+-function send(channel, payload) {
+-  if (mainWin && !mainWin.isDestroyed()) {
+-    mainWin.webContents.send(channel, payload);
+-  }
++function initUpdater() {
++  console.log('[updater] disabled: GatherLocal uses source-sync updates');
+ }
+ 
+-// Re-read prefs and apply to the live autoUpdater instance. Called
+-// at boot and whenever the renderer changes updatesAuto /
+-// updatesChannel via settings:set-pref.
+ function applyPrefs() {
+-  if (!app.isPackaged) return;
+-  const prefs = settings.getPrefs();
+-  autoUpdater.autoDownload = prefs.updatesAuto !== false;
+-  autoUpdater.channel = prefs.updatesChannel || 'latest';
+-  console.log(
+-    `[updater] applied prefs: autoDownload=${autoUpdater.autoDownload}, channel=${autoUpdater.channel}`,
+-  );
++  return DISABLED;
+ }
+ 
+-// Manual check, used by the Updates settings page. Returns a coarse
+-// status: { upToDate } | { downloading } | { error }. Detailed
+-// progress + completion still flow through the existing event
+-// channels (update-ready, update-error).
+ async function checkNow() {
+-  if (!app.isPackaged) return { unsupported: true };
+-  try {
+-    const result = await autoUpdater.checkForUpdates();
+-    const current = app.getVersion();
+-    const available = result?.updateInfo?.version;
+-    if (!available || available === current) {
+-      return { upToDate: true, currentVersion: current };
+-    }
+-    return { downloading: true, version: available };
+-  } catch (err) {
+-    return { error: err?.message || String(err) };
+-  }
+-}
+-
+-function initUpdater(window) {
+-  mainWin = window;
+-  if (!app.isPackaged) return;
+-
+-  // Pipe updater logs through console; helpful for the asar console
+-  // log without pulling in electron-log as a dependency.
+-  autoUpdater.logger = console;
+-  applyPrefs();
+-  autoUpdater.autoInstallOnAppQuit = true;
+-
+-  // Diagnostic: print where the running .app actually lives. If this
+-  // is anywhere outside /Applications (e.g. a dev-built bundle in
+-  // ~/GatherOS/dist/build/...), electron-updater's atomic swap will
+-  // silently fail at install time on macOS.
+-  console.log(
+-    `[updater] running from: ${app.getAppPath()} | exec: ${app.getPath('exe')} | version: ${app.getVersion()}`,
+-  );
+-
+-  autoUpdater.on('error', (err) => {
+-    const message = err?.message || String(err);
+-    console.error('[updater] error:', message);
+-    send('update-error', { message });
+-  });
+-
+-  autoUpdater.on('update-downloaded', (info) => {
+-    console.log('[updater] downloaded', info.version);
+-    send('update-ready', {
+-      version: info.version,
+-      releaseDate: info.releaseDate || null,
+-    });
+-  });
+-
+-  // First check 4s after window is up. setInterval handles ongoing
+-  // sessions — most users will quit and relaunch, but for long-
+-  // running ones we still want to surface new releases.
+-  const HALF_HOUR = 30 * 60 * 1000;
+-  const kick = () => {
+-    autoUpdater.checkForUpdates().catch((err) => {
+-      console.warn('[updater] check failed:', err?.message || err);
+-    });
+-  };
+-  setTimeout(kick, 4000);
+-  setInterval(kick, HALF_HOUR);
++  return DISABLED;
+ }
+ 
+ function quitAndInstall() {
+-  if (!app.isPackaged) return;
+-  console.log('[updater] quitAndInstall: starting install handoff');
+-  // (isSilent=false) so the user sees the brief installer dialog,
+-  // (isForceRunAfter=true) so the new version comes back up
+-  // immediately instead of leaving them on a dead Dock icon.
+-  try {
+-    autoUpdater.quitAndInstall(false, true);
+-  } catch (err) {
+-    console.error('[updater] quitAndInstall threw:', err?.message || err);
+-    send('update-error', { message: err?.message || String(err) });
+-  }
++  return DISABLED;
+ }
+ 
+ module.exports = { initUpdater, quitAndInstall, applyPrefs, checkNow };
+diff --git a/src/renderer/components/SettingsModal.jsx b/src/renderer/components/SettingsModal.jsx
+index 22f7e27f1ad96bb78d7f0f86b6821c248fbb0e64..5b420ca42ab25641df429066377f2fee28395203 100644
+--- a/src/renderer/components/SettingsModal.jsx
++++ b/src/renderer/components/SettingsModal.jsx
+@@ -667,7 +667,7 @@ function UpdatesPage({ prefs, updatePref }) {
+   async function handleCheck() {
+     setState({ checking: true, status: null });
+     const result = await window.moodmark.updater.check?.();
+-    if (!result) {
++    if (!result || result.unsupported) {
+       setState({ checking: false, status: 'unsupported' });
+       return;
+     }
+@@ -687,8 +687,7 @@ function UpdatesPage({ prefs, updatePref }) {
+   return (
+     <div className={styles.page}>
+       <p className={styles.sectionHint}>
+-        GatherOS checks for updates in the background and installs
+-        them the next time you quit.
++        GatherLocal updates are installed through the reviewed upstream-sync workflow.
+       </p>
+ 
+       <div className={styles.toggleRow}>
+diff --git a/src/shared/licensing-config.js b/src/shared/licensing-config.js
+index fd7dec75644118e6441d5807c680116053b92157..8de064e1c279f5aedbf5bb0da8b8ada685071258 100644
+--- a/src/shared/licensing-config.js
++++ b/src/shared/licensing-config.js
+@@ -5,6 +5,7 @@
+ // env vars for staging and production builds.
+ 
+ const env = (typeof process !== 'undefined' && process.env) || {};
++const { URL_SCHEME: DEFAULT_URL_SCHEME } = require('./runtime-identity');
+ 
+ // Where the licensing + AI Worker lives. Defaults to the
+ // production deploy in both dev and packaged builds — most
+@@ -13,14 +14,14 @@ const env = (typeof process !== 'undefined' && process.env) || {};
+ // GATHEROS_API_BASE_URL=http://localhost:8787 when running dev
+ // against a local Worker.
+ const API_BASE_URL =
++  env.GATHERLOCAL_API_BASE_URL ||
+   env.GATHEROS_API_BASE_URL ||
+   'https://api.gatheros.co';
+ 
+-// Custom URL scheme registered by the desktop app — magic-link
+-// emails redirect into `gatheros://auth/verify?token=…` and the
+-// main process catches it via app.on('open-url') (macOS) or via
+-// the second-instance argv (Windows / Linux).
+-const URL_SCHEME = 'gatheros';
++// Custom URL scheme registered by GatherLocal. A compatible auth service
++// must redirect magic links to this scheme; GatherLocal must never claim
++// GatherOS's scheme as a fallback because both apps may be installed.
++const URL_SCHEME = env.GATHERLOCAL_URL_SCHEME || DEFAULT_URL_SCHEME;
+ 
+ // How stale the cached /license/verify response can get before we
+ // stop trusting it. Within this window an offline launch is fine;
+diff --git a/src/shared/runtime-identity.js b/src/shared/runtime-identity.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..dad32650e470ac585da728999208c8ba9f6deeaf
+--- /dev/null
++++ b/src/shared/runtime-identity.js
+@@ -0,0 +1,42 @@
++'use strict';
++
++const os = require('node:os');
++const path = require('node:path');
++
++const APP_NAME = 'GatherLocal';
++const APP_ID = 'com.gatherlocal.app';
++const URL_SCHEME = 'gatherlocal';
++const NATIVE_HOST_NAME = 'co.gatherlocal.host';
++const EXTENSION_IDS = Object.freeze(['ffeaogljbgkjmbjkbpdfhdcdlomlbbpe']);
++const CAPTURE_HOST = '127.0.0.1';
++const CAPTURE_PORT = 53248;
++const BACKGROUND_LAUNCH_ARG = '--gatherlocal-bg';
++
++function defaultUserDataDir({
++  platform = process.platform,
++  home = os.homedir(),
++  env = process.env,
++} = {}) {
++  if (platform === 'darwin') {
++    return path.join(home, 'Library', 'Application Support', APP_NAME);
++  }
++  if (platform === 'win32') {
++    return path.join(env.APPDATA || '', APP_NAME);
++  }
++  if (platform === 'linux') {
++    return path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), APP_NAME);
++  }
++  return null;
++}
++
++module.exports = {
++  APP_NAME,
++  APP_ID,
++  URL_SCHEME,
++  NATIVE_HOST_NAME,
++  EXTENSION_IDS,
++  CAPTURE_HOST,
++  CAPTURE_PORT,
++  BACKGROUND_LAUNCH_ARG,
++  defaultUserDataDir,
++};
+diff --git a/test/runtime-identity.test.js b/test/runtime-identity.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..ce559a963fddb5463467c42b223a846d332ab272
+--- /dev/null
++++ b/test/runtime-identity.test.js
+@@ -0,0 +1,127 @@
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const crypto = require('node:crypto');
++const fs = require('node:fs');
++const path = require('node:path');
++const { pathToFileURL } = require('node:url');
++
++const ROOT = path.resolve(__dirname, '..');
++const identity = require('../src/shared/runtime-identity');
++
++function read(relativePath) {
++  return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
++}
++
++function extensionId(publicKeyBase64) {
++  const digest = crypto
++    .createHash('sha256')
++    .update(Buffer.from(publicKeyBase64, 'base64'))
++    .digest()
++    .subarray(0, 16);
++  return Array.from(digest, (byte) => (
++    String.fromCharCode(97 + (byte >> 4), 97 + (byte & 15))
++  )).join('');
++}
++
++function filesUnder(relativeDirectory) {
++  const root = path.join(ROOT, relativeDirectory);
++  const result = [];
++  const visit = (directory) => {
++    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
++      const full = path.join(directory, entry.name);
++      if (entry.isDirectory()) visit(full);
++      else result.push(full);
++    }
++  };
++  visit(root);
++  return result;
++}
++
++test('runtime identity is distinct from every GatherOS external route', () => {
++  assert.deepEqual(identity.EXTENSION_IDS, ['ffeaogljbgkjmbjkbpdfhdcdlomlbbpe']);
++  assert.equal(identity.APP_NAME, 'GatherLocal');
++  assert.equal(identity.APP_ID, 'com.gatherlocal.app');
++  assert.equal(identity.URL_SCHEME, 'gatherlocal');
++  assert.equal(identity.NATIVE_HOST_NAME, 'co.gatherlocal.host');
++  assert.equal(identity.CAPTURE_HOST, '127.0.0.1');
++  assert.equal(identity.CAPTURE_PORT, 53248);
++  assert.equal(identity.BACKGROUND_LAUNCH_ARG, '--gatherlocal-bg');
++  assert.equal(
++    identity.defaultUserDataDir({ platform: 'darwin', home: '/Users/test' }),
++    '/Users/test/Library/Application Support/GatherLocal',
++  );
++  assert.notEqual(identity.NATIVE_HOST_NAME, 'co.gatheros.host');
++  assert.notEqual(identity.CAPTURE_PORT, 53247);
++});
++
++test('extension public key creates only the GatherLocal extension ID', async () => {
++  const manifest = JSON.parse(read('extension/manifest.json'));
++  const browserIdentity = await import(pathToFileURL(path.join(ROOT, 'extension/identity.mjs')));
++  const id = extensionId(manifest.key);
++
++  assert.equal(manifest.name, 'GatherLocal');
++  assert.equal(manifest.action.default_title, 'GatherLocal');
++  assert.equal(id, identity.EXTENSION_IDS[0]);
++  assert.equal(browserIdentity.APP_NAME, identity.APP_NAME);
++  assert.equal(browserIdentity.NATIVE_HOST_NAME, identity.NATIVE_HOST_NAME);
++  assert.notEqual(id, 'dopoibgdcokjffklnmechmboglnfihlc');
++  assert.notEqual(id, 'jflmnonpoapjncoeankehcmenldecojk');
++
++  const extensionText = filesUnder('extension')
++    .filter((file) => /\.(?:js|mjs|json)$/.test(file))
++    .map((file) => fs.readFileSync(file, 'utf8'))
++    .join('\n');
++  assert.doesNotMatch(extensionText, /co\.gatheros\.host/);
++  assert.doesNotMatch(extensionText, /GatherOS/);
++});
++
++test('desktop, native host, packaging, and updater cannot claim GatherOS identity', async () => {
++  const pkg = JSON.parse(read('package.json'));
++  assert.equal(pkg.name, 'gatherlocal');
++  assert.equal(pkg.productName, identity.APP_NAME);
++  assert.equal(pkg.version, '0.7.0-local.1');
++  assert.doesNotMatch(pkg.scripts.release, /publish always/);
++
++  const builder = read('electron-builder.yml');
++  assert.match(builder, /^appId: com\.gatherlocal\.app$/m);
++  assert.match(builder, /^productName: GatherLocal$/m);
++  assert.match(builder, /^\s+- gatherlocal$/m);
++  assert.match(builder, /^publish: null$/m);
++  assert.doesNotMatch(builder, /BrettfromDJ|com\.gatheros\.app/);
++
++  const installer = read('src/main/native-host-installer.js');
++  assert.match(installer, /GATHERLOCAL_SKIP_NATIVE_HOST_INSTALL/);
++  assert.match(installer, /GATHERLOCAL_BINARY/);
++  assert.match(installer, /GATHERLOCAL_USER_DATA_DIR/);
++  assert.doesNotMatch(installer, /co\.gatheros\.host|GATHEROS_BINARY|jflmnon|dopoib/);
++
++  const host = read('src/main/native-host.js');
++  assert.match(host, /GATHERLOCAL_BINARY/);
++  assert.match(host, /GATHERLOCAL_USER_DATA_DIR/);
++  assert.doesNotMatch(host, /53247|--gatheros-bg|GATHEROS_BINARY|GATHEROS_APP_PATH/);
++
++  const server = require('../src/main/extension-server');
++  assert.equal(server.PORT, identity.CAPTURE_PORT);
++
++  const updater = require('../src/main/updater');
++  assert.deepEqual(await updater.checkNow(), {
++    unsupported: true,
++    reason: 'source_sync_only',
++  });
++  assert.doesNotMatch(read('src/main/updater.js'), /electron-updater|BrettfromDJ/);
++
++  assert.match(read('scripts/smoke-test.js'), /GATHERLOCAL_SKIP_NATIVE_HOST_INSTALL/);
++  assert.match(read('scripts/smoke-test.js'), /GATHERLOCAL_SKIP_PROTOCOL_REGISTRATION/);
++  assert.match(read('scripts/smoke-test.js'), /GATHERLOCAL_LOG_DIR/);
++  assert.match(read('scripts/smoke-test.js'), /GatherLocal\.app/);
++  assert.match(read('scripts/pack-extension.js'), /gatherlocal-extension\.zip/);
++  assert.doesNotMatch(read('scripts/pack-extension.js'), /delete manifest\.key|gatheros-extension/);
++  assert.doesNotMatch(read('scripts/build-starter-pack.js'), /Application Support.*GatherOS|gatheros-starter/);
++  assert.doesNotMatch(read('scripts/notarize.js'), /GatherOS-Notarize/);
++  assert.doesNotMatch(read('scripts/predev.js'), /quit app "GatherOS"|Electron\.app\/Contents\/MacOS\/Electron/);
++
++  const licensing = require('../src/shared/licensing-config');
++  assert.equal(licensing.URL_SCHEME, identity.URL_SCHEME);
++});
