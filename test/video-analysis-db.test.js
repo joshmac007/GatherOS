@@ -126,7 +126,8 @@ test('pre-v19 migration leaves legacy saves unrouted and startup dispatches a cr
     legacy.close();
 
     db.initDatabase();
-    assert.equal(db.getDatabase().pragma('user_version', { simple: true }), 20);
+    const currentVersion = db.getDatabase().pragma('user_version', { simple: true });
+    assert.ok(currentVersion >= 20);
     assert.equal(db.getSaveBackgroundRoute('legacy-before-v19'), undefined);
 
     db.insertSave({

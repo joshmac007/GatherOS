@@ -168,7 +168,7 @@ test('compatibility migration upgrades the committed intermediate queue schema',
     UPDATE semantic_index_state
        SET building_generation_id = 'gen-current-build'
      WHERE id = 1;
-    PRAGMA user_version = ${targetVersion - 2};
+    PRAGMA user_version = ${targetVersion - 3};
   `);
   raw.close();
 

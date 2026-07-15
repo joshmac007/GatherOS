@@ -76,6 +76,7 @@ function registerIpcHandlers({
   semanticSearch = null,
   backgroundRuntime = null,
   cleanupDerivedCache = null,
+  socialImportState = null,
 } = {}) {
   async function cleanupSaveDerived(saveId) {
     if (!saveId) return;
@@ -154,6 +155,14 @@ function registerIpcHandlers({
     const semanticWarning = await enqueueSemanticBestEffort(saveIds);
     return semanticWarning ? { ...result, semanticWarning } : result;
   }
+
+  ipcMain.handle('social-import:get', () => socialImportState?.get?.() || null);
+  ipcMain.handle('social-import:cancel', (_event, runId) => (
+    socialImportState?.cancel?.(runId) || { ok: false, error: 'social import unavailable' }
+  ));
+  ipcMain.handle('social-import:dismiss', (_event, runId) => (
+    socialImportState?.dismiss?.(runId) || { ok: false, error: 'social import unavailable' }
+  ));
   // Merges saves whose extracted palette is perceptually similar to a
   // named color in the query (e.g. "orange", "navy") into the existing
   // result set. Same view filters (collection/explicit colorHex) get
