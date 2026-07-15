@@ -11,9 +11,10 @@ import {
 import { loadAndVerifyManifest } from '../lib/manifest.mjs'
 
 const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const appRoot = path.resolve(
-  process.env.GATHERLOCAL_APP_SOURCE || path.join(workflowRoot, '..', 'GatherLocal-Next'),
-)
+const manifestFile = JSON.parse(fs.readFileSync(path.join(workflowRoot, 'manifests/overlay.v1.json'), 'utf8'))
+const appRoot = path.resolve(process.env.GATHERLOCAL_APP_SOURCE || path.join(
+  workflowRoot, '..', 'GatherLocal-Reconstructions', manifestFile.source.tip,
+))
 
 test('descriptor freezes and re-verifies exact candidate history', (t) => {
   const manifest = loadAndVerifyManifest({ root: workflowRoot, source: appRoot })
