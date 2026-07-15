@@ -122,3 +122,6 @@ under `.gatherlocal-sync-runs`; current accepted app remains selected.
 
 See `docs/steady-state-workflow.md` for normal update and optional contribution
 flows.
+
+Future agents must read `AI_AGENT_PLAYBOOK.md` before changing any checkout,
+overlay patch, contribution branch, or sync contract.
