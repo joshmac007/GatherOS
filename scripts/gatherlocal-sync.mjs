@@ -196,20 +196,21 @@ function initializeTopology(id, runRoot, env, logFile) {
     id, accepted, tip, tree, manifest, dependencyReceipt, bundle, env, logFile,
   })
 
-  git(['init', '--bare', paths.acceptedStore], workspaceRoot, { env, logFile })
-  git(['config', 'push.default', 'nothing'], paths.acceptedStore, { env, logFile })
-  git(['config', 'core.hooksPath', path.join(workflowRoot, '.githooks')], paths.acceptedStore, { env, logFile })
+  const stagedStore = path.join(runRoot, 'accepted-store.git')
+  git(['init', '--bare', stagedStore], runRoot, { env, logFile })
+  git(['config', 'push.default', 'nothing'], stagedStore, { env, logFile })
+  git(['config', 'core.hooksPath', path.join(workflowRoot, '.githooks')], stagedStore, { env, logFile })
   git([
     'fetch', '--no-tags', '--no-write-fetch-head', accepted,
     `refs/heads/${manifest.source.branch}:refs/gatherlocal/accepted`,
     `${manifest.source.canonical_evidence_ref}:${manifest.source.canonical_evidence_ref}`,
-  ], paths.acceptedStore, { env, logFile })
-  git(['update-ref', 'refs/gatherlocal/upstream/accepted', manifest.upstream.tested_base], paths.acceptedStore, { env, logFile })
-  git(['symbolic-ref', 'HEAD', 'refs/gatherlocal/accepted'], paths.acceptedStore, { env, logFile })
-  git(['fsck', '--full'], paths.acceptedStore, { env, logFile })
-  if (gitText(['remote'], paths.acceptedStore, { env, logFile }) !== '') fail('acceptance store gained a remote')
+  ], stagedStore, { env, logFile })
+  git(['update-ref', 'refs/gatherlocal/upstream/accepted', manifest.upstream.tested_base], stagedStore, { env, logFile })
+  git(['fsck', '--full'], stagedStore, { env, logFile })
+  if (gitText(['remote'], stagedStore, { env, logFile }) !== '') fail('acceptance store gained a remote')
 
   fs.mkdirSync(paths.reconstructions)
+  fs.renameSync(stagedStore, paths.acceptedStore)
   const immutablePath = path.join(paths.reconstructions, tip)
   fs.renameSync(paths.acceptedLink, immutablePath)
   const temporaryLink = path.join(workspaceRoot, `.GatherLocal-Next.${id}.tmp`)
@@ -221,6 +222,8 @@ function initializeTopology(id, runRoot, env, logFile) {
     if (!fs.existsSync(paths.acceptedLink) && fs.existsSync(immutablePath)) {
       fs.renameSync(immutablePath, paths.acceptedLink)
     }
+    if (fs.existsSync(paths.acceptedStore)) fs.renameSync(paths.acceptedStore, stagedStore)
+    try { fs.rmdirSync(paths.reconstructions) } catch {}
     throw error
   }
   if (fs.realpathSync(paths.acceptedLink) !== fs.realpathSync(immutablePath)) {
