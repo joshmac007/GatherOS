@@ -305,6 +305,9 @@ function migrateWithLocalOverlay({ database, upstream } = {}) {
     }
   }
 
+  if (initialUserVersion < upstream.targetVersion && backupPath === null) {
+    backupPath = createBackupOrThrow(database, false);
+  }
   const upstreamReport = callUpstream(database, upstream, backupPath);
   const pending = manifest.slice(ledgerRows.length);
   if (pending.length > 0 && backupPath === null) {

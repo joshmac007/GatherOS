@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS dismissed_tweets (
 `;
 
 let db = null;
+let lastMigrationReport = null;
 
 function getDatabasePath() {
   // Resolved per-call so a library switch (which writes a new
@@ -95,6 +96,7 @@ function getDatabasePath() {
 
 function initDatabase() {
   if (db) return db;
+  lastMigrationReport = null;
   const file = getDatabasePath();
   db = new Database(file);
   db.pragma('journal_mode = WAL');
@@ -103,7 +105,7 @@ function initDatabase() {
   // existing DBs but bootstraps fresh ones. Then run versioned
   // migrations on top to bring any older shape up to current.
   db.exec(SCHEMA);
-  migrateWithLocalOverlay({
+  lastMigrationReport = migrateWithLocalOverlay({
     database: db,
     upstream: {
       targetVersion: MIGRATIONS.length,
@@ -146,6 +148,16 @@ function checkIntegrity(database) {
 
 function getIntegrityResult() {
   return lastIntegrityResult;
+}
+
+function getMigrationReport() {
+  if (!lastMigrationReport) return null;
+  return {
+    ...lastMigrationReport,
+    upstream: { ...lastMigrationReport.upstream },
+    adopted: [...lastMigrationReport.adopted],
+    applied: [...lastMigrationReport.applied],
+  };
 }
 
 // ── Versioned migrations ───────────────────────────────────────────
@@ -2019,6 +2031,7 @@ module.exports = {
   deleteTag,
   deleteUnusedTags,
   getIntegrityResult,
+  getMigrationReport,
   // Boards
   listBoards,
   listBoardsWithThumbs,
