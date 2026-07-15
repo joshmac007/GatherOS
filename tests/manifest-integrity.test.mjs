@@ -8,7 +8,9 @@ import { loadAndVerifyManifest } from '../lib/manifest.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const manifestPath = path.join(root, 'manifests/overlay.v1.json')
-const source = path.resolve(root, '..', 'GatherLocal-Next')
+const source = path.resolve(
+  process.env.GATHERLOCAL_APP_SOURCE || path.join(root, '..', 'GatherLocal-Next'),
+)
 
 function fixture(mutate) {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-manifest-test.'))
@@ -37,7 +39,7 @@ function withFixture(mutate, check) {
 
 test('verifies artifact and current source evidence', () => {
   const manifest = loadAndVerifyManifest({ root, source })
-  assert.equal(manifest.patches.length, 5)
+  assert.equal(manifest.patches.length, 6)
   assert.equal(manifest.patches[1].contribution_state, 'pending-local-only')
 })
 

@@ -40,7 +40,7 @@ an untracked hook path, or no longer rejects a synthetic push invocation.
 
 ## Overlay manifest
 
-`manifests/overlay.v1.json` is the source of truth for the current ordered patch
+`manifests/overlay.v1.json` is the source of truth for the current six-patch
 stack. Logical IDs survive rebases; revisions change when patch behavior changes.
 Artifact checksums protect exported bytes, canonical-diff checksums bind current
 source evidence, and stable patch IDs support equivalence checks without being
@@ -66,3 +66,35 @@ node scripts/replay-manifest.mjs \
 
 The replay probe deletes a passing candidate unless `--keep` is supplied. A
 failed candidate is always preserved and printed for diagnosis.
+
+## Copied-data rehearsal
+
+`manifests/data-rehearsal.v1.json` binds the preserved version-21 GatherLocal
+snapshot by checksum and declares its non-sensitive counts, protected columns,
+protected tables, path counts, exact named-migration ledger, and source-key
+postconditions.
+
+The verifier APFS-clones the complete 2.9 GB preserved user-data tree into a
+unique temporary directory. It calls the same `initializePersistentState()`
+function as production without loading the full app. A macOS sandbox denies all
+network access and every filesystem write outside the disposable run root;
+in-process guards also reject child processes, forbidden modules, and listening
+servers. Physical-path checks stop copied symlinks from redirecting database or
+media access outside the copy. Stored absolute media paths are mapped into the
+copy and never dereferenced against the live library.
+
+Run:
+
+```sh
+node scripts/verify-data-rehearsal.mjs \
+  --app-source ../GatherLocal-Next \
+  --receipt runs/data-rehearsal-latest.json
+```
+
+The first startup must adopt six legacy migrations, apply the seventh, retain
+every pre-existing value and mapped file, and create one verified backup. The
+second startup must make zero row changes, preserve the full ledger, and create
+no backup. A run is rejected unless both repositories are clean and the app
+commit/tree exactly match the overlay manifest. Receipts are new-file-only and
+may live only under ignored `runs/` or a separate Preservation evidence folder.
+Passing copies are removed; failed copies are preserved and printed.

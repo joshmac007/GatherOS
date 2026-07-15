@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "contract_id": "gatherlocal-preserved-v21",
+  "snapshot": {
+    "root_relative": "Preservation/GatherLocal-20260714T062004Z",
+    "user_data_relative": "user-data-GatherLocal",
+    "database_relative": "libraries/library_default/moodmark.db",
+    "recorded_user_data_root": "/Users/joshmcswain/Library/Application Support/GatherLocal",
+    "checksum_manifest_sha256": "05291efbfe385b6334553ad016742ca5b527b77fdf65ca9c0a6999a80ed2c0b7",
+    "key_files": {
+      "libraries/library_default/moodmark.db": "494eb282c277f4597f5905fb6f8f8ad05c6c637e2895fecbebb7baa65205e8d2",
+      "libraries.json": "27497c45516b5d820a9badb0cd0199d1f1e9da961cbd84d0cc19985f44bc2f04",
+      "prefs.json": "2a86b41255fc3976e82a32a14e388f4900b82eac051509abf1a51b499681abb0"
+    }
+  },
+  "before": {
+    "user_version": 21,
+    "save_count": 174,
+    "active_save_count": 144,
+    "path_cells": 522,
+    "non_null_paths": 348,
+    "active_non_null_paths": 288,
+    "mapped_media_sha256": "5fdc9cb15bd71fd4c39a4da00d9c91816605d3d67649e36c8e89eb533963119a",
+    "protected_save_columns": [
+      "id",
+      "file_path",
+      "thumb_path",
+      "title",
+      "source_url",
+      "width",
+      "height",
+      "file_size",
+      "palette",
+      "created_at",
+      "ai_description",
+      "embedding",
+      "ocr_text",
+      "ai_prompt",
+      "deleted_at",
+      "meta",
+      "notes",
+      "content_hash",
+      "palette_lab",
+      "kind",
+      "tweet_meta",
+      "source",
+      "preview_path",
+      "view_count",
+      "viewed_at"
+    ],
+    "protected_tables": [
+      "board_items",
+      "boards",
+      "collection_items",
+      "collections",
+      "dismissed_tweets",
+      "save_background_routes",
+      "save_tags",
+      "save_topic_profiles",
+      "saves_fts",
+      "saves_fts_config",
+      "saves_fts_content",
+      "saves_fts_data",
+      "saves_fts_docsize",
+      "saves_fts_idx",
+      "semantic_index_generations",
+      "semantic_index_jobs",
+      "semantic_index_state",
+      "semantic_vectors",
+      "smart_categories",
+      "smart_category_aliases",
+      "smart_category_members",
+      "smart_category_runs",
+      "tags",
+      "video_analysis_jobs",
+      "video_tag_suggestions"
+    ],
+    "expected_table_counts": {
+      "collections": 1,
+      "collection_items": 7,
+      "tags": 33,
+      "save_tags": 202,
+      "boards": 0,
+      "board_items": 0,
+      "dismissed_tweets": 29,
+      "smart_categories": 0,
+      "smart_category_aliases": 0,
+      "smart_category_members": 0,
+      "save_topic_profiles": 61,
+      "smart_category_runs": 3,
+      "semantic_index_generations": 1,
+      "semantic_index_state": 1,
+      "semantic_vectors": 172,
+      "semantic_index_jobs": 173,
+      "video_analysis_jobs": 40,
+      "video_tag_suggestions": 189,
+      "save_background_routes": 109,
+      "saves_fts": 174
+    }
+  },
+  "after": {
+    "user_version": 15,
+    "ledger": [
+      {
+        "ordinal": 1,
+        "id": "smart-categories-foundation",
+        "checksum": "6331a8c5e750fbd5f215ff36fef08ecff4ef8c89ab9259ef59a9d63002f5e0c3",
+        "origin": "legacy-user-version-21"
+      },
+      {
+        "ordinal": 2,
+        "id": "smart-category-run-metadata",
+        "checksum": "4aec7086bc9cf0a56f7dd5a1b91f7a7c4a78f1b92508806c8107376a8bb1de59",
+        "origin": "legacy-user-version-21"
+      },
+      {
+        "ordinal": 3,
+        "id": "semantic-video-domain",
+        "checksum": "92a4e9dcb0af341acc89b8b1907361bc5c4c97a9aae98166db5c47e4112f2155",
+        "origin": "legacy-user-version-21"
+      },
+      {
+        "ordinal": 4,
+        "id": "semantic-video-queue-compatibility",
+        "checksum": "f7f7498bb2e2b7928e5440c35c50574ab047a06e2624da41922cbf4bc40671a6",
+        "origin": "legacy-user-version-21"
+      },
+      {
+        "ordinal": 5,
+        "id": "save-background-routing",
+        "checksum": "ec2d150675386d3731d69b3153a5d07aa3e9f94256ad54138c9f7936b8a8bbd2",
+        "origin": "legacy-user-version-21"
+      },
+      {
+        "ordinal": 6,
+        "id": "x-tweet-created-at-repair",
+        "checksum": "697d38e328d1ab91f83b8019367df566e04f4f1f28df06b014da1ab81e792966",
+        "origin": "legacy-user-version-21"
+      },
+      {
+        "ordinal": 7,
+        "id": "social-source-key",
+        "checksum": "b1a1ef6e1877573986adf1020ba76ca0a272d6914bb989c53b6cacf8870b8430",
+        "origin": "applied"
+      }
+    ],
+    "adopted": [
+      "smart-categories-foundation",
+      "smart-category-run-metadata",
+      "semantic-video-domain",
+      "semantic-video-queue-compatibility",
+      "save-background-routing",
+      "x-tweet-created-at-repair"
+    ],
+    "applied": [
+      "social-source-key"
+    ],
+    "active_source_key_claims": 138,
+    "eligible_social_rows": 140,
+    "eligible_duplicate_nulls": 2,
+    "source_key_claims_sha256": "8310ab9e996c5ec157bb6f6ce6e3e0fff14c879c66c286432cde818c73d15cb5"
+  },
+  "forbidden_app_modules": [
+    "src/main/index.js",
+    "src/main/licensing.js",
+    "src/main/extension-server.js",
+    "src/main/updater.js",
+    "src/main/native-host-installer.js",
+    "src/main/native-host.js",
+    "src/main/capture.js",
+    "src/main/openai.js",
+    "src/main/ipc.js"
+  ]
+}

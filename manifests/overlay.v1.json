@@ -11,8 +11,8 @@
   "source": {
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
-    "tip": "d2cd3ab8e6ace434265dbecd785cc3d7f1e4aaef",
-    "resulting_tree": "e4cdbcc1d14b147553c5444f09d505a93aa846c0"
+    "tip": "487967382314a7975f259be64e95b5e5f98780fd",
+    "resulting_tree": "229b9967964a9a7aedd2f8b102a3c3fdba5efeeb"
   },
   "acceptance": {
     "personal_policy": "never-auto-drop",
@@ -183,6 +183,38 @@
             "--check",
             "HEAD^",
             "HEAD"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 60,
+      "id": "personal.data-rehearsal-seam",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Add fail-closed data rehearsal seam",
+      "source_commit": "487967382314a7975f259be64e95b5e5f98780fd",
+      "source_parent": "d2cd3ab8e6ace434265dbecd785cc3d7f1e4aaef",
+      "source_tree": "229b9967964a9a7aedd2f8b102a3c3fdba5efeeb",
+      "logical_dependencies": [
+        "personal.local-migrations"
+      ],
+      "patch_id_stable": "03e3d453154f1d63bad79b46b06cb5ed49f2b57a",
+      "canonical_diff_sha256": "2d879a6b75cdfe19d5152cc0ae170370dca9e5c76b3dbd1613b573d3cb70390b",
+      "artifact": "patches/0060-personal.data-rehearsal-seam.patch",
+      "artifact_sha256": "36692a469fbadffb54d07246cfc450c99e0fdfbbf0d6cbda771f83316c6f8097",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "data-rehearsal-seam-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/persistent-state.test.js",
+            "test/local-migration-engine.test.js"
           ]
         }
       ]
