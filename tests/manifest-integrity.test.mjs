@@ -41,6 +41,7 @@ test('verifies artifact and current source evidence', () => {
   const manifest = loadAndVerifyManifest({ root, source })
   assert.equal(manifest.patches.length, 6)
   assert.equal(manifest.patches[1].contribution_state, 'pending-local-only')
+  assert.equal(manifest.source.canonical_evidence_ref, 'refs/gatherlocal/evidence/overlay-v1')
 })
 
 test('rejects modified artifact bytes', () => {

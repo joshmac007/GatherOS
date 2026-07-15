@@ -11,6 +11,7 @@
   "source": {
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
+    "canonical_evidence_ref": "refs/gatherlocal/evidence/overlay-v1",
     "tip": "487967382314a7975f259be64e95b5e5f98780fd",
     "resulting_tree": "229b9967964a9a7aedd2f8b102a3c3fdba5efeeb"
   },

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "contract_id": "gatherlocal-root-node-modules-20260714",
+  "platform": "darwin",
+  "arch": "arm64",
+  "tools": {
+    "node": "v24.11.1",
+    "electron": "v41.10.1",
+    "electron_node": "v24.18.0",
+    "npm": "11.6.2"
+  },
+  "package_json_sha256": "a1f25cbc58bca48fcf0630bdf9dcba297cd960ac1c41eb0e239a0f603b4c4380",
+  "node_modules": {
+    "entry_count": 26218,
+    "tree_sha256": "c4e8b9520c0671fa88921a3a7bbafd85a186f756fa6c21512359d11af6449cb1",
+    "install_lock_relative": "node_modules/.package-lock.json",
+    "install_lock_sha256": "2058fec4be86b271e919adc1a1f5715ce92b540a8ba58146977ee435aee35bcc",
+    "key_files": {
+      "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron": "afa086d829713c1385c6f15999898a8b959af24abb46df949ac324047afc30a7",
+      "node_modules/@electron-internal/extract-zip/index.darwin-universal.node": "155071063e93cbd3a62992a0bbba422553cc25813aefbf909379d86c1eb9e722",
+      "node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64.node": "72f7425d4d14c7934b793a2b386768a41ea361dbe5a249305f09dbc575e0707a",
+      "node_modules/@rollup/rollup-darwin-arm64/rollup.darwin-arm64.node": "1b14be77a4e56595d6d6a326855705aab673ad4f3f7cefe50055d8895f58c5f5",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node": "f3313c80714cbbac79debf22a575642528b082b68f362c21049dd263e8644869",
+      "node_modules/iconv-corefoundation/lib/native.node": "182edb49efc39a8f9df3a73e8f24cd185bcc948197480c55adc7acda04af6ae3"
+    }
+  }
+}

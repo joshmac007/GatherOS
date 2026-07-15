@@ -18,12 +18,16 @@ import {
   sha256File,
   treeInventory,
 } from '../lib/data-rehearsal.mjs'
+import { verifyCandidateDescriptor } from '../lib/candidate-descriptor.mjs'
+import { loadAndVerifyManifest } from '../lib/manifest.mjs'
 
 const workflowRoot = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
 const workspaceRoot = fs.realpathSync(path.resolve(workflowRoot, '..'))
 const contractPath = path.join(workflowRoot, 'manifests/data-rehearsal.v1.json')
 const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'))
 let appSource = path.join(workspaceRoot, 'GatherLocal-Next')
+let runtimeRoot = null
+let descriptorPath = null
 let receiptPath = path.join(workflowRoot, 'runs', 'data-rehearsal-latest.json')
 let keep = false
 
@@ -34,11 +38,13 @@ for (let index = 2; index < process.argv.length; index += 1) {
     continue
   }
   const value = process.argv[index + 1]
-  if (!['--app-source', '--receipt'].includes(flag) || !value) {
-    console.error(`Usage: ${process.argv[1]} [--app-source PATH] [--receipt PATH] [--keep]`)
+  if (!['--app-source', '--runtime-root', '--candidate-descriptor', '--receipt'].includes(flag) || !value) {
+    console.error(`Usage: ${process.argv[1]} [--app-source PATH] [--runtime-root PATH] [--candidate-descriptor PATH] [--receipt PATH] [--keep]`)
     process.exit(2)
   }
   if (flag === '--app-source') appSource = path.resolve(value)
+  if (flag === '--runtime-root') runtimeRoot = path.resolve(value)
+  if (flag === '--candidate-descriptor') descriptorPath = path.resolve(value)
   if (flag === '--receipt') receiptPath = path.resolve(value)
   index += 1
 }
@@ -144,10 +150,10 @@ function backupInventory(userData) {
     .sort()
 }
 
-function inspect({ electron, appSourcePath, database, userData, output, hashMedia = false }) {
+function inspect({ electron, executionRoot, runtimeRootPath, database, userData, output, hashMedia = false }) {
   const args = [
     path.join(workflowRoot, 'scripts/inspect-rehearsal-data.cjs'),
-    '--app-source', appSourcePath,
+    '--app-source', runtimeRootPath,
     '--database', database,
     '--contract', contractPath,
     '--user-data', userData,
@@ -155,13 +161,13 @@ function inspect({ electron, appSourcePath, database, userData, output, hashMedi
   ]
   if (hashMedia) args.push('--hash-media')
   run(electron, args, {
-    cwd: appSourcePath,
+    cwd: executionRoot,
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
   })
   return readJson(output)
 }
 
-function runStartup({ electron, appSourcePath, runRoot, userData, sentinel, label }) {
+function runStartup({ electron, executionRoot, runtimeRootPath, runRoot, userData, sentinel, label }) {
   const paths = {}
   for (const name of ['session', 'logs', 'crashes', 'home', 'tmp']) {
     paths[name] = path.join(runRoot, `${label}-${name}`)
@@ -172,7 +178,7 @@ function runStartup({ electron, appSourcePath, runRoot, userData, sentinel, labe
     ...process.env,
     HOME: paths.home,
     TMPDIR: paths.tmp,
-    GATHERLOCAL_REHEARSAL_APP_SOURCE: appSourcePath,
+    GATHERLOCAL_REHEARSAL_APP_SOURCE: runtimeRootPath,
     GATHERLOCAL_REHEARSAL_CONTRACT: contractPath,
     GATHERLOCAL_REHEARSAL_USER_DATA: userData,
     GATHERLOCAL_REHEARSAL_RUN_ROOT: runRoot,
@@ -190,7 +196,7 @@ function runStartup({ electron, appSourcePath, runRoot, userData, sentinel, labe
     electron,
     path.join(workflowRoot, 'scripts/data-rehearsal-entry.cjs'),
   ], {
-    cwd: appSourcePath,
+    cwd: executionRoot,
     env,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
@@ -278,14 +284,31 @@ try {
     fail('unsupported data rehearsal contract')
   }
   if (process.platform !== 'darwin') fail('APFS clone rehearsal requires macOS')
+  const appSourceInput = path.resolve(appSource)
+  if (fs.lstatSync(appSourceInput).isSymbolicLink()) fail('app source may not be a symlink')
   appSource = fs.realpathSync(appSource)
+  const runtimeInput = runtimeRoot ? path.resolve(runtimeRoot) : appSource
+  const runtimeInputStat = fs.lstatSync(runtimeInput)
+  if (runtimeInputStat.isSymbolicLink()
+    || (!runtimeInputStat.isDirectory() && !runtimeInputStat.isFile())) {
+    fail('runtime root must be a physical directory or app.asar file')
+  }
+  runtimeRoot = fs.realpathSync(runtimeInput)
+  if (runtimeRoot !== appSource) {
+    const relativeRuntime = path.relative(appSource, runtimeRoot)
+    if (!relativeRuntime || relativeRuntime.startsWith('..') || path.isAbsolute(relativeRuntime)) {
+      fail('packaged runtime must stay inside candidate source')
+    }
+    if (!runtimeInputStat.isFile() || path.basename(runtimeRoot) !== 'app.asar') {
+      fail('separate runtime root must be a packaged app.asar file')
+    }
+  }
   const snapshotRoot = fs.realpathSync(resolveInside(workspaceRoot, contract.snapshot.root_relative, 'snapshot root'))
   const sourceUserData = fs.realpathSync(resolveInside(snapshotRoot, contract.snapshot.user_data_relative, 'snapshot user data'))
   receiptPath = authorizeReceiptPath(receiptPath, snapshotRoot)
   receiptAuthorized = true
   const sourceDatabase = regularFileInside(sourceUserData, contract.snapshot.database_relative, 'snapshot database')
   if (fs.lstatSync(sourceUserData).isSymbolicLink()) fail('snapshot user data may not be a symlink')
-  if (fs.lstatSync(appSource).isSymbolicLink()) fail('app source may not be a symlink')
 
   const electron = path.join(appSource, 'node_modules/.bin/electron')
   if (!fs.existsSync(electron)) fail('candidate Electron runtime is missing')
@@ -294,14 +317,24 @@ try {
   const workflowCommit = git(['rev-parse', 'HEAD'], workflowRoot)
   const sourceStatus = git(['status', '--porcelain'], appSource)
   const workflowStatus = git(['status', '--porcelain'], workflowRoot)
-  const overlay = readJson(path.join(workflowRoot, 'manifests/overlay.v1.json'))
+  const overlay = loadAndVerifyManifest({ root: workflowRoot, source: appSource })
   const sourceTree = git(['rev-parse', 'HEAD^{tree}'], appSource)
-  const upstreamBase = git(['rev-parse', 'upstream/main'], appSource)
   if (sourceStatus !== '') fail('candidate app source must be clean')
   if (workflowStatus !== '') fail('workflow repository must be clean')
-  assertEqual(sourceCommit, overlay.source.tip, 'candidate app commit')
-  assertEqual(sourceTree, overlay.source.resulting_tree, 'candidate app tree')
-  assertEqual(upstreamBase, overlay.upstream.tested_base, 'candidate upstream base')
+  let upstreamBase = overlay.upstream.tested_base
+  let candidateDescriptor = null
+  if (descriptorPath) {
+    candidateDescriptor = verifyCandidateDescriptor({
+      file: descriptorPath,
+      workflowRoot,
+      appSource,
+      manifest: overlay,
+    })
+    upstreamBase = candidateDescriptor.descriptor.upstream.target
+  } else {
+    assertEqual(sourceCommit, overlay.source.tip, 'candidate app commit')
+    assertEqual(sourceTree, overlay.source.resulting_tree, 'candidate app tree')
+  }
 
   const preservationBefore = verifyPreservationChecksums(snapshotRoot)
   const sourceKeysBefore = keyFileHashes(sourceUserData)
@@ -332,7 +365,8 @@ try {
   const copiedDatabase = regularFileInside(copiedPhysical, contract.snapshot.database_relative, 'copied database')
   const beforeInspection = inspect({
     electron,
-    appSourcePath: appSource,
+    executionRoot: appSource,
+    runtimeRootPath: runtimeRoot,
     database: copiedDatabase,
     userData: copiedPhysical,
     output: path.join(runRoot, 'before.json'),
@@ -347,7 +381,8 @@ try {
 
   const firstRun = runStartup({
     electron,
-    appSourcePath: appSource,
+    executionRoot: appSource,
+    runtimeRootPath: runtimeRoot,
     runRoot: fs.realpathSync(runRoot),
     userData: copiedPhysical,
     sentinel: sentinelPath,
@@ -367,7 +402,8 @@ try {
   assertEqual(path.basename(firstRun.migration_report.backupPath), newBackups[0], 'first reported backup')
   const backupInspection = inspect({
     electron,
-    appSourcePath: appSource,
+    executionRoot: appSource,
+    runtimeRootPath: runtimeRoot,
     database: path.join(path.dirname(copiedDatabase), newBackups[0]),
     userData: copiedPhysical,
     output: path.join(runRoot, 'backup.json'),
@@ -391,7 +427,8 @@ try {
 
   const secondRun = runStartup({
     electron,
-    appSourcePath: appSource,
+    executionRoot: appSource,
+    runtimeRootPath: runtimeRoot,
     runRoot: fs.realpathSync(runRoot),
     userData: copiedPhysical,
     sentinel: sentinelPath,
@@ -431,6 +468,10 @@ try {
     workflow_commit: workflowCommit,
     workflow_status_clean: true,
     upstream_base: upstreamBase,
+    candidate_descriptor_sha256: candidateDescriptor?.descriptor_sha256 || null,
+    runtime: runtimeRoot === appSource
+      ? { kind: 'source-tree', tree: sourceTree }
+      : { kind: 'packaged-asar', sha256: sha256File(runtimeRoot) },
   }
   receipt.preservation = {
     snapshot: contract.snapshot.root_relative,

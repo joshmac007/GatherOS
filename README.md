@@ -98,3 +98,27 @@ no backup. A run is rejected unless both repositories are clean and the app
 commit/tree exactly match the overlay manifest. Receipts are new-file-only and
 may live only under ignored `runs/` or a separate Preservation evidence folder.
 Passing copies are removed; failed copies are preserved and printed.
+
+## Update controller
+
+One-time setup:
+
+```sh
+node scripts/gatherlocal-sync.mjs init
+```
+
+Receive Brett's latest `main` after independently confirming its full SHA:
+
+```sh
+node scripts/gatherlocal-sync.mjs sync \
+  --upstream-ref upstream/main \
+  --target-sha FULL_40_CHARACTER_SHA
+```
+
+Sync is one-way. It fetches public source, builds a new candidate, replays the
+personal overlay, validates package and copied data, then promotes only if every
+gate passes. It cannot push or create a pull request. Failed candidates remain
+under `.gatherlocal-sync-runs`; current accepted app remains selected.
+
+See `docs/steady-state-workflow.md` for normal update and optional contribution
+flows.
