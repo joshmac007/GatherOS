@@ -60,7 +60,7 @@ app.on('second-instance', (_event, argv) => {
 });
 
 const {
-  initDatabase, closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
+  closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
 } = require('./db');
 const { getPref } = require('./settings');
 const { hasSession: hasAiSession, analyzeImage, embedText } = require('./openai');
@@ -144,6 +144,7 @@ const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
 const libraryRegistry = require('./library-registry');
 const { reopenDatabase } = require('./db');
+const { initializePersistentState } = require('./persistent-state');
 
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:5173';
@@ -1045,9 +1046,7 @@ app.whenReady().then(() => {
   // Bootstrap the library registry first — moves any pre-multi-
   // library data into a default library folder so the DB and image
   // dirs initialize against the right path on the next call.
-  libraryRegistry.bootstrap();
-  ensureStorageDirs();
-  initDatabase();
+  initializePersistentState();
   // Decide the local no-account trial start on first launch (idempotent;
   // also done lazily inside getEntitlement). MUST run after initDatabase
   // so isNewInstall() can read the real library count — otherwise an

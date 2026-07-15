@@ -420,6 +420,65 @@ test('backup failure blocks all local mutation', () => {
   });
 });
 
+test('verified backup gates future upstream migrations', () => {
+  withTempDatabase((database) => {
+    setVersion(database, 15);
+    database.prepare(`
+      INSERT INTO collections (id, name, color, created_at)
+      VALUES ('future-upstream', 'Future upstream', '#000', 1)
+    `).run();
+    migrateWithLocalOverlay({ database, upstream: upstream(database) });
+
+    let backupCreated = false;
+    const guardedEngine = loadEngineWith({
+      createVerifiedBackup() {
+        backupCreated = true;
+        return '/verified/future-upstream.bak';
+      },
+    });
+    const report = guardedEngine({
+      database,
+      upstream: upstream(database, 16, () => {
+        assert.equal(backupCreated, true);
+        setVersion(database, 16);
+      }),
+    });
+
+    assert.equal(version(database), 16);
+    assert.equal(report.backupPath, '/verified/future-upstream.bak');
+    assert.deepEqual(report.applied, []);
+  });
+
+  withTempDatabase((database) => {
+    setVersion(database, 15);
+    database.prepare(`
+      INSERT INTO collections (id, name, color, created_at)
+      VALUES ('blocked-upstream', 'Blocked upstream', '#000', 1)
+    `).run();
+    migrateWithLocalOverlay({ database, upstream: upstream(database) });
+
+    let upstreamCalled = false;
+    const failedBackupEngine = loadEngineWith({
+      createVerifiedBackup() {
+        throw new Error('future backup failed');
+      },
+    });
+    assert.throws(
+      () => failedBackupEngine({
+        database,
+        upstream: upstream(database, 16, () => {
+          upstreamCalled = true;
+          setVersion(database, 16);
+        }),
+      }),
+      error => error.code === 'LOCAL_MIGRATION_BACKUP_FAILED'
+        && error.cause?.message === 'future backup failed',
+    );
+    assert.equal(upstreamCalled, false);
+    assert.equal(version(database), 15);
+  });
+});
+
 test('failed VACUUM removes partial backup while retaining attempted path', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-backup-failure-'));
   const file = path.join(dir, 'library.db');
