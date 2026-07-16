@@ -40,7 +40,7 @@ an untracked hook path, or no longer rejects a synthetic push invocation.
 
 ## Overlay manifest
 
-`manifests/overlay.v1.json` is the source of truth for the current six-patch
+`manifests/overlay.v1.json` is the source of truth for the current eight-patch
 stack. Logical IDs survive rebases; revisions change when patch behavior changes.
 Artifact checksums protect exported bytes, canonical-diff checksums bind current
 source evidence, and stable patch IDs support equivalence checks without being
