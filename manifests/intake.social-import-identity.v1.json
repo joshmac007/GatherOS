@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "expected_tip": "734f88fafe96553e30f4331c9a2fcdfdff58543c",
+  "workflow_commit_subject": "Intake social import identity patch",
+  "patches": [
+    {
+      "id": "personal.social-import-identity",
+      "revision": 1,
+      "class": "personal-support",
+      "subject": "Require explicit social import host identity",
+      "source_commit": "93ec84083f66bbb020bfe3b61c8856bacceeeff3",
+      "logical_dependencies": [
+        "personal.runtime-identity",
+        "pending.x-social-import"
+      ],
+      "checks": [
+        {
+          "id": "social-import-identity-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/runtime-identity.test.js",
+            "test/social-import-progress.test.js"
+          ]
+        }
+      ]
+    }
+  ]
+}
