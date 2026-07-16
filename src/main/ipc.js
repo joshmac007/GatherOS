@@ -963,6 +963,7 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
   // whether a session is present and what the monthly counter looks
   // like so it can show "AI features unlocked" + remaining quota.
   ipcMain.handle('ai:has-session', () => hasAiSession());
+  ipcMain.handle('ai:access', () => require('./openai').getAccess());
 
   ipcMain.handle('ai:usage', async () => {
     const usage = await getAiUsage();
