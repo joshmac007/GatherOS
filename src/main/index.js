@@ -64,66 +64,7 @@ const {
 } = require('./db');
 const { getPref } = require('./settings');
 const { hasSession: hasAiSession, analyzeImage, embedText } = require('./openai');
-const licensing = require('./licensing');
-const { URL_SCHEME: LICENSE_URL_SCHEME } = require('../shared/licensing-config');
 const { createSocialImportState } = require('./social-import-state');
-
-// Register the custom URL scheme so the OS knows magic-link emails
-// (gatherlocal://auth/verify?token=…) should open this app. macOS
-// dispatches the URL via the 'open-url' event; Windows / Linux pass
-// it through argv to a second-instance launch.
-if (process.env.GATHERLOCAL_SKIP_PROTOCOL_REGISTRATION === '1') {
-  // Disposable smoke/rehearsal launches must not rewrite LaunchServices.
-} else if (process.defaultApp) {
-  // Dev: when launched via `electron .`, defaultApp is true and we
-  // need to pass the script path so single-instance forwarding works.
-  if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(LICENSE_URL_SCHEME, process.execPath, [
-      path.resolve(process.argv[1]),
-    ]);
-  }
-} else {
-  app.setAsDefaultProtocolClient(LICENSE_URL_SCHEME);
-}
-
-// Token queue for licensing deep-links that arrive before the
-// renderer is ready to receive them (cold launch from email click).
-const pendingLicenseTokens = [];
-let rendererReady = false;
-
-async function handleLicensingDeepLink(url) {
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return;
-  }
-  // gatherlocal://auth/verify?token=…
-  if (parsed.hostname !== 'auth' || parsed.pathname !== '/verify') return;
-  const token = parsed.searchParams.get('token');
-  if (!token) return;
-
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  }
-
-  const result = await licensing.exchangeMagicToken(token);
-  // Always notify the renderer so it can refresh license state and
-  // dismiss the signin screen; include success/failure so the UI can
-  // surface the right toast.
-  pendingLicenseTokens.push(result);
-  drainLicenseTokenQueue();
-}
-
-function drainLicenseTokenQueue() {
-  if (!mainWindow || !rendererReady) return;
-  while (pendingLicenseTokens.length > 0) {
-    const item = pendingLicenseTokens.shift();
-    mainWindow.webContents.send('licensing:auth-result', item);
-  }
-}
 
 // Float32Array <-> Buffer plumbing for storing embeddings as SQLite BLOBs.
 function vectorToBuffer(arr) {
@@ -140,7 +81,7 @@ const {
 } = require('./capture');
 const extensionServer = require('./extension-server');
 const { showToast, destroyToastWindow } = require('./toast-window');
-const { setSaveNotifier, setDuplicateNotifier, setNeedsUpgradeNotifier, setBookmarkNotifier, setBookmarkFailedNotifier, setErrorNotifier, setTrayRefresher, notifyError } = require('./notify');
+const { setSaveNotifier, setDuplicateNotifier, setBookmarkNotifier, setBookmarkFailedNotifier, setErrorNotifier, setTrayRefresher, notifyError } = require('./notify');
 const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
 const libraryRegistry = require('./library-registry');
@@ -208,13 +149,6 @@ async function waitForMainWindowReady() {
 async function drainDockOpenQueue() {
   if (!dockOpenReady || dockOpenQueue.length === 0) return;
   await waitForMainWindowReady();
-  // Free tier: new saves require an upgrade. Drop the queued drops and
-  // surface the prompt rather than silently saving past the gate.
-  if (!require('./entitlement').canCreateSave()) {
-    dockOpenQueue.length = 0;
-    try { notifyNeedsUpgrade({ source: 'save' }); } catch { /* ignore */ }
-    return;
-  }
   const { saveImageFromFile } = require('./storage');
   const { insertSave } = require('./db');
   while (dockOpenQueue.length > 0) {
@@ -298,12 +232,6 @@ async function handleDockDropUrl(url, deps) {
 app.on('open-url', (event, url) => {
   event.preventDefault();
   if (typeof url !== 'string') return;
-  // Magic-link bridge: gatherlocal://auth/verify?token=… — route to the
-  // licensing module instead of the image-save pipeline.
-  if (url.startsWith(`${LICENSE_URL_SCHEME}://`)) {
-    handleLicensingDeepLink(url);
-    return;
-  }
   if (!/^https?:\/\//i.test(url)) return;
   dockOpenUrlQueue.push(url);
   if (mainWindow) {
@@ -317,11 +245,6 @@ app.on('open-url', (event, url) => {
 async function drainDockOpenUrlQueue() {
   if (!dockOpenReady || dockOpenUrlQueue.length === 0) return;
   await waitForMainWindowReady();
-  if (!require('./entitlement').canCreateSave()) {
-    dockOpenUrlQueue.length = 0;
-    try { notifyNeedsUpgrade({ source: 'save' }); } catch { /* ignore */ }
-    return;
-  }
   const { saveImageFromUrl } = require('./storage');
   const { insertSave } = require('./db');
   const { captureUrl } = require('./urlCapture');
@@ -517,25 +440,12 @@ function notifyDuplicateInRenderer(existing) {
   }
 }
 
-// A fire-and-forget save (global-hotkey screenshot) was blocked by the
-// free tier. Bring the window forward and let the renderer pop the
-// upgrade prompt — otherwise the capture would silently no-op.
-function notifyNeedsUpgrade(context) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.webContents.send('save:needs-upgrade', context || {});
-  }
-}
-
 // One vision call yields title + description. The description (plus
 // title and any tags) feeds a single embedding call. Whichever fields
 // the user opted into get persisted; the rest are skipped to save cost.
 async function maybeAIIndexInBackground(record) {
   if (!record?.id || !record.file_path) return;
-  // No license session = paywall is in front of the user; AI features
-  // would 401 at the proxy anyway, so skip the round-trip.
+  // Skip background AI work when no local structured provider is configured.
   if (!hasAiSession()) return;
 
   const wantName = getPref('autoNameOnSave', true) && !(record.title && record.title.trim());
@@ -659,12 +569,6 @@ function createMainWindow() {
     if (!LAUNCHED_FOR_BG_SAVE) mainWindow.show();
   });
 
-  // Renderer is ready to receive IPC events. Drain any queued
-  // licensing deep-links that arrived before this point.
-  mainWindow.webContents.once('did-finish-load', () => {
-    rendererReady = true;
-    drainLicenseTokenQueue();
-  });
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -814,10 +718,6 @@ function createTray() {
   });
 
   tray.on('drop-files', async (_e, files) => {
-    if (!require('./entitlement').canCreateSave()) {
-      try { notifyNeedsUpgrade({ source: 'save' }); } catch { /* ignore */ }
-      return;
-    }
     for (const file of files) {
       try {
         const imgData = await saveImageFromFile(file);
@@ -1037,7 +937,6 @@ app.whenReady().then(() => {
   }
   setSaveNotifier(notifySaved);
   setDuplicateNotifier(notifyDuplicateInRenderer);
-  setNeedsUpgradeNotifier(notifyNeedsUpgrade);
   setBookmarkNotifier(notifyBookmarkSaved);
   setBookmarkFailedNotifier(notifyBookmarkFailed);
   // Generic error line for fire-and-forget paths (dock drops etc.) —
@@ -1055,13 +954,6 @@ app.whenReady().then(() => {
   // library data into a default library folder so the DB and image
   // dirs initialize against the right path on the next call.
   initializePersistentState();
-  // Decide the local no-account trial start on first launch (idempotent;
-  // also done lazily inside getEntitlement). MUST run after initDatabase
-  // so isNewInstall() can read the real library count — otherwise an
-  // existing no-account user (with saves but no session) would be misread
-  // as a fresh install and wrongly handed a 14-day trial.
-  try { require('./entitlement').ensureTrialDecided(); }
-  catch (err) { console.warn('[gatheros] trial init failed:', err?.message || err); }
   registerIpcHandlers({
     socialImportState,
   });

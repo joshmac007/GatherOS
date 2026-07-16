@@ -1,8 +1,8 @@
 'use strict';
 
 // Product-facing AI facade. Existing main-process and IPC callers stay on
-// this module; transport, provider selection, and entitlement enforcement
-// live behind the capability runtime.
+// this module; local transport and provider selection live behind the
+// capability runtime.
 
 const { getAiRuntime } = require('./ai/bootstrap');
 const { CAPABILITIES } = require('./ai/runtime');
@@ -10,8 +10,7 @@ const { providerAccess } = require('./gatherlocal/ai/authorization');
 
 function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
   function hasSession() {
-    // Compatibility name: callers use this as "AI can be used", while
-    // account-session state remains owned by licensing:has-session.
+    // Compatibility name: callers use this as "AI is configured".
     return runtime.isConfigured(CAPABILITIES.STRUCTURED_JSON);
   }
 

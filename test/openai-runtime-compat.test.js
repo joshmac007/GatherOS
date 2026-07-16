@@ -44,7 +44,7 @@ test('openai facade reports provider ownership per capability', () => {
   const providers = {
     'structured-json': 'codex',
     embedding: 'ollama',
-    'image-generation': 'gatheros-proxy',
+    'image-generation': null,
   };
   const facade = createOpenAiFacade({
     runtime: {
@@ -62,9 +62,9 @@ test('openai facade reports provider ownership per capability', () => {
   });
   assert.deepEqual(facade.getAccess().imageGeneration, {
     capability: 'image-generation',
-    provider: 'gatheros-proxy',
+    provider: null,
     configured: false,
-    ownership: 'gatheros',
+    ownership: 'unknown',
     requiresPro: true,
   });
 });

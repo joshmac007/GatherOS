@@ -180,18 +180,6 @@ async function handleSave(req, res) {
   // web-page fetches from even reaching the auth path.
   if (!validateExtensionRequest(req, res)) return;
 
-  // Free tier: new saves require an upgrade. Surface the prompt in the
-  // app window and tell the extension so it can show its own notice.
-  // Fails OPEN — any error resolving entitlement allows the save.
-  try {
-    const { canCreateSave } = require('./entitlement');
-    if (!canCreateSave()) {
-      try { require('./notify').notifyNeedsUpgrade({ source: 'extension' }); } catch {}
-      sendJson(res, 402, { ok: false, needsUpgrade: true, error: 'upgrade required' });
-      return;
-    }
-  } catch { /* fail open */ }
-
   const parsed = await readPostBody(req, res);
   if (!parsed) return;
   const { body } = parsed;

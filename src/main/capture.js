@@ -21,22 +21,6 @@ const DEFAULT_ACCELERATOR = 'CommandOrControl+Shift+S';
 
 let activeAccelerator = null;
 
-// Free-tier guard for the hotkey-triggered screenshot paths. These are
-// fire-and-forget (no IPC return value), so on a block we surface the
-// upgrade prompt in the window via notify rather than silently no-op.
-// Fails OPEN — any error resolving entitlement allows the capture.
-function blockedByFreeTier(context) {
-  try {
-    const { canCreateSave } = require('./entitlement');
-    if (canCreateSave()) return false;
-    const { notifyNeedsUpgrade } = require('./notify');
-    notifyNeedsUpgrade({ source: context });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function readShortcutPref() {
   try {
     const settings = require('./settings');
@@ -174,7 +158,6 @@ async function startScreenshotCapture() {
     console.warn('[capture] area capture is macOS-only');
     return;
   }
-  if (blockedByFreeTier('screenshot')) return;
 
   const ok = await ensureScreenRecordingPermission();
   if (!ok) return;
@@ -248,7 +231,6 @@ async function persistScreenshot(buf, ext = 'png') {
 // Capture the entire display under the cursor in one shot — no
 // overlay, no picker. Saves straight to the active library.
 async function captureFullscreen() {
-  if (blockedByFreeTier('screenshot')) return;
   const ok = await ensureScreenRecordingPermission();
   if (!ok) return;
 
@@ -286,7 +268,6 @@ async function captureWindow() {
     console.warn('[gatheros] Window capture is macOS-only.');
     return;
   }
-  if (blockedByFreeTier('screenshot')) return;
 
   const ok = await ensureScreenRecordingPermission();
   if (!ok) return;

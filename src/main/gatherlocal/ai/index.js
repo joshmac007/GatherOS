@@ -13,15 +13,7 @@ function selector(config, capability, fallback) {
   return typeof value === 'string' ? value.trim().toLowerCase() || fallback : fallback;
 }
 
-function proxyRoute(proxyAdapter, capability) {
-  if (!proxyAdapter) return null;
-  if (capability === CAPABILITIES.STRUCTURED_JSON && typeof proxyAdapter.completeJson === 'function') return proxyAdapter;
-  if (capability === CAPABILITIES.EMBEDDING && typeof proxyAdapter.embed === 'function') return proxyAdapter;
-  if (capability === CAPABILITIES.IMAGE_GENERATION && typeof proxyAdapter.generateImage === 'function') return proxyAdapter;
-  return null;
-}
-
-function createGatherLocalRoutes({ config, proxyAdapter = null, dependencies = {} } = {}) {
+function createGatherLocalRoutes({ config, dependencies = {} } = {}) {
   const resolved = config || readGatherLocalAiConfig();
   const structured = selector(
     resolved,
@@ -44,17 +36,11 @@ function createGatherLocalRoutes({ config, proxyAdapter = null, dependencies = {
       ? createCodexStructuredAdapter(resolved.codex, dependencies.codex || {})
       : structured === 'local'
         ? createLocalStructuredAdapter(resolved.local, dependencies.local || {})
-        : structured === 'proxy'
-          ? proxyRoute(proxyAdapter, CAPABILITIES.STRUCTURED_JSON)
-          : null,
+        : null,
     [CAPABILITIES.EMBEDDING]: embedding === 'ollama'
       ? createOllamaEmbeddingAdapter(resolved.ollama, dependencies.ollama || {})
-      : embedding === 'proxy'
-        ? proxyRoute(proxyAdapter, CAPABILITIES.EMBEDDING)
-        : null,
-    [CAPABILITIES.IMAGE_GENERATION]: image === 'proxy'
-      ? proxyRoute(proxyAdapter, CAPABILITIES.IMAGE_GENERATION)
       : null,
+    [CAPABILITIES.IMAGE_GENERATION]: null,
   };
   return routes;
 }

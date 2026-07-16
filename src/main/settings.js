@@ -1,7 +1,5 @@
-// Plain-JSON preferences store. AI key storage was retired when the
-// app moved from BYOK to a server-proxied OpenAI integration; the
-// licensing session token (handled in licensing.js) is the only
-// credential the renderer cares about now.
+// Plain-JSON preferences store. GatherLocal AI configuration is read from
+// local environment variables and never stores a GatherOS session.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -51,12 +49,6 @@ const DEFAULT_PREFS = {
   syncInstagramEnabled: true,
   sortXBookmarksByTweetDate: false,
 
-  // ── Trial / free tier ────────────────────────────────────────
-  // Timestamp (ms) of when the local no-account trial started, set on
-  // first launch. Drives the 14-day reverse trial: full app while the
-  // clock runs, then a soft free tier (existing saves stay usable, new
-  // saves + pro features prompt to upgrade). null until first launch.
-  trialStartedAt: null,
 };
 
 function prefsFilePath() {

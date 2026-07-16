@@ -94,10 +94,6 @@ contextBridge.exposeInMainWorld('moodmark', {
         ext,
       }),
   },
-  announcement: {
-    // Current in-app notice, or null. Polled by the Announcement widget.
-    get: () => ipcRenderer.invoke('announcement:get'),
-  },
   collections: {
     getAll: () => ipcRenderer.invoke('collections:get-all'),
     getAllWithThumbs: () => ipcRenderer.invoke('collections:get-all-with-thumbs'),
@@ -212,9 +208,7 @@ contextBridge.exposeInMainWorld('moodmark', {
     restoreSnapshot: () => ipcRenderer.invoke('onboarding:restore-snapshot'),
   },
   ai: {
-    // Server-proxied AI features. The licensing session token in
-    // licensing.js is what gates these — no per-feature key to manage
-    // on the renderer side anymore.
+    // User-owned local AI routes. No GatherOS session or proxy.
     hasSession: () => ipcRenderer.invoke('ai:has-session'),
     access: () => ipcRenderer.invoke('ai:access'),
     usage: () => ipcRenderer.invoke('ai:usage'),
@@ -228,20 +222,6 @@ contextBridge.exposeInMainWorld('moodmark', {
     install: () => ipcRenderer.invoke('updater:install'),
     check: () => ipcRenderer.invoke('updater:check'),
   },
-  licensing: {
-    requestMagicLink: (email) => ipcRenderer.invoke('licensing:request-magic-link', email),
-    verify: (opts) => ipcRenderer.invoke('licensing:verify', opts),
-    hasSession: () => ipcRenderer.invoke('licensing:has-session'),
-    signOut: () => ipcRenderer.invoke('licensing:sign-out'),
-    // Dev/testing: finish sign-in by pasting a magic-link token (the
-    // gatheros:// deep link only works in the packaged app).
-    exchange: (token) => ipcRenderer.invoke('licensing:exchange', token),
-    openCustomerPortal: () => ipcRenderer.invoke('licensing:open-customer-portal'),
-    openCheckout: (plan) => ipcRenderer.invoke('licensing:open-checkout', plan),
-  },
-  entitlement: {
-    get: () => ipcRenderer.invoke('entitlement:get'),
-  },
   socialImport: {
     get: () => ipcRenderer.invoke('social-import:get'),
     cancel: (runId) => ipcRenderer.invoke('social-import:cancel', runId),
@@ -253,7 +233,6 @@ contextBridge.exposeInMainWorld('moodmark', {
       'save:duplicate',
       'save:updated',
       'save:deleted',
-      'save:needs-upgrade',
       'bookmarks:synced',
       'focus:save',
       'save:indexing-start',
@@ -264,7 +243,6 @@ contextBridge.exposeInMainWorld('moodmark', {
       'ai:reindex-progress',
       'storage:reclaim-progress',
       'library:switched',
-      'licensing:auth-result',
       'menu:command',
       'social-import:status',
     ]);
