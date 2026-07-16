@@ -39,3 +39,32 @@ test('openai facade preserves embedding vector compatibility', async () => {
   assert.equal(request.text, 'visual query');
   assert.equal(request.expectedDimension, 2);
 });
+
+test('openai facade reports provider ownership per capability', () => {
+  const providers = {
+    'structured-json': 'codex',
+    embedding: 'ollama',
+    'image-generation': 'gatheros-proxy',
+  };
+  const facade = createOpenAiFacade({
+    runtime: {
+      providerFor: (capability) => providers[capability] || null,
+      isConfigured: (capability) => capability !== 'image-generation',
+    },
+  });
+
+  assert.deepEqual(facade.getAccess().structuredJson, {
+    capability: 'structured-json',
+    provider: 'codex',
+    configured: true,
+    ownership: 'user',
+    requiresPro: false,
+  });
+  assert.deepEqual(facade.getAccess().imageGeneration, {
+    capability: 'image-generation',
+    provider: 'gatheros-proxy',
+    configured: false,
+    ownership: 'gatheros',
+    requiresPro: true,
+  });
+});

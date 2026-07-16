@@ -8,7 +8,7 @@ import TagSuggestions from './TagSuggestions.jsx';
 import { fuzzyMatch } from '../lib/fuzzy.js';
 import { findNearDuplicateTag } from '../lib/tagSimilarity.js';
 import { CollectionIcon } from './Sidebar.jsx';
-import { useEntitlementValue, isLocked, requestUpgrade } from '../context/entitlement.jsx';
+import { requestUpgrade } from '../context/entitlement.jsx';
 
 const SUGGESTION_LIMIT = 6;
 
@@ -142,6 +142,7 @@ export default function DetailPanel({
   allCollections = [],
   allTags = [],
   aiConfigured = false,
+  aiRequiresUpgrade = false,
   aiIndexing = false,
   onClose,
   onCollectionsChanged,
@@ -151,9 +152,6 @@ export default function DetailPanel({
   onOpenSave,
   onOpenSpace,
 }) {
-  // AI features (auto-tag, prompt generation) are pro; locked in the
-  // free tier. Fails open to unlocked.
-  const proLocked = isLocked(useEntitlementValue());
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
   const [copiedColor, setCopiedColor] = useState(null);
@@ -387,7 +385,7 @@ export default function DetailPanel({
 
   async function handleAutoTag() {
     if (autoTagging) return;
-    if (proLocked) { requestUpgrade('ai'); return; }
+    if (aiRequiresUpgrade) { requestUpgrade('ai'); return; }
     if (!aiConfigured) {
       onOpenSettings?.();
       return;
@@ -414,7 +412,7 @@ export default function DetailPanel({
 
   async function handleGeneratePrompt() {
     if (promptGenerating) return;
-    if (proLocked) { requestUpgrade('ai'); return; }
+    if (aiRequiresUpgrade) { requestUpgrade('ai'); return; }
     if (!aiConfigured) {
       onOpenSettings?.();
       return;
@@ -853,7 +851,7 @@ export default function DetailPanel({
             className={[styles.autoTagBtn, autoTagging && styles.autoTagBtnLoading].filter(Boolean).join(' ')}
             onClick={handleAutoTag}
             disabled={autoTagging}
-            title={aiConfigured ? 'Auto-tag with AI' : 'Configure OpenAI key to enable'}
+            title={aiConfigured ? 'Auto-tag with AI' : 'AI provider unavailable'}
           >
             <span className={styles.autoTagIcon}>
               {aiConfigured ? <SparkleIcon /> : <LockIcon />}
@@ -991,7 +989,7 @@ export default function DetailPanel({
                   ].filter(Boolean).join(' ')}
                   onClick={handleGeneratePrompt}
                   disabled={promptGenerating}
-                  title={aiConfigured ? 'Generate an image-generation prompt' : 'Configure OpenAI key to enable'}
+                  title={aiConfigured ? 'Generate an image-generation prompt' : 'AI provider unavailable'}
                 >
                   <span className={styles.autoTagIcon}>
                     {aiConfigured ? <SparkleIcon /> : <LockIcon />}

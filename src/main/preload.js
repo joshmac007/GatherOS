@@ -216,6 +216,7 @@ contextBridge.exposeInMainWorld('moodmark', {
     // licensing.js is what gates these — no per-feature key to manage
     // on the renderer side anymore.
     hasSession: () => ipcRenderer.invoke('ai:has-session'),
+    access: () => ipcRenderer.invoke('ai:access'),
     usage: () => ipcRenderer.invoke('ai:usage'),
     autoTag: (saveId) => ipcRenderer.invoke('ai:auto-tag', saveId),
     generatePrompt: (saveId) => ipcRenderer.invoke('ai:generate-prompt', saveId),
