@@ -277,7 +277,7 @@ function validateTopology(manifest, dependencyContract, env, logFile) {
   if (gitText(['symbolic-ref', '--short', 'HEAD'], accepted, { env, logFile }) !== manifest.source.branch) {
     fail('accepted reconstruction branch mismatch')
   }
-  loadAndVerifyManifest({ root: workflowRoot, source: accepted })
+  loadAndVerifyManifest({ root: workflowRoot, source: store })
   const dependencyReceipt = verifyDependencySnapshot(accepted, dependencyContract, { env })
   if (pointerRepaired) {
     atomicWriteJson(paths.state, {
@@ -337,7 +337,7 @@ function fetchTarget({ upstream, id, expected, previousTarget, manifest, env, lo
   return { target, incoming }
 }
 
-function createCandidate({ upstream, accepted, oldTip, target, id, manifest, dependencyContract, runRoot, env, checks }) {
+function createCandidate({ upstream, accepted, store, oldTip, target, id, manifest, dependencyContract, runRoot, env, checks }) {
   const candidate = path.join(runRoot, 'candidate')
   const replayLog = path.join(runRoot, 'logs/replay.log')
   git(['clone', '--no-hardlinks', '--no-checkout', upstream, candidate], workflowRoot, { env, logFile: replayLog })
@@ -353,8 +353,11 @@ function createCandidate({ upstream, accepted, oldTip, target, id, manifest, dep
   git(['remote', 'set-url', '--push', 'upstream', 'DISABLED'], candidate, { env, logFile: replayLog })
   git(['config', 'remote.upstream.fetch', '+refs/heads/main:refs/remotes/upstream/main'], candidate, { env, logFile: replayLog })
   git([
-    'fetch', '--no-tags', '--no-write-fetch-head', accepted,
+    'fetch', '--no-tags', '--no-write-fetch-head', store,
     `${manifest.source.canonical_evidence_ref}:${manifest.source.canonical_evidence_ref}`,
+  ], candidate, { env, logFile: replayLog })
+  git([
+    'fetch', '--no-tags', '--no-write-fetch-head', accepted,
     `refs/heads/${manifest.source.branch}:refs/gatherlocal/recovery/${id}`,
   ], candidate, { env, logFile: replayLog })
   cloneDependencySnapshot(accepted, candidate, dependencyContract, { verifyCandidatePackage: false, env })
@@ -608,6 +611,7 @@ function sync(id, runRoot, env, logFile, options) {
   const candidateState = createCandidate({
     upstream,
     accepted: topology.accepted,
+    store: topology.store,
     oldTip: topology.oldTip,
     target: fetched.target,
     id,

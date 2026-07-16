@@ -9,7 +9,7 @@ import { loadAndVerifyManifest } from '../lib/manifest.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const manifestPath = path.join(root, 'manifests/overlay.v1.json')
 const source = path.resolve(
-  process.env.GATHERLOCAL_APP_SOURCE || path.join(root, '..', 'GatherLocal-Next'),
+  process.env.GATHERLOCAL_OVERLAY_SOURCE || path.join(root, '..', 'GatherLocal-Accepted.git'),
 )
 
 function fixture(mutate) {

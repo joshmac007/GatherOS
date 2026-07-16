@@ -258,7 +258,7 @@ Workflow checks:
 cd "/Users/joshmcswain/Documents/GatherOS Remake/GatherLocal-Workflow"
 node --test tests/*.test.mjs
 scripts/check-boundary.sh
-node scripts/check-manifest.mjs --source ../GatherLocal-Next
+node scripts/check-manifest.mjs --source ../GatherLocal-Accepted.git
 git diff --check
 ```
 

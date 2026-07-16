@@ -52,7 +52,7 @@ dependencies are built for the app's Electron ABI, not the shell's Node ABI.
 Verify manifest artifacts and current reconstruction evidence:
 
 ```sh
-node scripts/check-manifest.mjs --source ../GatherLocal-Next
+node scripts/check-manifest.mjs --source ../GatherLocal-Accepted.git
 ```
 
 Replay every artifact from the tested upstream base in a disposable independent
@@ -61,7 +61,7 @@ clone and prove each intermediate tree:
 ```sh
 node scripts/replay-manifest.mjs \
   --upstream ../GatherOS-Upstream \
-  --source ../GatherLocal-Next
+  --source ../GatherLocal-Accepted.git
 ```
 
 The replay probe deletes a passing candidate unless `--keep` is supplied. A
