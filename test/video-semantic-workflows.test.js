@@ -258,28 +258,22 @@ test('new save routing warns instead of rejecting after semantic enqueue failure
   assert.equal(result.semanticWarning?.reason, 'semantic-enqueue-failed');
 });
 
-test('extension success response waits once and marks notification as already routed', async () => {
-  const gate = deferred();
+test('extension success response acknowledges durable queue without waiting for background work', async () => {
   const order = [];
   let responseBody = null;
   const response = {
     writeHead() {},
     end(body) { order.push('response'); responseBody = JSON.parse(body); },
   };
-  const completing = completeSavedResponse({
+  await completeSavedResponse({
     res: response,
     record: { id: 'extension-video', kind: 'video' },
     notify: (_record, options) => order.push(['notify', options]),
-    routeSave: async () => { await gate.promise; order.push('route'); },
+    routeSave: () => { order.push('queued'); return { ok: true, scheduled: true }; },
   });
-  await Promise.resolve();
-  assert.equal(responseBody, null);
-
-  gate.resolve();
-  await completing;
 
   assert.deepEqual(order, [
-    'route',
+    'queued',
     ['notify', { backgroundRouted: true }],
     'response',
   ]);
@@ -355,6 +349,7 @@ test('save router schedules image enrichment, drains outbox once, and leaves leg
     ['video-save', { save_id: 'video-save', state: 'pending' }],
   ]);
   const repository = {
+    getSaveBackgroundRoute(saveId) { return jobs.get(saveId); },
     claimSaveBackgroundRoute(saveId) {
       const job = jobs.get(saveId);
       if (!job || job.state !== 'pending') return undefined;
@@ -371,10 +366,11 @@ test('save router schedules image enrichment, drains outbox once, and leaves leg
       return { ok: true };
     },
     scheduleForegroundTask(task) {
-      const pending = Promise.resolve().then(() => task({
+      const pending = (this.taskTail || Promise.resolve()).then(() => task({
         isCurrent: () => true,
         routeSave: this.routeSave.bind(this),
       }));
+      this.taskTail = pending.catch(() => {});
       tasks.push(pending);
       return { ok: true, scheduled: true };
     },
@@ -391,12 +387,13 @@ test('save router schedules image enrichment, drains outbox once, and leaves leg
     now: () => 1_000,
   });
 
-  assert.deepEqual(await router.route(records.get('image-save')), { ok: true, scheduled: true });
+  assert.deepEqual(router.enqueue(records.get('image-save')), { ok: true, scheduled: true });
   await Promise.resolve();
   assert.deepEqual(order, [['activity', 'save'], ['enrich', 'image-save']]);
-  await router.route(records.get('video-save'));
+  assert.deepEqual(router.enqueue(records.get('video-save')), { ok: true, scheduled: true });
+  assert.equal(jobs.get('video-save').state, 'pending');
   assert.equal(router.notify(records.get('video-save'), { backgroundRouted: true }), null);
-  assert.deepEqual(await router.route(records.get('legacy-save') || { id: 'legacy-save' }, { duplicate: true }), {
+  assert.deepEqual(router.enqueue(records.get('legacy-save') || { id: 'legacy-save' }, { duplicate: true }), {
     ok: true, skipped: 'duplicate',
   });
   enrichGate.resolve();
@@ -406,9 +403,9 @@ test('save router schedules image enrichment, drains outbox once, and leaves leg
     ['activity', 'save'],
     ['enrich', 'image-save'],
     ['activity', 'save'],
-    ['route', 'video-save', { changed: false }],
     ['activity', 'duplicate'],
     ['route', 'image-save', { changed: true }],
+    ['route', 'video-save', { changed: false }],
   ]);
   assert.equal(jobs.get('image-save').state, 'completed');
   assert.equal(jobs.get('video-save').state, 'completed');
@@ -422,6 +419,7 @@ test('failed route stays durable and startup recovery heals it without user acti
   const save = { id: 'durable-retry', kind: 'video', file_path: '/tmp/retry.mp4' };
   const job = { save_id: save.id, state: 'pending', available_at: 100 };
   const repository = {
+    getSaveBackgroundRoute(saveId) { return saveId === save.id ? job : undefined; },
     claimSaveBackgroundRoute(saveId, now) {
       if (saveId !== save.id || job.state !== 'pending' || job.available_at > now) return undefined;
       job.state = 'running';
@@ -435,10 +433,14 @@ test('failed route stays durable and startup recovery heals it without user acti
       return job.state === 'pending' && job.available_at <= now ? [job] : [];
     },
   };
+  let firstTask;
   const first = createSaveBackgroundRouter({
     backgroundRuntime: {
       routeSave: async () => { throw new Error('disk temporarily locked'); },
-      scheduleForegroundTask: () => ({ ok: false }),
+      scheduleForegroundTask: (task) => {
+        firstTask = Promise.resolve().then(() => task({ isCurrent: () => true }));
+        return { ok: true, scheduled: true };
+      },
     },
     repository,
     getSave: () => save,
@@ -446,21 +448,30 @@ test('failed route stays durable and startup recovery heals it without user acti
     setTimer: () => ({ unref() {} }),
     clearTimer: () => {},
   });
-  await assert.rejects(first.route(save), /disk temporarily locked/);
+  assert.deepEqual(first.enqueue(save), { ok: true, scheduled: true });
+  await assert.rejects(firstTask, /disk temporarily locked/);
   assert.equal(job.state, 'pending');
   assert.equal(job.error, 'disk temporarily locked');
 
   let dispatched = 0;
+  let restartedTask;
   const restarted = createSaveBackgroundRouter({
     backgroundRuntime: {
       routeSave: async () => { dispatched += 1; return { ok: true }; },
-      scheduleForegroundTask: () => ({ ok: false }),
+      scheduleForegroundTask: (task) => {
+        restartedTask = Promise.resolve().then(() => task({
+          isCurrent: () => true,
+          routeSave: async () => { dispatched += 1; return { ok: true }; },
+        }));
+        return { ok: true, scheduled: true };
+      },
     },
     repository,
     getSave: () => save,
     now: () => 200,
   });
   assert.deepEqual(await restarted.recover(), { ok: true, count: 1 });
+  await restartedTask;
   assert.equal(dispatched, 1);
   assert.equal(job.state, 'completed');
 });

@@ -100,7 +100,13 @@ test('save insert atomically creates durable background route and legacy rows ar
   db.initDatabase();
   assert.equal(db.getSaveBackgroundRoute('route-failure-save').state, 'pending');
   assert.equal(db.claimSaveBackgroundRoute('route-failure-save', 5020).state, 'running');
-  assert.equal(db.completeSaveBackgroundRoute('route-failure-save', 30).ok, true);
+  const secondFailure = db.failSaveBackgroundRoute({
+    saveId: 'route-failure-save', error: 'queue still locked', now: 5030,
+  });
+  assert.deepEqual(secondFailure, { ok: true, availableAt: 15030, retryCount: 2 });
+  assert.equal(db.claimSaveBackgroundRoute('route-failure-save', 15029), undefined);
+  assert.equal(db.claimSaveBackgroundRoute('route-failure-save', 15030).state, 'running');
+  assert.equal(db.completeSaveBackgroundRoute('route-failure-save', 15040).ok, true);
   assert.equal(db.getSaveBackgroundRoute('route-failure-save').state, 'completed');
   db.getDatabase().prepare('DELETE FROM saves WHERE id = ?').run('route-failure-save');
   assert.equal(db.getSaveBackgroundRoute('route-failure-save'), undefined);
@@ -177,6 +183,7 @@ test('pre-v19 migration leaves legacy saves unrouted and startup dispatches a cr
       now: () => 300,
     });
     assert.deepEqual(await router.resume(), { ok: true, count: 1 });
+    await runtime.whenIdle();
     assert.deepEqual(await router.recover(), { ok: true, count: 0 });
     assert.equal(downstreamDispatches, 1);
     assert.equal(db.getSaveBackgroundRoute('new-after-upgrade').state, 'completed');

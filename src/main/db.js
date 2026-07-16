@@ -3250,6 +3250,8 @@ function getSemanticVector(saveId) {
 // ── Video analysis persistence ────────────────────────────────────────────
 
 const MAX_VIDEO_RETRY_BACKOFF_MS = 15 * 60 * 1000;
+const SAVE_ROUTE_RETRY_BASE_MS = 5_000;
+const MAX_SAVE_ROUTE_RETRY_BACKOFF_MS = 15 * 60 * 1000;
 
 function getSaveBackgroundRoute(saveId) {
   return getDatabase().prepare('SELECT * FROM save_background_routes WHERE save_id = ?').get(saveId);
@@ -3297,14 +3299,30 @@ function completeSaveBackgroundRoute(saveId, now = Date.now()) {
 
 function failSaveBackgroundRoute({ saveId, error, retryAt, now } = {}) {
   const timestamp = Number.isFinite(now) ? now : Date.now();
-  const availableAt = Number.isFinite(retryAt) ? Math.max(timestamp, retryAt) : timestamp + 5_000;
-  const result = getDatabase().prepare(`
-    UPDATE save_background_routes
-       SET state = 'pending', retry_count = retry_count + 1,
-           available_at = ?, error = ?, updated_at = ?, started_at = NULL
-     WHERE save_id = ? AND state = 'running'
-  `).run(availableAt, error || null, timestamp, saveId);
-  return { ok: result.changes === 1, availableAt };
+  const database = getDatabase();
+  const fail = database.transaction(() => {
+    const current = database.prepare(`
+      SELECT retry_count FROM save_background_routes
+       WHERE save_id = ? AND state = 'running'
+    `).get(saveId);
+    if (!current) return { ok: false, availableAt: null };
+    const retryCount = current.retry_count + 1;
+    const backoff = Math.min(
+      SAVE_ROUTE_RETRY_BASE_MS * (2 ** Math.max(0, retryCount - 1)),
+      MAX_SAVE_ROUTE_RETRY_BACKOFF_MS,
+    );
+    const availableAt = Number.isFinite(retryAt)
+      ? Math.max(timestamp, retryAt)
+      : timestamp + backoff;
+    const result = database.prepare(`
+      UPDATE save_background_routes
+         SET state = 'pending', retry_count = ?,
+             available_at = ?, error = ?, updated_at = ?, started_at = NULL
+       WHERE save_id = ? AND state = 'running'
+    `).run(retryCount, availableAt, error || null, timestamp, saveId);
+    return { ok: result.changes === 1, availableAt, retryCount };
+  });
+  return fail();
 }
 
 function enqueueVideoAnalysis({ id, saveId, fingerprint, promptVersion, now } = {}) {

@@ -1,6 +1,7 @@
 const PLATFORMS = new Set(['x', 'instagram']);
 const MODES = new Set(['catch-up', 'fixed', 'all']);
 const STAGES = new Set(['starting', 'scanning', 'saving', 'stopping', 'complete', 'stopped', 'failed']);
+const TERMINAL_STAGES = new Set(['complete', 'stopped', 'failed']);
 const COUNTERS = ['scanned', 'saved', 'known', 'failed'];
 
 function validateSnapshot(value) {
@@ -54,6 +55,8 @@ function createSocialImportState({
       active = null;
     } else if (snapshot.runId !== active.runId) {
       return { ok: false, error: 'runId mismatch' };
+    } else if (TERMINAL_STAGES.has(active.stage)) {
+      return { ok: false, error: 'run already finished' };
     }
     for (const key of COUNTERS) {
       if (active && snapshot[key] < active[key]) return { ok: false, error: `${key} cannot decrease` };

@@ -23,9 +23,13 @@ function createSaveBackgroundRouter({
   if (!repository || typeof repository.claimSaveBackgroundRoute !== 'function') {
     throw new TypeError('Save background router requires a durable route outbox');
   }
+  if (typeof repository.getSaveBackgroundRoute !== 'function') {
+    throw new TypeError('Save background router requires route lookup');
+  }
   let retryTimer = null;
   let retryDueAt = null;
   let paused = false;
+  const scheduledSaveIds = new Set();
 
   function clearRetryTimer() {
     if (retryTimer !== null) clearTimer(retryTimer);
@@ -74,25 +78,32 @@ function createSaveBackgroundRouter({
     }
   }
 
-  async function route(record, { duplicate = false } = {}) {
+  function enqueue(record, { duplicate = false } = {}) {
     if (!record?.id) return { ok: false, reason: 'save_not_found' };
     if (typeof noteActivity === 'function') {
       noteActivity({ kind: duplicate ? 'duplicate' : 'save', saveId: record.id });
     }
-    const claim = repository.claimSaveBackgroundRoute(record.id, now());
-    if (!claim) return { ok: true, skipped: 'duplicate' };
-    const image = isImageSave(record);
-    if (image) {
-      const scheduled = backgroundRuntime.scheduleForegroundTask(async ({ isCurrent, routeSave }) => {
-        if (!isCurrent()) return { ok: false, reason: 'library_epoch_stale' };
-        return finishClaim(record, { enrich: true, taskRouteSave: routeSave });
-      });
-      if (scheduled?.ok === false) {
-        repository.failSaveBackgroundRoute({ saveId: record.id, error: scheduled.reason, now: now() });
-      }
-      return scheduled;
+    const route = repository.getSaveBackgroundRoute(record.id);
+    if (!route || route.state !== 'pending' || scheduledSaveIds.has(record.id)) {
+      return { ok: true, skipped: 'duplicate' };
     }
-    return finishClaim(record);
+    const image = isImageSave(record);
+    scheduledSaveIds.add(record.id);
+    const scheduled = backgroundRuntime.scheduleForegroundTask(async ({ isCurrent, routeSave }) => {
+      try {
+        if (!isCurrent()) return { ok: false, reason: 'library_epoch_stale' };
+        const claim = repository.claimSaveBackgroundRoute(record.id, now());
+        if (!claim) return { ok: true, skipped: 'duplicate' };
+        return finishClaim(record, { enrich: image, taskRouteSave: routeSave });
+      } finally {
+        scheduledSaveIds.delete(record.id);
+      }
+    });
+    if (scheduled?.ok === false) {
+      scheduledSaveIds.delete(record.id);
+      scheduleRecovery(repository.getNextSaveBackgroundRouteReadyAt?.());
+    }
+    return scheduled;
   }
 
   async function recover() {
@@ -100,7 +111,7 @@ function createSaveBackgroundRouter({
     const rows = repository.listPendingSaveBackgroundRoutes(now());
     for (const row of rows) {
       const record = typeof getSave === 'function' ? getSave(row.save_id) : null;
-      if (record) await route(record, { duplicate: true }).catch(() => {});
+      if (record) enqueue(record, { duplicate: true });
     }
     scheduleRecovery(repository.getNextSaveBackgroundRouteReadyAt?.());
     return { ok: true, count: rows.length };
@@ -108,13 +119,7 @@ function createSaveBackgroundRouter({
 
   function notify(record, { backgroundRouted = false, duplicate = false } = {}) {
     if (backgroundRouted) return null;
-    const pending = route(record, { duplicate });
-    pending.catch((error) => {
-      if (error?.code !== 'library_epoch_stale') {
-        try { logger?.error?.('[background] save routing failed:', error?.message || error); } catch {}
-      }
-    });
-    return pending;
+    return enqueue(record, { duplicate });
   }
 
   function pause() {
@@ -127,7 +132,7 @@ function createSaveBackgroundRouter({
     return recover();
   }
 
-  return { route, notify, recover, pause, resume };
+  return { enqueue, notify, recover, pause, resume };
 }
 
 module.exports = { createSaveBackgroundRouter };
