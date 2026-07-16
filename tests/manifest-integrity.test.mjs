@@ -39,7 +39,7 @@ function withFixture(mutate, check) {
 
 test('verifies artifact and current source evidence', () => {
   const manifest = loadAndVerifyManifest({ root, source })
-  assert.equal(manifest.patches.length, 11)
+  assert.equal(manifest.patches.length, 12)
   assert.equal(manifest.patches[1].contribution_state, 'pending-local-only')
   assert.equal(manifest.source.canonical_evidence_ref, 'refs/gatherlocal/evidence/overlay-v1')
 })

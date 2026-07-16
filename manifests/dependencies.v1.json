@@ -11,8 +11,11 @@
   },
   "package_json_sha256": "a1f25cbc58bca48fcf0630bdf9dcba297cd960ac1c41eb0e239a0f603b4c4380",
   "node_modules": {
-    "entry_count": 26218,
-    "tree_sha256": "c4e8b9520c0671fa88921a3a7bbafd85a186f756fa6c21512359d11af6449cb1",
+    "ignored_names": [
+      ".DS_Store"
+    ],
+    "entry_count": 26215,
+    "tree_sha256": "2ffbe2a66f8d6611f8e7d703409d740835d5adaefbe308ccdbb1214e0c3cda81",
     "install_lock_relative": "node_modules/.package-lock.json",
     "install_lock_sha256": "2058fec4be86b271e919adc1a1f5715ce92b540a8ba58146977ee435aee35bcc",
     "key_files": {
