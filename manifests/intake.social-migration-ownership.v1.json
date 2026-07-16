@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "expected_tip": "93ec84083f66bbb020bfe3b61c8856bacceeeff3",
+  "workflow_commit_subject": "Intake social migration ownership patch",
+  "patches": [
+    {
+      "id": "personal.social-migration-ownership",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Keep social schema changes in local migration ledger",
+      "source_commit": "f7c1affc74edea087153ff6a0ffdd60f72c079c7",
+      "logical_dependencies": [
+        "personal.local-migrations",
+        "pending.x-social-import"
+      ],
+      "checks": [
+        {
+          "id": "social-migration-ownership-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/local-migration-artifacts.test.js",
+            "test/local-migration-engine.test.js",
+            "test/persistent-state.test.js",
+            "test/x-bookmark-status.test.js"
+          ]
+        }
+      ]
+    }
+  ]
+}
