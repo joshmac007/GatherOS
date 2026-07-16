@@ -1,0 +1,51 @@
+From f7c1affc74edea087153ff6a0ffdd60f72c079c7 Mon Sep 17 00:00:00 2001
+From: GatherLocal overlay intake <gatherlocal-overlay@invalid.local>
+Date: Wed, 15 Jul 2026 20:01:07 -0500
+Subject: [PATCH] Keep social schema changes in local migration ledger
+
+---
+ src/main/db.js | 28 ----------------------------
+ 1 file changed, 28 deletions(-)
+
+diff --git a/src/main/db.js b/src/main/db.js
+index 959f4784c29f0ed71995440497028a574c02bf92..ce8242eec71a0240183a74cfea529e9bbbaca63c 100644
+--- a/src/main/db.js
++++ b/src/main/db.js
+@@ -446,34 +446,6 @@ const MIGRATIONS = [
+   (database) => {
+     addColumnIfMissing(database, 'saves', 'viewed_at', 'INTEGER');
+   },
+-  // Repair older X saves whose extension payload predated tweetCreatedAt.
+-  (database) => {
+-    repairMissingXTweetCreatedAt(database);
+-  },
+-  // Stable social-post identity. Keep every existing row; assign only the
+-  // oldest active copy so future active duplicates can be rejected safely.
+-  (database) => {
+-    addColumnIfMissing(database, 'saves', 'source_key', 'TEXT');
+-    const rows = database.prepare(`
+-      SELECT id, source_url
+-        FROM saves
+-       WHERE deleted_at IS NULL AND source_url IS NOT NULL AND tweet_meta IS NOT NULL
+-       ORDER BY created_at ASC, id ASC
+-    `).all();
+-    const claimed = new Set();
+-    const assign = database.prepare('UPDATE saves SET source_key = ? WHERE id = ?');
+-    for (const row of rows) {
+-      const key = sourceKeyFromUrl(row.source_url);
+-      if (!key || claimed.has(key)) continue;
+-      claimed.add(key);
+-      assign.run(key, row.id);
+-    }
+-    database.exec(`
+-      CREATE UNIQUE INDEX IF NOT EXISTS idx_saves_active_source_key
+-        ON saves(source_key)
+-       WHERE deleted_at IS NULL AND source_key IS NOT NULL;
+-    `);
+-  },
+ ];
+ 
+ function repairMissingXTweetCreatedAt(database) {
+-- 
+2.50.1 (Apple Git-155)
+

@@ -12,8 +12,8 @@
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
     "canonical_evidence_ref": "refs/gatherlocal/evidence/overlay-v1",
-    "tip": "93ec84083f66bbb020bfe3b61c8856bacceeeff3",
-    "resulting_tree": "2a04d0344274718d4438c24baa38a388ba0969dc"
+    "tip": "f7c1affc74edea087153ff6a0ffdd60f72c079c7",
+    "resulting_tree": "f140ea1865946341aafa722ef98b7194f91cd03d"
   },
   "acceptance": {
     "personal_policy": "never-auto-drop",
@@ -327,6 +327,41 @@
             "--test",
             "test/runtime-identity.test.js",
             "test/social-import-progress.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 100,
+      "id": "personal.social-migration-ownership",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Keep social schema changes in local migration ledger",
+      "source_commit": "f7c1affc74edea087153ff6a0ffdd60f72c079c7",
+      "source_parent": "93ec84083f66bbb020bfe3b61c8856bacceeeff3",
+      "source_tree": "f140ea1865946341aafa722ef98b7194f91cd03d",
+      "logical_dependencies": [
+        "personal.local-migrations",
+        "pending.x-social-import"
+      ],
+      "patch_id_stable": "60b9fb861b84c216facf006d338c1d5e40eee5b9",
+      "canonical_diff_sha256": "e6b3fd6facec0e209b03b837a8b3df19e808fcf61f773f52bb078f87ac79a677",
+      "artifact": "patches/0100-personal.social-migration-ownership.patch",
+      "artifact_sha256": "9ca5db4016453ae164d17a443892547a784ee5b00551277277f4d68d33bbbfe3",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "social-migration-ownership-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/local-migration-artifacts.test.js",
+            "test/local-migration-engine.test.js",
+            "test/persistent-state.test.js",
+            "test/x-bookmark-status.test.js"
           ]
         }
       ]
