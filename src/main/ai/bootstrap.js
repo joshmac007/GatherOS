@@ -3,15 +3,11 @@
 const { createAiRuntime } = require('./runtime');
 const { createGatherOsProxyAdapter } = require('./providers/gatheros-proxy');
 const { createGatherLocalRoutes } = require('../gatherlocal/ai');
+const { createGatherLocalAuthorization } = require('../gatherlocal/ai/authorization');
 
 let cachedRuntime = null;
 
-function defaultAuthorize() {
-  // Require lazily: this module is also loaded by Node-focused tests where
-  // Electron's licensing client is intentionally unavailable.
-  const { getEntitlement } = require('../entitlement');
-  return Boolean(getEntitlement()?.proUnlocked);
-}
+const defaultAuthorize = createGatherLocalAuthorization();
 
 function createDefaultAiRuntime({
   authorize = defaultAuthorize,
