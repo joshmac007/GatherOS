@@ -7,6 +7,7 @@ import { tweetMediaItems } from '../lib/tweetMedia.js';
 import ContextMenu from './ContextMenu.jsx';
 import contextMenuStyles from './ContextMenu.module.css';
 import TagSuggestions from './TagSuggestions.jsx';
+import VideoTagSuggestions from './VideoTagSuggestions.jsx';
 import { fuzzyMatch } from '../lib/fuzzy.js';
 import { findNearDuplicateTag } from '../lib/tagSimilarity.js';
 import { CollectionIcon } from './Sidebar.jsx';
@@ -224,6 +225,7 @@ export default function DetailPanel({
   })();
   const src = fileUrl(record.file_path);
   const typeLabel = fileTypeLabel(record.file_path);
+  const isVideo = record?.kind === 'video' || /\.(mp4|webm|mov|m4v)$/i.test(record?.file_path || '');
   // Text-only tweets render as a card (no real image), so the preview
   // hero — the rendered PNG and its color palette — is all meaningless.
   // Hide that whole top section for them.
@@ -1041,7 +1043,7 @@ export default function DetailPanel({
         )}
       </div>
 
-      <div className={styles.promptSection}>
+      {!isVideo && <div className={styles.promptSection}>
         <div className={styles.promptHeader}>
           <span className={styles.sectionLabelIcon}><SparkleIcon /></span>
           <span className={styles.promptLabel}>Image Prompt</span>
@@ -1089,7 +1091,7 @@ export default function DetailPanel({
         {promptError && (
           <div className={styles.autoTagError}>{promptError}</div>
         )}
-      </div>
+      </div>}
 
       <div className={styles.collectionsSection}>
         <div className={styles.collectionsLabel}>
@@ -1156,6 +1158,16 @@ export default function DetailPanel({
         </div>
       )}
 
+      {isVideo && (
+        <VideoTagSuggestions
+          saveId={record.id}
+          onAccepted={() => {
+            refreshTags();
+            onTagsChanged?.();
+          }}
+        />
+      )}
+
       <div className={styles.tagsSection}>
         <div className={styles.tagsLabel}>
           <span className={styles.sectionLabelIcon}><TagIcon /></span>
@@ -1207,7 +1219,7 @@ export default function DetailPanel({
               </button>
             </span>
           ))}
-          <button
+          {!isVideo && <button
             type="button"
             className={[styles.autoTagBtn, autoTagging && styles.autoTagBtnLoading].filter(Boolean).join(' ')}
             onClick={handleAutoTag}
@@ -1218,7 +1230,7 @@ export default function DetailPanel({
               {aiConfigured ? <SparkleIcon /> : <LockIcon />}
             </span>
             {autoTagging ? 'Tagging…' : 'Auto-tag'}
-          </button>
+          </button>}
         </div>
         {autoTagError && (
           <div className={styles.autoTagError}>{autoTagError}</div>

@@ -1,0 +1,535 @@
+const path = require('node:path');
+
+const { createBackgroundWorkCoordinator } = require('./background-work-coordinator');
+const { createSemanticIndex } = require('./semantic-index');
+const { createSemanticSearch } = require('./semantic-search');
+const { createVideoAnalysisService } = require('./video-analysis');
+
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.m4v']);
+const VIDEO_RETRY_CODES = new Set([
+  'AI_PROVIDER_UNAVAILABLE',
+  'AI_AUTH_REQUIRED',
+  'AI_TIMEOUT',
+  'video_analysis_unavailable',
+  'invalid_video_suggestions',
+]);
+
+function isVideoSave(save = {}) {
+  if (String(save.kind || '').toLowerCase() === 'video') return true;
+  const filePath = save.file_path ?? save.filePath;
+  return typeof filePath === 'string' && VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+function shouldUseImageAi(save = {}) {
+  const filePath = save.file_path ?? save.filePath;
+  return !!filePath && !isVideoSave(save);
+}
+
+async function cleanupPurgedSaveDerived({ saveIds = [], cleanupSaveDerived, onError = null } = {}) {
+  if (typeof cleanupSaveDerived !== 'function') {
+    throw new TypeError('Purged-save cleanup requires cleanupSaveDerived');
+  }
+  const results = await Promise.all(saveIds.map(async (saveId) => {
+    try {
+      await cleanupSaveDerived(saveId);
+      return true;
+    } catch (error) {
+      if (typeof onError === 'function') onError(error, saveId);
+      return false;
+    }
+  }));
+  return { attempted: results.length, failed: results.filter((ok) => !ok).length };
+}
+
+function staleEpochError() {
+  const error = new Error('Background library epoch is stale');
+  error.code = 'library_epoch_stale';
+  return error;
+}
+
+function createVideoSemanticWorkflows({
+  repository,
+  embeddingProvider,
+  structuredProvider,
+  frameExtractor,
+  createSemanticIndexService = createSemanticIndex,
+  createSemanticSearchService = createSemanticSearch,
+  createVideoAnalysisService: createVideoService = createVideoAnalysisService,
+  createCoordinator = createBackgroundWorkCoordinator,
+  isForegroundBusy = () => false,
+  notify = null,
+  getDerivedDirectory = () => null,
+  cleanupDerivedSave = async () => {},
+  cleanupDerivedAll = async () => {},
+  restoreBackupImpl = null,
+  now = Date.now,
+  maxVideoAttempts = 3,
+  baseVideoRetryMs = 5_000,
+  maxVideoRetryMs = 15 * 60 * 1_000,
+  logger = console,
+} = {}) {
+  if (!repository || typeof repository.recoverBackgroundJobs !== 'function') {
+    throw new TypeError('Video-semantic workflows require a durable repository');
+  }
+  if (!embeddingProvider || typeof embeddingProvider.embed !== 'function'
+      || !embeddingProvider.model) {
+    throw new TypeError('Video-semantic workflows require an embedding provider');
+  }
+  if (!structuredProvider || typeof structuredProvider.completeJson !== 'function') {
+    throw new TypeError('Video-semantic workflows require a structured-output provider');
+  }
+
+  let epoch = 0;
+  let active = null;
+  let healthPromise = null;
+  let healthPromiseEpoch = null;
+  let transitioning = false;
+  let pendingTransitions = 0;
+  let transitionTail = Promise.resolve();
+  const foregroundTasks = new Set();
+  let foregroundTaskTail = Promise.resolve();
+  let lifecycleHooks = null;
+  let semanticHealth = {
+    ok: null,
+    status: 'checking',
+    model: embeddingProvider.model,
+    reason: null,
+    setupAction: null,
+  };
+
+  function emit(event, payload) {
+    if (typeof notify !== 'function') return;
+    try {
+      const result = notify(event, payload);
+      result?.catch?.(() => {});
+    } catch {}
+  }
+
+  function guardedRepository(boundEpoch) {
+    return new Proxy(repository, {
+      get(target, property) {
+        if (property === 'recoverSemanticIndexJobs') return undefined;
+        const value = Reflect.get(target, property, target);
+        if (typeof value !== 'function') return value;
+        return (...args) => {
+          if (boundEpoch !== epoch) throw staleEpochError();
+          return Reflect.apply(value, target, args);
+        };
+      },
+    });
+  }
+
+  function videoRetryDelay(retryCount) {
+    return Math.min(
+      maxVideoRetryMs,
+      baseVideoRetryMs * (2 ** Math.max(0, Number(retryCount) || 0)),
+    );
+  }
+
+  function createVideoLane({ boundRepository, videoAnalysis, boundEpoch }) {
+    return {
+      name: 'video-analysis',
+      claimReady(timestamp) {
+        return boundRepository.claimVideoAnalysis(timestamp);
+      },
+      async run(job) {
+        try {
+          const save = boundRepository.getSave(job.save_id);
+          if (!save) {
+            const error = new Error('Video save no longer exists');
+            error.code = 'video_save_missing';
+            throw error;
+          }
+          const result = await videoAnalysis.run({
+            job,
+            save,
+            acceptedTags: boundRepository.getTagsForSave(job.save_id) || [],
+          });
+          if (result?.status === 'stale') {
+            await videoAnalysis.prepare({ save });
+          }
+          if (boundEpoch !== epoch) return { ok: false, reason: 'library_epoch_stale' };
+          emit('video-analysis:updated', { saveId: job.save_id, ...result });
+          return result;
+        } catch (error) {
+          if (error?.code === 'library_epoch_stale' || boundEpoch !== epoch) {
+            return { ok: false, reason: 'library_epoch_stale' };
+          }
+          const attempt = (Number(job.retry_count) || 0) + 1;
+          const retryableError = error?.retryable === true
+            || (error?.retryable == null && VIDEO_RETRY_CODES.has(error?.code));
+          const retryable = retryableError && attempt < maxVideoAttempts;
+          const timestamp = now();
+          boundRepository.failVideoAnalysis({
+            id: job.id,
+            error: error?.message || String(error),
+            retryable,
+            retryAt: retryable ? timestamp + videoRetryDelay(job.retry_count) : undefined,
+            now: timestamp,
+          });
+          const failure = {
+            saveId: job.save_id,
+            state: retryable ? 'pending' : 'failed',
+            retryable,
+            reason: error?.code || 'video_analysis_failed',
+            error: error?.message || String(error),
+          };
+          emit('video-analysis:updated', failure);
+          return { ok: false, ...failure };
+        }
+      },
+      nextReadyAt() {
+        if (typeof boundRepository.getNextVideoAnalysisReadyAt !== 'function') return null;
+        return boundRepository.getNextVideoAnalysisReadyAt();
+      },
+    };
+  }
+
+  function bind() {
+    const boundEpoch = epoch;
+    repository.recoverBackgroundJobs(now());
+    const boundRepository = guardedRepository(boundEpoch);
+    let coordinator = null;
+    const coordinatorBridge = { wake: () => coordinator?.wake() };
+    const semanticIndex = createSemanticIndexService({
+      repository: boundRepository,
+      embeddingProvider,
+      coordinator: coordinatorBridge,
+      notify: emit,
+      now,
+    });
+    const semanticSearch = createSemanticSearchService({ repository: boundRepository, embeddingProvider });
+    const videoAnalysis = createVideoService({
+      repository: boundRepository,
+      frameExtractor,
+      structuredProvider,
+      derivedDir: getDerivedDirectory(),
+      now,
+    });
+    const semanticLanes = semanticIndex.createLanes();
+    const videoLane = createVideoLane({ boundRepository, videoAnalysis, boundEpoch });
+    coordinator = createCoordinator({
+      lanes: [videoLane, ...semanticLanes],
+      isForegroundBusy: () => foregroundTasks.size > 0 || isForegroundBusy(),
+      now,
+      onError(error, context) {
+        if (error?.code === 'library_epoch_stale') return;
+        try { logger?.error?.('Background workflow failed', error, context); } catch {}
+      },
+    });
+    active = {
+      epoch: boundEpoch,
+      repository: boundRepository,
+      coordinator,
+      semanticIndex,
+      semanticSearch,
+      videoAnalysis,
+    };
+    semanticHealth = {
+      ok: null,
+      status: 'checking',
+      model: embeddingProvider.model,
+      reason: null,
+      setupAction: null,
+    };
+    coordinator.start();
+    refreshSemanticHealth().catch(() => {});
+  }
+
+  function start() {
+    if (active) return active;
+    epoch += 1;
+    bind();
+    return active;
+  }
+
+  async function deactivate() {
+    const previous = active;
+    if (!previous) return;
+    transitioning = true;
+    await lifecycleHooks?.beforeTransition?.();
+    previous.coordinator.stop();
+    await Promise.allSettled([...foregroundTasks]);
+    await previous.coordinator.whenIdle();
+    epoch += 1;
+    if (active === previous) active = null;
+  }
+
+  function serializeTransition(run) {
+    pendingTransitions += 1;
+    transitioning = true;
+    const queued = transitionTail.then(async () => {
+      try {
+        return await run();
+      } finally {
+        pendingTransitions -= 1;
+        transitioning = pendingTransitions > 0;
+      }
+    });
+    transitionTail = queued.catch(() => {});
+    return queued;
+  }
+
+  async function performRebind(action) {
+    await deactivate();
+    let result;
+    let error;
+    try {
+      result = typeof action === 'function' ? await action() : undefined;
+    } catch (cause) {
+      error = cause;
+    }
+    bind();
+    await lifecycleHooks?.afterTransition?.();
+    if (error) throw error;
+    return result;
+  }
+
+  function rebind(action) {
+    return serializeTransition(() => performRebind(action));
+  }
+
+  function stopAndDrain() {
+    return serializeTransition(() => deactivate());
+  }
+
+  async function routeSave(save, {
+    duplicate = false,
+    changed = false,
+    reanalyzeVideo = false,
+    _taskEpoch = null,
+  } = {}) {
+    if (duplicate) return { ok: true, skipped: 'duplicate' };
+    if (transitioning && _taskEpoch !== epoch) return { ok: false, reason: 'library_epoch_stale' };
+    if (!active) return { ok: false, reason: 'runtime_not_started' };
+    const current = active;
+    const persisted = current.repository.getSave(save?.id) || save;
+    if (!persisted?.id) return { ok: false, reason: 'save_not_found' };
+    let video = null;
+    if ((!changed || reanalyzeVideo) && isVideoSave(persisted)) {
+      try {
+        video = await current.videoAnalysis.prepare({ save: persisted });
+      } catch (error) {
+        if (error?.code !== 'library_epoch_stale') {
+          emit('video-analysis:updated', {
+            saveId: persisted.id,
+            state: 'failed',
+            reason: error?.code || 'video_prepare_failed',
+            error: error?.message || String(error),
+          });
+        }
+        throw error;
+      }
+    }
+    let semantic = null;
+    let semanticWarning = null;
+    try {
+      if (semanticHealth.ok) ensureInitialSemanticGeneration();
+      semantic = await current.semanticIndex.enqueue(persisted.id);
+      if (semantic?.ok === false) {
+        semanticWarning = {
+          reason: 'semantic-enqueue-failed',
+          detail: semantic.detail || semantic.reason || 'Semantic indexing could not be queued',
+        };
+      }
+    } catch (error) {
+      semanticWarning = {
+        reason: 'semantic-enqueue-failed',
+        detail: error?.message || String(error),
+      };
+    }
+    if (current.epoch === epoch) current.coordinator.wake();
+    return semanticWarning
+      ? { ok: true, semantic, video, semanticWarning }
+      : { ok: true, semantic, video };
+  }
+
+  function noteActivity() {
+    active?.coordinator.noteActivity();
+  }
+
+  function whenIdle() {
+    return Promise.all([
+      active?.coordinator.whenIdle() || Promise.resolve(),
+      Promise.allSettled([...foregroundTasks]),
+    ]).then(() => undefined);
+  }
+
+  function scheduleForegroundTask(run) {
+    if (typeof run !== 'function') return { ok: false, reason: 'invalid_task' };
+    if (!active || transitioning) return { ok: false, reason: 'runtime_not_started' };
+    const taskEpoch = epoch;
+    const boundCoordinator = active.coordinator;
+    const execution = foregroundTaskTail.then(async () => {
+      await boundCoordinator.whenIdle();
+      return run({
+        isCurrent: () => taskEpoch === epoch,
+        routeSave: (save, options = {}) => routeSave(save, { ...options, _taskEpoch: taskEpoch }),
+      });
+    });
+    let tracked;
+    tracked = execution.catch((error) => {
+      if (error?.code !== 'library_epoch_stale') {
+        try { logger?.error?.('Foreground background-preparation task failed', error); } catch {}
+      }
+    }).finally(() => {
+      foregroundTasks.delete(tracked);
+      if (taskEpoch === epoch && !transitioning) active?.coordinator.wake();
+    });
+    foregroundTasks.add(tracked);
+    foregroundTaskTail = tracked;
+    return { ok: true, scheduled: true };
+  }
+
+  function setLifecycleHooks(hooks) {
+    lifecycleHooks = hooks && typeof hooks === 'object' ? hooks : null;
+  }
+
+  function serviceFacade(key) {
+    return new Proxy({}, {
+      get(_target, property) {
+        const value = active?.[key]?.[property];
+        if (typeof value !== 'function') return value;
+        return (...args) => {
+          const current = active?.[key]?.[property];
+          if (typeof current !== 'function') throw new Error(`${key} service is unavailable`);
+          return current.apply(active[key], args);
+        };
+      },
+    });
+  }
+
+  const semanticIndexFacade = serviceFacade('semanticIndex');
+  const semanticSearchFacade = serviceFacade('semanticSearch');
+
+  function getSemanticIndex() {
+    return semanticIndexFacade;
+  }
+
+  function getSemanticSearch() {
+    return semanticSearchFacade;
+  }
+
+  function getSemanticHealth() {
+    return { ...semanticHealth };
+  }
+
+  function updateSemanticHealth(next) {
+    const changed = ['ok', 'status', 'model', 'reason', 'setupAction']
+      .some((key) => semanticHealth[key] !== next[key]);
+    semanticHealth = next;
+    if (changed) emit('semantic-index:status', semanticHealth);
+  }
+
+  function ensureInitialSemanticGeneration() {
+    const semanticIndex = active?.semanticIndex;
+    if (!semanticIndex) return { ok: false, reason: 'runtime_not_started' };
+    const status = semanticIndex.status();
+    if (status?.active_generation_id || status?.building_generation_id) {
+      return { ok: true, skipped: 'generation_exists' };
+    }
+    const saves = active.repository.getAllSaves({}) || [];
+    if (saves.length === 0) return { ok: true, skipped: 'no_saves' };
+    const result = semanticIndex.startRebuild({ model: embeddingProvider.model });
+    if (result?.ok === false) {
+      emit('semantic-index:notice', {
+        type: 'bootstrap-failed',
+        reason: result.reason || 'semantic_bootstrap_failed',
+        message: 'Semantic index could not start automatically.',
+      });
+    }
+    return result;
+  }
+
+  function refreshSemanticHealth() {
+    if (healthPromise && healthPromiseEpoch === epoch) return healthPromise;
+    const healthEpoch = epoch;
+    const pending = Promise.resolve()
+      .then(() => typeof embeddingProvider.health === 'function'
+        ? embeddingProvider.health()
+        : { ok: true, model: embeddingProvider.model })
+      .then((result) => {
+        if (healthEpoch === epoch) {
+          if (result?.ok === false) {
+            const error = new Error(result.reason || 'Embedding provider is unavailable');
+            error.code = result.reason || 'embedding_unavailable';
+            error.setupAction = result.setupAction || null;
+            throw error;
+          }
+          updateSemanticHealth({
+            ok: true,
+            status: 'connected',
+            model: result?.model || embeddingProvider.model,
+            reason: null,
+            setupAction: null,
+          });
+          ensureInitialSemanticGeneration();
+        }
+        return getSemanticHealth();
+      })
+      .catch((error) => {
+        if (healthEpoch === epoch) {
+          updateSemanticHealth({
+            ok: false,
+            status: error?.code === 'embedding_model_missing' ? 'model-missing' : 'unavailable',
+            model: embeddingProvider.model,
+            reason: error?.code || 'embedding_unavailable',
+            setupAction: error?.setupAction || null,
+          });
+        }
+        return getSemanticHealth();
+      })
+      .finally(() => {
+        if (healthPromise === pending) {
+          healthPromise = null;
+          healthPromiseEpoch = null;
+        }
+      });
+    healthPromise = pending;
+    healthPromiseEpoch = healthEpoch;
+    return healthPromise;
+  }
+
+  async function cleanupSaveDerived(saveId) {
+    await cleanupDerivedSave(getDerivedDirectory(), saveId);
+  }
+
+  async function cleanupAllDerived() {
+    await cleanupDerivedAll(getDerivedDirectory());
+  }
+
+  async function restoreBackup(snapshotPath) {
+    if (typeof restoreBackupImpl !== 'function') {
+      return { ok: false, reason: 'restore_unavailable' };
+    }
+    const result = await rebind(() => restoreBackupImpl(snapshotPath));
+    if (result?.ok) emit('library:switched', { reason: 'restore' });
+    return result;
+  }
+
+  return {
+    start,
+    rebind,
+    stopAndDrain,
+    routeSave,
+    noteActivity,
+    whenIdle,
+    scheduleForegroundTask,
+    setLifecycleHooks,
+    getSemanticIndex,
+    getSemanticSearch,
+    getSemanticHealth,
+    refreshSemanticHealth,
+    cleanupSaveDerived,
+    cleanupAllDerived,
+    restoreBackup,
+    get epoch() { return epoch; },
+  };
+}
+
+module.exports = {
+  createVideoSemanticWorkflows,
+  cleanupPurgedSaveDerived,
+  isVideoSave,
+  shouldUseImageAi,
+};

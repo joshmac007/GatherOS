@@ -211,14 +211,16 @@ async function startScreenshotCapture() {
 async function persistScreenshot(buf, ext = 'png') {
   const { saveImageFromBuffer } = require('./storage');
   const { insertSave, addTagToSave } = require('./db');
-  const { notifySaved, notifyDuplicate } = require('./notify');
+  const { notifySaved, notifyDuplicate, notifySaveChanged } = require('./notify');
   const imgData = await saveImageFromBuffer(buf, ext);
   const tag = (saveId) => {
-    try { addTagToSave({ saveId, name: 'screenshot' }); }
+    try { return addTagToSave({ saveId, name: 'screenshot' }); }
     catch (err) { console.warn('[capture] auto-tag #screenshot failed:', err); }
+    return null;
   };
   if (imgData.duplicateOf) {
-    tag(imgData.existing.id); // idempotent — keeps the existing copy tagged
+    const tagged = tag(imgData.existing.id); // idempotent — keeps the existing copy tagged
+    if (tagged?.ok) notifySaveChanged(imgData.existing.id, { kind: 'tag' });
     notifyDuplicate(imgData.existing);
     return imgData.existing;
   }

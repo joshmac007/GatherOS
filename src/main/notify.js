@@ -6,6 +6,7 @@ let duplicateNotifier = () => {};
 let bookmarkNotifier = () => {};
 let bookmarkFailedNotifier = () => {};
 let errorNotifier = () => {};
+let saveChangedNotifier = () => {};
 
 function setSaveNotifier(fn) {
   savedNotifier = typeof fn === 'function' ? fn : () => {};
@@ -18,8 +19,8 @@ function setBookmarkNotifier(fn) {
   bookmarkNotifier = typeof fn === 'function' ? fn : () => {};
 }
 
-function notifyBookmarkSaved(record) {
-  bookmarkNotifier(record);
+function notifyBookmarkSaved(record, options) {
+  bookmarkNotifier(record, options);
 }
 
 // A bookmark that arrived from the extension but failed to persist.
@@ -40,6 +41,14 @@ function setErrorNotifier(fn) {
   errorNotifier = typeof fn === 'function' ? fn : () => {};
 }
 
+function setSaveChangedNotifier(fn) {
+  saveChangedNotifier = typeof fn === 'function' ? fn : () => {};
+}
+
+function notifySaveChanged(saveId, context) {
+  return saveChangedNotifier(saveId, context);
+}
+
 function notifyError(message) {
   try { errorNotifier(message); } catch { /* toast is best-effort */ }
 }
@@ -48,8 +57,8 @@ function setDuplicateNotifier(fn) {
   duplicateNotifier = typeof fn === 'function' ? fn : () => {};
 }
 
-function notifySaved(record) {
-  savedNotifier(record);
+function notifySaved(record, options) {
+  savedNotifier(record, options);
 }
 
 function notifyDuplicate(existing) {
@@ -76,11 +85,13 @@ module.exports = {
   setBookmarkNotifier,
   setBookmarkFailedNotifier,
   setErrorNotifier,
+  setSaveChangedNotifier,
   setTrayRefresher,
   notifySaved,
   notifyDuplicate,
   notifyBookmarkSaved,
   notifyBookmarkFailed,
   notifyError,
+  notifySaveChanged,
   refreshTray,
 };

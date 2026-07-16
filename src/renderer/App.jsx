@@ -11,6 +11,7 @@ import BulkTagPicker from './components/BulkTagPicker.jsx';
 import MoodboardPreview from './components/MoodboardPreview.jsx';
 import RediscoverMode from './components/RediscoverMode.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
+import { subscribeSemanticNotices } from './components/SemanticIndexSettings.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import SaveUrlModal from './components/SaveUrlModal.jsx';
 import PasteToSavePrompt from './components/PasteToSavePrompt.jsx';
@@ -87,6 +88,8 @@ import {
   HardDrive,
   Database,
   Info,
+  Pin,
+  EyeOff,
 } from 'lucide-react';
 import { useLibrary } from './hooks/useLibrary.js';
 import { useUndoStack } from './hooks/useUndoStack.js';
@@ -102,7 +105,6 @@ import OnboardingOverlay from './onboarding/OnboardingOverlay.jsx';
 import { useOnboarding, ONBOARDING_DONE_PREF } from './onboarding/OnboardingContext.jsx';
 import SocialImportActivity from './components/SocialImportActivity.jsx';
 import { isTerminalStage } from './lib/socialImportView.mjs';
-import { canUseCapability } from './lib/aiAccess.mjs';
 
 // Lucide-backed icon shims. Component names are kept identical to
 // the previous inline SVG defs so every existing call site (right-
@@ -349,7 +351,9 @@ export default function App() {
     } catch {}
   }, [shuffleAts]);
   const viewKey = (v) =>
-    v && v.type === 'collection' ? `collection:${v.id}` : v?.type || 'all';
+    v && (v.type === 'collection' || v.type === 'smartCategory')
+      ? `${v.type}:${v.id}`
+      : v?.type || 'all';
   const shuffleSeed = shuffleSeeds.get(viewKey(view)) || null;
   const shuffleAt = shuffleAts.get(viewKey(view)) || 0;
   const handleShuffleView = useCallback((targetView) => {
@@ -358,9 +362,7 @@ export default function App() {
       setView(targetView);
       setFocusedId(null);
     }
-    const key = targetView
-      ? (target.type === 'collection' ? `collection:${target.id}` : target.type)
-      : viewKey(view);
+    const key = targetView ? viewKey(target) : viewKey(view);
     const previous = shuffleSeeds.get(key) || null;
     const previousAt = shuffleAts.get(key) || 0;
     // Math.random() yields [0,1) and we want a 32-bit-ish int seed.
@@ -764,11 +766,65 @@ export default function App() {
   }, []);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
-  const [aiAccess, setAiAccess] = useState(null);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, semanticSearch: true });
+  const [semanticStatus, setSemanticStatus] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    const refreshSemanticStatus = async () => {
+      try {
+        const status = await window.moodmark?.semanticIndex?.status?.();
+        if (active) setSemanticStatus(status || null);
+      } catch {
+        if (active) setSemanticStatus(null);
+      }
+    };
+    refreshSemanticStatus();
+    const offStatus = window.moodmark?.on?.('semantic-index:status', refreshSemanticStatus);
+    const offProgress = window.moodmark?.on?.('semantic-index:progress', refreshSemanticStatus);
+    return () => {
+      active = false;
+      try { offStatus?.(); } catch {}
+      try { offProgress?.(); } catch {}
+    };
+  }, []);
 
   // Imperative handles for the global keyboard shortcuts.
   const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    const note = (payload) => window.moodmark?.smartCategories?.noteActivity?.(payload);
+    const isTypingTarget = (element) => element && (
+      element.tagName === 'INPUT'
+      || element.tagName === 'TEXTAREA'
+      || element.isContentEditable
+    );
+    const onInput = (event) => {
+      if (!isTypingTarget(event.target)) return;
+      const kind = event.target === searchInputRef.current || event.target?.type === 'search'
+        ? 'search'
+        : 'edit';
+      note({ kind });
+    };
+    const onDragStart = () => note({ kind: 'dragDrop', active: true });
+    const onDragOver = () => note({ kind: 'dragDrop', active: true });
+    const onDragEnd = () => note({ kind: 'dragDrop', active: false });
+
+    document.addEventListener('input', onInput, true);
+    document.addEventListener('change', onInput, true);
+    document.addEventListener('dragstart', onDragStart, true);
+    document.addEventListener('dragover', onDragOver, true);
+    document.addEventListener('dragend', onDragEnd, true);
+    document.addEventListener('drop', onDragEnd, true);
+    return () => {
+      document.removeEventListener('input', onInput, true);
+      document.removeEventListener('change', onInput, true);
+      document.removeEventListener('dragstart', onDragStart, true);
+      document.removeEventListener('dragover', onDragOver, true);
+      document.removeEventListener('dragend', onDragEnd, true);
+      document.removeEventListener('drop', onDragEnd, true);
+    };
+  }, []);
 
   // Blur the search field whenever the user clicks anywhere outside
   // it — clears the focus ring so the bar reads as inactive once the
@@ -793,7 +849,6 @@ export default function App() {
   const [renameViewSignal, setRenameViewSignal] = useState(0);
   useEffect(() => {
     window.moodmark.ai.access().then((access) => {
-      setAiAccess(access || null);
       setAiConfigured(!!access?.structuredJson?.configured);
     }).catch(() => {
       window.moodmark.ai.hasSession().then(setAiConfigured).catch(() => setAiConfigured(false));
@@ -824,10 +879,9 @@ export default function App() {
   // every walkthrough end so the library reflects the result of
   // the 'fresh' choice (or just a fresh install on first launch).
   const prevOnboardingActive = useRef(false);
-  // Route semantic search through the configured local embedding provider.
-  const embeddingAccess = aiAccess?.embedding;
+  // Search switches to semantic ranking only when active generation is ready.
   const semanticSearchActive = !!prefs.semanticSearch
-    && canUseCapability(embeddingAccess);
+    && !!semanticStatus?.searchReady;
 
   // Set of save ids the main process is currently AI-indexing. Driven
   // by save:indexing-start / save:indexing-end events. DetailPanel
@@ -870,18 +924,21 @@ export default function App() {
 
   // Collections state
   const [collections, setCollections] = useState([]);
+  const [smartCategories, setSmartCategories] = useState([]);
   // Counts that drive the sidebar's smart-view badges (All / Unsorted /
   // Trash). Refreshed alongside collections.
   const [smartCounts, setSmartCounts] = useState({ all: 0, unsorted: 0, trash: 0, bookmarks: 0, onThisDay: 0 });
 
   const loadCollections = useCallback(async () => {
-    const [cols, counts] = await Promise.all([
+    const [cols, counts, smartCategoryRows] = await Promise.all([
       // Pulls thumbs in the same query so the Folders-mode tile
       // grid can render its stack-fans without a per-tile round-trip.
       window.moodmark.collections.getAllWithThumbs(),
       window.moodmark.saves.counts(),
+      window.moodmark.smartCategories?.listNav?.() ?? [],
     ]);
     setCollections(cols);
+    setSmartCategories(Array.isArray(smartCategoryRows) ? smartCategoryRows : []);
     setSmartCounts(counts && typeof counts === 'object'
       ? counts
       : { all: 0, unsorted: 0, trash: 0, bookmarks: 0, onThisDay: 0 });
@@ -1168,12 +1225,79 @@ export default function App() {
     });
   }, [showActionToast, deleteSave, reload]);
 
+  // Keep routine indexing quiet. Only lifecycle notices reach library UI.
+  useEffect(() => subscribeSemanticNotices(window.moodmark, (message) => {
+    showActionToast({ message, durationMs: 4200 });
+  }), [showActionToast]);
+
   // Card context menu
   const [cardCtx, setCardCtx] = useState(null); // { saveId, x, y, items }
+  const [smartCategoryCtx, setSmartCategoryCtx] = useState(null); // { x, y, items }
+  const handleSmartCategoryContextMenu = useCallback((category, x, y) => {
+    if (!category?.id) return;
+    const pinned = !!category.frozen_name;
+    setSmartCategoryCtx({
+      x,
+      y,
+      items: [
+        { type: 'header', label: category.name },
+        {
+          label: pinned ? 'Unpin category name' : 'Pin category name',
+          icon: <Pin size={14} strokeWidth={1.7} aria-hidden="true" />,
+          onClick: async () => {
+            const result = await window.moodmark.smartCategories?.pin?.({
+              id: category.id,
+              pinned: !pinned,
+            });
+            if (!result?.ok) return;
+            await loadCollections();
+            showActionToast({
+              message: pinned ? 'Category name can refresh again' : 'Category name pinned',
+              durationMs: 1800,
+            });
+          },
+        },
+        {
+          label: 'Hide category',
+          icon: <EyeOff size={14} strokeWidth={1.7} aria-hidden="true" />,
+          onClick: async () => {
+            const result = await window.moodmark.smartCategories?.hide?.(category.id);
+            if (!result?.ok) return;
+            if (view.type === 'smartCategory' && view.id === category.id) {
+              setView({ type: 'all' });
+            }
+            await loadCollections();
+            showActionToast({ message: 'Category hidden', durationMs: 1800 });
+          },
+        },
+      ],
+    });
+  }, [loadCollections, setView, showActionToast, view]);
   // Bulk "Add to Collection" picker, anchored above the selection bar.
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
   const [bulkTagPicker, setBulkTagPicker] = useState(null); // { x, y } | null
   const [rediscoverOpen, setRediscoverOpen] = useState(false);
+
+  useEffect(() => {
+    const modalActive = !!(
+      settingsOpen
+      || aiUnlockedOpen
+      || saveUrlOpen
+      || whatsNewNotes
+      || shortcutsOpen
+      || quickSwitcherOpen
+      || rediscoverOpen
+    );
+    window.moodmark?.smartCategories?.noteActivity?.({ kind: 'modal', active: modalActive });
+  }, [
+    settingsOpen,
+    aiUnlockedOpen,
+    saveUrlOpen,
+    whatsNewNotes,
+    shortcutsOpen,
+    quickSwitcherOpen,
+    rediscoverOpen,
+  ]);
 
   const buildCardMenuItems = useCallback((saveId, memberIds) => {
     // If the right-clicked save is part of an active multi-selection,
@@ -3454,6 +3578,7 @@ export default function App() {
       { id: 'open-trash', label: 'Open trash', keywords: 'deleted bin', Icon: () => <Trash2 {...ICON} />, run: () => { handleModeChange('library'); handleViewChange({ type: 'trash' }); } },
       { id: 'shortcuts', label: 'Keyboard shortcuts', hint: '⌘/', keywords: 'keys help hotkeys', Icon: () => <Keyboard {...ICON} />, run: () => setShortcutsOpen(true) },
       { id: 'whats-new', label: "What's new", keywords: 'release notes changelog version', Icon: () => <Sparkles {...ICON} />, run: () => handleOpenReleaseNotes() },
+      { id: 'refresh-smart-categories', label: 'Refresh smart categories', keywords: 'classify organize categories topics', Icon: () => <RefreshCw {...ICON} />, run: async () => { await window.moodmark.smartCategories?.refresh?.(); await loadCollections(); } },
       { id: 'export-library', label: 'Export library as zip', keywords: 'backup download archive', Icon: () => <Archive {...ICON} />, run: () => window.moodmark.library?.exportZip?.() },
       { id: 'snapshot-library', label: 'Back up library now', keywords: 'snapshot data safety', Icon: () => <Save {...ICON} />, run: () => window.moodmark.backup?.snapshot?.() },
       { id: 'settings', label: 'Open settings', hint: '⌘,', keywords: 'preferences options', Icon: () => <Settings {...ICON} />, run: () => setSettingsOpen(true) },
@@ -3469,7 +3594,7 @@ export default function App() {
       settingsPage('data', 'Settings · Data', 'backup snapshot restore wipe export', () => <Database {...ICON} />),
       settingsPage('about', 'Settings · About', 'acknowledgments version privacy', () => <Info {...ICON} />),
     ];
-  }, [handleCreateAndOpenCollection, handleCreateBoard, handleModeChange, handleViewChange, handleOpenReleaseNotes, setView]);
+  }, [handleCreateAndOpenCollection, handleCreateBoard, handleModeChange, handleViewChange, handleOpenReleaseNotes, loadCollections, setView]);
 
   // The multi-select bar belongs to surfaces that show selectable image
   // cards. On the Collections and Spaces browse tabs there's nothing to
@@ -3690,11 +3815,15 @@ export default function App() {
                   || (appMode === 'folders' && view.type === 'collection')) && (
                   <SmartChipRail
                     activeViewType={
-                      ['all', 'unsorted', 'bookmarks', 'trash'].includes(view.type)
+                      view.type === 'smartCategory'
+                        ? `smartCategory:${view.id}`
+                        : ['all', 'unsorted', 'bookmarks', 'trash'].includes(view.type)
                         ? view.type
                         : 'all'
                     }
                     counts={smartCounts}
+                    smartCategories={smartCategories}
+                    onSmartCategoryContextMenu={handleSmartCategoryContextMenu}
                     onPick={(v) => handleViewChange(v)}
                     tweetTypeFilter={tweetTypeFilter}
                     tweetTypeCounts={tweetTypeCounts}
@@ -4103,6 +4232,14 @@ export default function App() {
         onCancel={cancelSocialImport}
         onDismiss={dismissSocialImport}
       />
+      {smartCategoryCtx && (
+        <ContextMenu
+          x={smartCategoryCtx.x}
+          y={smartCategoryCtx.y}
+          items={smartCategoryCtx.items}
+          onClose={() => setSmartCategoryCtx(null)}
+        />
+      )}
       <QuickLookOverlay
         save={peekedSaveId ? saves.find((s) => s.id === peekedSaveId) || null : null}
         onDismiss={() => setPeekedSaveId(null)}

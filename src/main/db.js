@@ -627,12 +627,19 @@ function insertSave({
     source: source || 'x',
     created_at: Number.isFinite(createdAt) ? createdAt : Date.now(),
   };
-  db.prepare(`
-    INSERT INTO saves
-      (id, file_path, thumb_path, title, notes, source_url, source_key, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, source, created_at)
-    VALUES
-      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @source_key, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @source, @created_at)
-  `).run(record);
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO saves
+        (id, file_path, thumb_path, title, notes, source_url, source_key, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, source, created_at)
+      VALUES
+        (@id, @file_path, @thumb_path, @title, @notes, @source_url, @source_key, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @source, @created_at)
+    `).run(record);
+    db.prepare(`
+      INSERT INTO save_background_routes
+        (save_id, state, retry_count, available_at, created_at, updated_at)
+      VALUES (?, 'pending', 0, ?, ?, ?)
+    `).run(record.id, record.created_at, record.created_at, record.created_at);
+  })();
   return record;
 }
 
@@ -886,6 +893,79 @@ function ftsPrefixQuery(text) {
   return terms.map((t) => `"${t}"*`).join(' ');
 }
 
+function smartCategorySearchTokens(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function smartCategoryLabelMatchesSearch(label, queryTokens) {
+  const labelTokens = smartCategorySearchTokens(label);
+  if (!labelTokens.length || !queryTokens.length) return false;
+  if (queryTokens.length > 1 && labelTokens.join(' ').includes(queryTokens.join(' '))) return true;
+  return queryTokens.every((queryToken) => (
+    labelTokens.some((labelToken) => (
+      labelToken === queryToken
+      || (queryToken.length >= 3 && labelToken.startsWith(queryToken))
+    ))
+  ));
+}
+
+function getSmartCategorySearchCategoryIds(text) {
+  const queryTokens = smartCategorySearchTokens(text);
+  if (!queryTokens.length) return [];
+  const rows = getDatabase().prepare(`
+    SELECT c.id, c.name, a.alias
+      FROM smart_categories c
+      LEFT JOIN smart_category_aliases a ON a.category_id = c.id
+     WHERE c.status = 'visible'
+     ORDER BY c.updated_at DESC
+  `).all();
+  const labelsById = new Map();
+  for (const row of rows) {
+    if (!labelsById.has(row.id)) labelsById.set(row.id, []);
+    labelsById.get(row.id).push(row.name);
+    if (row.alias) labelsById.get(row.id).push(row.alias);
+  }
+  return [...labelsById.entries()]
+    .filter(([, labels]) => labels.some((label) => smartCategoryLabelMatchesSearch(label, queryTokens)))
+    .map(([id]) => id);
+}
+
+function getSmartCategorySearchExpandedSaves({ text, baseConditions, baseParams, sort } = {}) {
+  const categoryIds = getSmartCategorySearchCategoryIds(text);
+  if (!categoryIds.length) return [];
+  const categoryPlaceholders = categoryIds.map(() => '?').join(', ');
+  const baseWhere = baseConditions.length ? ` WHERE ${baseConditions.join(' AND ')}` : '';
+  const recency = sort === 'oldest' ? 's.created_at ASC' : 's.created_at DESC';
+  const selectColumns = SAVE_LIST_COLUMNS.split(', ').map((column) => `s.${column}`).join(', ');
+  return getDatabase().prepare(`
+    SELECT ${selectColumns}, MAX(m.weight) AS smart_category_search_weight
+      FROM smart_category_members m
+      JOIN saves s ON s.id = m.save_id
+     WHERE m.category_id IN (${categoryPlaceholders})
+       AND m.weight >= ?
+       AND s.id IN (SELECT id FROM saves${baseWhere})
+     GROUP BY s.id
+     ORDER BY smart_category_search_weight DESC, ${recency}
+  `).all(...categoryIds, SMART_CATEGORY_PRIMARY_WEIGHT, ...baseParams);
+}
+
+function appendSmartCategorySearchRows(directRows, expandedRows) {
+  if (!expandedRows.length) return directRows;
+  const seen = new Set(directRows.map((row) => row.id));
+  const merged = directRows.slice();
+  for (const row of expandedRows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    merged.push(row);
+  }
+  return merged;
+}
+
 function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorHex = null, view = 'all', _noFts = false } = {}) {
   const db = getDatabase();
   const conditions = [];
@@ -986,6 +1066,9 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
     params.push(parsed.after);
   }
 
+  const baseConditions = conditions.slice();
+  const baseParams = params.slice();
+
   if (text) {
     // Indexed FTS5 match over title / ocr_text / tweet text (the old
     // LIKE pass full-scanned the table and json_extract-parsed
@@ -1055,6 +1138,12 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
       return getAllSaves({ search, sort, collectionId, colorHex, view, _noFts: true });
     }
     throw err;
+  }
+  if (text) {
+    rows = appendSmartCategorySearchRows(
+      rows,
+      getSmartCategorySearchExpandedSaves({ text, baseConditions, baseParams, sort }),
+    );
   }
   // Color filter: requested hex matched against each save's stored
   // palette in LAB space. Done in JS because SQLite doesn't have the
@@ -1447,6 +1536,615 @@ function getSaveEmbeddingsCached() {
   return embeddingCache;
 }
 
+// ── Smart categories ─────────────────────────────────────────────
+// Internal classifier-owned lenses. These helpers deliberately do not
+// touch tags, folders, boards, search, or import behavior.
+
+const SMART_CATEGORY_STATUSES = new Set(['candidate', 'visible', 'hidden', 'archived']);
+const SMART_CATEGORY_CHANGE_KINDS = new Set(['created', 'renamed', 'merged', 'split']);
+const SMART_CATEGORY_PRIMARY_WEIGHT = 0.75;
+const SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS = 5;
+const SMART_CATEGORY_RECENT_CHANGE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+function clampUnit(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+
+function jsonString(value, fallback) {
+  if (value == null) return fallback;
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function parseJsonField(value, fallback) {
+  if (!value) return fallback;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function normalizeSmartCategory(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    frozen_name: !!row.frozen_name,
+  };
+}
+
+function normalizeTopicProfile(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    concepts: parseJsonField(row.concepts, []),
+  };
+}
+
+function normalizeMembership(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    evidence: parseJsonField(row.evidence, row.evidence || null),
+  };
+}
+
+function createSmartCategory({
+  id,
+  name,
+  description,
+  status = 'candidate',
+  parentId = null,
+  centroidEmbedding = null,
+  visibilityScore = 0,
+  memberCount = 0,
+  createdAt,
+  updatedAt,
+  lastChangedAt,
+  changeKind = 'created',
+  frozenName = false,
+} = {}) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return { ok: false, reason: 'missing-name' };
+  if (!SMART_CATEGORY_STATUSES.has(status)) return { ok: false, reason: 'invalid-status' };
+  if (changeKind != null && !SMART_CATEGORY_CHANGE_KINDS.has(changeKind)) {
+    return { ok: false, reason: 'invalid-change-kind' };
+  }
+  const now = Date.now();
+  const record = {
+    id: id || crypto.randomUUID(),
+    name: trimmed,
+    description: description || null,
+    status,
+    parent_id: parentId || null,
+    centroid_embedding: centroidEmbedding || null,
+    visibility_score: clampUnit(visibilityScore),
+    member_count: Math.max(0, Number(memberCount) || 0),
+    created_at: Number.isFinite(createdAt) ? createdAt : now,
+    updated_at: Number.isFinite(updatedAt) ? updatedAt : now,
+    last_changed_at: Number.isFinite(lastChangedAt) ? lastChangedAt : now,
+    change_kind: changeKind || null,
+    frozen_name: frozenName ? 1 : 0,
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_categories
+      (id, name, description, status, parent_id, centroid_embedding,
+       visibility_score, member_count, created_at, updated_at,
+       last_changed_at, change_kind, frozen_name)
+    VALUES
+      (@id, @name, @description, @status, @parent_id, @centroid_embedding,
+       @visibility_score, @member_count, @created_at, @updated_at,
+       @last_changed_at, @change_kind, @frozen_name)
+  `).run(record);
+  return { ok: true, category: normalizeSmartCategory(record) };
+}
+
+// Deterministic discovery IDs make bootstrap replayable. Existing user state
+// (visibility, pinned name, parent, memberships) remains authoritative.
+function upsertSmartCategory(options = {}) {
+  const existing = options.id ? getSmartCategory(options.id) : null;
+  if (!existing) return createSmartCategory(options);
+  const name = (options.name || '').trim();
+  if (!name) return { ok: false, reason: 'missing-name' };
+  const updatedAt = Number.isFinite(options.updatedAt) ? options.updatedAt : Date.now();
+  getDatabase().prepare(`
+    UPDATE smart_categories
+       SET name = CASE WHEN frozen_name = 1 THEN name ELSE ? END,
+           description = ?,
+           updated_at = ?
+     WHERE id = ?
+  `).run(name, options.description || null, updatedAt, options.id);
+  return { ok: true, category: getSmartCategory(options.id), created: false };
+}
+
+function getSmartCategory(id) {
+  return normalizeSmartCategory(
+    getDatabase().prepare('SELECT * FROM smart_categories WHERE id = ?').get(id),
+  );
+}
+
+function updateSmartCategoryCentroidEmbedding({
+  categoryId,
+  centroidEmbedding = null,
+  updatedAt,
+} = {}) {
+  if (!categoryId || !centroidEmbedding) return { ok: false, reason: 'missing-centroid' };
+  const at = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+  const { changes } = getDatabase()
+    .prepare('UPDATE smart_categories SET centroid_embedding = ?, updated_at = ? WHERE id = ?')
+    .run(centroidEmbedding, at, categoryId);
+  return { ok: changes > 0, reason: changes > 0 ? null : 'not-found' };
+}
+
+function listSmartCategories({ status = null, includeArchived = false } = {}) {
+  const params = [];
+  const where = [];
+  if (status) {
+    where.push('status = ?');
+    params.push(status);
+  } else if (!includeArchived) {
+    where.push("status != 'archived'");
+  }
+  const sql = `SELECT * FROM smart_categories${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY frozen_name DESC, visibility_score DESC, updated_at DESC`;
+  return getDatabase().prepare(sql).all(...params).map(normalizeSmartCategory);
+}
+
+function listNavigableSmartCategories({
+  minPrimaryMembers = SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS,
+  minVisibilityScore = 0,
+  recentChangeWindowMs = SMART_CATEGORY_RECENT_CHANGE_WINDOW_MS,
+  now = Date.now(),
+} = {}) {
+  const minMembers = Math.max(1, Number(minPrimaryMembers) || SMART_CATEGORY_NAV_MIN_PRIMARY_MEMBERS);
+  const minScore = clampUnit(minVisibilityScore, 0);
+  const at = Number.isFinite(now) ? now : Date.now();
+  const changeWindow = Math.max(0, Number(recentChangeWindowMs) || 0);
+  return getDatabase()
+    .prepare(`
+      SELECT c.*,
+             COUNT(m.save_id) AS primary_member_count
+        FROM smart_categories c
+        JOIN smart_category_members m
+          ON m.category_id = c.id
+         AND m.weight >= ?
+        JOIN saves s
+          ON s.id = m.save_id
+         AND s.deleted_at IS NULL
+       WHERE c.status = 'visible'
+         AND c.visibility_score > ?
+       GROUP BY c.id
+      HAVING primary_member_count >= ?
+       ORDER BY c.frozen_name DESC,
+                c.visibility_score DESC,
+                primary_member_count DESC,
+                c.updated_at DESC
+    `)
+    .all(SMART_CATEGORY_PRIMARY_WEIGHT, minScore, minMembers)
+    .map((row) => {
+      const category = normalizeSmartCategory(row);
+      const changedAt = Number(category.last_changed_at) || 0;
+      const recent = category.change_kind === 'renamed'
+        && changedAt > 0
+        && at >= changedAt
+        && at - changedAt <= changeWindow;
+      let note = null;
+      if (recent) {
+        const oldName = getDatabase()
+          .prepare(`
+            SELECT alias FROM smart_category_aliases
+            WHERE category_id = ? AND source = 'old_name'
+            ORDER BY created_at DESC
+            LIMIT 1
+          `)
+          .get(category.id)?.alias;
+        note = oldName
+          ? `Renamed from "${oldName}". Old name still works in search.`
+          : 'Renamed recently. Old names still work in search.';
+      }
+      return {
+        ...category,
+        primary_member_count: Number(row.primary_member_count) || 0,
+        recent_change: recent,
+        recent_change_kind: recent ? category.change_kind : null,
+        recent_change_note: note,
+      };
+    });
+}
+
+function setSmartCategoryStatus(id, status, { restoreHidden = false, rebuild = false } = {}) {
+  if (!id || !SMART_CATEGORY_STATUSES.has(status)) return { ok: false };
+  const current = getSmartCategory(id);
+  if (!current) return { ok: false, reason: 'not-found' };
+  if (
+    current.status === 'hidden'
+    && (status === 'visible' || status === 'candidate')
+    && !restoreHidden
+    && !rebuild
+  ) {
+    return { ok: false, reason: 'hidden-requires-restore' };
+  }
+  const now = Date.now();
+  const { changes } = getDatabase()
+    .prepare('UPDATE smart_categories SET status = ?, updated_at = ? WHERE id = ?')
+    .run(status, now, id);
+  return { ok: changes > 0 };
+}
+
+function hideSmartCategory(id) {
+  return setSmartCategoryStatus(id, 'hidden');
+}
+
+function archiveSmartCategory(id) {
+  return setSmartCategoryStatus(id, 'archived');
+}
+
+function restoreSmartCategory(id, { status = 'visible' } = {}) {
+  return setSmartCategoryStatus(id, status, { restoreHidden: true });
+}
+
+function pinSmartCategory(id, pinned = true) {
+  if (!id) return { ok: false };
+  const now = Date.now();
+  const { changes } = getDatabase()
+    .prepare('UPDATE smart_categories SET frozen_name = ?, updated_at = ? WHERE id = ?')
+    .run(pinned ? 1 : 0, now, id);
+  return { ok: changes > 0 };
+}
+
+function renameSmartCategory({
+  id,
+  name,
+  automatic = true,
+  changedAt,
+} = {}) {
+  const trimmed = (name || '').trim();
+  if (!id) return { ok: false, reason: 'missing-id' };
+  if (!trimmed) return { ok: false, reason: 'missing-name' };
+  const current = getSmartCategory(id);
+  if (!current) return { ok: false, reason: 'not-found' };
+  if (current.frozen_name && automatic) {
+    return { ok: false, reason: 'name-frozen' };
+  }
+  if (current.name === trimmed) {
+    return { ok: true, renamed: false, category: current };
+  }
+
+  const at = Number.isFinite(changedAt) ? changedAt : Date.now();
+  const tx = getDatabase().transaction(() => {
+    upsertSmartCategoryAlias({
+      categoryId: id,
+      alias: current.name,
+      source: 'old_name',
+      createdAt: at,
+    });
+    getDatabase()
+      .prepare(`
+        UPDATE smart_categories
+           SET name = ?,
+               updated_at = ?,
+               last_changed_at = ?,
+               change_kind = 'renamed'
+         WHERE id = ?
+      `)
+      .run(trimmed, at, at, id);
+  });
+  tx();
+  return { ok: true, renamed: true, category: getSmartCategory(id) };
+}
+
+function upsertSmartCategoryAlias({
+  id,
+  categoryId,
+  alias,
+  source = 'model_synonym',
+  createdAt,
+} = {}) {
+  const trimmed = (alias || '').trim();
+  if (!categoryId || !trimmed) return { ok: false };
+  const record = {
+    id: id || crypto.randomUUID(),
+    category_id: categoryId,
+    alias: trimmed,
+    source,
+    created_at: Number.isFinite(createdAt) ? createdAt : Date.now(),
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_category_aliases (id, category_id, alias, source, created_at)
+    VALUES (@id, @category_id, @alias, @source, @created_at)
+    ON CONFLICT(category_id, alias) DO UPDATE SET
+      source = excluded.source,
+      created_at = excluded.created_at
+  `).run(record);
+  return { ok: true, alias: record };
+}
+
+function applySmartCategoryTaxonomyChanges({ renames = [], aliases = [], changedAt } = {}) {
+  const at = Number.isFinite(changedAt) ? changedAt : Date.now();
+  let renamedCount = 0;
+  let aliasCount = 0;
+  const tx = getDatabase().transaction(() => {
+    for (const rename of Array.isArray(renames) ? renames : []) {
+      const result = renameSmartCategory({
+        id: rename.id,
+        name: rename.name,
+        automatic: rename.automatic !== false,
+        changedAt: Number.isFinite(rename.changedAt) ? rename.changedAt : at,
+      });
+      if (!result?.ok) throw new Error(result?.reason || 'rename-failed');
+      if (result.renamed !== false) renamedCount += 1;
+    }
+    for (const alias of Array.isArray(aliases) ? aliases : []) {
+      const result = upsertSmartCategoryAlias({
+        categoryId: alias.categoryId,
+        alias: alias.alias,
+        source: alias.source || 'model_synonym',
+        createdAt: Number.isFinite(alias.createdAt) ? alias.createdAt : at,
+      });
+      if (!result?.ok) throw new Error(result?.reason || 'alias-failed');
+      aliasCount += 1;
+    }
+  });
+  try {
+    tx();
+  } catch (err) {
+    return { ok: false, reason: err?.message || 'taxonomy-apply-failed' };
+  }
+  return { ok: true, renamedCount, aliasCount };
+}
+
+function getSmartCategoryAliases(categoryId) {
+  return getDatabase()
+    .prepare('SELECT * FROM smart_category_aliases WHERE category_id = ? ORDER BY alias ASC')
+    .all(categoryId);
+}
+
+function findSmartCategoryAliases(alias) {
+  const q = (alias || '').trim();
+  if (!q) return [];
+  return getDatabase()
+    .prepare(`
+      SELECT a.*, c.name AS category_name, c.status AS category_status
+      FROM smart_category_aliases a
+      JOIN smart_categories c ON c.id = a.category_id
+      WHERE LOWER(a.alias) = LOWER(?)
+      ORDER BY c.updated_at DESC
+    `)
+    .all(q);
+}
+
+function upsertSaveTopicProfile({
+  saveId,
+  concepts = [],
+  contentType = null,
+  intentGuess = null,
+  summary = null,
+  embedding = null,
+  confidence = 0,
+  updatedAt,
+} = {}) {
+  if (!saveId) return { ok: false };
+  const record = {
+    save_id: saveId,
+    concepts: jsonString(Array.isArray(concepts) ? concepts : [], '[]'),
+    content_type: contentType || null,
+    intent_guess: intentGuess || null,
+    summary: summary || null,
+    embedding: embedding || null,
+    confidence: clampUnit(confidence),
+    updated_at: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
+  };
+  getDatabase().prepare(`
+    INSERT INTO save_topic_profiles
+      (save_id, concepts, content_type, intent_guess, summary, embedding, confidence, updated_at)
+    VALUES
+      (@save_id, @concepts, @content_type, @intent_guess, @summary, @embedding, @confidence, @updated_at)
+    ON CONFLICT(save_id) DO UPDATE SET
+      concepts = excluded.concepts,
+      content_type = excluded.content_type,
+      intent_guess = excluded.intent_guess,
+      summary = excluded.summary,
+      embedding = excluded.embedding,
+      confidence = excluded.confidence,
+      updated_at = excluded.updated_at
+  `).run(record);
+  return { ok: true, profile: normalizeTopicProfile(record) };
+}
+
+function getSaveTopicProfile(saveId) {
+  return normalizeTopicProfile(
+    getDatabase().prepare('SELECT * FROM save_topic_profiles WHERE save_id = ?').get(saveId),
+  );
+}
+
+function listSaveTopicProfiles({ limit = 120 } = {}) {
+  const count = Math.max(1, Math.min(500, Number(limit) || 120));
+  return getDatabase()
+    .prepare('SELECT * FROM save_topic_profiles ORDER BY updated_at DESC LIMIT ?')
+    .all(count)
+    .map(normalizeTopicProfile);
+}
+
+function upsertSmartCategoryMembership({
+  categoryId,
+  saveId,
+  weight,
+  evidence = null,
+  assignedAt,
+  updatedAt,
+} = {}) {
+  if (!categoryId || !saveId) return { ok: false };
+  const now = Date.now();
+  const record = {
+    category_id: categoryId,
+    save_id: saveId,
+    weight: clampUnit(weight),
+    evidence: jsonString(evidence, null),
+    assigned_at: Number.isFinite(assignedAt) ? assignedAt : now,
+    updated_at: Number.isFinite(updatedAt) ? updatedAt : now,
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_category_members
+      (category_id, save_id, weight, evidence, assigned_at, updated_at)
+    VALUES
+      (@category_id, @save_id, @weight, @evidence, @assigned_at, @updated_at)
+    ON CONFLICT(category_id, save_id) DO UPDATE SET
+      weight = excluded.weight,
+      evidence = excluded.evidence,
+      updated_at = excluded.updated_at
+  `).run(record);
+  getDatabase().prepare(`
+    UPDATE smart_categories
+       SET member_count = (
+         SELECT COUNT(*) FROM smart_category_members
+         WHERE category_id = ? AND weight >= 0.45
+       ),
+       updated_at = ?
+     WHERE id = ?
+  `).run(categoryId, now, categoryId);
+  return { ok: true, membership: normalizeMembership(record) };
+}
+
+function getSmartCategoryMembers(categoryId, { minWeight = 0 } = {}) {
+  return getDatabase()
+    .prepare(`
+      SELECT m.*, s.created_at AS save_created_at
+      FROM smart_category_members m
+      JOIN saves s ON s.id = m.save_id
+      WHERE m.category_id = ? AND m.weight >= ? AND s.deleted_at IS NULL
+      ORDER BY m.weight DESC, s.created_at DESC
+    `)
+    .all(categoryId, clampUnit(minWeight))
+    .map(normalizeMembership);
+}
+
+function getSmartCategoryMemberTopicEmbeddings(categoryId, { minWeight = 0.45 } = {}) {
+  if (!categoryId) return [];
+  return getDatabase()
+    .prepare(`
+      SELECT m.save_id, p.embedding, m.weight
+        FROM smart_category_members m
+        JOIN save_topic_profiles p
+          ON p.save_id = m.save_id
+         AND p.embedding IS NOT NULL
+        JOIN saves s
+          ON s.id = m.save_id
+         AND s.deleted_at IS NULL
+       WHERE m.category_id = ?
+         AND m.weight >= ?
+       ORDER BY m.weight DESC, s.created_at DESC
+    `)
+    .all(categoryId, clampUnit(minWeight));
+}
+
+function getSmartCategorySaves(categoryId, { minWeight = SMART_CATEGORY_PRIMARY_WEIGHT } = {}) {
+  if (!categoryId) return [];
+  return getDatabase()
+    .prepare(`
+      SELECT ${SAVE_LIST_COLUMNS.split(', ').map((column) => `s.${column}`).join(', ')},
+             m.weight AS smart_category_weight,
+             m.evidence AS smart_category_evidence,
+             m.updated_at AS smart_category_updated_at
+        FROM smart_category_members m
+        JOIN smart_categories c
+          ON c.id = m.category_id
+         AND c.status = 'visible'
+        JOIN saves s
+          ON s.id = m.save_id
+         AND s.deleted_at IS NULL
+       WHERE m.category_id = ?
+         AND m.weight >= ?
+       ORDER BY m.weight DESC, s.created_at DESC
+    `)
+    .all(categoryId, clampUnit(minWeight));
+}
+
+function getSmartCategoriesForSave(saveId, { minWeight = 0 } = {}) {
+  return getDatabase()
+    .prepare(`
+      SELECT m.*, c.name, c.status
+      FROM smart_category_members m
+      JOIN smart_categories c ON c.id = m.category_id
+      WHERE m.save_id = ? AND m.weight >= ?
+      ORDER BY m.weight DESC, c.name ASC
+    `)
+    .all(saveId, clampUnit(minWeight))
+    .map(normalizeMembership);
+}
+
+function recordSmartCategoryRun({
+  id,
+  runType,
+  startedAt,
+  finishedAt = null,
+  inputSaveCount = 0,
+  createdCount = 0,
+  renamedCount = 0,
+  mergedCount = 0,
+  splitCount = 0,
+  failedCount = 0,
+  provider = null,
+  error = null,
+  metadata = null,
+} = {}) {
+  if (!runType) return { ok: false, reason: 'missing-run-type' };
+  const record = {
+    id: id || crypto.randomUUID(),
+    run_type: runType,
+    started_at: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    finished_at: Number.isFinite(finishedAt) ? finishedAt : null,
+    input_save_count: Math.max(0, Number(inputSaveCount) || 0),
+    created_count: Math.max(0, Number(createdCount) || 0),
+    renamed_count: Math.max(0, Number(renamedCount) || 0),
+    merged_count: Math.max(0, Number(mergedCount) || 0),
+    split_count: Math.max(0, Number(splitCount) || 0),
+    failed_count: Math.max(0, Number(failedCount) || 0),
+    provider,
+    error,
+    metadata: jsonString(metadata, null),
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_category_runs
+      (id, run_type, started_at, finished_at, input_save_count,
+       created_count, renamed_count, merged_count, split_count,
+       failed_count, provider, error, metadata)
+    VALUES
+      (@id, @run_type, @started_at, @finished_at, @input_save_count,
+       @created_count, @renamed_count, @merged_count, @split_count,
+       @failed_count, @provider, @error, @metadata)
+  `).run(record);
+  return { ok: true, run: record };
+}
+
+function listSmartCategoryRuns({ limit = 20 } = {}) {
+  const n = Math.max(1, Math.min(100, Number(limit) || 20));
+  return getDatabase()
+    .prepare('SELECT * FROM smart_category_runs ORDER BY started_at DESC LIMIT ?')
+    .all(n);
+}
+
+function getPendingSmartCategorySaves({ limit = 50 } = {}) {
+  const n = Math.max(1, Math.min(500, Number(limit) || 50));
+  return getDatabase()
+    .prepare(`
+      SELECT ${SAVE_LIST_COLUMNS.split(', ').map((column) => `s.${column}`).join(', ')}
+        FROM saves s
+        LEFT JOIN save_topic_profiles p ON p.save_id = s.id
+       WHERE s.deleted_at IS NULL
+         AND (
+           p.save_id IS NULL
+           OR NOT EXISTS (
+             SELECT 1
+               FROM smart_category_members m
+               JOIN smart_categories c ON c.id = m.category_id
+              WHERE m.save_id = s.id
+                AND c.status IN ('visible', 'candidate')
+           )
+         )
+       ORDER BY s.created_at DESC
+       LIMIT ?
+    `)
+    .all(n);
+}
+
+
 function getSavesByIds(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const placeholders = ids.map(() => '?').join(',');
@@ -1615,6 +2313,865 @@ function createCollection({ name, color, parentId } = {}) {
   return record;
 }
 
+// ── Semantic index persistence ────────────────────────────────────────────
+
+function createSemanticGeneration({
+  id,
+  model,
+  dimension,
+  sourceVersion,
+  status = 'building',
+  createdAt,
+} = {}) {
+  if (!id || !model || !Number.isInteger(sourceVersion)) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const database = getDatabase();
+  const now = Number.isFinite(createdAt) ? createdAt : Date.now();
+  const record = {
+    id,
+    model,
+    dimension: Number.isInteger(dimension) && dimension > 0 ? dimension : null,
+    source_version: sourceVersion,
+    status,
+    created_at: now,
+    activated_at: status === 'active' ? now : null,
+  };
+  const create = database.transaction(() => {
+    if (status === 'building') {
+      const existing = database.prepare(`
+        SELECT id FROM semantic_index_generations
+         WHERE status = 'building'
+         LIMIT 1
+      `).get();
+      if (existing) {
+        return { ok: false, reason: 'building_exists', generationId: existing.id };
+      }
+    }
+    database.prepare(`
+      INSERT INTO semantic_index_generations
+        (id, model, dimension, source_version, status, created_at, activated_at)
+      VALUES
+        (@id, @model, @dimension, @source_version, @status, @created_at, @activated_at)
+    `).run(record);
+    if (status === 'active') {
+      database.prepare(
+        "UPDATE semantic_index_generations SET status = 'retired' WHERE status = 'active' AND id != ?",
+      ).run(id);
+      database.prepare(`
+        UPDATE semantic_index_state
+           SET active_generation_id = ?, updated_at = ?
+         WHERE id = 1
+      `).run(id, now);
+    } else if (status === 'building') {
+      database.prepare(`
+        UPDATE semantic_index_state
+           SET building_generation_id = ?, updated_at = ?
+         WHERE id = 1
+      `).run(id, now);
+    }
+    return null;
+  });
+  const rejected = create();
+  if (rejected) return rejected;
+  return database.prepare('SELECT * FROM semantic_index_generations WHERE id = ?').get(id);
+}
+
+function createSemanticRebuild({ id, model, sourceVersion, createdAt, jobs } = {}) {
+  if (
+    !id
+    || !model
+    || !Number.isInteger(sourceVersion)
+    || !Array.isArray(jobs)
+    || jobs.length === 0
+    || jobs.some((job) => !job?.saveId || !job?.sourceHash)
+  ) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const database = getDatabase();
+  const now = Number.isFinite(createdAt) ? createdAt : Date.now();
+  const create = database.transaction(() => {
+    const existing = database.prepare(`
+      SELECT id FROM semantic_index_generations
+       WHERE status = 'building'
+       LIMIT 1
+    `).get();
+    if (existing) {
+      return { ok: false, reason: 'building_exists', generationId: existing.id };
+    }
+
+    database.prepare(`
+      INSERT INTO semantic_index_generations
+        (id, model, dimension, source_version, status, created_at, activated_at)
+      VALUES (?, ?, NULL, ?, 'building', ?, NULL)
+    `).run(id, model, sourceVersion, now);
+    database.prepare(`
+      UPDATE semantic_index_state
+         SET building_generation_id = ?, updated_at = ?
+       WHERE id = 1
+    `).run(id, now);
+
+    const insertJob = database.prepare(`
+      INSERT INTO semantic_index_jobs
+        (id, generation_id, save_id, kind, source_hash, state, retry_count, retryable,
+         available_at, created_at, updated_at)
+      VALUES (?, ?, ?, 'rebuild', ?, 'pending', 0, 0, ?, ?, ?)
+    `);
+    for (const job of jobs) {
+      insertJob.run(job.id || crypto.randomUUID(), id, job.saveId, job.sourceHash, now, now, now);
+    }
+    return database.prepare('SELECT * FROM semantic_index_generations WHERE id = ?').get(id);
+  });
+  return create();
+}
+
+function getSemanticIndexState() {
+  const row = getDatabase().prepare(`
+    SELECT active_generation_id, building_generation_id, paused,
+           pause_reason, paused_at, updated_at
+      FROM semantic_index_state
+     WHERE id = 1
+  `).get();
+  return { ...row, paused: !!row.paused };
+}
+
+function getActiveSemanticIndexIdentity() {
+  const row = getDatabase().prepare(`
+    SELECT g.id AS generation_id, g.model, g.dimension
+      FROM semantic_index_state s
+      JOIN semantic_index_generations g ON g.id = s.active_generation_id
+     WHERE s.id = 1 AND g.status = 'active'
+  `).get();
+  return row || undefined;
+}
+
+function enqueueSemanticIndexJob({
+  id,
+  generationId,
+  saveId,
+  kind = 'incremental',
+  sourceHash,
+  now,
+} = {}) {
+  if (!generationId || !saveId || !sourceHash) return { ok: false, reason: 'invalid' };
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  database.prepare(`
+    INSERT INTO semantic_index_jobs
+      (id, generation_id, save_id, kind, source_hash, state, retry_count, retryable,
+       available_at, created_at, updated_at)
+    VALUES
+      (@id, @generation_id, @save_id, @kind, @source_hash, 'pending', 0, 0,
+       @available_at, @created_at, @updated_at)
+    ON CONFLICT(generation_id, save_id, kind) DO UPDATE SET
+      source_hash = excluded.source_hash,
+      state = 'pending',
+      retry_count = CASE
+        WHEN semantic_index_jobs.source_hash = excluded.source_hash
+        THEN semantic_index_jobs.retry_count ELSE 0 END,
+      retryable = 0,
+      available_at = excluded.available_at,
+      error = NULL,
+      updated_at = excluded.updated_at,
+      started_at = NULL,
+      finished_at = NULL
+  `).run({
+    id: id || crypto.randomUUID(),
+    generation_id: generationId,
+    save_id: saveId,
+    kind,
+    source_hash: sourceHash,
+    available_at: timestamp,
+    created_at: timestamp,
+    updated_at: timestamp,
+  });
+  return database.prepare(`
+    SELECT * FROM semantic_index_jobs
+     WHERE generation_id = ? AND save_id = ? AND kind = ?
+  `).get(generationId, saveId, kind);
+}
+
+function claimSemanticIndexJob(kind, now = Date.now()) {
+  const database = getDatabase();
+  if (database.prepare('SELECT paused FROM semantic_index_state WHERE id = 1').get().paused) {
+    return undefined;
+  }
+  const claim = database.transaction(() => {
+    const row = database.prepare(`
+      SELECT j.*
+        FROM semantic_index_jobs j
+        JOIN semantic_index_generations g ON g.id = j.generation_id
+        JOIN semantic_index_state s ON s.id = 1
+       WHERE j.state = 'pending'
+         AND j.available_at <= ?
+         AND (? IS NULL OR j.kind = ?)
+         AND g.status IN ('active', 'building')
+         AND (
+           (j.kind = 'incremental' AND j.generation_id = s.active_generation_id)
+           OR
+           (j.kind = 'rebuild' AND j.generation_id = s.building_generation_id)
+         )
+       ORDER BY CASE j.kind WHEN 'incremental' THEN 0 ELSE 1 END,
+                j.available_at ASC, j.created_at ASC
+       LIMIT 1
+    `).get(now, kind || null, kind || null);
+    if (!row) return undefined;
+    const result = database.prepare(`
+      UPDATE semantic_index_jobs
+         SET state = 'running', retryable = 0,
+             started_at = ?, updated_at = ?, error = NULL
+       WHERE id = ? AND state = 'pending'
+    `).run(now, now, row.id);
+    if (result.changes !== 1) return undefined;
+    return database.prepare('SELECT * FROM semantic_index_jobs WHERE id = ?').get(row.id);
+  });
+  return claim();
+}
+
+function vectorBuffer(value) {
+  if (Buffer.isBuffer(value)) return value;
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return null;
+}
+
+function isValidFloat32Vector(bytes, dimension) {
+  if (!bytes || !Number.isInteger(dimension) || dimension < 1) return false;
+  if (bytes.byteLength !== dimension * Float32Array.BYTES_PER_ELEMENT) return false;
+  for (let i = 0; i < dimension; i += 1) {
+    if (!Number.isFinite(bytes.readFloatLE(i * Float32Array.BYTES_PER_ELEMENT))) return false;
+  }
+  return true;
+}
+
+function completeSemanticIndexJob({
+  id,
+  sourceHash,
+  model,
+  dimension,
+  vector,
+  now,
+  activate = true,
+} = {}) {
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const bytes = vectorBuffer(vector);
+  const complete = database.transaction(() => {
+    const job = database.prepare('SELECT * FROM semantic_index_jobs WHERE id = ?').get(id);
+    if (!job) return { ok: false, reason: 'not_found' };
+    if (job.state !== 'running') {
+      return { ok: false, reason: job.source_hash !== sourceHash ? 'stale' : 'not_running' };
+    }
+    if (job.source_hash !== sourceHash) return { ok: false, reason: 'stale' };
+    const generation = database.prepare(
+      'SELECT * FROM semantic_index_generations WHERE id = ?',
+    ).get(job.generation_id);
+    if (!generation || generation.model !== model || !Number.isInteger(dimension) || dimension < 1) {
+      return { ok: false, reason: 'invalid_vector_identity' };
+    }
+    if (!isValidFloat32Vector(bytes, dimension)) {
+      return { ok: false, reason: 'invalid_vector_payload' };
+    }
+    if (generation.dimension && generation.dimension !== dimension) {
+      return { ok: false, reason: 'dimension_mismatch' };
+    }
+
+    database.prepare(`
+      UPDATE semantic_index_generations
+         SET dimension = COALESCE(dimension, ?)
+       WHERE id = ?
+    `).run(dimension, generation.id);
+    database.prepare(`
+      INSERT INTO semantic_vectors
+        (generation_id, save_id, model, dimension, source_hash, vector, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(generation_id, save_id) DO UPDATE SET
+        model = excluded.model,
+        dimension = excluded.dimension,
+        source_hash = excluded.source_hash,
+        vector = excluded.vector,
+        updated_at = excluded.updated_at
+    `).run(
+      generation.id,
+      job.save_id,
+      model,
+      dimension,
+      sourceHash,
+      bytes,
+      timestamp,
+      timestamp,
+    );
+    database.prepare(`
+      UPDATE semantic_index_jobs
+         SET state = 'completed', retryable = 0,
+             updated_at = ?, finished_at = ?, error = NULL
+       WHERE id = ?
+    `).run(timestamp, timestamp, id);
+
+    const indexState = database.prepare(`
+      SELECT building_generation_id FROM semantic_index_state WHERE id = 1
+    `).get();
+    if (
+      generation.status === 'building'
+      && indexState.building_generation_id === generation.id
+      && activate !== false
+    ) {
+      const incomplete = database.prepare(`
+        SELECT COUNT(*) AS n
+          FROM semantic_index_jobs j
+          LEFT JOIN semantic_vectors v
+            ON v.generation_id = j.generation_id
+           AND v.save_id = j.save_id
+           AND v.source_hash = j.source_hash
+           AND v.model = ?
+           AND v.dimension = ?
+         WHERE j.generation_id = ?
+           AND (j.state != 'completed' OR v.save_id IS NULL)
+      `).get(generation.model, dimension, generation.id).n;
+      if (incomplete === 0) {
+        database.prepare(`
+          UPDATE semantic_index_generations
+             SET status = 'retired'
+           WHERE status = 'active' AND id != ?
+        `).run(generation.id);
+        database.prepare(`
+          UPDATE semantic_index_generations
+             SET status = 'active', activated_at = ?, completed_at = ?
+           WHERE id = ?
+        `).run(timestamp, timestamp, generation.id);
+        database.prepare(`
+          UPDATE semantic_index_state
+             SET active_generation_id = ?, building_generation_id = NULL, updated_at = ?
+           WHERE id = 1
+        `).run(generation.id, timestamp);
+      }
+    }
+    return { ok: true, saveId: job.save_id, generationId: generation.id };
+  });
+  return complete();
+}
+
+function failSemanticIndexJob({ id, error, retryable = false, retryAt, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const availableAt = Number.isFinite(retryAt) ? retryAt : timestamp;
+  const result = getDatabase().prepare(`
+    UPDATE semantic_index_jobs
+       SET state = ?, retry_count = retry_count + 1, retryable = ?,
+           available_at = ?, error = ?, updated_at = ?,
+           started_at = CASE WHEN ? = 1 THEN NULL ELSE started_at END,
+           finished_at = CASE WHEN ? = 1 THEN NULL ELSE ? END
+     WHERE id = ? AND state = 'running'
+  `).run(
+    retryable ? 'pending' : 'failed',
+    retryable ? 1 : 0,
+    availableAt,
+    error || null,
+    timestamp,
+    retryable ? 1 : 0,
+    retryable ? 1 : 0,
+    timestamp,
+    id,
+  );
+  return { ok: result.changes === 1 };
+}
+
+function pauseSemanticIndex({ reason, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  getDatabase().prepare(`
+    UPDATE semantic_index_state
+       SET paused = 1, pause_reason = ?, paused_at = ?, updated_at = ?
+     WHERE id = 1
+  `).run(reason || null, timestamp, timestamp);
+  return getSemanticIndexState();
+}
+
+function resumeSemanticIndex(now = Date.now()) {
+  getDatabase().prepare(`
+    UPDATE semantic_index_state
+       SET paused = 0, pause_reason = NULL, paused_at = NULL, updated_at = ?
+     WHERE id = 1
+  `).run(now);
+  return getSemanticIndexState();
+}
+
+function retrySemanticFailures(ids, now = Date.now()) {
+  if (!Array.isArray(ids) || ids.length === 0) return { ok: true, count: 0 };
+  const placeholders = ids.map(() => '?').join(',');
+  const result = getDatabase().prepare(`
+    UPDATE semantic_index_jobs
+       SET state = 'pending', available_at = ?, error = NULL,
+           retryable = 0, updated_at = ?, started_at = NULL, finished_at = NULL
+     WHERE state = 'failed' AND id IN (${placeholders})
+  `).run(now, now, ...ids);
+  return { ok: true, count: result.changes };
+}
+
+function dismissSemanticFailures(ids, now = Date.now()) {
+  if (!Array.isArray(ids) || ids.length === 0) return { ok: true, count: 0 };
+  const placeholders = ids.map(() => '?').join(',');
+  const result = getDatabase().prepare(`
+    UPDATE semantic_index_jobs
+       SET state = 'dismissed', updated_at = ?, finished_at = ?
+     WHERE state = 'failed' AND id IN (${placeholders})
+  `).run(now, now, ...ids);
+  return { ok: true, count: result.changes };
+}
+
+function cancelSemanticGeneration(generationId, now = Date.now()) {
+  const database = getDatabase();
+  const cancel = database.transaction(() => {
+    const generation = database.prepare(
+      'SELECT status FROM semantic_index_generations WHERE id = ?',
+    ).get(generationId);
+    if (!generation) return { ok: false, reason: 'not_found' };
+    if (generation.status !== 'building') return { ok: false, reason: 'not_building' };
+    database.prepare('DELETE FROM semantic_index_jobs WHERE generation_id = ?').run(generationId);
+    database.prepare('DELETE FROM semantic_vectors WHERE generation_id = ?').run(generationId);
+    database.prepare(`
+      UPDATE semantic_index_generations
+         SET status = 'cancelled', cancelled_at = ?, completed_at = ?
+       WHERE id = ?
+    `).run(now, now, generationId);
+    database.prepare(`
+      UPDATE semantic_index_state
+         SET building_generation_id = CASE
+               WHEN building_generation_id = ? THEN NULL ELSE building_generation_id END,
+             updated_at = ?
+       WHERE id = 1
+    `).run(generationId, now);
+    return { ok: true };
+  });
+  return cancel();
+}
+
+function getSemanticIndexStatus() {
+  const database = getDatabase();
+  const state = getSemanticIndexState();
+  const counts = Object.fromEntries(database.prepare(`
+    SELECT j.state, COUNT(*) AS n
+      FROM semantic_index_jobs j
+      JOIN semantic_index_state s ON s.id = 1
+      JOIN semantic_index_generations g ON g.id = j.generation_id
+     WHERE (j.generation_id = s.active_generation_id AND g.status = 'active')
+        OR (j.generation_id = s.building_generation_id AND g.status = 'building')
+     GROUP BY j.state
+  `).all().map((row) => [row.state, row.n]));
+  const summary = database.prepare(`
+    SELECT g.model AS active_model,
+           g.dimension AS active_dimension,
+           (SELECT COUNT(*) FROM saves WHERE deleted_at IS NULL) AS total,
+           (
+             SELECT COUNT(*)
+               FROM semantic_vectors v
+               JOIN saves live ON live.id = v.save_id AND live.deleted_at IS NULL
+              WHERE v.generation_id = s.active_generation_id
+                AND g.status = 'active'
+                AND v.model = g.model
+                AND v.dimension = g.dimension
+           ) AS indexed
+      FROM semantic_index_state s
+      LEFT JOIN semantic_index_generations g ON g.id = s.active_generation_id
+     WHERE s.id = 1
+  `).get();
+  return {
+    ...state,
+    active_model: summary.active_model || null,
+    active_dimension: summary.active_dimension || null,
+    indexed: summary.indexed || 0,
+    total: summary.total || 0,
+    waiting: counts.pending || 0,
+    running: counts.running || 0,
+    failed: counts.failed || 0,
+    dismissed: counts.dismissed || 0,
+  };
+}
+
+function listSemanticIndexJobs({ generationId, saveId, kind, state } = {}) {
+  const clauses = [];
+  const params = [];
+  if (generationId) { clauses.push('generation_id = ?'); params.push(generationId); }
+  if (saveId) { clauses.push('save_id = ?'); params.push(saveId); }
+  if (kind) { clauses.push('kind = ?'); params.push(kind); }
+  if (state) { clauses.push('state = ?'); params.push(state); }
+  return getDatabase().prepare(`
+    SELECT * FROM semantic_index_jobs
+    ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+    ORDER BY created_at ASC, id ASC
+  `).all(...params);
+}
+
+function getActiveSemanticVectors() {
+  return getDatabase().prepare(`
+    SELECT v.*
+      FROM semantic_vectors v
+      JOIN semantic_index_state s ON s.id = 1 AND s.active_generation_id = v.generation_id
+      JOIN semantic_index_generations g ON g.id = v.generation_id
+     WHERE g.status = 'active'
+       AND g.model = v.model
+       AND g.dimension = v.dimension
+     ORDER BY v.save_id ASC
+  `).all();
+}
+
+function getSemanticVector(saveId) {
+  return getDatabase().prepare(`
+    SELECT v.*
+      FROM semantic_vectors v
+      JOIN semantic_index_state s ON s.id = 1 AND s.active_generation_id = v.generation_id
+      JOIN semantic_index_generations g ON g.id = v.generation_id
+     WHERE v.save_id = ?
+       AND g.status = 'active'
+       AND g.model = v.model
+       AND g.dimension = v.dimension
+  `).get(saveId);
+}
+
+// ── Video analysis persistence ────────────────────────────────────────────
+
+const MAX_VIDEO_RETRY_BACKOFF_MS = 15 * 60 * 1000;
+
+function getSaveBackgroundRoute(saveId) {
+  return getDatabase().prepare('SELECT * FROM save_background_routes WHERE save_id = ?').get(saveId);
+}
+
+function backfillSaveBackgroundRoutes(now = Date.now()) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const result = getDatabase().prepare(`
+    INSERT OR IGNORE INTO save_background_routes
+      (save_id, state, retry_count, available_at, created_at, updated_at)
+    SELECT id, 'pending', 0, COALESCE(created_at, ?), COALESCE(created_at, ?), ?
+      FROM saves
+  `).run(timestamp, timestamp, timestamp);
+  return { ok: true, count: result.changes };
+}
+
+function listPendingSaveBackgroundRoutes(now = Date.now()) {
+  return getDatabase().prepare(`
+    SELECT * FROM save_background_routes
+     WHERE state = 'pending' AND available_at <= ?
+     ORDER BY available_at ASC, created_at ASC
+  `).all(now);
+}
+
+function getNextSaveBackgroundRouteReadyAt() {
+  const row = getDatabase().prepare(`
+    SELECT MIN(available_at) AS ready_at
+      FROM save_background_routes
+     WHERE state = 'pending'
+  `).get();
+  return Number.isFinite(row?.ready_at) ? row.ready_at : null;
+}
+
+function claimSaveBackgroundRoute(saveId, now = Date.now()) {
+  const database = getDatabase();
+  const claim = database.transaction(() => {
+    const result = database.prepare(`
+      UPDATE save_background_routes
+         SET state = 'running', started_at = ?, updated_at = ?, error = NULL
+       WHERE save_id = ? AND state = 'pending' AND available_at <= ?
+    `).run(now, now, saveId, now);
+    if (result.changes !== 1) return undefined;
+    return database.prepare('SELECT * FROM save_background_routes WHERE save_id = ?').get(saveId);
+  });
+  return claim();
+}
+
+function completeSaveBackgroundRoute(saveId, now = Date.now()) {
+  const result = getDatabase().prepare(`
+    UPDATE save_background_routes
+       SET state = 'completed', error = NULL, updated_at = ?, finished_at = ?
+     WHERE save_id = ? AND state = 'running'
+  `).run(now, now, saveId);
+  return { ok: result.changes === 1 };
+}
+
+function failSaveBackgroundRoute({ saveId, error, retryAt, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const availableAt = Number.isFinite(retryAt) ? Math.max(timestamp, retryAt) : timestamp + 5_000;
+  const result = getDatabase().prepare(`
+    UPDATE save_background_routes
+       SET state = 'pending', retry_count = retry_count + 1,
+           available_at = ?, error = ?, updated_at = ?, started_at = NULL
+     WHERE save_id = ? AND state = 'running'
+  `).run(availableAt, error || null, timestamp, saveId);
+  return { ok: result.changes === 1, availableAt };
+}
+
+function enqueueVideoAnalysis({ id, saveId, fingerprint, promptVersion, now } = {}) {
+  if (!saveId || !fingerprint || !Number.isInteger(promptVersion) || promptVersion < 1) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const enqueue = database.transaction(() => {
+    const current = database.prepare(`
+      SELECT * FROM video_analysis_jobs
+       WHERE save_id = ? AND state != 'superseded'
+       ORDER BY updated_at DESC LIMIT 1
+    `).get(saveId);
+    if (current && current.fingerprint === fingerprint) return current;
+
+    const remembered = database.prepare(`
+      SELECT * FROM video_analysis_jobs
+       WHERE save_id = ? AND fingerprint = ?
+       LIMIT 1
+    `).get(saveId, fingerprint);
+
+    if (current) {
+      database.prepare(`
+        UPDATE video_analysis_jobs
+           SET superseded_from_state = CASE
+                 WHEN state = 'running' THEN 'pending' ELSE state END,
+               state = 'superseded', updated_at = ?,
+               finished_at = COALESCE(finished_at, ?)
+         WHERE id = ?
+      `).run(timestamp, timestamp, current.id);
+    }
+    // Only unresolved output is replaceable. Accepted and dismissed rows are
+    // durable history tied to their original fingerprint.
+    database.prepare(`
+      DELETE FROM video_tag_suggestions
+       WHERE save_id = ? AND state = 'suggested'
+    `).run(saveId);
+
+    if (remembered) {
+      const restoredState = remembered.superseded_from_state || 'pending';
+      database.prepare(`
+        UPDATE video_analysis_jobs
+           SET state = ?, superseded_from_state = NULL, updated_at = ?,
+               started_at = CASE WHEN ? = 'pending' THEN NULL ELSE started_at END,
+               finished_at = CASE WHEN ? = 'pending' THEN NULL ELSE finished_at END
+         WHERE id = ?
+      `).run(restoredState, timestamp, restoredState, restoredState, remembered.id);
+      return database.prepare('SELECT * FROM video_analysis_jobs WHERE id = ?').get(remembered.id);
+    }
+
+    const record = {
+      id: id || crypto.randomUUID(),
+      save_id: saveId,
+      fingerprint,
+      prompt_version: promptVersion,
+      available_at: timestamp,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    database.prepare(`
+      INSERT INTO video_analysis_jobs
+        (id, save_id, fingerprint, prompt_version, state, retry_count, retryable,
+         available_at, created_at, updated_at)
+      VALUES
+        (@id, @save_id, @fingerprint, @prompt_version, 'pending', 0, 0,
+         @available_at, @created_at, @updated_at)
+    `).run(record);
+    return database.prepare('SELECT * FROM video_analysis_jobs WHERE id = ?').get(record.id);
+  });
+  return enqueue();
+}
+
+function claimVideoAnalysis(now = Date.now()) {
+  const database = getDatabase();
+  const claim = database.transaction(() => {
+    const row = database.prepare(`
+      SELECT * FROM video_analysis_jobs
+       WHERE state = 'pending'
+         AND available_at <= ?
+       ORDER BY available_at ASC, created_at ASC
+       LIMIT 1
+    `).get(now);
+    if (!row) return undefined;
+    const result = database.prepare(`
+      UPDATE video_analysis_jobs
+         SET state = 'running', retryable = 0,
+             started_at = ?, updated_at = ?, error = NULL
+       WHERE id = ? AND state = 'pending'
+    `).run(now, now, row.id);
+    if (result.changes !== 1) return undefined;
+    return database.prepare('SELECT * FROM video_analysis_jobs WHERE id = ?').get(row.id);
+  });
+  return claim();
+}
+
+function getNextVideoAnalysisReadyAt() {
+  const row = getDatabase().prepare(`
+    SELECT MIN(available_at) AS ready_at
+      FROM video_analysis_jobs
+     WHERE state = 'pending'
+  `).get();
+  return Number.isFinite(row?.ready_at) ? row.ready_at : null;
+}
+
+function normalizeTagName(name) {
+  return (name || '').trim().toLowerCase().replace(/^#+/, '');
+}
+
+function completeVideoAnalysis({ id, fingerprint, suggestions = [], unavailable = false, now } = {}) {
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const complete = database.transaction(() => {
+    const job = database.prepare('SELECT * FROM video_analysis_jobs WHERE id = ?').get(id);
+    if (!job) return { ok: false, reason: 'not_found' };
+    if (job.state !== 'running') return { ok: false, reason: 'not_running' };
+    if (job.fingerprint !== fingerprint) return { ok: false, reason: 'stale' };
+
+    database.prepare(`
+      DELETE FROM video_tag_suggestions
+       WHERE job_id = ? AND state = 'suggested'
+    `).run(id);
+    const insert = database.prepare(`
+      INSERT OR IGNORE INTO video_tag_suggestions
+        (id, job_id, save_id, fingerprint, name, confidence, evidence,
+         state, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'suggested', ?)
+    `);
+    if (!unavailable) {
+      for (const suggestion of suggestions) {
+        const name = normalizeTagName(suggestion && suggestion.name);
+        if (!name) continue;
+        const evidence = Array.isArray(suggestion.evidence) ? suggestion.evidence : [];
+        insert.run(
+          crypto.randomUUID(),
+          job.id,
+          job.save_id,
+          job.fingerprint,
+          name,
+          suggestion.confidence || 'high',
+          JSON.stringify(evidence),
+          timestamp,
+        );
+      }
+    }
+    database.prepare(`
+      UPDATE video_analysis_jobs
+         SET state = ?, error = NULL, updated_at = ?, finished_at = ?
+       WHERE id = ?
+    `).run(unavailable ? 'unavailable' : 'completed', timestamp, timestamp, id);
+    return { ok: true, saveId: job.save_id };
+  });
+  return complete();
+}
+
+function failVideoAnalysis({ id, error, retryable = false, retryAt, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const requestedRetry = Number.isFinite(retryAt) ? retryAt : timestamp;
+  const availableAt = retryable
+    ? Math.min(Math.max(requestedRetry, timestamp), timestamp + MAX_VIDEO_RETRY_BACKOFF_MS)
+    : timestamp;
+  const result = getDatabase().prepare(`
+    UPDATE video_analysis_jobs
+       SET state = ?, retry_count = retry_count + 1, retryable = ?,
+           available_at = ?, error = ?, updated_at = ?,
+           started_at = CASE WHEN ? = 1 THEN NULL ELSE started_at END,
+           finished_at = CASE WHEN ? = 1 THEN NULL ELSE ? END
+     WHERE id = ? AND state = 'running'
+  `).run(
+    retryable ? 'pending' : 'failed',
+    retryable ? 1 : 0,
+    availableAt,
+    error || null,
+    timestamp,
+    retryable ? 1 : 0,
+    retryable ? 1 : 0,
+    timestamp,
+    id,
+  );
+  return { ok: result.changes === 1 };
+}
+
+function recoverBackgroundJobs(now = Date.now()) {
+  const database = getDatabase();
+  const recover = database.transaction(() => {
+    const semantic = database.prepare(`
+      UPDATE semantic_index_jobs
+         SET state = 'pending', retryable = 0, started_at = NULL, updated_at = ?
+       WHERE state = 'running'
+    `).run(now).changes;
+    const video = database.prepare(`
+      UPDATE video_analysis_jobs
+         SET state = 'pending', retryable = 0, started_at = NULL, updated_at = ?
+       WHERE state = 'running'
+    `).run(now).changes;
+    const routes = database.prepare(`
+      UPDATE save_background_routes
+         SET state = 'pending', started_at = NULL, available_at = ?, updated_at = ?
+       WHERE state = 'running'
+    `).run(now, now).changes;
+    return { semantic, video, routes };
+  });
+  return recover();
+}
+
+function recoverSemanticIndexJobs(now = Date.now()) {
+  const semantic = getDatabase().prepare(`
+    UPDATE semantic_index_jobs
+       SET state = 'pending', retryable = 0, started_at = NULL, updated_at = ?
+     WHERE state = 'running'
+  `).run(now).changes;
+  return { semantic };
+}
+
+function getVideoAnalysis(saveId) {
+  return getDatabase().prepare(`
+    SELECT * FROM video_analysis_jobs
+     WHERE save_id = ? AND state != 'superseded'
+     ORDER BY updated_at DESC LIMIT 1
+  `).get(saveId);
+}
+
+function listVideoTagSuggestions(saveId) {
+  return getDatabase().prepare(`
+    SELECT * FROM video_tag_suggestions
+     WHERE save_id = ?
+     ORDER BY name ASC, created_at ASC
+  `).all(saveId);
+}
+
+function acceptVideoTagSuggestion({ suggestionId, id, now } = {}) {
+  const database = getDatabase();
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const resolve = database.transaction(() => {
+    const suggestion = database.prepare(
+      'SELECT * FROM video_tag_suggestions WHERE id = ?',
+    ).get(suggestionId || id);
+    if (!suggestion) return { ok: false, reason: 'not_found' };
+    if (suggestion.state !== 'suggested') return { ok: false, reason: 'resolved' };
+    let tag = database.prepare('SELECT id FROM tags WHERE name = ?').get(suggestion.name);
+    if (!tag) {
+      tag = { id: crypto.randomUUID() };
+      database.prepare('INSERT INTO tags (id, name) VALUES (?, ?)').run(tag.id, suggestion.name);
+    }
+    database.prepare(
+      'INSERT OR IGNORE INTO save_tags (save_id, tag_id) VALUES (?, ?)',
+    ).run(suggestion.save_id, tag.id);
+    database.prepare(`
+      UPDATE video_tag_suggestions
+         SET state = 'accepted', resolved_at = ?
+       WHERE id = ? AND state = 'suggested'
+    `).run(timestamp, suggestion.id);
+    return { ok: true, saveId: suggestion.save_id };
+  });
+  return resolve();
+}
+
+function dismissVideoTagSuggestion({ suggestionId, id, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const database = getDatabase();
+  const suggestion = database.prepare(
+    'SELECT * FROM video_tag_suggestions WHERE id = ?',
+  ).get(suggestionId || id);
+  if (!suggestion) return { ok: false, reason: 'not_found' };
+  if (suggestion.state !== 'suggested') return { ok: false, reason: 'resolved' };
+  const result = database.prepare(`
+    UPDATE video_tag_suggestions
+       SET state = 'dismissed', resolved_at = ?
+     WHERE id = ? AND state = 'suggested'
+  `).run(timestamp, suggestion.id);
+  return result.changes === 1
+    ? { ok: true, saveId: suggestion.save_id }
+    : { ok: false, reason: 'resolved' };
+}
+
+
 // ── Tags ───────────────────────────────────────────────────────────────────
 
 // Internal tags are namespaced with a leading "__" (e.g. "__starter__",
@@ -1643,6 +3200,13 @@ function getTagsForSave(saveId) {
     WHERE st.save_id = ? AND ${NOT_INTERNAL_TAG}
     ORDER BY t.name ASC
   `).all(saveId);
+}
+
+function getSaveIdsForTag(tagId) {
+  if (!tagId) return [];
+  return getDatabase().prepare(`
+    SELECT save_id FROM save_tags WHERE tag_id = ? ORDER BY save_id ASC
+  `).all(tagId).map((row) => row.save_id);
 }
 
 function addTagToSave({ saveId, name } = {}) {
@@ -2096,6 +3660,71 @@ module.exports = {
   getUnindexedSaves,
   getUnindexedCount,
   filterByColor,
+  // Smart categories
+  createSmartCategory,
+  upsertSmartCategory,
+  getSmartCategory,
+  updateSmartCategoryCentroidEmbedding,
+  listSmartCategories,
+  listNavigableSmartCategories,
+  setSmartCategoryStatus,
+  hideSmartCategory,
+  archiveSmartCategory,
+  restoreSmartCategory,
+  pinSmartCategory,
+  renameSmartCategory,
+  upsertSmartCategoryAlias,
+  applySmartCategoryTaxonomyChanges,
+  getSmartCategoryAliases,
+  findSmartCategoryAliases,
+  upsertSaveTopicProfile,
+  getSaveTopicProfile,
+  listSaveTopicProfiles,
+  upsertSmartCategoryMembership,
+  getSmartCategoryMembers,
+  getSmartCategoryMemberTopicEmbeddings,
+  getSmartCategorySaves,
+  getSmartCategoriesForSave,
+  recordSmartCategoryRun,
+  listSmartCategoryRuns,
+  getPendingSmartCategorySaves,
+  // Semantic index
+  createSemanticGeneration,
+  createSemanticRebuild,
+  getSemanticIndexState,
+  getActiveSemanticIndexIdentity,
+  enqueueSemanticIndexJob,
+  claimSemanticIndexJob,
+  completeSemanticIndexJob,
+  failSemanticIndexJob,
+  pauseSemanticIndex,
+  resumeSemanticIndex,
+  retrySemanticFailures,
+  dismissSemanticFailures,
+  cancelSemanticGeneration,
+  getSemanticIndexStatus,
+  listSemanticIndexJobs,
+  getActiveSemanticVectors,
+  getSemanticVector,
+  // Video analysis and routing
+  enqueueVideoAnalysis,
+  claimVideoAnalysis,
+  getNextVideoAnalysisReadyAt,
+  getSaveBackgroundRoute,
+  backfillSaveBackgroundRoutes,
+  listPendingSaveBackgroundRoutes,
+  getNextSaveBackgroundRouteReadyAt,
+  claimSaveBackgroundRoute,
+  completeSaveBackgroundRoute,
+  failSaveBackgroundRoute,
+  completeVideoAnalysis,
+  failVideoAnalysis,
+  recoverSemanticIndexJobs,
+  recoverBackgroundJobs,
+  getVideoAnalysis,
+  listVideoTagSuggestions,
+  acceptVideoTagSuggestion,
+  dismissVideoTagSuggestion,
   getAllCollections,
   getAllCollectionsWithThumbs,
   getCollectionsForSave,
@@ -2110,6 +3739,7 @@ module.exports = {
   removeSaveFromCollection,
   getAllTags,
   getTagsForSave,
+  getSaveIdsForTag,
   addTagToSave,
   removeTagFromSave,
   renameTag,
