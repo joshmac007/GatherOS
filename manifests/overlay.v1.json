@@ -12,8 +12,8 @@
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
     "canonical_evidence_ref": "refs/gatherlocal/evidence/overlay-v1",
-    "tip": "646704edb7ab9d678b02af64e1c749bdad9ef9dc",
-    "resulting_tree": "671241986cdadab3a3c4ce101c995e01f5e02d51"
+    "tip": "e00707dd3b4b690b5e2a89b3f71cfa41dc30f379",
+    "resulting_tree": "277db1f00e401dbb9d7f8451edc8a0c70f19d831"
   },
   "acceptance": {
     "personal_policy": "never-auto-drop",
@@ -430,6 +430,53 @@
             "test/gatherlocal-ai-bootstrap.test.js",
             "test/gatherlocal-ai-access-view.test.js",
             "test/openai-runtime-compat.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 130,
+      "id": "pending.smart-indexing",
+      "revision": 1,
+      "class": "pending-contribution",
+      "contribution_state": "pending-local-only",
+      "subject": "Add provider-neutral smart indexing",
+      "source_commit": "e00707dd3b4b690b5e2a89b3f71cfa41dc30f379",
+      "source_parent": "646704edb7ab9d678b02af64e1c749bdad9ef9dc",
+      "source_tree": "277db1f00e401dbb9d7f8451edc8a0c70f19d831",
+      "logical_dependencies": [
+        "personal.local-migrations",
+        "pending.ai-capability-runtime",
+        "personal.ai-providers",
+        "personal.local-ai-authorization"
+      ],
+      "patch_id_stable": "4990a392e57170d280b2b7375f31c3c81999e53a",
+      "canonical_diff_sha256": "1d079380c0b07a0a470f7cb4b954ba678338049c8b4b6bd3db4ad7217f87ba3b",
+      "artifact": "patches/0130-pending.smart-indexing.patch",
+      "artifact_sha256": "19d37d710ee60a66dbf3574a2ac1d62ee14c4672ea485ade1a02958848a4f264",
+      "acceptance_policy": "exact-upstream-or-reviewed-contract",
+      "checks": [
+        {
+          "id": "smart-indexing-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/ai-runtime.test.js",
+            "test/local-migration-artifacts.test.js",
+            "test/local-migration-engine.test.js",
+            "test/renderer-smart-semantic.test.js",
+            "test/smart-indexing-bootstrap.test.js",
+            "test/smart-indexing-core.test.js",
+            "test/smart-indexing-db.test.js",
+            "test/smart-indexing-ipc.test.js",
+            "test/video-analysis-provider-neutral.test.js",
+            "test/video-frame-extractor-provider-neutral.test.js",
+            "test/video-semantic-provider-contract.test.js",
+            "test/video-suggestions-bridge.test.js",
+            "test/video-suggestions-component.test.js"
           ]
         }
       ]
