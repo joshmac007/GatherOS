@@ -12,8 +12,8 @@
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
     "canonical_evidence_ref": "refs/gatherlocal/evidence/overlay-v1",
-    "tip": "f7c1affc74edea087153ff6a0ffdd60f72c079c7",
-    "resulting_tree": "f140ea1865946341aafa722ef98b7194f91cd03d"
+    "tip": "c8662f6802883b8235ac53b231bcc71ff845554d",
+    "resulting_tree": "289e691ff80eb2926fe6bd4781bd71533d7bbf51"
   },
   "acceptance": {
     "personal_policy": "never-auto-drop",
@@ -362,6 +362,37 @@
             "test/local-migration-engine.test.js",
             "test/persistent-state.test.js",
             "test/x-bookmark-status.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 110,
+      "id": "personal.renderer-identity",
+      "revision": 1,
+      "class": "personal-support",
+      "subject": "Use GatherLocal renderer titles",
+      "source_commit": "c8662f6802883b8235ac53b231bcc71ff845554d",
+      "source_parent": "f7c1affc74edea087153ff6a0ffdd60f72c079c7",
+      "source_tree": "289e691ff80eb2926fe6bd4781bd71533d7bbf51",
+      "logical_dependencies": [
+        "personal.runtime-identity"
+      ],
+      "patch_id_stable": "62ef89194576b6f5e8988b4c62124e68b0de67f6",
+      "canonical_diff_sha256": "88c7d24c8d4c1e006a7ae2e1a7146be6478c6c83044c30216ba7bc3dc11240f2",
+      "artifact": "patches/0110-personal.renderer-identity.patch",
+      "artifact_sha256": "f636394ca424df37e0936b5cf219e691f8c337f2674f1a8c3bbc9d269c7e2e3d",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "renderer-identity-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/runtime-identity.test.js"
           ]
         }
       ]

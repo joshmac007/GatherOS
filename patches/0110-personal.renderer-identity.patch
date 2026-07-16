@@ -1,0 +1,56 @@
+From c8662f6802883b8235ac53b231bcc71ff845554d Mon Sep 17 00:00:00 2001
+From: GatherLocal overlay intake <gatherlocal-overlay@invalid.local>
+Date: Wed, 15 Jul 2026 20:08:08 -0500
+Subject: [PATCH] Use GatherLocal renderer titles
+
+---
+ src/renderer/index.html       | 2 +-
+ src/renderer/toast.html       | 2 +-
+ test/runtime-identity.test.js | 5 +++++
+ 3 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/renderer/index.html b/src/renderer/index.html
+index cf264cbcdd96e5a8736395c927453a78b628d2b7..949d0bd5b576de6b5d74cd076ca4c099a8a1566d 100644
+--- a/src/renderer/index.html
++++ b/src/renderer/index.html
+@@ -12,7 +12,7 @@
+     -->
+     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; script-src 'self'; connect-src 'self' ws: http://localhost:5173; img-src 'self' data: blob: https: moodmark-file:" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+-    <title>GatherOS</title>
++    <title>GatherLocal</title>
+   </head>
+   <body>
+     <div id="root"></div>
+diff --git a/src/renderer/toast.html b/src/renderer/toast.html
+index 4670feb49f8b79afe4cddc1b540d3b0c6c5888b0..44cd9fdedc8081056d155e05886cfa5e8787ddb7 100644
+--- a/src/renderer/toast.html
++++ b/src/renderer/toast.html
+@@ -3,7 +3,7 @@
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+-    <title>GatherOS Toast</title>
++    <title>GatherLocal toast</title>
+     <style>
+       * { margin: 0; padding: 0; box-sizing: border-box; }
+       html, body, #root {
+diff --git a/test/runtime-identity.test.js b/test/runtime-identity.test.js
+index ce559a963fddb5463467c42b223a846d332ab272..af943fb8491c874133ef659a543cc16596f7b733 100644
+--- a/test/runtime-identity.test.js
++++ b/test/runtime-identity.test.js
+@@ -122,6 +122,11 @@ test('desktop, native host, packaging, and updater cannot claim GatherOS identit
+   assert.doesNotMatch(read('scripts/notarize.js'), /GatherOS-Notarize/);
+   assert.doesNotMatch(read('scripts/predev.js'), /quit app "GatherOS"|Electron\.app\/Contents\/MacOS\/Electron/);
+ 
++  assert.match(read('src/renderer/index.html'), /<title>GatherLocal<\/title>/);
++  assert.match(read('src/renderer/toast.html'), /<title>GatherLocal toast<\/title>/);
++  assert.doesNotMatch(read('src/renderer/index.html'), /GatherOS/);
++  assert.doesNotMatch(read('src/renderer/toast.html'), /GatherOS/);
++
+   const licensing = require('../src/shared/licensing-config');
+   assert.equal(licensing.URL_SCHEME, identity.URL_SCHEME);
+ });
+-- 
+2.50.1 (Apple Git-155)
+
