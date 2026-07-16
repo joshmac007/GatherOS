@@ -494,8 +494,8 @@ async function handleImportBookmarks(msg) {
       const boundary = await requestXBookmarkStatus([]);
       if (!boundary || !boundary.ok) {
         releaseSocialImport('x', reservation);
-        notify('Could not reach GatherOS.');
-        return { ok: false, error: 'Could not reach GatherOS.' };
+        notify('Could not reach GatherLocal.');
+        return { ok: false, error: 'Could not reach GatherLocal.' };
       }
       const preflight = catchUpPreflightResult(boundary);
       if (preflight) {
@@ -504,8 +504,8 @@ async function handleImportBookmarks(msg) {
       }
     } catch {
       releaseSocialImport('x', reservation);
-      notify('Could not reach GatherOS.');
-      return { ok: false, error: 'Could not reach GatherOS.' };
+      notify('Could not reach GatherLocal.');
+      return { ok: false, error: 'Could not reach GatherLocal.' };
     }
   }
 
