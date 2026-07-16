@@ -5,9 +5,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { CAPABILITIES } = require('../../ai/runtime');
 
-const STRUCTURED_PROVIDERS = new Set(['codex', 'local', 'proxy']);
-const EMBEDDING_PROVIDERS = new Set(['ollama', 'proxy']);
-const IMAGE_PROVIDERS = new Set(['disabled', 'proxy']);
+const STRUCTURED_PROVIDERS = new Set(['codex', 'local']);
+const EMBEDDING_PROVIDERS = new Set(['ollama']);
+const IMAGE_PROVIDERS = new Set(['disabled']);
 
 function clean(value) {
   return typeof value === 'string' ? value.trim() : '';

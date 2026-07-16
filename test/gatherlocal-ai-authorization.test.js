@@ -8,14 +8,8 @@ const {
   providerAccess,
 } = require('../src/main/gatherlocal/ai/authorization');
 
-test('user-owned providers do not consume GatherOS entitlement', () => {
-  let entitlementReads = 0;
-  const authorize = createGatherLocalAuthorization({
-    getEntitlement: () => {
-      entitlementReads += 1;
-      return { proUnlocked: false };
-    },
-  });
+test('user-owned providers are allowed without account state', () => {
+  const authorize = createGatherLocalAuthorization();
 
   for (const provider of ['codex', 'local', 'ollama']) {
     assert.deepEqual(authorize({ provider }), {
@@ -24,29 +18,19 @@ test('user-owned providers do not consume GatherOS entitlement', () => {
       requiresPro: false,
     });
   }
-  assert.equal(entitlementReads, 0);
 });
 
-test('GatherOS proxy keeps Brett entitlement enforcement', () => {
-  const denied = createGatherLocalAuthorization({
-    getEntitlement: () => ({ proUnlocked: false }),
-  });
-  const allowed = createGatherLocalAuthorization({
-    getEntitlement: () => ({ proUnlocked: true }),
-  });
-
-  assert.equal(denied({ provider: 'gatheros-proxy' }).allowed, false);
-  assert.equal(allowed({ provider: 'gatheros-proxy' }).allowed, true);
+test('removed GatherOS proxy is rejected as unknown', () => {
+  const authorize = createGatherLocalAuthorization();
+  assert.equal(authorize({ provider: 'gatheros-proxy' }).allowed, false);
   assert.deepEqual(providerAccess('gatheros-proxy'), {
-    ownership: 'gatheros',
+    ownership: 'unknown',
     requiresPro: true,
   });
 });
 
 test('unknown providers fail closed', () => {
-  const authorize = createGatherLocalAuthorization({
-    getEntitlement: () => ({ proUnlocked: true }),
-  });
+  const authorize = createGatherLocalAuthorization();
   assert.deepEqual(authorize({ provider: 'mystery' }), {
     allowed: false,
     ownership: 'unknown',

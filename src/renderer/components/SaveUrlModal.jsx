@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Link as LinkIcon, X as XIcon } from 'lucide-react';
 import styles from './SaveUrlModal.module.css';
-import { requestUpgrade } from '../context/entitlement.jsx';
 
 // Minimal preview derived purely from the URL — used as a fallback when
 // the metadata fetch fails (site blocks it, offline, etc.) so a valid
@@ -120,13 +119,6 @@ export default function SaveUrlModal({ open, onClose, onSaved }) {
     setError(null);
     try {
       const result = await window.moodmark?.saves?.captureUrl?.(target);
-      // Free tier — the save was blocked. Close and let the upgrade modal
-      // take over instead of showing a misleading "capture failed".
-      if (result?.needsUpgrade) {
-        onClose?.();
-        requestUpgrade('save');
-        return;
-      }
       if (!result?.ok) {
         setError(result?.error || 'Capture failed. Try again.');
         setSaving(false);

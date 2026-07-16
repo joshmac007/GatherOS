@@ -14,7 +14,6 @@ import SettingsModal from './components/SettingsModal.jsx';
 import AIUnlockedModal from './components/AIUnlockedModal.jsx';
 import SaveUrlModal from './components/SaveUrlModal.jsx';
 import PasteToSavePrompt from './components/PasteToSavePrompt.jsx';
-import Announcement from './components/Announcement.jsx';
 import AddFab from './components/AddFab.jsx';
 import WhatsNewModal from './components/WhatsNewModal.jsx';
 import SunBlinds from './components/SunBlinds.jsx';
@@ -101,12 +100,9 @@ import { tweetTypeOf } from './lib/tweetType.js';
 import { configureSaveSound, DEFAULT_SAVE_SOUND, playEmptyTrashSound } from './lib/sounds.js';
 import OnboardingOverlay from './onboarding/OnboardingOverlay.jsx';
 import { useOnboarding, ONBOARDING_DONE_PREF } from './onboarding/OnboardingContext.jsx';
-import { EntitlementProvider, requestUpgrade, PENDING_UPGRADE_KEY } from './context/entitlement.jsx';
-import UpgradeModal from './components/UpgradeModal.jsx';
-import UpgradeBanner from './components/UpgradeBanner.jsx';
 import SocialImportActivity from './components/SocialImportActivity.jsx';
 import { isTerminalStage } from './lib/socialImportView.mjs';
-import { canUseCapability, capabilityRequiresUpgrade } from './lib/aiAccess.mjs';
+import { canUseCapability } from './lib/aiAccess.mjs';
 
 // Lucide-backed icon shims. Component names are kept identical to
 // the previous inline SVG defs so every existing call site (right-
@@ -147,75 +143,8 @@ function readViewScroll() {
   }
 }
 
-export default function App({ entitlement } = {}) {
+export default function App() {
   const onboarding = useOnboarding();
-  // The resolved entitlement (mode paid/trial/free) flows in from
-  // AppGate. Default to a permissive value so the app never locks itself
-  // if it's rendered without the prop (tests, dev overrides).
-  const ent = entitlement || {
-    mode: 'trial', paid: false,
-    trial: { startedAt: null, endsAt: null, active: true, daysLeft: 14 },
-    canCreateSave: true, proUnlocked: true, serverTrialing: false, loading: true,
-  };
-  // Pro features (boards, multiple libraries, AI) are locked only in the
-  // free tier. Primitive so handlers can depend on it without churning.
-  const proLocked = ent.mode === 'free';
-  // Upgrade modal: opened by any locked action via requestUpgrade(), and
-  // by the main process when a fire-and-forget save (hotkey screenshot,
-  // extension) is blocked. `upgradeFeature` tailors the modal copy.
-  const [upgradeFeature, setUpgradeFeature] = useState(null);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-  useEffect(() => {
-    function onRequestUpgrade(e) {
-      setUpgradeFeature(e?.detail?.feature || null);
-      setUpgradeOpen(true);
-    }
-    function onNeedsUpgrade(payload) {
-      setUpgradeFeature(payload?.source === 'extension' ? 'save' : (payload?.source || 'save'));
-      setUpgradeOpen(true);
-    }
-    window.addEventListener('moodmark:request-upgrade', onRequestUpgrade);
-    const off = window.moodmark?.on?.('save:needs-upgrade', onNeedsUpgrade);
-    return () => {
-      window.removeEventListener('moodmark:request-upgrade', onRequestUpgrade);
-      try { off?.(); } catch { /* ignore */ }
-    };
-  }, []);
-
-  // Resume a pending upgrade after "Sign in to upgrade". The user tapped
-  // upgrade, got bounced to sign-in (which unmounts this component), then
-  // came back via the magic link. The instant we're back AND signed in
-  // AND still on the free tier, re-open the upgrade modal automatically —
-  // no redundant second tap on the toast. Runs here (not in AppGate)
-  // because App is the thing that re-mounts after sign-in, so the modal
-  // it owns is guaranteed to be listening.
-  useEffect(() => {
-    if (ent.loading) return undefined;          // wait for real entitlement
-    let pending = null;
-    try { pending = JSON.parse(localStorage.getItem(PENDING_UPGRADE_KEY) || 'null'); }
-    catch { pending = null; }
-    if (!pending) return undefined;
-    let cancelled = false;
-    (async () => {
-      const signedIn = await window.moodmark?.licensing?.hasSession?.().catch(() => false);
-      if (cancelled || !signedIn) return;       // only after a real sign-in
-      localStorage.removeItem(PENDING_UPGRADE_KEY);
-      if (ent.mode === 'free') {
-        setUpgradeFeature(pending.feature || null);
-        setUpgradeOpen(true);
-      }
-      // entitled trial / paid → signing in already granted access; the
-      // intent is consumed above with nothing more to do.
-    })();
-    return () => { cancelled = true; };
-  }, [ent.mode, ent.loading]);
-
-  // The moment a subscription lands (mode flips to paid), close the
-  // upgrade modal — otherwise the paywall stays up over the now-unlocked
-  // app after the user comes back from checkout.
-  useEffect(() => {
-    if (ent.mode === 'paid') setUpgradeOpen(false);
-  }, [ent.mode]);
   const {
     saves,
     loading,
@@ -895,15 +824,10 @@ export default function App({ entitlement } = {}) {
   // every walkthrough end so the library reflects the result of
   // the 'fresh' choice (or just a fresh install on first launch).
   const prevOnboardingActive = useRef(false);
-  // True when both the toggle is on AND the user is signed-in to a
-  // license session — search will route through embeddings rather
-  // than LIKE. Locked in the free tier (semantic search is pro); the
-  // app falls back to plain LIKE search, which still works fine.
+  // Route semantic search through the configured local embedding provider.
   const embeddingAccess = aiAccess?.embedding;
   const semanticSearchActive = !!prefs.semanticSearch
-    && canUseCapability(embeddingAccess, proLocked);
-  const structuredAccess = aiAccess?.structuredJson;
-  const aiRequiresUpgrade = capabilityRequiresUpgrade(structuredAccess, proLocked);
+    && canUseCapability(embeddingAccess);
 
   // Set of save ids the main process is currently AI-indexing. Driven
   // by save:indexing-start / save:indexing-end events. DetailPanel
@@ -1009,11 +933,10 @@ export default function App({ entitlement } = {}) {
   }, [onboarding.active, reload, loadCollections, loadBoards]);
 
   const handleCreateBoard = useCallback(async () => {
-    if (proLocked) { requestUpgrade('boards'); return null; }
     const board = await window.moodmark.boards.create({ name: 'Untitled board' });
     await loadBoards();
     return board;
-  }, [loadBoards, proLocked]);
+  }, [loadBoards]);
 
   const handleRenameBoard = useCallback(async ({ id, name }) => {
     await window.moodmark.boards.rename({ id, name });
@@ -1982,7 +1905,6 @@ export default function App({ entitlement } = {}) {
   }, [activeLibraryId, libraries, loadCollections, reload, setColorFilter, setSearch, setView]);
 
   const handleCreateLibrary = useCallback(async (name) => {
-    if (proLocked) { requestUpgrade('libraries'); return; }
     const res = await window.moodmark.libraries.create(name);
     if (res?.ok && res.library) {
       await refreshLibraries();
@@ -1992,7 +1914,7 @@ export default function App({ entitlement } = {}) {
       // brand-new one yet, so the overlay would otherwise show a stale name.
       await handleSwitchLibrary(res.library.id, res.library.name || name);
     }
-  }, [refreshLibraries, handleSwitchLibrary, proLocked]);
+  }, [refreshLibraries, handleSwitchLibrary]);
 
   const handleRenameLibrary = useCallback(async (id, name) => {
     const res = await window.moodmark.libraries.rename(id, name);
@@ -2211,7 +2133,6 @@ export default function App({ entitlement } = {}) {
   // navigates the user straight into the new canvas.
   const handleOpenCollectionAsSpace = useCallback(async (collectionId) => {
     if (!collectionId) return;
-    if (proLocked) { requestUpgrade('boards'); return; }
     const collection = collections.find((c) => c.id === collectionId);
     if (!collection) return;
     let collectionSaves = [];
@@ -2297,7 +2218,7 @@ export default function App({ entitlement } = {}) {
     });
     loadBoards();
     handleViewChange({ type: 'board', id: board.id });
-  }, [collections, loadBoards, handleViewChange, proLocked]);
+  }, [collections, loadBoards, handleViewChange]);
 
   const handleReorderCollections = useCallback(async (orderedIds) => {
     const previousOrder = collections.map((c) => c.id);
@@ -3561,7 +3482,6 @@ export default function App({ entitlement } = {}) {
     || (appMode === 'folders' && view.type === 'collection');
 
   return (
-   <EntitlementProvider value={ent}>
     <div
       className={`app-shell${dragging ? ' drag-over' : ''}`}
       onDragOver={onDragOver}
@@ -3895,7 +3815,6 @@ export default function App({ entitlement } = {}) {
             allCollections={collections}
             allTags={allTags}
             aiConfigured={aiConfigured}
-            aiRequiresUpgrade={aiRequiresUpgrade}
             aiIndexing={indexingIds.has(focused.id)}
             altImageIdx={focusedAltImageIdx}
             onAltImageIdxChange={setFocusedAltImageIdx}
@@ -4391,23 +4310,6 @@ export default function App({ entitlement } = {}) {
 
       <OnboardingOverlay />
 
-      {/* Remote in-app notice (incident / heads-up / longform update),
-          pushed from the Worker without an app release. */}
-      <Announcement />
-
-      {/* Free-tier upgrade banner (trial countdown / "upgrade to keep
-          saving") and the upgrade modal opened from any locked action. */}
-      <UpgradeBanner
-        entitlement={ent}
-        onUpgrade={() => { setUpgradeFeature(null); setUpgradeOpen(true); }}
-      />
-      <UpgradeModal
-        open={upgradeOpen}
-        feature={upgradeFeature}
-        entitlement={ent}
-        onClose={() => setUpgradeOpen(false)}
-      />
     </div>
-   </EntitlementProvider>
   );
 }

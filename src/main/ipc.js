@@ -46,18 +46,6 @@ const {
   getUsage: getAiUsage,
 } = require('./openai');
 const { detectColorName } = require('./colorNames');
-const { canCreateSave } = require('./entitlement');
-const { notifyNeedsUpgrade } = require('./notify');
-
-// Free-tier save guard for IPC handlers. Returns true (and surfaces the
-// upgrade prompt in the renderer) when a new save must be blocked. The
-// caller returns its own needsUpgrade-shaped result so the renderer's
-// call site stays happy. Fails OPEN via canCreateSave().
-function blockNewSave(source) {
-  if (canCreateSave()) return false;
-  try { notifyNeedsUpgrade({ source: source || 'save' }); } catch { /* ignore */ }
-  return true;
-}
 
 // Dot product over pre-normalized vectors (the embedding cache stores
 // unit vectors) — equivalent to cosine at half the arithmetic.
@@ -343,7 +331,6 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
   ipcMain.handle('saves:update', (_e, payload) => updateSave(payload));
 
   ipcMain.handle('saves:drop-file', async (_e, filePath) => {
-    if (blockNewSave('save')) return { needsUpgrade: true };
     const imgData = await saveImageFromFile(filePath);
     if (imgData.duplicateOf) {
       notifyDuplicate(imgData.existing);
@@ -359,7 +346,6 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
   // renderer hands us the bytes and we run them through the same
   // saveImageFromBuffer → insertSave pipeline (dedup, palette, etc.).
   ipcMain.handle('saves:paste-image', async (_e, payload) => {
-    if (blockNewSave('save')) return { needsUpgrade: true };
     const { bytes, ext } = payload || {};
     if (!bytes || !bytes.length) throw new Error('paste-image called without image bytes');
     const buffer = Buffer.from(bytes);
@@ -377,7 +363,6 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
   });
 
   ipcMain.handle('saves:drop-zip', async (_e, zipPath) => {
-    if (blockNewSave('save')) return { ok: false, needsUpgrade: true };
     if (!zipPath) throw new Error('drop-zip called without a path');
     try {
       const counts = await ingestZip(zipPath);
@@ -412,19 +397,7 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
     }
   });
 
-  // Current in-app announcement (remote, no entitlement gate). Returns
-  // the announcement object or null. Fail-silent — see announcement.js.
-  ipcMain.handle('announcement:get', async () => {
-    try {
-      const { fetchAnnouncement } = require('./announcement');
-      return { ok: true, announcement: await fetchAnnouncement() };
-    } catch {
-      return { ok: true, announcement: null };
-    }
-  });
-
   ipcMain.handle('saves:capture-url', async (_e, url) => {
-    if (blockNewSave('save')) return { ok: false, needsUpgrade: true };
     if (typeof url !== 'string' || !url.trim()) {
       return { ok: false, error: 'missing_url' };
     }
@@ -448,7 +421,6 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
   });
 
   ipcMain.handle('saves:drop-url', async (_e, payload) => {
-    if (blockNewSave('save')) return { needsUpgrade: true };
     const candidates = Array.isArray(payload?.urls)
       ? payload.urls
       : Array.isArray(payload)
@@ -957,11 +929,7 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
     }
   });
 
-  // ── AI entitlement + monthly usage ────────────────────────────────────
-  // BYOK was retired — the licensing Worker proxies OpenAI calls on
-  // behalf of any signed-in user. The renderer just needs to know
-  // whether a session is present and what the monthly counter looks
-  // like so it can show "AI features unlocked" + remaining quota.
+  // ── Local AI configuration ────────────────────────────────────────────
   ipcMain.handle('ai:has-session', () => hasAiSession());
   ipcMain.handle('ai:access', () => require('./openai').getAccess());
 
@@ -1253,65 +1221,6 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
     return { ok: true, count: removed.length };
   });
 
-  // ─── Licensing ──────────────────────────────────────────────
-  // Renderer asks for the entitlement state on launch + on every
-  // window focus; main process owns the session token + cache.
-  const licensing = require('./licensing');
-  ipcMain.handle('licensing:request-magic-link', (_e, email) =>
-    licensing.requestMagicLink(email),
-  );
-  ipcMain.handle('licensing:verify', (_e, opts) =>
-    licensing.verifyLicense(opts || {}),
-  );
-  ipcMain.handle('licensing:has-session', () => licensing.hasSession());
-  ipcMain.handle('licensing:sign-out', () => licensing.signOut());
-
-  // Exchange a magic-link token directly for a session. The gatheros://
-  // deep link only resolves in the packaged app (its Info.plist registers
-  // the scheme), so under `npm run dev` the email link goes nowhere —
-  // paste the token here from DevTools instead:
-  //   await window.moodmark.licensing.exchange("<token-from-the-email-link>")
-  // Persists the session and fires the same auth-result the deep-link
-  // handler does, so the UI signs in. Harmless in production: it still
-  // requires a valid, single-use token only the user's email provides.
-  ipcMain.handle('licensing:exchange', async (e, token) => {
-    const result = await licensing.exchangeMagicToken(token);
-    try { e.sender.send('licensing:auth-result', result); } catch { /* ignore */ }
-    return result;
-  });
-
-  // Combined entitlement (local trial + server subscription) the renderer
-  // uses to show the trial countdown / free-tier meter and to know when to
-  // surface upgrade prompts.
-  ipcMain.handle('entitlement:get', () => require('./entitlement').getEntitlement());
-  // Mints a customer-portal URL and opens it in the user's default
-  // browser. Renderer doesn't need to handle the URL itself — we open
-  // it in main so the user lands on the secure session without us
-  // ever exposing the URL to the page context.
-  ipcMain.handle('licensing:open-customer-portal', async () => {
-    const result = await licensing.customerPortal();
-    if (result?.ok && result.url) {
-      try { await shell.openExternal(result.url); } catch (err) {
-        return { ok: false, error: 'open_failed' };
-      }
-      return { ok: true };
-    }
-    return { ok: false, error: result?.error || 'unknown' };
-  });
-  // Mints a Lemon Squeezy checkout URL for the chosen plan and opens
-  // it externally. The same shell.openExternal pattern works on both
-  // localhost dev (renderer talks to our worker) and the packaged
-  // file:// app (no domain-whitelist gymnastics).
-  ipcMain.handle('licensing:open-checkout', async (_e, plan) => {
-    const result = await licensing.createCheckout(plan);
-    if (result?.ok && result.url) {
-      try { await shell.openExternal(result.url); } catch (err) {
-        return { ok: false, error: 'open_failed' };
-      }
-      return { ok: true };
-    }
-    return { ok: false, error: result?.error || 'unknown' };
-  });
 }
 
 module.exports = { registerIpcHandlers };

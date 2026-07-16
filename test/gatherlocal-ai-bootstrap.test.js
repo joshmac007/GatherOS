@@ -31,7 +31,7 @@ test('default runtime composes the selected GatherLocal capability routes', () =
   assert.equal(runtime.providerFor(CAPABILITIES.IMAGE_GENERATION), null);
 });
 
-test('entitlement denial blocks personal providers before transport', async () => {
+test('explicit runtime authorization denial blocks transport', async () => {
   let calls = 0;
   const runtime = createDefaultAiRuntime({
     authorize: () => false,

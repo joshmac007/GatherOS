@@ -3,7 +3,6 @@
 
 let savedNotifier = () => {};
 let duplicateNotifier = () => {};
-let needsUpgradeNotifier = () => {};
 let bookmarkNotifier = () => {};
 let bookmarkFailedNotifier = () => {};
 let errorNotifier = () => {};
@@ -49,23 +48,12 @@ function setDuplicateNotifier(fn) {
   duplicateNotifier = typeof fn === 'function' ? fn : () => {};
 }
 
-// Fired when a fire-and-forget save path (global-hotkey screenshots) is
-// blocked by the free tier — there's no IPC return value to carry the
-// needsUpgrade flag, so we surface the upgrade prompt in the window.
-function setNeedsUpgradeNotifier(fn) {
-  needsUpgradeNotifier = typeof fn === 'function' ? fn : () => {};
-}
-
 function notifySaved(record) {
   savedNotifier(record);
 }
 
 function notifyDuplicate(existing) {
   duplicateNotifier(existing);
-}
-
-function notifyNeedsUpgrade(context) {
-  needsUpgradeNotifier(context);
 }
 
 // Tray menu shows the latest saves; mutations elsewhere need to ping
@@ -85,14 +73,12 @@ function refreshTray() {
 module.exports = {
   setSaveNotifier,
   setDuplicateNotifier,
-  setNeedsUpgradeNotifier,
   setBookmarkNotifier,
   setBookmarkFailedNotifier,
   setErrorNotifier,
   setTrayRefresher,
   notifySaved,
   notifyDuplicate,
-  notifyNeedsUpgrade,
   notifyBookmarkSaved,
   notifyBookmarkFailed,
   notifyError,

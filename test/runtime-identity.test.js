@@ -127,6 +127,4 @@ test('desktop, native host, packaging, and updater cannot claim GatherOS identit
   assert.doesNotMatch(read('src/renderer/index.html'), /GatherOS/);
   assert.doesNotMatch(read('src/renderer/toast.html'), /GatherOS/);
 
-  const licensing = require('../src/shared/licensing-config');
-  assert.equal(licensing.URL_SCHEME, identity.URL_SCHEME);
 });
