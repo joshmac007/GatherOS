@@ -12,8 +12,8 @@
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
     "canonical_evidence_ref": "refs/gatherlocal/evidence/overlay-v1",
-    "tip": "c8662f6802883b8235ac53b231bcc71ff845554d",
-    "resulting_tree": "289e691ff80eb2926fe6bd4781bd71533d7bbf51"
+    "tip": "646704edb7ab9d678b02af64e1c749bdad9ef9dc",
+    "resulting_tree": "671241986cdadab3a3c4ce101c995e01f5e02d51"
   },
   "acceptance": {
     "personal_policy": "never-auto-drop",
@@ -393,6 +393,43 @@
             "./node_modules/.bin/electron",
             "--test",
             "test/runtime-identity.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 120,
+      "id": "personal.offline-local",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Make GatherLocal fully local",
+      "source_commit": "646704edb7ab9d678b02af64e1c749bdad9ef9dc",
+      "source_parent": "c8662f6802883b8235ac53b231bcc71ff845554d",
+      "source_tree": "671241986cdadab3a3c4ce101c995e01f5e02d51",
+      "logical_dependencies": [
+        "personal.local-ai-authorization",
+        "personal.runtime-identity"
+      ],
+      "patch_id_stable": "8ff369e62ea2622252207b10c5d5b83497002876",
+      "canonical_diff_sha256": "d3764be410c74d753ab60def8c41dacdcca90ec4f94f998dfe5d54bc6c9cc284",
+      "artifact": "patches/0120-personal.offline-local.patch",
+      "artifact_sha256": "aaa53a81756f9ff909f3a3d5cd5d5ae355d02d5b7930378c527b67948baa1435",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "offline-local-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/gatherlocal-offline-mode.test.js",
+            "test/gatherlocal-ai-authorization.test.js",
+            "test/gatherlocal-ai-adapters.test.js",
+            "test/gatherlocal-ai-bootstrap.test.js",
+            "test/gatherlocal-ai-access-view.test.js",
+            "test/openai-runtime-compat.test.js"
           ]
         }
       ]
