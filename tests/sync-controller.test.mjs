@@ -34,6 +34,11 @@ test('sync CLI accepts only explicit upstream/main and full target SHA', () => {
   ]), /duplicate sync option/)
 })
 
+test('rebuild CLI accepts no upstream or target options', () => {
+  assert.deepEqual(parseSyncArguments(['rebuild']), { command: 'rebuild' })
+  assert.throws(() => parseSyncArguments(['rebuild', '--target-sha', OLD]), /accepts no options/)
+})
+
 test('accepted ref transaction is atomic and rejects stale old tip', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-ref-test.'))
   const store = path.join(root, 'accepted.git')

@@ -122,6 +122,12 @@ git --git-dir ../GatherLocal-Accepted.git show-ref
 readlink ../GatherLocal-Next
 ```
 
+When GitHub is unavailable and only personal overlay composition changed, use
+`node scripts/gatherlocal-sync.mjs rebuild`. It accepts no target override,
+reuses only `refs/gatherlocal/upstream/accepted`, runs every normal acceptance
+gate, and records `accepted-target-no-network` freshness. It never substitutes
+for `sync` when receiving Brett updates.
+
 ## Decide where a new feature belongs
 
 Ask one question: could Brett ship this unchanged to every GatherOS user?

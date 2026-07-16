@@ -31,6 +31,16 @@ copied-data rehearsals. It never edits accepted app in place. Success switches
 `GatherLocal-Next` to new immutable reconstruction. Failure leaves old accepted
 reconstruction selected and preserves diagnostics.
 
+If GitHub is unavailable and only the personal overlay changed, rebuild against
+the already accepted upstream target:
+
+```sh
+node scripts/gatherlocal-sync.mjs rebuild
+```
+
+This runs identical replay, test, package, signing, and copied-data gates. It
+does not check for or receive new Brett commits.
+
 ## Make personal/local-AI changes
 
 Personal work belongs in overlay reconstruction. Convert each coherent change

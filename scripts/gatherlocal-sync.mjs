@@ -337,6 +337,20 @@ function fetchTarget({ upstream, id, expected, previousTarget, manifest, env, lo
   return { target, incoming }
 }
 
+function acceptedTarget({ upstream, previousTarget, manifest, env, logFile }) {
+  const target = previousTarget
+  git(['cat-file', '-e', `${target}^{commit}`], upstream, { env, logFile })
+  ancestry(upstream, manifest.upstream.release_floor, target, env, 'release floor', logFile)
+  ancestry(upstream, manifest.upstream.tested_base, target, env, 'canonical tested base', logFile)
+  const remoteTarget = gitText(['rev-parse', 'refs/remotes/upstream/main^{commit}'], upstream, { env, logFile })
+  ancestry(upstream, target, remoteTarget, env, 'accepted target against stored upstream main', logFile)
+  return {
+    target,
+    incoming: null,
+    freshness: 'accepted-target-no-network',
+  }
+}
+
 function createCandidate({ upstream, accepted, store, oldTip, target, id, manifest, dependencyContract, runRoot, env, checks }) {
   const candidate = path.join(runRoot, 'candidate')
   const replayLog = path.join(runRoot, 'logs/replay.log')
@@ -522,7 +536,7 @@ function freezeReconstruction({ candidate, descriptorFile, manifest, dependencyC
   }
 }
 
-function createRecoveryEvidence({ store, candidate, descriptorFile, dataReceipt, runRoot, id, oldTip, newTip, previousTarget, target, checks, packageReceipt, extension, reconstruction, env, logFile }) {
+function createRecoveryEvidence({ store, candidate, descriptorFile, dataReceipt, runRoot, id, oldTip, newTip, previousTarget, target, upstreamFreshness, checks, packageReceipt, extension, reconstruction, env, logFile }) {
   const incomingRef = `refs/gatherlocal/incoming/${id}`
   git(['fetch', '--no-tags', '--no-write-fetch-head', candidate, `HEAD:${incomingRef}`], store, { env, logFile })
   if (gitText(['rev-parse', incomingRef], store, { env, logFile }) !== newTip) fail('acceptance incoming ref mismatch')
@@ -545,6 +559,7 @@ function createRecoveryEvidence({ store, candidate, descriptorFile, dataReceipt,
     candidate_tip: newTip,
     previous_upstream_target: previousTarget,
     upstream_target: target,
+    upstream_freshness: upstreamFreshness,
     checks,
     package: packageReceipt,
     extension,
@@ -598,15 +613,26 @@ function sync(id, runRoot, env, logFile, options) {
   run('/usr/bin/shasum', ['-a', '256', '-c', 'SHA256SUMS'], {
     cwd: preservationSnapshot, env, logFile,
   })
-  const fetched = fetchTarget({
-    upstream,
-    id,
-    expected: options.targetSha,
-    previousTarget: topology.previousTarget,
-    manifest,
-    env,
-    logFile,
-  })
+  const fetched = options.command === 'rebuild'
+    ? acceptedTarget({
+      upstream,
+      previousTarget: topology.previousTarget,
+      manifest,
+      env,
+      logFile,
+    })
+    : {
+      ...fetchTarget({
+        upstream,
+        id,
+        expected: options.targetSha,
+        previousTarget: topology.previousTarget,
+        manifest,
+        env,
+        logFile,
+      }),
+      freshness: 'remote-main-verified',
+    }
 
   const checks = []
   const candidateState = createCandidate({
@@ -628,6 +654,7 @@ function sync(id, runRoot, env, logFile, options) {
     manifest,
     previousTarget: topology.previousTarget,
     target: fetched.target,
+    upstreamFreshness: fetched.freshness,
     tip: candidateState.tip,
     tree: candidateState.tree,
     replay: candidateState.replay,
@@ -701,7 +728,8 @@ function sync(id, runRoot, env, logFile, options) {
     env,
   })
   assertEqual(movedReconstruction, reconstruction, 'moved reconstruction receipt')
-  if (gitText(['rev-parse', `${fetched.incoming}^{commit}`], upstream, { env, logFile }) !== fetched.target) {
+  if (fetched.incoming
+    && gitText(['rev-parse', `${fetched.incoming}^{commit}`], upstream, { env, logFile }) !== fetched.target) {
     fail('incoming upstream ref changed before promotion')
   }
   atomicWriteJson(journal, {
@@ -745,7 +773,7 @@ function sync(id, runRoot, env, logFile, options) {
     accepted_tip: candidateState.tip, recovery_tip: topology.oldTip,
     reconstruction: immutablePath, evidence: evidence.directory,
   })
-  git(['update-ref', '-d', fetched.incoming, fetched.target], upstream, { env, logFile })
+  if (fetched.incoming) git(['update-ref', '-d', fetched.incoming, fetched.target], upstream, { env, logFile })
   return { ...promotedReceipt, evidence: evidence.directory }
 }
 
@@ -754,7 +782,7 @@ const options = (() => {
     return parseSyncArguments(process.argv.slice(2))
   } catch (error) {
     console.error(`FAIL: ${error.message}`)
-    console.error(`Usage: ${process.argv[1]} init | sync --upstream-ref upstream/main [--target-sha FULL_SHA]`)
+    console.error(`Usage: ${process.argv[1]} init | rebuild | sync --upstream-ref upstream/main [--target-sha FULL_SHA]`)
     process.exit(2)
   }
 })()

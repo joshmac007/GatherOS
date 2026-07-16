@@ -122,6 +122,16 @@ One-time setup:
 node scripts/gatherlocal-sync.mjs init
 ```
 
+Rebuild the personal overlay against the already accepted upstream target when
+GitHub is unavailable:
+
+```sh
+node scripts/gatherlocal-sync.mjs rebuild
+```
+
+`rebuild` runs the same acceptance gates but makes no freshness claim. Use
+`sync` below to receive new Brett commits.
+
 Receive Brett's latest `main` after independently confirming its full SHA:
 
 ```sh
