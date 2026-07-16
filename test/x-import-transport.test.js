@@ -26,14 +26,15 @@ test('shared transport adapter executes ordered catch-up behavior', async () => 
   assert.equal(state.imported, 1);
 });
 
-test('save failure stops before later status with accurate partial progress', async () => {
+test('save failure records failure and continues with later bookmarks', async () => {
   const { runCatchUpTransportBatch } = await transport();
   const state = catchUpState();
   let saves = 0;
-  await assert.rejects(runCatchUpTransportBatch({
+  const errors = [];
+  const result = await runCatchUpTransportBatch({
     state,
     entries: [{ tweetId: 'first' }, { tweetId: 'failed' }, { tweetId: 'later' }],
-    classify: async () => ['new', 'new', 'known-active'],
+    classify: async () => ['new', 'new', 'new'],
     save: async (entry) => {
       saves += 1;
       if (entry.tweetId === 'failed') return { ok: false, error: 'rejected' };
@@ -41,11 +42,45 @@ test('save failure stops before later status with accurate partial progress', as
     },
     isAccepted: (response) => response.ok,
     isNew: (response) => !!response.id,
-  }), /rejected/);
-  assert.equal(saves, 2);
-  assert.equal(state.imported, 1);
+    onError: (error, entry) => errors.push([entry.tweetId, error.message]),
+  });
+  assert.equal(saves, 3);
+  assert.equal(state.imported, 2);
+  assert.equal(state.failed, 1);
   assert.equal(state.knownStreak, 0);
-  assert.deepEqual([...state.processed], ['first', 'failed']);
+  assert.deepEqual([...state.processed], ['first', 'failed', 'later']);
+  assert.deepEqual(result.acceptedIds, ['first', 'later']);
+  assert.deepEqual(errors, [['failed', 'rejected']]);
+});
+
+test('import batch queue serializes overlapping page deliveries and closes cleanly', async () => {
+  const { createImportBatchQueue } = await transport();
+  let concurrent = 0;
+  let maxConcurrent = 0;
+  const order = [];
+  let releaseFirst;
+  const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+  const queue = createImportBatchQueue({
+    processBatch: async ([id]) => {
+      concurrent += 1;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      order.push(`start-${id}`);
+      if (id === 'first') await firstGate;
+      order.push(`end-${id}`);
+      concurrent -= 1;
+    },
+  });
+
+  const first = queue.enqueue(['first']);
+  const second = queue.enqueue(['second']);
+  await Promise.resolve();
+  assert.deepEqual(order, ['start-first']);
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.equal(maxConcurrent, 1);
+  assert.deepEqual(order, ['start-first', 'end-first', 'start-second', 'end-second']);
+  queue.close();
+  assert.deepEqual(await queue.enqueue(['third']), { ok: false, reason: 'closed' });
 });
 
 test('classification failure performs no saves', async () => {
@@ -146,6 +181,7 @@ test('background wires catch-up adapter into API and scroll and preserves fallba
   assert.equal(fallbackCalls.length, 4);
   assert.deepEqual(new Set(fallbackCalls), new Set(['runXScrollImport(limit, mode, progress, reservation)']));
   assert.equal((source.match(/runCatchUpTransportBatch\(\{/g) || []).length, 2);
+  assert.match(source, /batchQueue\.enqueue\(bookmarks\)/);
 });
 
 test('explicit X and Instagram imports reserve before their first await', () => {

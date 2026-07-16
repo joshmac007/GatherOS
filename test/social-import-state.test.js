@@ -76,3 +76,15 @@ test('new starting run resets terminal counter baseline', () => {
   assert.equal(state.get().runId, 'run-2');
   assert.equal(state.get().scanned, 0);
 });
+
+test('terminal run rejects late progress from overlapping work', () => {
+  const state = createSocialImportState();
+  state.update(snapshot());
+  state.update(snapshot({ stage: 'failed', scanned: 2, failed: 1 }));
+  assert.deepEqual(
+    state.update(snapshot({ stage: 'saving', scanned: 3, saved: 1, failed: 1 })),
+    { ok: false, error: 'run already finished' },
+  );
+  assert.equal(state.get().stage, 'failed');
+  assert.equal(state.get().saved, 0);
+});

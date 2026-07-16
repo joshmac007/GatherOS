@@ -41,21 +41,21 @@ test('library and quit lifecycle drain or rebind background ownership', () => {
   assert.match(main, /smartCategoryRefresh\?\.pause\(\);[\s\S]*smartCategoryRefresh\?\.drain\(\)/);
 });
 
-test('extension acknowledges saves after durable routing attempt', async () => {
+test('extension acknowledges durable queue without waiting for background work', async () => {
   const { completeSavedResponse } = require('../src/main/extension-server');
   const res = responseHarness();
   const calls = [];
   const body = await completeSavedResponse({
     res,
     record: { id: 'save-a' },
-    routeSave: async (record, options) => {
-      calls.push(['route', record.id, options]);
-      return { ok: true };
+    routeSave: (record, options) => {
+      calls.push(['queued', record.id, options]);
+      return { ok: true, scheduled: true };
     },
     notify: (record, options) => calls.push(['notify', record.id, options]),
   });
   assert.deepEqual(calls, [
-    ['route', 'save-a', { duplicate: false }],
+    ['queued', 'save-a', { duplicate: false }],
     ['notify', 'save-a', { backgroundRouted: true }],
   ]);
   assert.deepEqual(body, { ok: true, id: 'save-a' });

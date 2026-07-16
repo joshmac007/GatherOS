@@ -2,7 +2,7 @@ import { processCatchUpEntries, importSaveOptions } from './catch-up-import.mjs'
 import { claimImportItem, importLimitReached } from './import-limit.mjs';
 
 export async function runCatchUpTransportBatch({
-  state, entries, classify, save, isAccepted, isNew, progress = null,
+  state, entries, classify, save, isAccepted, isNew, onError = () => {}, progress = null,
 }) {
   state.known = Number(state.known) || 0;
   state.failed = Number(state.failed) || 0;
@@ -24,12 +24,14 @@ export async function runCatchUpTransportBatch({
       catch (error) {
         state.failed += 1;
         if (progress) await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
-        throw error;
+        onError(error, entry);
+        return;
       }
       if (!isAccepted(response)) {
         state.failed += 1;
         if (progress) await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
-        throw new Error(response?.error || 'save rejected');
+        onError(new Error(response?.error || 'save rejected'), entry);
+        return;
       }
       if (isNew(response)) state.imported += 1;
       acceptedIds.push(entry.tweetId);
@@ -41,6 +43,31 @@ export async function runCatchUpTransportBatch({
     },
   });
   return { boundaryReached: result.boundaryReached, acceptedIds };
+}
+
+export function createImportBatchQueue({ processBatch, onError = () => {} } = {}) {
+  if (typeof processBatch !== 'function') throw new TypeError('processBatch required');
+  let closed = false;
+  let tail = Promise.resolve();
+
+  function enqueue(entries) {
+    if (closed) return Promise.resolve({ ok: false, reason: 'closed' });
+    const task = tail.then(() => {
+      if (closed) return { ok: false, reason: 'closed' };
+      return processBatch(entries);
+    });
+    tail = task.catch((error) => {
+      onError(error);
+      return { ok: false, reason: error?.message || String(error) };
+    });
+    return tail;
+  }
+
+  return {
+    enqueue,
+    close() { closed = true; },
+    whenIdle() { return tail; },
+  };
 }
 
 export async function runFixedTransportBatch({

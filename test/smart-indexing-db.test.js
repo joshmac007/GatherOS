@@ -72,9 +72,17 @@ test('save insertion creates one durable background route without changing upstr
     finished_at: null,
   });
   assert.equal(database.pragma('user_version', { simple: true }), version);
-  const claimed = db.claimSaveBackgroundRoute('save-route', 250);
-  assert.equal(claimed.state, 'running');
-  assert.equal(db.completeSaveBackgroundRoute('save-route', 260).ok, true);
+  assert.equal(db.claimSaveBackgroundRoute('save-route', 250).state, 'running');
+  assert.deepEqual(db.failSaveBackgroundRoute({
+    saveId: 'save-route', error: 'first failure', now: 260,
+  }), { ok: true, availableAt: 5260, retryCount: 1 });
+  assert.equal(db.claimSaveBackgroundRoute('save-route', 5259), undefined);
+  assert.equal(db.claimSaveBackgroundRoute('save-route', 5260).state, 'running');
+  assert.deepEqual(db.failSaveBackgroundRoute({
+    saveId: 'save-route', error: 'second failure', now: 5270,
+  }), { ok: true, availableAt: 15270, retryCount: 2 });
+  assert.equal(db.claimSaveBackgroundRoute('save-route', 15270).state, 'running');
+  assert.equal(db.completeSaveBackgroundRoute('save-route', 15280).ok, true);
   assert.equal(db.getSaveBackgroundRoute('save-route').state, 'completed');
   database.prepare('DELETE FROM save_background_routes WHERE save_id = ?').run('save-route');
   assert.equal(db.backfillSaveBackgroundRoutes(300).count, 1);

@@ -28,7 +28,20 @@ test('reports full snapshots with monotonic counters and terminal state', async 
     type: 'social-import-status', runId: 'run-1', platform: 'x', mode: 'fixed', stage: 'complete',
     scanned: 1, saved: 1, known: 0, failed: 0, target: 2, startedAt: 1000, message: null,
   });
-  await assert.rejects(reporter.update({ scanned: 0 }), /monotonic/);
+  await assert.rejects(reporter.update({ scanned: 0 }), /already finished/);
+});
+
+test('terminal progress cannot be reopened by late batch updates', async () => {
+  const { createSocialImportProgress } = await progress();
+  const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
+    randomUUID: () => 'run-1',
+    sendNativeMessage: async () => ({ ok: true, cancelRequested: false }),
+  });
+  await reporter.start({ platform: 'x', mode: 'catch-up' });
+  await reporter.finish('failed', 'media failed');
+  await assert.rejects(reporter.update({ stage: 'saving', scanned: 1, saved: 1 }), /already finished/);
+  assert.equal(reporter.getSnapshot().stage, 'failed');
 });
 
 test('returns native cancellation and checks it before next work', async () => {

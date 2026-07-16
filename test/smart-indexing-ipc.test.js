@@ -210,16 +210,18 @@ test('foreground activity extends quiet window and wakes once idle', () => {
 test('durable router claims once, enriches images, and completes outbox', async () => {
   const completed = [];
   const calls = [];
+  const tasks = [];
   let backfills = 0;
-  let claimed = true;
+  const route = { save_id: 'save-image', state: 'pending', available_at: 100 };
   const repository = {
     backfillSaveBackgroundRoutes: () => { backfills += 1; return { ok: true, count: 1 }; },
+    getSaveBackgroundRoute: () => route,
     claimSaveBackgroundRoute: () => {
-      if (!claimed) return undefined;
-      claimed = false;
-      return { save_id: 'save-image' };
+      if (route.state !== 'pending') return undefined;
+      route.state = 'running';
+      return route;
     },
-    completeSaveBackgroundRoute: (saveId) => completed.push(saveId),
+    completeSaveBackgroundRoute: (saveId) => { route.state = 'completed'; completed.push(saveId); },
     failSaveBackgroundRoute: () => ({ availableAt: 200 }),
     listPendingSaveBackgroundRoutes: () => [],
     getNextSaveBackgroundRouteReadyAt: () => null,
@@ -228,23 +230,28 @@ test('durable router claims once, enriches images, and completes outbox', async 
     repository,
     backgroundRuntime: {
       routeSave: async () => ({ ok: true }),
-      scheduleForegroundTask: async (task) => task({
-        isCurrent: () => true,
-        routeSave: async (save, options) => { calls.push([save.id, options]); return { ok: true }; },
-      }),
+      scheduleForegroundTask: (task) => {
+        tasks.push(Promise.resolve().then(() => task({
+          isCurrent: () => true,
+          routeSave: async (save, options) => { calls.push([save.id, options]); return { ok: true }; },
+        })));
+        return { ok: true, scheduled: true };
+      },
     },
     enrichImageSave: async (save) => calls.push(['enrich', save.id]),
     isImageSave: () => true,
     getSave: (id) => ({ id, kind: 'image' }),
     now: () => 100,
   });
-  await router.route({ id: 'save-image', kind: 'image' });
+  assert.deepEqual(router.enqueue({ id: 'save-image', kind: 'image' }), { ok: true, scheduled: true });
+  assert.equal(route.state, 'pending');
+  await Promise.all(tasks);
   assert.deepEqual(calls, [
     ['enrich', 'save-image'],
     ['save-image', { changed: true }],
   ]);
   assert.deepEqual(completed, ['save-image']);
-  assert.equal((await router.route({ id: 'save-image' })).skipped, 'duplicate');
+  assert.equal(router.enqueue({ id: 'save-image' }).skipped, 'duplicate');
   await router.recover();
   assert.equal(backfills, 1);
 });

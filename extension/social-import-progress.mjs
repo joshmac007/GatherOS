@@ -1,4 +1,5 @@
 const STAGES = new Set(['starting', 'scanning', 'saving', 'stopping', 'complete', 'stopped', 'failed']);
+const TERMINAL_STAGES = new Set(['complete', 'stopped', 'failed']);
 
 export function createSocialImportProgress({
   sendNativeMessage,
@@ -42,6 +43,7 @@ export function createSocialImportProgress({
 
   async function update(patch = {}) {
     if (!snapshot) throw new Error('progress run not started');
+    if (TERMINAL_STAGES.has(snapshot.stage)) throw new Error('progress run already finished');
     const next = { ...snapshot, ...patch };
     if (!STAGES.has(next.stage)) throw new Error('invalid stage');
     if (cancelRequested && ['starting', 'scanning', 'saving'].includes(next.stage)) next.stage = 'stopping';

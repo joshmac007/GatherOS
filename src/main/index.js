@@ -1137,7 +1137,7 @@ app.whenReady().then(() => {
   createTray();
   registerCaptureHotkey();
   extensionServer.start({
-    routeSave: (record, options) => saveBackgroundRouter.route(record, options),
+    routeSave: (record, options) => saveBackgroundRouter.enqueue(record, options),
     onSocialImportStatus: (payload) => socialImportState.update(payload),
   });
   // Drop the native-messaging host manifest into every Chromium-

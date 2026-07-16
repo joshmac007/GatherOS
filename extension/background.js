@@ -13,6 +13,7 @@ import {
   catchUpSummary,
 } from './catch-up-import.mjs';
 import {
+  createImportBatchQueue,
   runCatchUpTransportBatch,
   runFixedTransportBatch,
 } from './x-import-transport.mjs';
@@ -354,7 +355,9 @@ async function handleBookmarkBatch(bookmarks) {
   // handleImportBatch.
   if (importState) {
     if (importState.apiMode) return;
-    if (importState.active) await handleImportBatch(bookmarks);
+    if (importState.active && importState.batchQueue) {
+      await importState.batchQueue.enqueue(bookmarks);
+    }
     return;
   }
 
@@ -739,7 +742,7 @@ async function runXScrollImport(limit, mode = 'fixed', progress = null, reservat
     notify("Couldn't open your X bookmarks.");
     return;
   }
-  importState = {
+  const run = {
     active: true,
     tabId: tab.id,
     limit,
@@ -756,7 +759,12 @@ async function runXScrollImport(limit, mode = 'fixed', progress = null, reservat
     reservation,
     watchdog: setTimeout(() => { endImport('timeout'); }, IMPORT_WATCHDOG_MS),
   };
-  if (!progress) await importState.progress.start({ platform: 'x', mode, target: mode === 'fixed' && Number.isFinite(limit) ? limit : null });
+  run.batchQueue = createImportBatchQueue({
+    processBatch: (bookmarks) => handleImportBatch(run, bookmarks),
+    onError: (error) => console.warn('[gatheros] queued import batch failed:', error?.message || error),
+  });
+  importState = run;
+  if (!progress) await run.progress.start({ platform: 'x', mode, target: mode === 'fixed' && Number.isFinite(limit) ? limit : null });
   scheduleImportStart(tab.id);
 }
 
@@ -783,9 +791,9 @@ function pauseImportScroll(state) {
   }, () => { void chrome.runtime.lastError; });
 }
 
-async function handleImportBatch(bookmarks) {
-  const state = importState;
+async function handleImportBatch(state, bookmarks) {
   if (!state || !state.active || state.apiMode) return;
+  if (importState !== state) return;
   if (state.progress && !state.progress.beforeNext()) { await endImport('stopped'); return; }
   let foundNew = false;
   let reachedLimit = false;
@@ -801,6 +809,7 @@ async function handleImportBatch(bookmarks) {
         save: syncBookmarkToGather,
         isAccepted: isAcceptedSaveResponse,
         isNew: isNewImportedSaveResponse,
+        onError: (err) => console.warn('[gatheros] backfill import failed:', err?.message || err),
         progress: state.progress,
       });
       resolvedIds.push(...result.acceptedIds);
@@ -860,6 +869,7 @@ async function endImport(_reason) {
   const run = importState;
   if (!run || !run.active) return; // guards double-end
   run.active = false;
+  run.batchQueue?.close();
   const { tabId, imported, watchdog } = run;
   if (watchdog) clearTimeout(watchdog);
 
