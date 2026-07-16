@@ -282,7 +282,7 @@ Verified 2026-07-15; recheck live state before reuse:
 - Brett `main`: `527f92639aaa897458a6502dc0f49e2d0c2aade6`.
 - Accepted upstream target: same SHA.
 - Accepted reconstruction: `21bba2b3327174cba20b8095d018bf38b5323d47`.
-- Personal stack: ten ordered patches.
+- Personal stack: eleven ordered patches.
 - Original `GatherLocal`: preserved with unfinished local work; not accepted app.
 - Last full sync evidence:
   `Preservation/GatherLocal-Sync-20260715T051228Z-b711a913`.
