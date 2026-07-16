@@ -139,6 +139,14 @@ contextBridge.exposeInMainWorld('moodmark', {
     delete: (id) => ipcRenderer.invoke('tags:delete', id),
     deleteUnused: () => ipcRenderer.invoke('tags:delete-unused'),
   },
+  smartCategories: {
+    listNav: () => ipcRenderer.invoke('smart-categories:list-nav'),
+    getSaves: (payload) => ipcRenderer.invoke('smart-categories:get-saves', payload ?? {}),
+    hide: (id) => ipcRenderer.invoke('smart-categories:hide', id),
+    pin: (payload) => ipcRenderer.invoke('smart-categories:pin', payload ?? {}),
+    refresh: () => ipcRenderer.invoke('smart-categories:refresh'),
+    noteActivity: (payload) => ipcRenderer.send('smart-categories:activity', payload ?? {}),
+  },
   db: {
     integrity: () => ipcRenderer.invoke('db:integrity'),
   },
@@ -218,6 +226,16 @@ contextBridge.exposeInMainWorld('moodmark', {
     reindexLibrary: () => ipcRenderer.invoke('ai:reindex-library'),
     similarSaves: (saveId, limit) => ipcRenderer.invoke('ai:similar-saves', saveId, limit),
   },
+  semanticIndex: {
+    status: () => ipcRenderer.invoke('semantic-index:status'),
+    queue: () => ipcRenderer.invoke('semantic-index:queue'),
+    pause: () => ipcRenderer.invoke('semantic-index:pause'),
+    resume: () => ipcRenderer.invoke('semantic-index:resume'),
+    retryFailed: (ids) => ipcRenderer.invoke('semantic-index:retry-failed', ids),
+    dismissFailed: (ids) => ipcRenderer.invoke('semantic-index:dismiss-failed', ids),
+    startRebuild: () => ipcRenderer.invoke('semantic-index:start-rebuild'),
+    cancelRebuild: () => ipcRenderer.invoke('semantic-index:cancel-rebuild'),
+  },
   updater: {
     install: () => ipcRenderer.invoke('updater:install'),
     check: () => ipcRenderer.invoke('updater:check'),
@@ -226,6 +244,13 @@ contextBridge.exposeInMainWorld('moodmark', {
     get: () => ipcRenderer.invoke('social-import:get'),
     cancel: (runId) => ipcRenderer.invoke('social-import:cancel', runId),
     dismiss: (runId) => ipcRenderer.invoke('social-import:dismiss', runId),
+  },
+  videoAnalysis: {
+    getForSave: (saveId) => ipcRenderer.invoke('video-analysis:get-for-save', saveId),
+    accept: (suggestionId) => ipcRenderer.invoke('video-analysis:accept', suggestionId),
+    dismiss: (suggestionId) => ipcRenderer.invoke('video-analysis:dismiss', suggestionId),
+    acceptAll: (saveId) => ipcRenderer.invoke('video-analysis:accept-all', saveId),
+    dismissAll: (saveId) => ipcRenderer.invoke('video-analysis:dismiss-all', saveId),
   },
   on: (channel, listener) => {
     const allowed = new Set([
@@ -241,10 +266,14 @@ contextBridge.exposeInMainWorld('moodmark', {
       'update-error',
       'app:error-toast',
       'ai:reindex-progress',
+      'semantic-index:status',
+      'semantic-index:progress',
+      'semantic-index:notice',
       'storage:reclaim-progress',
       'library:switched',
       'menu:command',
       'social-import:status',
+      'video-analysis:updated',
     ]);
     if (!allowed.has(channel)) return () => {};
     const wrapped = (_event, ...args) => listener(...args);

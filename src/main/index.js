@@ -59,17 +59,38 @@ app.on('second-instance', (_event, argv) => {
   }
 });
 
+const databaseRepository = require('./db');
 const {
   closeDatabase, insertSave, getSave, updateSave, getTagsForSave,
-} = require('./db');
+  upsertSaveTopicProfile, getSaveTopicProfile, listSaveTopicProfiles,
+  listSmartCategories, getSmartCategoryAliases, upsertSmartCategoryMembership,
+  recordSmartCategoryRun, getPendingSmartCategorySaves, getSemanticIndexState,
+  getSemanticVector, getActiveSemanticVectors, getSmartCategoryMembers,
+  upsertSmartCategory, upsertSmartCategoryAlias, applySmartCategoryTaxonomyChanges,
+  listSmartCategoryRuns,
+} = databaseRepository;
 const { getPref } = require('./settings');
-const { hasSession: hasAiSession, analyzeImage, embedText } = require('./openai');
+const { analyzeImage } = require('./openai');
+const { getAiRuntime } = require('./ai/bootstrap');
+const { CAPABILITIES } = require('./ai/runtime');
+const { createSaveTopicProfile } = require('./save-topic-profiles');
+const { assignSaveToExistingSmartCategories } = require('./smart-category-memberships');
+const { discoverSmartCategories } = require('./smart-category-discovery');
+const { runSmartCategoryTaxonomyRefresh } = require('./smart-category-taxonomy-refresh');
+const {
+  createBackgroundSmartCategoryRefresh,
+  runIncrementalSmartCategoryRefresh,
+} = require('./smart-category-refresh');
+const { createDefaultVideoFrameExtractor } = require('./video-frame-extractor');
+const { cleanupDerivedVideoCache } = require('./video-analysis');
+const {
+  createVideoSemanticWorkflows,
+  cleanupPurgedSaveDerived,
+  shouldUseImageAi,
+} = require('./video-semantic-workflows');
+const { createForegroundActivityTracker } = require('./foreground-activity');
+const { createSaveBackgroundRouter } = require('./save-background-router');
 const { createSocialImportState } = require('./social-import-state');
-
-// Float32Array <-> Buffer plumbing for storing embeddings as SQLite BLOBs.
-function vectorToBuffer(arr) {
-  return Buffer.from(new Float32Array(arr).buffer);
-}
 const { ensureStorageDirs, saveImageFromFile } = require('./storage');
 const { registerIpcHandlers } = require('./ipc');
 const {
@@ -81,7 +102,7 @@ const {
 } = require('./capture');
 const extensionServer = require('./extension-server');
 const { showToast, destroyToastWindow } = require('./toast-window');
-const { setSaveNotifier, setDuplicateNotifier, setBookmarkNotifier, setBookmarkFailedNotifier, setErrorNotifier, setTrayRefresher, notifyError } = require('./notify');
+const { setSaveNotifier, setDuplicateNotifier, setBookmarkNotifier, setBookmarkFailedNotifier, setErrorNotifier, setSaveChangedNotifier, setTrayRefresher, notifyError } = require('./notify');
 const { initUpdater } = require('./updater');
 const { getInitialOptions: getWindowInitialOptions, track: trackWindowState } = require('./window-state');
 const libraryRegistry = require('./library-registry');
@@ -100,6 +121,39 @@ const socialImportState = createSocialImportState({
   },
 });
 let tray = null;
+let smartCategoryRefresh = null;
+let backgroundRuntime = null;
+let foregroundActivity = null;
+let saveBackgroundRouter = null;
+let structuredProvider = null;
+
+function sendBackgroundEvent(event, payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(event, payload);
+}
+
+function activeVideoDerivedDirectory() {
+  return path.join(libraryRegistry.getActiveLibraryRoot(), 'derived', 'video-analysis');
+}
+
+async function cleanupSaveVideoDerived(directory, saveId) {
+  return cleanupDerivedVideoCache({ directory, saveId });
+}
+
+async function cleanupAllVideoDerived(directory) {
+  await fs.promises.rm(directory, { recursive: true, force: true });
+}
+
+function routeNewSaveToBackground(record, options) {
+  return saveBackgroundRouter?.notify(record, options) || null;
+}
+
+function withSmartCategoryAliases(categories = []) {
+  return (Array.isArray(categories) ? categories : []).map((category) => ({
+    ...category,
+    aliases: getSmartCategoryAliases(category.id).map((alias) => alias.alias),
+  }));
+}
 
 // macOS Dock-drop queue. The 'open-file' event can fire BEFORE app
 // is ready (e.g. when the user drags an image onto a non-running
@@ -363,7 +417,7 @@ function registerMoodmarkFileProtocol() {
   });
 }
 
-function notifySaved(record) {
+function notifySaved(record, options = {}) {
   // Each side-effect is isolated: a failure in showToast (creating
   // a new BrowserWindow during cold launch is the most common
   // crasher) shouldn't take out the IPC notify or tray rebuild.
@@ -376,8 +430,9 @@ function notifySaved(record) {
   catch (err) { console.error('[gatheros] showToast failed:', err); }
   try { rebuildTrayMenu(); }
   catch (err) { console.error('[gatheros] rebuildTrayMenu failed:', err); }
-  try { maybeAIIndexInBackground(record); }
-  catch (err) { console.error('[gatheros] AI index failed:', err); }
+  routeNewSaveToBackground(record, options);
+  try { smartCategoryRefresh?.noteActivity({ kind: 'capture' }); }
+  catch (err) { console.error('[smart-categories] refresh schedule failed:', err?.message || err); }
 }
 
 // Quiet, batched save path for X bookmark syncs. Scrolling the
@@ -413,10 +468,10 @@ function notifyBookmarkFailed() {
   bookmarkBatchTimer = setTimeout(flushBookmarkBatch, 1500);
 }
 
-function notifyBookmarkSaved(record) {
-  // Keep search working — embeddings still index in the background.
-  try { maybeAIIndexInBackground(record); }
-  catch (err) { console.error('[gatheros] AI index failed:', err); }
+function notifyBookmarkSaved(record, options = {}) {
+  routeNewSaveToBackground(record, options);
+  try { smartCategoryRefresh?.noteActivity({ kind: 'import' }); }
+  catch (err) { console.error('[smart-categories] refresh schedule failed:', err?.message || err); }
   if (bookmarkBatchCount === 0) bookmarkBatchStartedAt = Date.now();
   bookmarkBatchCount += 1;
   // Flush after 1.5s of quiet, OR force one every ~5s during a long
@@ -440,13 +495,12 @@ function notifyDuplicateInRenderer(existing) {
   }
 }
 
-// One vision call yields title + description. The description (plus
-// title and any tags) feeds a single embedding call. Whichever fields
-// the user opted into get persisted; the rest are skipped to save cost.
-async function maybeAIIndexInBackground(record) {
+// Image-only metadata enrichment. Semantic vectors belong exclusively
+// to the generation service and are queued after these fields persist.
+async function enrichImageSaveInBackground(record) {
   if (!record?.id || !record.file_path) return;
-  // Skip background AI work when no local structured provider is configured.
-  if (!hasAiSession()) return;
+  if (!shouldUseImageAi(record)) return;
+  if (!structuredProvider || !getAiRuntime().isConfigured(CAPABILITIES.STRUCTURED_JSON)) return;
 
   const wantName = getPref('autoNameOnSave', true) && !(record.title && record.title.trim());
   const wantSemantic = getPref('semanticSearch', true);
@@ -478,29 +532,21 @@ async function maybeAIIndexInBackground(record) {
     // sweep doesn't keep retrying the same row forever.
     updates.ocrText = text || '';
 
-    if (wantSemantic) {
-      const tags = getTagsForSave(record.id).map((t) => t.name).join(', ');
-      // Cap the OCR slice so a text-heavy screenshot doesn't dilute
-      // the embedding. 300 chars ≈ ~75 tokens, plenty to surface key
-      // headlines / labels semantically.
-      const ocrSnippet = text ? text.slice(0, 300) : '';
-      const embedSource = [title, description, ocrSnippet, tags].filter(Boolean).join('. ');
-      if (embedSource) {
-        try {
-          const vec = await embedText(embedSource);
-          updates.embedding = vectorToBuffer(vec);
-        } catch (err) {
-          console.error('Embed failed:', err.message);
-        }
-      }
-    }
-
     if (Object.keys(updates).length > 1) {
       updateSave(updates);
       const updated = getSave(record.id);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('save:updated', updated);
       }
+    }
+
+    if (!getSaveTopicProfile(record.id)) {
+      await createSaveTopicProfile({
+        save: getSave(record.id) || record,
+        manualTags: getTagsForSave(record.id),
+        structuredProvider,
+        upsertSaveTopicProfile,
+      });
     }
   } catch (err) {
     console.error('AI index failed:', err.message);
@@ -553,6 +599,10 @@ function createMainWindow() {
       webviewTag: true,
     },
   });
+
+  const noteInteractiveActivity = () => foregroundActivity?.noteActivity();
+  mainWindow.webContents.on('before-input-event', noteInteractiveActivity);
+  mainWindow.webContents.on('ipc-message', noteInteractiveActivity);
 
   // Re-apply maximized / fullscreen flags after construction (they
   // can't be passed to the BrowserWindow constructor on macOS).
@@ -839,14 +889,18 @@ ipcMain.handle('library:rename', (_e, payload = {}) => {
   return libraryRegistry.renameLibrary(payload.id, payload.name);
 });
 
-ipcMain.handle('library:delete', (_e, id) => {
-  const result = libraryRegistry.deleteLibrary(id);
+ipcMain.handle('library:delete', async (_e, id) => {
+  const wasActive = libraryRegistry.getActiveLibrary()?.id === id;
+  let result;
+  const remove = () => {
+    result = libraryRegistry.deleteLibrary(id);
+    if (result.ok && result.wasActive) reopenDatabase();
+    return result;
+  };
+  if (wasActive && backgroundRuntime) await backgroundRuntime.rebind(remove);
+  else remove();
   if (!result.ok) return result;
   if (result.wasActive) {
-    // The DB handle was open against the now-deleted folder. Reopen
-    // against the auto-promoted active library and notify the
-    // renderer so it can clear its view + refetch.
-    reopenDatabase();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('library:switched', { activeId: result.newActiveId });
     }
@@ -854,16 +908,18 @@ ipcMain.handle('library:delete', (_e, id) => {
   return result;
 });
 
-ipcMain.handle('library:switch', (_e, id) => {
-  const result = libraryRegistry.setActiveLibrary(id);
+ipcMain.handle('library:switch', async (_e, id) => {
+  let result;
+  const activate = () => {
+    result = libraryRegistry.setActiveLibrary(id);
+    if (!result.ok) return result;
+    reopenDatabase();
+    ensureStorageDirs();
+    return result;
+  };
+  if (backgroundRuntime) await backgroundRuntime.rebind(activate);
+  else activate();
   if (!result.ok) return result;
-  // Closing + reopening the DB picks up the new active path.
-  reopenDatabase();
-  // Make sure the now-active library has its images/ + thumbs/ dirs.
-  // Dirs are derived per-call, but they still have to exist before the
-  // first save writes into them — older libraries (or any created
-  // before this guard) may be missing them.
-  ensureStorageDirs();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('library:switched', { activeId: id });
   }
@@ -954,7 +1010,123 @@ app.whenReady().then(() => {
   // library data into a default library folder so the DB and image
   // dirs initialize against the right path on the next call.
   initializePersistentState();
+  const aiRuntime = getAiRuntime();
+  structuredProvider = {
+    completeJson: (request) => aiRuntime.completeJson(request),
+  };
+  const embeddingProvider = {
+    model: aiRuntime.modelFor(CAPABILITIES.EMBEDDING),
+    health: () => aiRuntime.health(CAPABILITIES.EMBEDDING),
+    embed: (request) => aiRuntime.embed(request),
+  };
+  foregroundActivity = createForegroundActivityTracker({
+    onIdle: () => backgroundRuntime?.noteActivity(),
+  });
+  backgroundRuntime = createVideoSemanticWorkflows({
+    repository: databaseRepository,
+    embeddingProvider,
+    structuredProvider,
+    frameExtractor: createDefaultVideoFrameExtractor(),
+    notify: sendBackgroundEvent,
+    getDerivedDirectory: activeVideoDerivedDirectory,
+    cleanupDerivedSave: cleanupSaveVideoDerived,
+    cleanupDerivedAll: cleanupAllVideoDerived,
+    restoreBackupImpl: (snapshotPath) => require('./backup').restoreFromSnapshot(snapshotPath),
+    isForegroundBusy: () => foregroundActivity.isBusy(),
+  });
+  backgroundRuntime.start();
+  saveBackgroundRouter = createSaveBackgroundRouter({
+    backgroundRuntime,
+    repository: databaseRepository,
+    getSave,
+    enrichImageSave: enrichImageSaveInBackground,
+    noteActivity: () => foregroundActivity.noteActivity(),
+  });
+  setSaveChangedNotifier((saveId, { reanalyzeVideo = false } = {}) => {
+    const save = getSave(saveId);
+    if (!save) return Promise.resolve({ ok: false, reason: 'save_not_found' });
+    return backgroundRuntime.routeSave(save, { changed: true, reanalyzeVideo });
+  });
+  backgroundRuntime.setLifecycleHooks({
+    beforeTransition: async () => {
+      saveBackgroundRouter.pause();
+      smartCategoryRefresh?.pause();
+      await smartCategoryRefresh?.drain();
+    },
+    afterTransition: async () => {
+      await saveBackgroundRouter.resume();
+      smartCategoryRefresh?.resume();
+    },
+  });
+  saveBackgroundRouter.resume().catch((error) => {
+    console.error('[background] initial outbox recovery failed:', error?.message || error);
+  });
+  smartCategoryRefresh = createBackgroundSmartCategoryRefresh({
+    getPendingSmartCategorySaves,
+    listSmartCategories,
+    getLastTaxonomyRefreshAt: () => {
+      const run = listSmartCategoryRuns({ limit: 100 })
+        .find((row) => row.run_type === 'taxonomy_refresh');
+      return Number(run?.finished_at || run?.started_at) || 0;
+    },
+    hasProvider: () => aiRuntime.isConfigured(CAPABILITIES.STRUCTURED_JSON),
+    runRefresh: async ({ pendingSaves, categories, shouldContinue, taxonomyRequested, signal }) => {
+      const incremental = await runIncrementalSmartCategoryRefresh({
+        pendingSaves,
+        categories,
+        structuredProvider,
+        providerName: aiRuntime.providerFor(CAPABILITIES.STRUCTURED_JSON),
+        getSave,
+        getTagsForSave,
+        getSaveTopicProfile,
+        createSaveTopicProfile: (input) => createSaveTopicProfile({
+          ...input,
+          onProfilePersisted: (saveId) => {
+            if (input.signal?.aborted) return { ok: false, reason: 'aborted' };
+            const save = getSave(saveId);
+            return save
+              ? backgroundRuntime.routeSave(save, { changed: true })
+              : { ok: false, reason: 'save_not_found' };
+          },
+        }),
+        discoverSmartCategories,
+        assignSaveToExistingSmartCategories,
+        shouldContinue,
+        signal,
+        recordSmartCategoryRun,
+        storage: {
+          upsertSaveTopicProfile,
+          listSaveTopicProfiles,
+          listSmartCategories,
+          getSmartCategoryAliases,
+          upsertSmartCategory,
+          upsertSmartCategoryAlias,
+          upsertSmartCategoryMembership,
+          getSemanticIndexState,
+          getSemanticVector,
+          getActiveSemanticVectors,
+          getSmartCategoryMembers,
+        },
+      });
+      if (!taxonomyRequested || !shouldContinue?.()) return incremental;
+      const taxonomy = await runSmartCategoryTaxonomyRefresh({
+        categories: withSmartCategoryAliases(listSmartCategories()),
+        structuredProvider,
+        providerName: aiRuntime.providerFor(CAPABILITIES.STRUCTURED_JSON),
+        storage: { applySmartCategoryTaxonomyChanges, recordSmartCategoryRun },
+        signal,
+      });
+      return { ...incremental, taxonomy };
+    },
+  });
   registerIpcHandlers({
+    smartCategoryRefresh,
+    semanticIndex: backgroundRuntime.getSemanticIndex(),
+    semanticSearch: backgroundRuntime.getSemanticSearch(),
+    backgroundRuntime,
+    cleanupDerivedCache: ({ saveId, all } = {}) => (
+      all ? backgroundRuntime.cleanupAllDerived() : backgroundRuntime.cleanupSaveDerived(saveId)
+    ),
     socialImportState,
   });
   createMainWindow();
@@ -965,6 +1137,7 @@ app.whenReady().then(() => {
   createTray();
   registerCaptureHotkey();
   extensionServer.start({
+    routeSave: (record, options) => saveBackgroundRouter.route(record, options),
     onSocialImportStatus: (payload) => socialImportState.update(payload),
   });
   // Drop the native-messaging host manifest into every Chromium-
@@ -1000,6 +1173,13 @@ app.whenReady().then(() => {
       if (result?.ok && result.ids.length > 0) {
         console.log(`[trash] auto-purged ${result.ids.length} saves older than ${rawDays}d`);
         for (const f of result.files) deleteImageFiles(f.filePath, f.thumbPath);
+        cleanupPurgedSaveDerived({
+          saveIds: result.ids,
+          cleanupSaveDerived: (saveId) => backgroundRuntime.cleanupSaveDerived(saveId),
+          onError: (error, saveId) => {
+            console.warn(`[trash] derived cleanup failed for ${saveId}:`, error?.message || error);
+          },
+        });
       }
     }
   } catch (err) {
@@ -1066,8 +1246,27 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => app.quit());
 }
 
-app.on('before-quit', () => {
-  destroyToastWindow();
+let backgroundDrainedForQuit = false;
+let backgroundQuitDrain = null;
+app.on('before-quit', (event) => {
+  if (!backgroundRuntime || backgroundDrainedForQuit) {
+    destroyToastWindow();
+    return;
+  }
+  event.preventDefault();
+  extensionServer.stop();
+  if (backgroundQuitDrain) return;
+  smartCategoryRefresh?.pause();
+  backgroundQuitDrain = Promise.resolve()
+    .then(() => smartCategoryRefresh?.drain())
+    .then(() => backgroundRuntime.stopAndDrain())
+    .catch((error) => console.error('[background] quit drain failed:', error?.message || error))
+    .finally(() => {
+      backgroundDrainedForQuit = true;
+      foregroundActivity?.dispose();
+      destroyToastWindow();
+      app.quit();
+    });
 });
 
 app.on('will-quit', () => {

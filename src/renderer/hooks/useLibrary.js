@@ -3,6 +3,33 @@ import { playPop, playTrashSound } from '../lib/sounds.js';
 
 const SEARCH_DEBOUNCE_MS = 180;
 
+export async function fetchLibraryView({
+  moodmark,
+  view,
+  search = '',
+  colorHex,
+  similarTo = null,
+} = {}) {
+  if (similarTo?.id) return moodmark.saves.findSimilar(similarTo.id, 60);
+  if (view?.type === 'smartCategory' && view.id) {
+    return moodmark.smartCategories.getSaves({
+      categoryId: view.id,
+      search,
+      colorHex: colorHex || undefined,
+    });
+  }
+  const backendView = ['unsorted', 'trash', 'bookmarks'].includes(view?.type)
+    ? view.type
+    : 'all';
+  return moodmark.saves.getAll({
+    search,
+    sort: 'newest',
+    view: backendView,
+    collectionId: view?.type === 'collection' ? view.id : undefined,
+    colorHex: colorHex || undefined,
+  });
+}
+
 // Pulled at preload time from prefs.windowState. We seed `view` with
 // the persisted shape on first render so the user lands directly on
 // the bucket / board they had open at quit, rather than flashing
@@ -48,23 +75,13 @@ export function useLibrary() {
     const myId = ++requestIdRef.current;
     setLoading(true);
     try {
-      let data;
-      if (similarTo?.id) {
-        // Find-similar query bypasses search / view / color and just
-        // returns the ranked similar set straight from the backend.
-        data = await window.moodmark.saves.findSimilar(similarTo.id, 60);
-      } else {
-        const backendView = ['unsorted', 'trash', 'bookmarks'].includes(view.type)
-          ? view.type
-          : 'all';
-        data = await window.moodmark.saves.getAll({
-          search: debouncedSearch,
-          sort: 'newest',
-          view: backendView,
-          collectionId: view.type === 'collection' ? view.id : undefined,
-          colorHex: colorFilter || undefined,
-        });
-      }
+      const data = await fetchLibraryView({
+        moodmark: window.moodmark,
+        view,
+        search: debouncedSearch,
+        colorHex: colorFilter,
+        similarTo,
+      });
       if (requestIdRef.current !== myId) return; // stale, ignore
       setSaves(data);
     } finally {

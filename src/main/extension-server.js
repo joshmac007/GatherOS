@@ -26,6 +26,7 @@ const { deriveXTweetCreatedAt } = require('./x-tweet-date');
 const MAX_BODY = 2 * 1024 * 1024;
 
 let server = null;
+let backgroundSaveRouter = null;
 let socialImportStatusHandler = null;
 let cachedToken = null;
 const socialSaveLocks = new Map();
@@ -84,13 +85,31 @@ function sendJson(res, status, body) {
   res.end(json);
 }
 
-async function completeSavedResponse({ res, record, notify, duplicate = false } = {}) {
+async function completeSavedResponse({
+  res,
+  record,
+  notify,
+  routeSave = backgroundSaveRouter,
+  duplicate = false,
+} = {}) {
   if (!record?.id) throw new Error('saved record id required');
+  let background = null;
+  if (typeof routeSave === 'function') {
+    try {
+      const routed = await routeSave(record, { duplicate });
+      const warning = routed?.semanticWarning?.detail
+        || (routed?.ok === false ? routed.reason || 'Background routing unavailable' : null);
+      if (warning) background = { ok: false, warning };
+    } catch (error) {
+      background = { ok: false, warning: error?.message || String(error) };
+    }
+  }
   if (typeof notify === 'function') {
-    try { notify(record); } catch { /* saved response is authoritative */ }
+    try { notify(record, { backgroundRouted: true }); } catch { /* saved response is authoritative */ }
   }
   const body = { ok: true, id: record.id };
   if (duplicate) body.duplicate = true;
+  if (background) body.background = background;
   sendJson(res, 200, body);
   return body;
 }
@@ -329,8 +348,12 @@ async function handleSave(req, res) {
       const { captureTweetCard } = require('./tweetCardCapture');
       const captured = await captureTweetCard(tweetMeta);
       if (captured.duplicateOf) {
-        notifyDuplicate(captured.existing);
-        sendJson(res, 200, { ok: true, duplicate: true, id: captured.existing.id });
+        await completeSavedResponse({
+          res,
+          record: captured.existing,
+          notify: notifyDuplicate,
+          duplicate: true,
+        });
         return;
       }
       const tweetRecord = insertSave({
@@ -348,8 +371,7 @@ async function handleSave(req, res) {
         createdAt: nextSyncCreatedAt(),
       });
       attachTags(tweetRecord.id);
-      notifyNew(tweetRecord);
-      sendJson(res, 200, { ok: true, id: tweetRecord.id });
+      await completeSavedResponse({ res, record: tweetRecord, notify: notifyNew });
       return;
     }
 
@@ -360,8 +382,12 @@ async function handleSave(req, res) {
       const { captureUrl } = require('./urlCapture');
       const captured = await captureUrl(pageUrl);
       if (captured.duplicateOf) {
-        notifyDuplicate(captured.existing);
-        sendJson(res, 200, { ok: true, duplicate: true, id: captured.existing.id });
+        await completeSavedResponse({
+          res,
+          record: captured.existing,
+          notify: notifyDuplicate,
+          duplicate: true,
+        });
         return;
       }
       const pageTitle = typeof body?.pageTitle === 'string' ? body.pageTitle.trim() : '';
@@ -371,8 +397,7 @@ async function handleSave(req, res) {
         title: pageTitle || captured.title || null,
         kind: 'url',
       });
-      notifySaved(urlRecord);
-      sendJson(res, 200, { ok: true, id: urlRecord.id });
+      await completeSavedResponse({ res, record: urlRecord, notify: notifySaved });
       return;
     }
 
@@ -384,8 +409,12 @@ async function handleSave(req, res) {
       ? await saveVideoFromUrl(videoUrl, posterUrl || null)
       : await saveImageFromUrl(imageUrl);
     if (mediaData.duplicateOf) {
-      notifyDuplicate(mediaData.existing);
-      sendJson(res, 200, { ok: true, duplicate: true, id: mediaData.existing.id });
+      await completeSavedResponse({
+        res,
+        record: mediaData.existing,
+        notify: notifyDuplicate,
+        duplicate: true,
+      });
       return;
     }
     // pageUrl (parsed above) preserves the page the user was browsing
@@ -417,8 +446,7 @@ async function handleSave(req, res) {
       createdAt: tweetMeta ? nextSyncCreatedAt() : undefined,
     });
     attachTags(record.id);
-    notifyNew(record);
-    sendJson(res, 200, { ok: true, id: record.id });
+    await completeSavedResponse({ res, record, notify: notifyNew });
   } catch (err) {
     console.error('[ext-server] /save failed:', err?.message || err);
     // Surface the failure in the app, not just the extension response.
@@ -480,7 +508,8 @@ async function handleSocialImportStatus(req, res, handler = socialImportStatusHa
   }
 }
 
-function start({ onSocialImportStatus } = {}) {
+function start({ routeSave, onSocialImportStatus } = {}) {
+  backgroundSaveRouter = typeof routeSave === 'function' ? routeSave : null;
   socialImportStatusHandler = typeof onSocialImportStatus === 'function' ? onSocialImportStatus : null;
   if (server) return;
   // Trigger the token init now so the renderer's first prefs read
@@ -529,6 +558,7 @@ function start({ onSocialImportStatus } = {}) {
 }
 
 function stop() {
+  backgroundSaveRouter = null;
   socialImportStatusHandler = null;
   if (!server) return;
   server.close();
