@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "expected_tip": "f7c1affc74edea087153ff6a0ffdd60f72c079c7",
+  "workflow_commit_subject": "Intake renderer identity patch",
+  "patches": [
+    {
+      "id": "personal.renderer-identity",
+      "revision": 1,
+      "class": "personal-support",
+      "subject": "Use GatherLocal renderer titles",
+      "source_commit": "c8662f6802883b8235ac53b231bcc71ff845554d",
+      "logical_dependencies": [
+        "personal.runtime-identity"
+      ],
+      "checks": [
+        {
+          "id": "renderer-identity-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/runtime-identity.test.js"
+          ]
+        }
+      ]
+    }
+  ]
+}
