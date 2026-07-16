@@ -46,15 +46,22 @@ function patchId(bytes) {
 function parseArgs(argv) {
   let source
   let spec
-  for (let index = 0; index < argv.length; index += 2) {
+  let resume = false
+  for (let index = 0; index < argv.length;) {
     const flag = argv[index]
+    if (flag === '--resume') {
+      resume = true
+      index += 1
+      continue
+    }
     const value = argv[index + 1]
     if (!value || !['--source', '--spec'].includes(flag)) fail('usage: intake-overlay.mjs --source PATH --spec RELATIVE_PATH')
     if (flag === '--source') source = path.resolve(value)
     if (flag === '--spec') spec = path.resolve(root, value)
+    index += 2
   }
   if (!source || !spec) fail('both --source and --spec are required')
-  return { source: fs.realpathSync(source), spec: fs.realpathSync(spec) }
+  return { source: fs.realpathSync(source), spec: fs.realpathSync(spec), resume }
 }
 
 function assertRepositoryBoundaries(source) {
@@ -145,26 +152,17 @@ function verifyProposal(proposal, source) {
   }
 }
 
-function publishProposal(proposal, source) {
-  for (const artifact of proposal.artifacts) {
-    fs.writeFileSync(path.join(root, artifact.relative), artifact.bytes, { flag: 'wx' })
-  }
-  fs.writeFileSync(manifestFile, `${JSON.stringify(proposal.manifest, null, 2)}\n`)
-  const generated = ['manifests/overlay.v1.json', ...proposal.artifacts.map(item => item.relative)]
-  git(['add', '--', ...generated], root)
-  git(['diff', '--check', '--cached'], root)
-  git(['commit', '-m', proposal.subject, '--', ...generated], root)
-
+function advanceEvidence(manifest, oldTip, source) {
   const id = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
   const incoming = `refs/gatherlocal/incoming-overlay/${id}`
   const recovery = `refs/gatherlocal/evidence-recovery/${id}`
-  git(['fetch', '--no-tags', '--no-write-fetch-head', source, `${proposal.manifest.source.tip}:${incoming}`], store)
+  git(['fetch', '--no-tags', '--no-write-fetch-head', source, `${manifest.source.tip}:${incoming}`], store)
   const transaction = [
     'start',
-    `verify ${REF} ${proposal.manifest.patches.at(-proposal.artifacts.length - 1).source_commit}`,
-    `create ${recovery} ${proposal.manifest.patches.at(-proposal.artifacts.length - 1).source_commit}`,
-    `update ${REF} ${proposal.manifest.source.tip} ${proposal.manifest.patches.at(-proposal.artifacts.length - 1).source_commit}`,
-    `delete ${incoming} ${proposal.manifest.source.tip}`,
+    `verify ${REF} ${oldTip}`,
+    `create ${recovery} ${oldTip}`,
+    `update ${REF} ${manifest.source.tip} ${oldTip}`,
+    `delete ${incoming} ${manifest.source.tip}`,
     'prepare',
     'commit',
     '',
@@ -172,17 +170,39 @@ function publishProposal(proposal, source) {
   git(['update-ref', '--stdin'], store, { input: Buffer.from(transaction) })
   loadAndVerifyManifest({ root, source: store })
   if (gitText(['status', '--porcelain'], root) !== '') fail('workflow repository dirty after intake')
-  return { id, recovery, tip: proposal.manifest.source.tip }
+  return { id, recovery, tip: manifest.source.tip }
+}
+
+function publishProposal(proposal, oldTip, source) {
+  for (const artifact of proposal.artifacts) {
+    fs.writeFileSync(path.join(root, artifact.relative), artifact.bytes, { flag: 'wx' })
+  }
+  fs.writeFileSync(manifestFile, `${JSON.stringify(proposal.manifest, null, 2)}\n`)
+  const generated = ['manifests/overlay.v1.json', ...proposal.artifacts.map(item => item.relative)]
+  git(['add', '--', ...generated], root)
+  git(['diff', '--check', '--cached', '--', '.', ':(exclude)patches/*.patch'], root)
+  git(['commit', '-m', proposal.subject, '--', ...generated], root)
+  return advanceEvidence(proposal.manifest, oldTip, source)
 }
 
 try {
   const options = parseArgs(process.argv.slice(2))
   assertRepositoryBoundaries(options.source)
-  const manifest = loadAndVerifyManifest({ root, source: store })
   const spec = JSON.parse(fs.readFileSync(options.spec, 'utf8'))
+  if (options.resume) {
+    const manifest = loadAndVerifyManifest({ root })
+    if (spec.expected_tip === manifest.source.tip) fail('resume requires an already-committed manifest extension')
+    const proposal = { manifest, artifacts: [], subject: spec.workflow_commit_subject }
+    verifyProposal(proposal, options.source)
+    const result = advanceEvidence(manifest, spec.expected_tip, options.source)
+    console.log(`PASS: overlay intake ${result.tip}`)
+    console.log(`Recovery ref: ${result.recovery}`)
+    process.exit(0)
+  }
+  const manifest = loadAndVerifyManifest({ root, source: store })
   const proposal = buildProposal(manifest, spec, options.source)
   verifyProposal(proposal, options.source)
-  const result = publishProposal(proposal, options.source)
+  const result = publishProposal(proposal, manifest.source.tip, options.source)
   console.log(`PASS: overlay intake ${result.tip}`)
   console.log(`Recovery ref: ${result.recovery}`)
 } catch (error) {

@@ -1,0 +1,491 @@
+From 734f88fafe96553e30f4331c9a2fcdfdff58543c Mon Sep 17 00:00:00 2001
+From: GatherLocal overlay intake <gatherlocal-overlay@invalid.local>
+Date: Wed, 15 Jul 2026 19:46:50 -0500
+Subject: [PATCH] Authorize user-owned local AI providers
+
+---
+ src/main/ai/bootstrap.js                  |  8 +---
+ src/main/gatherlocal/ai/authorization.js  | 29 ++++++++++++
+ src/main/ipc.js                           |  1 +
+ src/main/openai.js                        | 20 +++++++++
+ src/main/preload.js                       |  1 +
+ src/renderer/App.jsx                      | 16 ++++++-
+ src/renderer/components/DetailPanel.jsx   | 14 +++---
+ src/renderer/components/DetailPanelV2.jsx | 14 +++---
+ src/renderer/lib/aiAccess.mjs             |  9 ++++
+ test/gatherlocal-ai-access-view.test.js   | 30 +++++++++++++
+ test/gatherlocal-ai-authorization.test.js | 55 +++++++++++++++++++++++
+ test/openai-runtime-compat.test.js        | 29 ++++++++++++
+ 12 files changed, 202 insertions(+), 24 deletions(-)
+ create mode 100644 src/main/gatherlocal/ai/authorization.js
+ create mode 100644 src/renderer/lib/aiAccess.mjs
+ create mode 100644 test/gatherlocal-ai-access-view.test.js
+ create mode 100644 test/gatherlocal-ai-authorization.test.js
+
+diff --git a/src/main/ai/bootstrap.js b/src/main/ai/bootstrap.js
+index 1852258bc3e9915d2a1828c391226d154c08e8a4..798d818e7274b1cdac500393196a5dd366b3c0ce 100644
+--- a/src/main/ai/bootstrap.js
++++ b/src/main/ai/bootstrap.js
+@@ -3,15 +3,11 @@
+ const { createAiRuntime } = require('./runtime');
+ const { createGatherOsProxyAdapter } = require('./providers/gatheros-proxy');
+ const { createGatherLocalRoutes } = require('../gatherlocal/ai');
++const { createGatherLocalAuthorization } = require('../gatherlocal/ai/authorization');
+ 
+ let cachedRuntime = null;
+ 
+-function defaultAuthorize() {
+-  // Require lazily: this module is also loaded by Node-focused tests where
+-  // Electron's licensing client is intentionally unavailable.
+-  const { getEntitlement } = require('../entitlement');
+-  return Boolean(getEntitlement()?.proUnlocked);
+-}
++const defaultAuthorize = createGatherLocalAuthorization();
+ 
+ function createDefaultAiRuntime({
+   authorize = defaultAuthorize,
+diff --git a/src/main/gatherlocal/ai/authorization.js b/src/main/gatherlocal/ai/authorization.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..4cece2404fc726f606673655b174d869a4fbdece
+--- /dev/null
++++ b/src/main/gatherlocal/ai/authorization.js
+@@ -0,0 +1,29 @@
++'use strict';
++
++const USER_OWNED_PROVIDERS = new Set(['codex', 'local', 'ollama']);
++const BRETT_OWNED_PROVIDERS = new Set(['gatheros-proxy']);
++
++function providerAccess(provider) {
++  if (USER_OWNED_PROVIDERS.has(provider)) {
++    return { ownership: 'user', requiresPro: false };
++  }
++  if (BRETT_OWNED_PROVIDERS.has(provider)) {
++    return { ownership: 'gatheros', requiresPro: true };
++  }
++  return { ownership: 'unknown', requiresPro: true };
++}
++
++function createGatherLocalAuthorization({ getEntitlement } = {}) {
++  const resolveEntitlement = getEntitlement || (() => require('../../entitlement').getEntitlement());
++  return ({ provider } = {}) => {
++    const access = providerAccess(provider);
++    if (access.ownership === 'user') return { allowed: true, ...access };
++    if (access.ownership !== 'gatheros') return { allowed: false, ...access };
++    return { allowed: Boolean(resolveEntitlement()?.proUnlocked), ...access };
++  };
++}
++
++module.exports = {
++  createGatherLocalAuthorization,
++  providerAccess,
++};
+diff --git a/src/main/ipc.js b/src/main/ipc.js
+index 0be574366ab636c839b2bfe5bbeb8552c4cbd57b..fbaa31c2aca894487e8c7c7f825616a220323a1a 100644
+--- a/src/main/ipc.js
++++ b/src/main/ipc.js
+@@ -963,6 +963,7 @@ function registerIpcHandlers({ socialImportState = null } = {}) {
+   // whether a session is present and what the monthly counter looks
+   // like so it can show "AI features unlocked" + remaining quota.
+   ipcMain.handle('ai:has-session', () => hasAiSession());
++  ipcMain.handle('ai:access', () => require('./openai').getAccess());
+ 
+   ipcMain.handle('ai:usage', async () => {
+     const usage = await getAiUsage();
+diff --git a/src/main/openai.js b/src/main/openai.js
+index ad9d638877f5bbcd65c2d800ddd6e72e0f56fccf..391c91b7539af8bfbb42a53dd1987d54a7351e2b 100644
+--- a/src/main/openai.js
++++ b/src/main/openai.js
+@@ -6,6 +6,7 @@
+ 
+ const { getAiRuntime } = require('./ai/bootstrap');
+ const { CAPABILITIES } = require('./ai/runtime');
++const { providerAccess } = require('./gatherlocal/ai/authorization');
+ 
+ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
+   function hasSession() {
+@@ -14,6 +15,24 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
+     return runtime.isConfigured(CAPABILITIES.STRUCTURED_JSON);
+   }
+ 
++  function capabilityAccess(capability) {
++    const provider = runtime.providerFor(capability);
++    return {
++      capability,
++      provider,
++      configured: runtime.isConfigured(capability),
++      ...providerAccess(provider),
++    };
++  }
++
++  function getAccess() {
++    return {
++      structuredJson: capabilityAccess(CAPABILITIES.STRUCTURED_JSON),
++      embedding: capabilityAccess(CAPABILITIES.EMBEDDING),
++      imageGeneration: capabilityAccess(CAPABILITIES.IMAGE_GENERATION),
++    };
++  }
++
+   async function autoTagImage(filePath, { signal } = {}) {
+     const parsed = await runtime.completeJson({
+       system:
+@@ -117,6 +136,7 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
+ 
+   return {
+     hasSession,
++    getAccess,
+     autoTagImage,
+     analyzeImage,
+     generateImagePrompt,
+diff --git a/src/main/preload.js b/src/main/preload.js
+index 38580f146c73a9e88db592e503405b8ae811628f..8a709b7bc120c730d8afb76accb8e4ac62764c17 100644
+--- a/src/main/preload.js
++++ b/src/main/preload.js
+@@ -216,6 +216,7 @@ contextBridge.exposeInMainWorld('moodmark', {
+     // licensing.js is what gates these — no per-feature key to manage
+     // on the renderer side anymore.
+     hasSession: () => ipcRenderer.invoke('ai:has-session'),
++    access: () => ipcRenderer.invoke('ai:access'),
+     usage: () => ipcRenderer.invoke('ai:usage'),
+     autoTag: (saveId) => ipcRenderer.invoke('ai:auto-tag', saveId),
+     generatePrompt: (saveId) => ipcRenderer.invoke('ai:generate-prompt', saveId),
+diff --git a/src/renderer/App.jsx b/src/renderer/App.jsx
+index 8dc9ed423e36e7ba49a239bb9da5749bccb15f14..a46b5557c594769e7ae90ec25863b54a6116ef0a 100644
+--- a/src/renderer/App.jsx
++++ b/src/renderer/App.jsx
+@@ -106,6 +106,7 @@ import UpgradeModal from './components/UpgradeModal.jsx';
+ import UpgradeBanner from './components/UpgradeBanner.jsx';
+ import SocialImportActivity from './components/SocialImportActivity.jsx';
+ import { isTerminalStage } from './lib/socialImportView.mjs';
++import { canUseCapability, capabilityRequiresUpgrade } from './lib/aiAccess.mjs';
+ 
+ // Lucide-backed icon shims. Component names are kept identical to
+ // the previous inline SVG defs so every existing call site (right-
+@@ -834,6 +835,7 @@ export default function App({ entitlement } = {}) {
+   }, []);
+   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+   const [aiConfigured, setAiConfigured] = useState(false);
++  const [aiAccess, setAiAccess] = useState(null);
+   const [prefs, setPrefs] = useState({ autoNameOnSave: true, semanticSearch: true });
+ 
+   // Imperative handles for the global keyboard shortcuts.
+@@ -861,7 +863,12 @@ export default function App({ entitlement } = {}) {
+   // boolean so back-to-back creates each re-trigger the rename.
+   const [renameViewSignal, setRenameViewSignal] = useState(0);
+   useEffect(() => {
+-    window.moodmark.ai.hasSession().then(setAiConfigured);
++    window.moodmark.ai.access().then((access) => {
++      setAiAccess(access || null);
++      setAiConfigured(!!access?.structuredJson?.configured);
++    }).catch(() => {
++      window.moodmark.ai.hasSession().then(setAiConfigured).catch(() => setAiConfigured(false));
++    });
+     window.moodmark.settings.getPrefs().then((p) => {
+       setPrefs(p);
+       // Prime the save-sound engine from saved prefs.
+@@ -892,7 +899,11 @@ export default function App({ entitlement } = {}) {
+   // license session — search will route through embeddings rather
+   // than LIKE. Locked in the free tier (semantic search is pro); the
+   // app falls back to plain LIKE search, which still works fine.
+-  const semanticSearchActive = aiConfigured && !!prefs.semanticSearch && !proLocked;
++  const embeddingAccess = aiAccess?.embedding;
++  const semanticSearchActive = !!prefs.semanticSearch
++    && canUseCapability(embeddingAccess, proLocked);
++  const structuredAccess = aiAccess?.structuredJson;
++  const aiRequiresUpgrade = capabilityRequiresUpgrade(structuredAccess, proLocked);
+ 
+   // Set of save ids the main process is currently AI-indexing. Driven
+   // by save:indexing-start / save:indexing-end events. DetailPanel
+@@ -3884,6 +3895,7 @@ export default function App({ entitlement } = {}) {
+             allCollections={collections}
+             allTags={allTags}
+             aiConfigured={aiConfigured}
++            aiRequiresUpgrade={aiRequiresUpgrade}
+             aiIndexing={indexingIds.has(focused.id)}
+             altImageIdx={focusedAltImageIdx}
+             onAltImageIdxChange={setFocusedAltImageIdx}
+diff --git a/src/renderer/components/DetailPanel.jsx b/src/renderer/components/DetailPanel.jsx
+index 3d2081ed1b483ebe5c1fa83a0bf88fa1bc3d199e..c4fe11b4a9362ea5aca6539db88e6a9b65d3796b 100644
+--- a/src/renderer/components/DetailPanel.jsx
++++ b/src/renderer/components/DetailPanel.jsx
+@@ -10,7 +10,7 @@ import TagSuggestions from './TagSuggestions.jsx';
+ import { fuzzyMatch } from '../lib/fuzzy.js';
+ import { findNearDuplicateTag } from '../lib/tagSimilarity.js';
+ import { CollectionIcon } from './Sidebar.jsx';
+-import { useEntitlementValue, isLocked, requestUpgrade } from '../context/entitlement.jsx';
++import { requestUpgrade } from '../context/entitlement.jsx';
+ 
+ const SUGGESTION_LIMIT = 6;
+ 
+@@ -193,6 +193,7 @@ export default function DetailPanel({
+   allCollections = [],
+   allTags = [],
+   aiConfigured = false,
++  aiRequiresUpgrade = false,
+   aiIndexing = false,
+   onClose,
+   onCollectionsChanged,
+@@ -223,9 +224,6 @@ export default function DetailPanel({
+     try { return new URL(record?.source_url).hostname.replace(/^www\./, ''); }
+     catch { return ''; }
+   })();
+-  // AI features (auto-tag, prompt generation) are pro; locked in the
+-  // free tier. Fails open to unlocked.
+-  const proLocked = isLocked(useEntitlementValue());
+   const src = fileUrl(record.file_path);
+   const typeLabel = fileTypeLabel(record.file_path);
+   // Text-only tweets render as a card (no real image), so the preview
+@@ -459,7 +457,7 @@ export default function DetailPanel({
+ 
+   async function handleAutoTag() {
+     if (autoTagging) return;
+-    if (proLocked) { requestUpgrade('ai'); return; }
++    if (aiRequiresUpgrade) { requestUpgrade('ai'); return; }
+     if (!aiConfigured) {
+       onOpenSettings?.();
+       return;
+@@ -486,7 +484,7 @@ export default function DetailPanel({
+ 
+   async function handleGeneratePrompt() {
+     if (promptGenerating) return;
+-    if (proLocked) { requestUpgrade('ai'); return; }
++    if (aiRequiresUpgrade) { requestUpgrade('ai'); return; }
+     if (!aiConfigured) {
+       onOpenSettings?.();
+       return;
+@@ -1084,7 +1082,7 @@ export default function DetailPanel({
+             ].filter(Boolean).join(' ')}
+             onClick={handleGeneratePrompt}
+             disabled={promptGenerating}
+-            title={aiConfigured ? 'Generate an image-generation prompt' : 'Configure OpenAI key to enable'}
++            title={aiConfigured ? 'Generate an image-generation prompt' : 'AI provider unavailable'}
+           >
+             <span className={styles.autoTagIcon}>
+               {aiConfigured ? <SparkleIcon /> : <LockIcon />}
+@@ -1218,7 +1216,7 @@ export default function DetailPanel({
+             className={[styles.autoTagBtn, autoTagging && styles.autoTagBtnLoading].filter(Boolean).join(' ')}
+             onClick={handleAutoTag}
+             disabled={autoTagging}
+-            title={aiConfigured ? 'Auto-tag with AI' : 'Configure OpenAI key to enable'}
++            title={aiConfigured ? 'Auto-tag with AI' : 'AI provider unavailable'}
+           >
+             <span className={styles.autoTagIcon}>
+               {aiConfigured ? <SparkleIcon /> : <LockIcon />}
+diff --git a/src/renderer/components/DetailPanelV2.jsx b/src/renderer/components/DetailPanelV2.jsx
+index e3e74d4ad3eeb06cb2b55f8b023235bb3368c7d7..0b71bb8d7eb4ef005cf8ff90f87912ffbc27b66f 100644
+--- a/src/renderer/components/DetailPanelV2.jsx
++++ b/src/renderer/components/DetailPanelV2.jsx
+@@ -8,7 +8,7 @@ import TagSuggestions from './TagSuggestions.jsx';
+ import { fuzzyMatch } from '../lib/fuzzy.js';
+ import { findNearDuplicateTag } from '../lib/tagSimilarity.js';
+ import { CollectionIcon } from './Sidebar.jsx';
+-import { useEntitlementValue, isLocked, requestUpgrade } from '../context/entitlement.jsx';
++import { requestUpgrade } from '../context/entitlement.jsx';
+ 
+ const SUGGESTION_LIMIT = 6;
+ 
+@@ -142,6 +142,7 @@ export default function DetailPanel({
+   allCollections = [],
+   allTags = [],
+   aiConfigured = false,
++  aiRequiresUpgrade = false,
+   aiIndexing = false,
+   onClose,
+   onCollectionsChanged,
+@@ -151,9 +152,6 @@ export default function DetailPanel({
+   onOpenSave,
+   onOpenSpace,
+ }) {
+-  // AI features (auto-tag, prompt generation) are pro; locked in the
+-  // free tier. Fails open to unlocked.
+-  const proLocked = isLocked(useEntitlementValue());
+   const src = fileUrl(record.file_path);
+   const typeLabel = fileTypeLabel(record.file_path);
+   const [copiedColor, setCopiedColor] = useState(null);
+@@ -387,7 +385,7 @@ export default function DetailPanel({
+ 
+   async function handleAutoTag() {
+     if (autoTagging) return;
+-    if (proLocked) { requestUpgrade('ai'); return; }
++    if (aiRequiresUpgrade) { requestUpgrade('ai'); return; }
+     if (!aiConfigured) {
+       onOpenSettings?.();
+       return;
+@@ -414,7 +412,7 @@ export default function DetailPanel({
+ 
+   async function handleGeneratePrompt() {
+     if (promptGenerating) return;
+-    if (proLocked) { requestUpgrade('ai'); return; }
++    if (aiRequiresUpgrade) { requestUpgrade('ai'); return; }
+     if (!aiConfigured) {
+       onOpenSettings?.();
+       return;
+@@ -853,7 +851,7 @@ export default function DetailPanel({
+             className={[styles.autoTagBtn, autoTagging && styles.autoTagBtnLoading].filter(Boolean).join(' ')}
+             onClick={handleAutoTag}
+             disabled={autoTagging}
+-            title={aiConfigured ? 'Auto-tag with AI' : 'Configure OpenAI key to enable'}
++            title={aiConfigured ? 'Auto-tag with AI' : 'AI provider unavailable'}
+           >
+             <span className={styles.autoTagIcon}>
+               {aiConfigured ? <SparkleIcon /> : <LockIcon />}
+@@ -991,7 +989,7 @@ export default function DetailPanel({
+                   ].filter(Boolean).join(' ')}
+                   onClick={handleGeneratePrompt}
+                   disabled={promptGenerating}
+-                  title={aiConfigured ? 'Generate an image-generation prompt' : 'Configure OpenAI key to enable'}
++                  title={aiConfigured ? 'Generate an image-generation prompt' : 'AI provider unavailable'}
+                 >
+                   <span className={styles.autoTagIcon}>
+                     {aiConfigured ? <SparkleIcon /> : <LockIcon />}
+diff --git a/src/renderer/lib/aiAccess.mjs b/src/renderer/lib/aiAccess.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..4ee85cb1e48a7bd4443474eb3878941970b4eaae
+--- /dev/null
++++ b/src/renderer/lib/aiAccess.mjs
+@@ -0,0 +1,9 @@
++export function canUseCapability(access, proLocked) {
++  if (!access?.configured) return false;
++  return !access.requiresPro || !proLocked;
++}
++
++export function capabilityRequiresUpgrade(access, proLocked) {
++  if (!proLocked) return false;
++  return access ? !!access.requiresPro : true;
++}
+diff --git a/test/gatherlocal-ai-access-view.test.js b/test/gatherlocal-ai-access-view.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..e1f3c027eed587cdd3d5e0741c382bd22ed0a4fb
+--- /dev/null
++++ b/test/gatherlocal-ai-access-view.test.js
+@@ -0,0 +1,30 @@
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++async function helpers() {
++  return import('../src/renderer/lib/aiAccess.mjs');
++}
++
++test('user-owned AI remains usable without GatherOS Pro', async () => {
++  const { canUseCapability, capabilityRequiresUpgrade } = await helpers();
++  const local = { configured: true, ownership: 'user', requiresPro: false };
++  assert.equal(canUseCapability(local, true), true);
++  assert.equal(capabilityRequiresUpgrade(local, true), false);
++});
++
++test('GatherOS proxy remains locked without Pro', async () => {
++  const { canUseCapability, capabilityRequiresUpgrade } = await helpers();
++  const proxy = { configured: true, ownership: 'gatheros', requiresPro: true };
++  assert.equal(canUseCapability(proxy, true), false);
++  assert.equal(capabilityRequiresUpgrade(proxy, true), true);
++  assert.equal(canUseCapability(proxy, false), true);
++});
++
++test('unconfigured and unresolved capabilities fail closed', async () => {
++  const { canUseCapability, capabilityRequiresUpgrade } = await helpers();
++  assert.equal(canUseCapability({ configured: false, requiresPro: false }, true), false);
++  assert.equal(canUseCapability(null, true), false);
++  assert.equal(capabilityRequiresUpgrade(null, true), true);
++});
+diff --git a/test/gatherlocal-ai-authorization.test.js b/test/gatherlocal-ai-authorization.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..334886a09b93d7ffb69a39b5c9bd46c07c8a4b3c
+--- /dev/null
++++ b/test/gatherlocal-ai-authorization.test.js
+@@ -0,0 +1,55 @@
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++const {
++  createGatherLocalAuthorization,
++  providerAccess,
++} = require('../src/main/gatherlocal/ai/authorization');
++
++test('user-owned providers do not consume GatherOS entitlement', () => {
++  let entitlementReads = 0;
++  const authorize = createGatherLocalAuthorization({
++    getEntitlement: () => {
++      entitlementReads += 1;
++      return { proUnlocked: false };
++    },
++  });
++
++  for (const provider of ['codex', 'local', 'ollama']) {
++    assert.deepEqual(authorize({ provider }), {
++      allowed: true,
++      ownership: 'user',
++      requiresPro: false,
++    });
++  }
++  assert.equal(entitlementReads, 0);
++});
++
++test('GatherOS proxy keeps Brett entitlement enforcement', () => {
++  const denied = createGatherLocalAuthorization({
++    getEntitlement: () => ({ proUnlocked: false }),
++  });
++  const allowed = createGatherLocalAuthorization({
++    getEntitlement: () => ({ proUnlocked: true }),
++  });
++
++  assert.equal(denied({ provider: 'gatheros-proxy' }).allowed, false);
++  assert.equal(allowed({ provider: 'gatheros-proxy' }).allowed, true);
++  assert.deepEqual(providerAccess('gatheros-proxy'), {
++    ownership: 'gatheros',
++    requiresPro: true,
++  });
++});
++
++test('unknown providers fail closed', () => {
++  const authorize = createGatherLocalAuthorization({
++    getEntitlement: () => ({ proUnlocked: true }),
++  });
++  assert.deepEqual(authorize({ provider: 'mystery' }), {
++    allowed: false,
++    ownership: 'unknown',
++    requiresPro: true,
++  });
++});
+diff --git a/test/openai-runtime-compat.test.js b/test/openai-runtime-compat.test.js
+index ce379c8c3bb50c74d7bb3e7c1bf3cf0c8eba33a3..386caee3e0ac5cf1dbb6444af8665e0db1ea5fd3 100644
+--- a/test/openai-runtime-compat.test.js
++++ b/test/openai-runtime-compat.test.js
+@@ -39,3 +39,32 @@ test('openai facade preserves embedding vector compatibility', async () => {
+   assert.equal(request.text, 'visual query');
+   assert.equal(request.expectedDimension, 2);
+ });
++
++test('openai facade reports provider ownership per capability', () => {
++  const providers = {
++    'structured-json': 'codex',
++    embedding: 'ollama',
++    'image-generation': 'gatheros-proxy',
++  };
++  const facade = createOpenAiFacade({
++    runtime: {
++      providerFor: (capability) => providers[capability] || null,
++      isConfigured: (capability) => capability !== 'image-generation',
++    },
++  });
++
++  assert.deepEqual(facade.getAccess().structuredJson, {
++    capability: 'structured-json',
++    provider: 'codex',
++    configured: true,
++    ownership: 'user',
++    requiresPro: false,
++  });
++  assert.deepEqual(facade.getAccess().imageGeneration, {
++    capability: 'image-generation',
++    provider: 'gatheros-proxy',
++    configured: false,
++    ownership: 'gatheros',
++    requiresPro: true,
++  });
++});
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,3543 @@
+From f8380e3f793b65ae758fd8d4dfa0f63ca5b5f0ec Mon Sep 17 00:00:00 2001
+From: GatherLocal overlay intake <gatherlocal-overlay@invalid.local>
+Date: Wed, 15 Jul 2026 19:46:50 -0500
+Subject: [PATCH] Add X and social import workflow
+
+---
+ .../2026-07-10-x-bookmark-catch-up-import.md  | 161 ++++++
+ extension/background.js                       | 470 ++++++++++++++----
+ extension/catch-up-import.mjs                 |  50 ++
+ extension/content/x-bookmark-watcher.js       |   9 +
+ extension/content/x-graphql-interceptor.js    |   6 +
+ extension/import-limit.mjs                    |  30 ++
+ extension/panel.js                            |   9 +-
+ extension/save-response.mjs                   |  14 +
+ extension/social-import-progress.mjs          |  74 +++
+ extension/x-import-transport.mjs              |  80 +++
+ src/main/db.js                                | 118 ++++-
+ src/main/extension-server.js                  | 162 +++++-
+ src/main/index.js                             |  16 +-
+ src/main/ipc.js                               |   9 +-
+ src/main/native-host.js                       |  37 +-
+ src/main/preload.js                           |   6 +
+ src/main/settings.js                          |   1 +
+ src/main/social-import-state.js               |  97 ++++
+ src/main/x-tweet-date.js                      |  17 +
+ src/renderer/App.jsx                          |  77 ++-
+ src/renderer/components/SettingsModal.jsx     |  14 +-
+ .../components/SocialImportActivity.jsx       | 112 +++++
+ .../SocialImportActivity.module.css           | 114 +++++
+ src/renderer/lib/saveSortDate.mjs             |  18 +
+ src/renderer/lib/socialImportView.mjs         |  92 ++++
+ test/catch-up-import.test.js                  | 108 ++++
+ test/import-limit.test.js                     |  22 +
+ test/save-response.test.js                    |  24 +
+ test/save-sort-date.test.js                   |  34 ++
+ test/social-import-progress.test.js           |  73 +++
+ test/social-import-state.test.js              |  78 +++
+ test/social-import-view.test.js               |  55 ++
+ test/x-bookmark-status.test.js                | 231 +++++++++
+ test/x-import-transport.test.js               | 160 ++++++
+ 34 files changed, 2436 insertions(+), 142 deletions(-)
+ create mode 100644 docs/superpowers/plans/2026-07-10-x-bookmark-catch-up-import.md
+ create mode 100644 extension/catch-up-import.mjs
+ create mode 100644 extension/import-limit.mjs
+ create mode 100644 extension/save-response.mjs
+ create mode 100644 extension/social-import-progress.mjs
+ create mode 100644 extension/x-import-transport.mjs
+ create mode 100644 src/main/social-import-state.js
+ create mode 100644 src/main/x-tweet-date.js
+ create mode 100644 src/renderer/components/SocialImportActivity.jsx
+ create mode 100644 src/renderer/components/SocialImportActivity.module.css
+ create mode 100644 src/renderer/lib/saveSortDate.mjs
+ create mode 100644 src/renderer/lib/socialImportView.mjs
+ create mode 100644 test/catch-up-import.test.js
+ create mode 100644 test/import-limit.test.js
+ create mode 100644 test/save-response.test.js
+ create mode 100644 test/save-sort-date.test.js
+ create mode 100644 test/social-import-progress.test.js
+ create mode 100644 test/social-import-state.test.js
+ create mode 100644 test/social-import-view.test.js
+ create mode 100644 test/x-bookmark-status.test.js
+ create mode 100644 test/x-import-transport.test.js
+
+diff --git a/docs/superpowers/plans/2026-07-10-x-bookmark-catch-up-import.md b/docs/superpowers/plans/2026-07-10-x-bookmark-catch-up-import.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..7c1a802df9745825a1f027578e807e36b5a17426
+--- /dev/null
++++ b/docs/superpowers/plans/2026-07-10-x-bookmark-catch-up-import.md
+@@ -0,0 +1,161 @@
++# X Bookmark Catch-Up Import Implementation Plan
++
++> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
++
++**Goal:** Add an X import mode that saves missed recent bookmarks and stops after two consecutive active-or-dismissed bookmarks known to GatherLocal.
++
++**Architecture:** GatherLocal classifies ordered X URLs through a token-authenticated desktop contract; extension applies a small deterministic catch-up state machine to API replay and scroll fallback. Desktop DB remains source of truth, tombstones remain intact, and existing count/all modes keep their force-import behavior.
++
++**Tech Stack:** Electron/Node CommonJS, Chrome MV3 JavaScript, SQLite via better-sqlite3, `node:test`.
++
++---
++
++### Task 1: Catch-up stop policy
++
++**Files:**
++- Create: `extension/catch-up-import.mjs`
++- Create: `test/catch-up-import.test.js`
++
++- [x] **Step 1: Write failing policy tests**
++
++Test public `applyCatchUpStatus(state, status)` with literal sequences:
++
++```js
++assert.deepEqual(run(['new', 'known-active', 'known-active']), {
++  saves: 1, stopped: true, knownStreak: 2,
++});
++assert.deepEqual(run(['known-active', 'new', 'known-dismissed', 'known-active']), {
++  saves: 1, stopped: true, knownStreak: 2,
++});
++assert.deepEqual(run(['known-dismissed', 'known-active']), {
++  saves: 0, stopped: true, knownStreak: 2,
++});
++```
++
++- [x] **Step 2: Run RED**
++
++Run: `rtk node --test test/catch-up-import.test.js`
++Expected: FAIL because `extension/catch-up-import.mjs` does not exist.
++
++- [x] **Step 3: Implement minimal state machine**
++
++Export `applyCatchUpStatus(state, status)`. `new` returns `shouldSave: true`, resets `knownStreak`; either known value increments streak and returns `shouldStop: true` only at `2`; unknown statuses throw.
++
++- [x] **Step 4: Run GREEN**
++
++Run: `rtk node --test test/catch-up-import.test.js`
++Expected: all policy tests PASS.
++
++### Task 2: Desktop bookmark-status source of truth
++
++**Files:**
++- Modify: `src/main/db.js`
++- Modify: `src/main/extension-server.js`
++- Modify: `src/main/native-host.js`
++- Create: `test/x-bookmark-status.test.js`
++
++- [x] **Step 1: Write failing DB and HTTP contract tests**
++
++Use repo temp-DB helpers. Seed one live X save and one `dismissed_tweets` key. Assert ordered classification:
++
++```js
++assert.deepEqual(classifyXBookmarkUrls([
++  'https://x.com/a/status/101',
++  'https://x.com/b/status/202',
++  'https://x.com/c/status/303',
++]), {
++  hasKnownHistory: true,
++  statuses: ['known-active', 'known-dismissed', 'new'],
++});
++```
++
++Also assert empty DB returns `hasKnownHistory: false`; invalid/non-X URL is `new`; batches above 100 are rejected. Start the local extension server against the temp DB, call authenticated `POST /x-bookmark-status`, and assert HTTP 200 plus exact ordered response keys. Send an invalid token and assert HTTP 401.
++
++- [x] **Step 2: Run RED**
++
++Run: `rtk node --test test/x-bookmark-status.test.js`
++Expected: FAIL because classifier/route do not exist.
++
++- [x] **Step 3: Implement DB classifier**
++
++Add/export `classifyXBookmarkUrls(tweetUrls)`. Canonicalize with `tweetKeyFromUrl`. Query live `saves` (`deleted_at IS NULL`, X status source URL) and `dismissed_tweets`; classify tombstone before active; compute `hasKnownHistory` from any live X save or `tw:%` tombstone. Preserve input order. Reject non-array and length over 100.
++
++- [x] **Step 4: Implement authenticated server route**
++
++Generalize JSON POST auth/body parsing without changing `/save`. Add `POST /x-bookmark-status`, token-protected and origin-checked, accepting `{ tweetUrls }`; return `{ ok: true, hasKnownHistory, statuses }`. Invalid input returns HTTP 400.
++
++- [x] **Step 5: Implement native relay**
++
++Generalize `postToApp(body, token, path = '/save')`. Handle native message `{ type: 'x-bookmark-status', tweetUrls }`, require running app/token like save, POST to `/x-bookmark-status`, return body unchanged.
++
++- [x] **Step 6: Run GREEN + syntax checks**
++
++Run: `rtk node --test test/x-bookmark-status.test.js`
++Run: `rtk node --check src/main/db.js src/main/extension-server.js src/main/native-host.js`
++Expected: PASS.
++
++### Task 3: Importer and panel integration
++
++**Files:**
++- Modify: `extension/panel.js`
++- Modify: `extension/background.js`
++- Modify: `extension/import-limit.mjs` only if shared run-state helpers belong there
++- Modify: `test/catch-up-import.test.js`
++- Modify: `test/import-limit.test.js` only for fixed-mode regression coverage
++
++- [x] **Step 1: Add failing orchestration tests at helper seam**
++
++Add a page helper test proving ordered statuses yield only new entries before the second consecutive known marker, including `known, new, known, known`. Add regression assertion that numeric claim limits remain unchanged.
++
++- [x] **Step 2: Run RED**
++
++Run: `rtk node --test test/catch-up-import.test.js test/import-limit.test.js`
++Expected: new orchestration test FAILS; existing limit tests PASS.
++
++- [x] **Step 3: Add panel mode**
++
++Add selector option `Catch up to latest saved` with nonnumeric value `catch-up`. Send `{ type: 'gatheros:import-bookmarks', mode: 'catch-up' }`; numeric options continue sending `limit`. Handle `{ noBoundary: true }` by keeping panel open, restoring button, and showing `No previous X bookmark found. Choose a fixed amount instead.`
++
++- [x] **Step 4: Add preflight and mode state**
++
++Before starting catch-up, send native `x-bookmark-status` with `tweetUrls: []`. If `hasKnownHistory` is false, return `{ ok: false, noBoundary: true }`. Store `mode: 'catch-up'`, `knownStreak: 0`, and no finite claim limit. Fixed modes retain current state and `force: true` saves.
++
++- [x] **Step 5: Apply same ordered policy to both transports**
++
++For each API page or scroll batch, call desktop status once with ordered `tweetUrl` values. Walk entries/statuses together. In catch-up mode: known entries are not saved; new entries save with `force: false`; successful new save resets streak; second consecutive known ends import. A classification/save rejection stops run with partial-progress notification. API pagination ending before boundary reports completion without claiming `Already caught up.` Scroll mode pauses immediately at boundary before finishing queued saves.
++
++- [x] **Step 6: Add completion copy**
++
++When boundary reached with zero new saves, notify `Already caught up.` Otherwise retain accurate imported-count summary. Do not use this copy for bottom, timeout, or error completion.
++
++- [x] **Step 7: Run GREEN + extension checks**
++
++Run: `rtk node --test test/catch-up-import.test.js test/import-limit.test.js test/save-response.test.js test/x-bookmark-status.test.js`
++Run: `rtk node --check extension/background.js extension/panel.js extension/content/x-bookmark-watcher.js extension/import-limit.mjs extension/catch-up-import.mjs`
++Expected: PASS.
++
++### Task 4: Full verification and commit
++
++**Files:**
++- Modify only files listed above plus this plan/spec when needed for accuracy.
++
++- [x] **Step 1: Run repo checks**
++
++Run: `rtk npm run test:ai`
++Run: `rtk npm run build:renderer`
++Run: `rtk git diff --check`
++Expected: all PASS.
++
++- [x] **Step 2: Inspect scope and diff**
++
++Run: `rtk git status --short`
++Run: `rtk git diff --stat 7b82825...HEAD`
++Run: `rtk git diff 7b82825...HEAD -- extension src/main test docs/superpowers/plans`
++Confirm no unrelated files, contract matches spec, fixed/all imports still force-import.
++
++- [x] **Step 3: Commit**
++
++```bash
++rtk git add extension src/main test docs/superpowers/plans/2026-07-10-x-bookmark-catch-up-import.md
++rtk git commit -m "Add X bookmark catch-up import"
++```
+diff --git a/extension/background.js b/extension/background.js
+index c06418289965a48be75db5a50af200e4c8e9bbc8..83281ca0b2520071f4892e1c1094684bff5d8789 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -1,4 +1,22 @@
+ import { NATIVE_HOST_NAME } from './identity.mjs';
++import {
++  importLimitReached,
++  importProcessedCount,
++  rememberImportEntries,
++} from './import-limit.mjs';
++import {
++  isAcceptedSaveResponse,
++  isNewImportedSaveResponse,
++} from './save-response.mjs';
++import {
++  catchUpPreflightResult,
++  catchUpSummary,
++} from './catch-up-import.mjs';
++import {
++  runCatchUpTransportBatch,
++  runFixedTransportBatch,
++} from './x-import-transport.mjs';
++import { createSocialImportProgress } from './social-import-progress.mjs';
+ 
+ // Service worker for the GatherLocal browser extension.
+ //
+@@ -249,11 +267,13 @@ function handleClickBookmark(msg, sendResponse) {
+     tweetMeta: msg.tweetMeta,
+     tags: msg.tags,
+   }).then(async (response) => {
+-    const ok = !!(response && response.ok);
++    const ok = isAcceptedSaveResponse(response);
+     sendResponse({
+       ok,
+       duplicate: !!(response && response.duplicate),
+-      error: response?.error || null,
++      error: response?.error
++        || (response?.syncDisabled ? 'Bookmark sync is disabled in GatherLocal.' : null)
++        || (response?.skipped ? 'Save skipped.' : null),
+     });
+     // Mark this tweet as seen so the bookmark-batch flow (cross-
+     // device sync) doesn't re-import it later. We do this even on
+@@ -359,17 +379,14 @@ async function handleBookmarkBatch(bookmarks) {
+   const toImport = bookmarks.filter((b) => b && b.tweetId && !seen.has(b.tweetId));
+   for (const b of toImport) {
+     try {
+-      await syncBookmarkToGather(b);
+-      // Add to seen even when the save fails offline — the next
+-      // visit will retry naturally because the bookmark will appear
+-      // in the response again. Tracking it as "seen" only on
+-      // confirmed save would otherwise re-attempt on every poll.
+-      seen.add(b.tweetId);
++      const response = await syncBookmarkToGather(b);
++      if (isAcceptedSaveResponse(response)) {
++        seen.add(b.tweetId);
++      } else {
++        console.warn('[gatheros] cross-device bookmark sync rejected:', response?.error || 'save not accepted');
++      }
+     } catch (err) {
+       console.warn('[gatheros] cross-device bookmark sync failed:', err?.message || err);
+-      // Still mark seen — same reasoning as above; an unrecoverable
+-      // failure (e.g. content_hash bug) shouldn't loop forever.
+-      seen.add(b.tweetId);
+     }
+   }
+   await writeSeenSet(seen);
+@@ -406,6 +423,27 @@ const IMPORT_WATCHDOG_MS = 6 * 60 * 1000;
+ //   stagnant:number, watchdog:timeoutId }
+ let importState = null;
+ 
++function createImportProgress(platform, mode, target = null) {
++  return createSocialImportProgress({
++    sendNativeMessage: (host, payload) => chrome.runtime.sendNativeMessage(host, payload),
++    hostName: HOST_NAME,
++    log: (...args) => console.warn(...args),
++  });
++}
++
++function reserveSocialImport(platform) {
++  if ((importState && importState.active) || (igImportState && igImportState.active)) return null;
++  const reservation = { active: true, reservation: true, platform };
++  if (platform === 'x') importState = reservation;
++  else igImportState = reservation;
++  return reservation;
++}
++
++function releaseSocialImport(platform, reservation) {
++  if (platform === 'x' && importState === reservation) importState = null;
++  if (platform === 'instagram' && igImportState === reservation) igImportState = null;
++}
++
+ // Signed-in checks via each platform's real login cookie (auth_token /
+ // sessionid — the CSRF tokens exist for guests, so they aren't proof of
+ // a session). Returned to the panel so it can show an inline "sign in"
+@@ -424,17 +462,20 @@ async function igSignedIn() {
+ }
+ 
+ async function handleImportBookmarks(msg) {
++  const reservation = reserveSocialImport('x');
++  if (!reservation) {
++    notify('A bookmark import is already running.');
++    return { ok: false, busy: true };
++  }
+   const { [STORAGE_IMPORT_DISABLED_KEY]: disabled } =
+     await chrome.storage.local.get(STORAGE_IMPORT_DISABLED_KEY);
+   if (disabled) {
++    releaseSocialImport('x', reservation);
+     notify('Bookmark import is temporarily unavailable.');
+     return { ok: false, disabled: true };
+   }
+-  if (importState && importState.active) {
+-    notify('A bookmark import is already running.');
+-    return { ok: false, busy: true };
+-  }
+   if (!(await xSignedIn())) {
++    releaseSocialImport('x', reservation);
+     return { ok: false, needsSignIn: true, platform: 'x' };
+   }
+ 
+@@ -442,20 +483,54 @@ async function handleImportBookmarks(msg) {
+   // saves — every import would just fail. Tell the user to open it.
+   const status = await pingApp();
+   if (!status || status.hostMissing || !status.appRunning) {
++    releaseSocialImport('x', reservation);
+     notify('Open GatherLocal first, then run Import bookmarks.');
+     return { ok: false, appClosed: true };
+   }
+ 
++  const mode = msg && msg.mode === 'catch-up' ? 'catch-up' : 'fixed';
++  if (mode === 'catch-up') {
++    try {
++      const boundary = await requestXBookmarkStatus([]);
++      if (!boundary || !boundary.ok) {
++        releaseSocialImport('x', reservation);
++        notify('Could not reach GatherOS.');
++        return { ok: false, error: 'Could not reach GatherOS.' };
++      }
++      const preflight = catchUpPreflightResult(boundary);
++      if (preflight) {
++        releaseSocialImport('x', reservation);
++        return preflight;
++      }
++    } catch {
++      releaseSocialImport('x', reservation);
++      notify('Could not reach GatherOS.');
++      return { ok: false, error: 'Could not reach GatherOS.' };
++    }
++  }
++
+   // 0 / missing / non-positive = "all".
+   const n = Number(msg && msg.limit);
+-  const limit = Number.isFinite(n) && n > 0 ? n : Infinity;
++  const limit = mode === 'catch-up' ? Infinity : (Number.isFinite(n) && n > 0 ? n : Infinity);
+ 
+   // Background import — replay the captured Bookmarks request and follow
+   // the cursor, no tab or auto-scroll (mirrors the Instagram path).
+-  runXApiImport(limit);
++  runXApiImport(limit, mode, reservation);
+   return { ok: true };
+ }
+ 
++async function requestXBookmarkStatus(tweetUrls) {
++  const response = await chrome.runtime.sendNativeMessage(HOST_NAME, {
++    type: 'x-bookmark-status',
++    tweetUrls,
++  });
++  if (!response || !response.ok || !Array.isArray(response.statuses)
++    || response.statuses.length !== tweetUrls.length) {
++    throw new Error(response?.error || 'bookmark status failed');
++  }
++  return response;
++}
++
+ // Rewrite the Bookmarks request URL's `variables` JSON to page from a
+ // given cursor (X paginates via variables.cursor, not a query param).
+ function xWithCursor(baseUrl, cursor) {
+@@ -484,10 +559,11 @@ function extractBottomCursor(json) {
+ }
+ 
+ // Paginate the captured Bookmarks GraphQL request from the worker,
+-// following the bottom cursor, importing each bookmark (force = override
+-// tombstones) up to `limit`. Uses the stored bearer + a fresh ct0 cookie;
++// following the bottom cursor, importing each bookmark up to `limit`.
++// Fixed/all imports override tombstones; catch-up preserves them.
++// Uses the stored bearer + a fresh ct0 cookie;
+ // no tab, no scroll.
+-async function runXApiImport(limit) {
++async function runXApiImport(limit, mode = 'fixed', reservation = null) {
+   // Signed-in check first. auth_token is X's real login cookie (ct0 is
+   // the CSRF token and can exist for guests), so check it before doing
+   // anything — a signed-out user gets a clear message instead of being
+@@ -501,17 +577,21 @@ async function runXApiImport(limit) {
+     if (c && c.value) csrf = c.value;
+   } catch { /* ignore */ }
+   if (!authToken) {
++    releaseSocialImport('x', reservation);
+     notify('Sign in to X in this browser, then run Import bookmarks.');
+     return;
+   }
+ 
++  const progress = createImportProgress('x', mode, mode === 'fixed' && Number.isFinite(limit) ? limit : null);
++  await progress.start({ platform: 'x', mode, target: mode === 'fixed' && Number.isFinite(limit) ? limit : null });
++
+   const { [STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(STORAGE_TEMPLATE_KEY);
+ 
+   // Signed in but no replayable request yet (or no csrf) — fall back to
+   // the visible bookmarks tab, which captures a fresh template so the
+   // quiet path works next time.
+   if (!template || !template.url || !template.authorization || !csrf) {
+-    return runXScrollImport(limit);
++    return runXScrollImport(limit, mode, progress, reservation);
+   }
+ 
+   const headers = {
+@@ -529,15 +609,31 @@ async function runXApiImport(limit) {
+   let json;
+   try {
+     const res = await fetch(template.url, { method: 'GET', credentials: 'include', headers });
+-    if (!res.ok) return runXScrollImport(limit);
++    if (!res.ok) return runXScrollImport(limit, mode, progress, reservation);
+     json = await res.json();
+   } catch {
+-    return runXScrollImport(limit);
++    return runXScrollImport(limit, mode, progress, reservation);
+   }
+   let entries = pollExtractBookmarkEntries(json);
+-  if (entries.length === 0) return runXScrollImport(limit);
++  if (entries.length === 0) return runXScrollImport(limit, mode, progress, reservation);
+ 
+-  importState = { active: true, apiMode: true, limit, imported: 0, processed: 0 };
++  const state = {
++    active: true,
++    apiMode: true,
++    limit,
++    imported: 0,
++    known: 0,
++    failed: 0,
++    processed: new Set(),
++    seenIds: new Set(),
++    mode,
++    knownStreak: 0,
++    boundaryReached: false,
++    error: null,
++    progress,
++    reservation,
++  };
++  importState = state;
+   notify('Importing bookmarks from X…');
+ 
+   const PAGE_DELAY_MS = 1200;
+@@ -546,54 +642,100 @@ async function runXApiImport(limit) {
+   let lastCursor = null;
+   let pages = 0;
+   try {
+-    while (importState && importState.active && importState.processed < limit && pages < MAX_PAGES) {
+-      for (const b of entries) {
+-        if (importState.processed >= limit) break;
+-        importState.processed += 1;
++    while (state.active && !importLimitReached(state) && pages < MAX_PAGES) {
++      if (!progress.beforeNext()) { state.active = false; break; }
++      await progress.update({ stage: 'scanning', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
++      if (mode !== 'catch-up') rememberImportEntries(state, entries);
++      if (mode === 'catch-up') {
+         try {
+-          const resp = await syncBookmarkToGather(b, { force: true });
+-          if (resp && resp.ok && !resp.duplicate && !resp.dismissed) importState.imported += 1;
++          const result = await runCatchUpTransportBatch({
++            state,
++            entries,
++            classify: async (pageEntries) => (
++              await requestXBookmarkStatus(pageEntries.map((b) => b?.tweetUrl || ''))
++            ).statuses,
++            save: syncBookmarkToGather,
++            isAccepted: isAcceptedSaveResponse,
++            isNew: isNewImportedSaveResponse,
++            progress,
++          });
++          state.boundaryReached = result.boundaryReached;
++          for (const id of result.acceptedIds) state.seenIds.add(id);
+         } catch (err) {
++          if (err?.code === 'IMPORT_STOPPED') { state.active = false; break; }
++          state.error = err;
++          console.warn('[gatheros] X catch-up save failed:', err?.message || err);
++        }
++      } else {
++        const result = await runFixedTransportBatch({
++          state,
++          entries,
++          save: syncBookmarkToGather,
++          isAccepted: isAcceptedSaveResponse,
++          isNew: isNewImportedSaveResponse,
++          onError: (err, b) => {
+           console.warn('[gatheros] X import save failed:', err?.message || err);
++          state.seenIds.delete(b.tweetId);
++          },
++          progress,
++        });
++        for (const id of result.acceptedIds) state.seenIds.add(id);
++        for (const id of result.attemptedIds) {
++          if (!result.acceptedIds.includes(id)) state.seenIds.delete(id);
+         }
+       }
++      await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
++      if (state.error || state.boundaryReached || !state.active) break;
+       pages += 1;
+       const next = extractBottomCursor(json);
+       // Stop at the bottom: no cursor, an unchanging cursor, an empty
+       // page (X pads the tail with cursor-only pages), or limit reached.
+-      if (!next || next === lastCursor || entries.length === 0 || importState.processed >= limit) break;
++      if (!next || next === lastCursor || entries.length === 0 || importLimitReached(state)) break;
+       lastCursor = next;
+       cursor = next;
+       await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
++      if (!progress.beforeNext()) { state.active = false; break; }
+       let res;
+       try {
+         res = await fetch(xWithCursor(template.url, cursor), { method: 'GET', credentials: 'include', headers });
+-      } catch { break; }
+-      if (!res.ok) break;
+-      try { json = await res.json(); } catch { break; }
++      } catch (err) { state.error = err; break; }
++      if (!res.ok) { state.error = new Error(`X request failed (${res.status})`); break; }
++      try { json = await res.json(); } catch (err) { state.error = err; break; }
+       entries = pollExtractBookmarkEntries(json);
+     }
++  } catch (err) {
++    if (err?.code === 'IMPORT_STOPPED') state.active = false;
++    else state.error = err;
+   } finally {
+-    const imported = importState ? importState.imported : 0;
+-    importState = null;
++    const imported = state.imported;
++    if (importState === state) importState = null;
+     try {
+       const { seen } = await readSeenSet();
++      for (const id of state.seenIds) seen.add(id);
+       await writeSeenSet(seen, { baseline: true, version: CAPTURE_VERSION });
+     } catch { /* ignore */ }
+-    notify(imported > 0
+-      ? `Imported ${imported} bookmark${imported === 1 ? '' : 's'} from X.`
+-      : 'No new bookmarks to import.');
++    if (state.error) await progress.finish('failed', state.error?.message || null);
++    else if (!state.active && !state.boundaryReached) await progress.finish('stopped');
++    else await progress.finish('complete');
++    notify(catchUpSummary(state));
+   }
+ }
+ 
+ // Reliable fallback: open the bookmarks tab and auto-scroll (the original
+ // import). Also re-captures a fresh request template so the quiet API path
+ // works on the next run.
+-async function runXScrollImport(limit) {
++async function runXScrollImport(limit, mode = 'fixed', progress = null, reservation = null) {
++  if (progress && !progress.beforeNext()) {
++    releaseSocialImport('x', reservation);
++    await progress.finish('stopped');
++    return;
++  }
+   let tab;
+   try {
+     tab = await chrome.tabs.create({ url: 'https://x.com/i/bookmarks', active: true });
+   } catch (err) {
++    releaseSocialImport('x', reservation);
++    if (progress) await progress.finish('failed', err?.message || null);
+     notify("Couldn't open your X bookmarks.");
+     return;
+   }
+@@ -603,9 +745,18 @@ async function runXScrollImport(limit) {
+     limit,
+     processed: new Set(),
+     imported: 0,
++    known: 0,
++    failed: 0,
+     stagnant: 0,
++    mode,
++    knownStreak: 0,
++    boundaryReached: false,
++    error: null,
++    progress: progress || createImportProgress('x', mode, mode === 'fixed' && Number.isFinite(limit) ? limit : null),
++    reservation,
+     watchdog: setTimeout(() => { endImport('timeout'); }, IMPORT_WATCHDOG_MS),
+   };
++  if (!progress) await importState.progress.start({ platform: 'x', mode, target: mode === 'fixed' && Number.isFinite(limit) ? limit : null });
+   scheduleImportStart(tab.id);
+ }
+ 
+@@ -614,7 +765,7 @@ async function runXScrollImport(limit) {
+ // times with backoff until the message is received.
+ function scheduleImportStart(tabId, attempt = 0) {
+   setTimeout(() => {
+-    if (!importState || !importState.active || importState.tabId !== tabId) return;
++    if (!importState || !importState.active || importState.scrollPaused || importState.tabId !== tabId) return;
+     chrome.tabs.sendMessage(tabId, { type: 'gatheros:start-import' }, () => {
+       if (chrome.runtime.lastError && attempt < 6) {
+         scheduleImportStart(tabId, attempt + 1);
+@@ -623,57 +774,97 @@ function scheduleImportStart(tabId, attempt = 0) {
+   }, attempt === 0 ? 2500 : 1000);
+ }
+ 
++function pauseImportScroll(state) {
++  if (!state || state.scrollPaused || state.tabId == null) return;
++  state.scrollPaused = true;
++  chrome.tabs.sendMessage(state.tabId, {
++    type: 'gatheros:pause-import-scroll',
++    processed: importProcessedCount(state),
++  }, () => { void chrome.runtime.lastError; });
++}
++
+ async function handleImportBatch(bookmarks) {
++  const state = importState;
++  if (!state || !state.active || state.apiMode) return;
++  if (state.progress && !state.progress.beforeNext()) { await endImport('stopped'); return; }
+   let foundNew = false;
+   let reachedLimit = false;
+-  for (const b of bookmarks) {
+-    if (!b || !b.tweetId) continue;
+-    if (importState.processed.has(b.tweetId)) continue; // counted this run already
+-    importState.processed.add(b.tweetId);
+-    foundNew = true;
++  const resolvedIds = [];
++  if (state.mode === 'catch-up') {
+     try {
+-      // force: true → explicit backfill overrides tombstones (re-imports
+-      // bookmarks the user previously deleted). Count only genuinely new
+-      // saves — not duplicates, and not dismissed (so the toast is honest).
+-      const resp = await syncBookmarkToGather(b, { force: true });
+-      if (resp && resp.ok && !resp.duplicate && !resp.dismissed) importState.imported += 1;
++      const result = await runCatchUpTransportBatch({
++        state,
++        entries: bookmarks,
++        classify: async (batch) => (
++          await requestXBookmarkStatus(batch.map((b) => b?.tweetUrl || ''))
++        ).statuses,
++        save: syncBookmarkToGather,
++        isAccepted: isAcceptedSaveResponse,
++        isNew: isNewImportedSaveResponse,
++        progress: state.progress,
++      });
++      resolvedIds.push(...result.acceptedIds);
++      foundNew = result.acceptedIds.length > 0;
++      if (result.boundaryReached) {
++        state.boundaryReached = true;
++        reachedLimit = true;
++        pauseImportScroll(state);
++      }
+     } catch (err) {
++      if (err?.code === 'IMPORT_STOPPED') { state.active = false; await endImport('stopped'); return; }
++      state.error = err;
+       console.warn('[gatheros] backfill import failed:', err?.message || err);
+     }
+-    // Limit counts bookmarks *traversed*, newest-first — "most recent
+-    // N" — not just the ones that turned out to be new.
+-    if (importState.processed.size >= importState.limit) { reachedLimit = true; break; }
++  } else {
++    const result = await runFixedTransportBatch({
++      state,
++      entries: bookmarks,
++      save: syncBookmarkToGather,
++      isAccepted: isAcceptedSaveResponse,
++      isNew: isNewImportedSaveResponse,
++      progress: state.progress,
++      onError: (err) => console.warn('[gatheros] backfill import failed:', err?.message || err),
++    });
++    resolvedIds.push(...result.acceptedIds);
++    foundNew = result.attemptedIds.length > 0;
++    reachedLimit = result.reachedLimit;
++    if (reachedLimit) pauseImportScroll(state);
+   }
+   // Keep the seen-set current so the normal incremental poll doesn't
+   // re-handle these later.
+-  await markBookmarksSeen(bookmarks.map((b) => b && b.tweetId).filter(Boolean));
++  await markBookmarksSeen(resolvedIds);
++  if (!state.active || importState !== state) return;
+ 
+   // Stream the running count to the tab so the import toast updates live.
+-  if (importState.tabId != null) {
+-    chrome.tabs.sendMessage(importState.tabId, {
++  if (state.tabId != null) {
++    chrome.tabs.sendMessage(state.tabId, {
+       type: 'gatheros:import-progress',
+-      imported: importState.imported,
+-      processed: importState.processed.size,
++      imported: state.imported,
++      processed: importProcessedCount(state),
+     }, () => { void chrome.runtime.lastError; });
+   }
+ 
+-  if (foundNew) importState.stagnant = 0;
+-  else importState.stagnant += 1;
++  if (foundNew) state.stagnant = 0;
++  else state.stagnant += 1;
+ 
+-  if (reachedLimit || importState.stagnant >= IMPORT_STAGNANT_BATCHES_LIMIT) {
++  if (state.error) {
++    await endImport('error');
++  } else if (state.progress && !state.progress.beforeNext()) {
++    await endImport('stopped');
++  } else if (reachedLimit || state.stagnant >= IMPORT_STAGNANT_BATCHES_LIMIT) {
+     await endImport(reachedLimit ? 'limit' : 'bottom');
+   }
+ }
+ 
+ async function endImport(_reason) {
+-  if (!importState || !importState.active) return; // guards double-end
+-  importState.active = false;
+-  const { tabId, imported, watchdog } = importState;
++  const run = importState;
++  if (!run || !run.active) return; // guards double-end
++  run.active = false;
++  const { tabId, imported, watchdog } = run;
+   if (watchdog) clearTimeout(watchdog);
+ 
+-  // A backfill establishes the baseline (everything currently in
+-  // bookmarks has now been processed), so the regular poll resumes
+-  // importing only genuinely-new bookmarks from here on.
++  // Preserve existing seen-set baseline metadata. Catch-up only adds IDs
++  // successfully saved before its boundary; fixed/all retain full baseline behavior.
+   try {
+     const { seen } = await readSeenSet();
+     await writeSeenSet(seen, { baseline: true, version: CAPTURE_VERSION });
+@@ -687,22 +878,27 @@ async function endImport(_reason) {
+       void chrome.runtime.lastError; // tab may have closed — ignore
+     });
+   }
+-  notify(imported > 0
+-    ? `Imported ${imported} bookmark${imported === 1 ? '' : 's'} from X.`
+-    : 'No new bookmarks to import.');
++  notify(catchUpSummary(run));
++  if (run.progress) {
++    const terminal = (_reason === 'error' || _reason === 'timeout') ? 'failed' : (_reason === 'stopped' ? 'stopped' : 'complete');
++    await run.progress.finish(terminal);
++  }
+ 
+   // Keep the (now-inactive) state around briefly to swallow trailing
+   // cursor pages until the watcher stops scrolling + the interceptor's
+   // IMPORT_MODE is back off, then fully clear.
+-  setTimeout(() => { if (importState && !importState.active) importState = null; }, 8000);
++  setTimeout(() => { if (importState === run && !run.active) importState = null; }, 8000);
+ }
+ 
+ // If the user closes the bookmarks tab mid-import, stop cleanly.
+ chrome.tabs.onRemoved.addListener((tabId) => {
+-  if (importState && importState.active && importState.tabId === tabId) {
+-    if (importState.watchdog) clearTimeout(importState.watchdog);
+-    const imported = importState.imported;
+-    importState = null;
++  const run = importState;
++  if (run && run.active && run.tabId === tabId) {
++    if (run.watchdog) clearTimeout(run.watchdog);
++    const imported = run.imported;
++    run.active = false;
++    if (importState === run) importState = null;
++    if (run.progress) void run.progress.finish('stopped');
+     if (imported > 0) notify(`Bookmark import stopped — imported ${imported} so far.`);
+   }
+ });
+@@ -729,6 +925,7 @@ async function syncBookmarkToGather(b, { force = false } = {}) {
+       imageUrls: Array.isArray(b.imageUrls) ? b.imageUrls : [],
+       videoUrl: b.videoUrl || null,
+       posterUrl: b.posterUrl || '',
++      tweetCreatedAt: Number.isFinite(Number(b.tweetCreatedAt)) ? Number(b.tweetCreatedAt) : null,
+       quoted: b.quoted || null,
+     },
+   };
+@@ -940,6 +1137,9 @@ function pollExtractTweetCore(result) {
+     authorAvatarUrl: avatarUrl,
+     caption: legacy.full_text || '',
+     imageUrls,
++    tweetCreatedAt: Number.isFinite(Date.parse(legacy.created_at || ''))
++      ? Date.parse(legacy.created_at)
++      : null,
+   };
+ }
+ 
+@@ -1030,6 +1230,9 @@ function pollParseTweetForBookmark(result) {
+     imageUrls,
+     videoUrl,
+     posterUrl,
++    tweetCreatedAt: Number.isFinite(Date.parse(legacy.created_at || ''))
++      ? Date.parse(legacy.created_at)
++      : null,
+     media: pollBuildMediaList(legacy),
+     quoted: pollExtractTweetCore(t.quoted_status_result && t.quoted_status_result.result),
+   };
+@@ -1118,11 +1321,14 @@ async function handleIgSavedBatch(posts) {
+   const toImport = posts.filter((p) => p && p.postId && !seen.has(p.postId));
+   for (const p of toImport) {
+     try {
+-      await syncSavedPostToGather(p);
+-      seen.add(p.postId);
++      const response = await syncSavedPostToGather(p);
++      if (isAcceptedSaveResponse(response)) {
++        seen.add(p.postId);
++      } else {
++        console.warn('[gatheros] instagram saved sync rejected:', response?.error || 'save not accepted');
++      }
+     } catch (err) {
+       console.warn('[gatheros] instagram saved sync failed:', err?.message || err);
+-      seen.add(p.postId);
+     }
+   }
+   await writeIgSeenSet(seen);
+@@ -1134,22 +1340,26 @@ function isSavedPageUrl(url) {
+ }
+ 
+ async function handleImportSaved(msg, sender) {
++  const reservation = reserveSocialImport('instagram');
++  if (!reservation) {
++    notify('A saved-post import is already running.');
++    return { ok: false, busy: true };
++  }
+   const { [IG_STORAGE_IMPORT_DISABLED_KEY]: disabled } =
+     await chrome.storage.local.get(IG_STORAGE_IMPORT_DISABLED_KEY);
+   if (disabled) {
++    releaseSocialImport('instagram', reservation);
+     notify('Saved-post import is temporarily unavailable.');
+     return { ok: false, disabled: true };
+   }
+-  if (igImportState && igImportState.active) {
+-    notify('A saved-post import is already running.');
+-    return { ok: false, busy: true };
+-  }
+   if (!(await igSignedIn())) {
++    releaseSocialImport('instagram', reservation);
+     return { ok: false, needsSignIn: true, platform: 'instagram' };
+   }
+ 
+   const status = await pingApp();
+   if (!status || status.hostMissing || !status.appRunning) {
++    releaseSocialImport('instagram', reservation);
+     notify('Open GatherLocal first, then run Import saved.');
+     return { ok: false, appClosed: true };
+   }
+@@ -1161,7 +1371,7 @@ async function handleImportSaved(msg, sender) {
+   // no navigation, no username (the saved feed is session-scoped). Same
+   // request the mobile-sync poll replays, just paginated + forced. Runs
+   // async and reports progress via notifications.
+-  runIgApiImport(limit);
++  runIgApiImport(limit, reservation);
+   return { ok: true };
+ }
+ 
+@@ -1181,10 +1391,7 @@ function igWithMaxId(baseUrl, maxId) {
+   }
+ }
+ 
+-async function runIgApiImport(limit) {
+-  const { [IG_STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(IG_STORAGE_TEMPLATE_KEY);
+-  const baseUrl = (template && template.url) || IG_SAVED_FEED_URL;
+-
++async function runIgApiImport(limit, reservation = null) {
+   // Signed-in check. Instagram sets `csrftoken` even for logged-out
+   // visitors, so it's not proof of a session — the `sessionid` cookie is
+   // the real auth cookie. Check it up front so a signed-out user gets a
+@@ -1199,14 +1406,36 @@ async function runIgApiImport(limit) {
+     if (c && c.value) csrf = c.value;
+   } catch { /* ignore */ }
+   if (!signedIn || !csrf) {
++    releaseSocialImport('instagram', reservation);
+     notify('Sign in to Instagram in this browser, then run Import saved.');
+     return;
+   }
+ 
++  const { [IG_STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(IG_STORAGE_TEMPLATE_KEY);
++  const baseUrl = (template && template.url) || IG_SAVED_FEED_URL;
++  const progress = createImportProgress('instagram', Number.isFinite(limit) ? 'fixed' : 'all', Number.isFinite(limit) ? limit : null);
++  await progress.start({
++    platform: 'instagram', mode: Number.isFinite(limit) ? 'fixed' : 'all',
++    target: Number.isFinite(limit) ? limit : null,
++  });
++  if (!progress.beforeNext()) { await progress.finish('stopped'); return; }
++
+   const headers = { ...((template && template.headers) || {}), 'x-csrftoken': csrf, accept: '*/*' };
+   if (!headers['x-ig-app-id']) headers['x-ig-app-id'] = IG_WEB_APP_ID;
+ 
+-  igImportState = { active: true, apiMode: true, limit, imported: 0, processed: 0 };
++  const state = {
++    active: true,
++    apiMode: true,
++    limit,
++    imported: 0,
++    known: 0,
++    failed: 0,
++    processed: 0,
++    seenIds: new Set(),
++    progress,
++    reservation,
++  };
++  igImportState = state;
+   notify('Importing saved posts from Instagram…');
+ 
+   const PAGE_DELAY_MS = 1400; // gentle pacing — looks like a slow scroll
+@@ -1217,43 +1446,56 @@ async function runIgApiImport(limit) {
+   try {
+     while (igImportState && igImportState.active
+       && igImportState.processed < limit && pages < MAX_PAGES) {
++      if (!state.progress.beforeNext()) { state.active = false; break; }
++      await state.progress.update({ stage: 'scanning', scanned: state.processed, saved: state.imported, known: state.known, failed: state.failed });
+       let res;
+       try {
+         res = await fetch(igWithMaxId(baseUrl, maxId), {
+           method: 'GET', credentials: 'include', headers,
+         });
+       } catch (err) {
++        state.error = err;
+         console.warn('[gatheros] IG import fetch failed:', err?.message || err);
+         break;
+       }
+-      if (!res.ok) { authFailedFirstPage = pages === 0; break; }
++      if (!res.ok) { authFailedFirstPage = pages === 0; state.error = new Error(`Instagram request failed (${res.status})`); break; }
+       let json;
+-      try { json = await res.json(); } catch { break; }
++      try { json = await res.json(); } catch (err) { state.error = err; break; }
+ 
+       const posts = pollExtractSavedPosts(json);
+       for (const p of posts) {
+         if (igImportState.processed >= limit) break;
++        if (!state.progress.beforeNext()) { state.active = false; break; }
+         igImportState.processed += 1;
+         try {
+           const resp = await syncSavedPostToGather(p, { force: true });
+-          if (resp && resp.ok && !resp.duplicate && !resp.dismissed) igImportState.imported += 1;
++          if (isNewImportedSaveResponse(resp)) state.imported += 1;
++          else if (isAcceptedSaveResponse(resp)) state.known += 1;
++          if (isAcceptedSaveResponse(resp)) state.seenIds.add(p.postId);
+         } catch (err) {
++          state.failed += 1;
+           console.warn('[gatheros] IG import save failed:', err?.message || err);
+         }
++        await state.progress.update({ stage: 'saving', scanned: state.processed, saved: state.imported, known: state.known, failed: state.failed });
+       }
+       pages += 1;
+       if (!json.more_available || !json.next_max_id) break;
+       maxId = json.next_max_id;
+       await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
++      if (!state.progress.beforeNext()) { state.active = false; break; }
+     }
+   } finally {
+-    const imported = igImportState ? igImportState.imported : 0;
++    const imported = state.imported;
+     igImportState = null;
+     // Establish the baseline so passive sync only imports newer posts.
+     try {
+       const { seen } = await readIgSeenSet();
++      for (const id of state.seenIds) seen.add(id);
+       await writeIgSeenSet(seen, { baseline: true, version: IG_CAPTURE_VERSION });
+     } catch { /* ignore */ }
++    if (state.error) await state.progress.finish('failed', state.error?.message || null);
++    else if (!state.active) await state.progress.finish('stopped');
++    else await state.progress.finish('complete');
+     if (authFailedFirstPage) {
+       notify('Could not read your Instagram saved feed. Open your Saved page once, then try again.');
+     } else {
+@@ -1267,20 +1509,32 @@ async function runIgApiImport(limit) {
+ async function handleIgImportBatch(posts) {
+   let foundNew = false;
+   let reachedLimit = false;
++  const resolvedIds = [];
++  if (igImportState.progress && !igImportState.progress.beforeNext()) { await endIgImport('stopped'); return; }
+   for (const p of posts) {
+     if (!p || !p.postId) continue;
++    if (igImportState.progress && !igImportState.progress.beforeNext()) { await endIgImport('stopped'); return; }
+     if (igImportState.processed.has(p.postId)) continue;
+     igImportState.processed.add(p.postId);
+     foundNew = true;
+     try {
+       const resp = await syncSavedPostToGather(p, { force: true });
+-      if (resp && resp.ok && !resp.duplicate && !resp.dismissed) igImportState.imported += 1;
++      if (isNewImportedSaveResponse(resp)) igImportState.imported += 1;
++      else if (isAcceptedSaveResponse(resp)) igImportState.known = (igImportState.known || 0) + 1;
++      if (isAcceptedSaveResponse(resp)) resolvedIds.push(p.postId);
+     } catch (err) {
++      igImportState.failed = (igImportState.failed || 0) + 1;
+       console.warn('[gatheros] instagram backfill failed:', err?.message || err);
+     }
++    if (igImportState.progress) {
++      await igImportState.progress.update({
++        stage: 'saving', scanned: igImportState.processed.size,
++        saved: igImportState.imported, known: igImportState.known || 0, failed: igImportState.failed || 0,
++      });
++    }
+     if (igImportState.processed.size >= igImportState.limit) { reachedLimit = true; break; }
+   }
+-  await markIgSeen(posts.map((p) => p && p.postId).filter(Boolean));
++  await markIgSeen(resolvedIds);
+ 
+   if (igImportState.tabId != null) {
+     chrome.tabs.sendMessage(igImportState.tabId, {
+@@ -1299,9 +1553,10 @@ async function handleIgImportBatch(posts) {
+ }
+ 
+ async function endIgImport(_reason) {
+-  if (!igImportState || !igImportState.active) return;
+-  igImportState.active = false;
+-  const { tabId, imported, watchdog } = igImportState;
++  const run = igImportState;
++  if (!run || !run.active) return;
++  run.active = false;
++  const { tabId, imported, watchdog } = run;
+   if (watchdog) clearTimeout(watchdog);
+   await chrome.storage.local.set({ [IG_STORAGE_IMPORT_ACTIVE_KEY]: false });
+ 
+@@ -1323,16 +1578,23 @@ async function endIgImport(_reason) {
+   notify(imported > 0
+     ? `Imported ${imported} saved post${imported === 1 ? '' : 's'} from Instagram.`
+     : 'No new saved posts to import.');
++  if (run.progress) {
++    const terminal = (_reason === 'error' || _reason === 'timeout') ? 'failed' : (_reason === 'stopped' ? 'stopped' : 'complete');
++    await run.progress.finish(terminal);
++  }
+ 
+-  setTimeout(() => { if (igImportState && !igImportState.active) igImportState = null; }, 8000);
++  setTimeout(() => { if (igImportState === run && !run.active) igImportState = null; }, 8000);
+ }
+ 
+ // Stop cleanly if the user closes the saved tab mid-import.
+ chrome.tabs.onRemoved.addListener((tabId) => {
+-  if (igImportState && igImportState.active && igImportState.tabId === tabId) {
+-    if (igImportState.watchdog) clearTimeout(igImportState.watchdog);
+-    const imported = igImportState.imported;
+-    igImportState = null;
++  const run = igImportState;
++  if (run && run.active && run.tabId === tabId) {
++    if (run.watchdog) clearTimeout(run.watchdog);
++    const imported = run.imported;
++    run.active = false;
++    if (igImportState === run) igImportState = null;
++    if (run.progress) void run.progress.finish('stopped');
+     chrome.storage.local.set({ [IG_STORAGE_IMPORT_ACTIVE_KEY]: false });
+     if (imported > 0) notify(`Saved-post import stopped — imported ${imported} so far.`);
+   }
+diff --git a/extension/catch-up-import.mjs b/extension/catch-up-import.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..15839a4a294a70926813087bb4e3773f424cff09
+--- /dev/null
++++ b/extension/catch-up-import.mjs
+@@ -0,0 +1,50 @@
++export function applyCatchUpStatus(state, status) {
++  if (!state || typeof state !== 'object') throw new TypeError('state required');
++  if (status === 'new') {
++    state.knownStreak = 0;
++    return { shouldSave: true, shouldStop: false, knownStreak: 0 };
++  }
++  if (status === 'known-active' || status === 'known-dismissed') {
++    state.knownStreak = (Number(state.knownStreak) || 0) + 1;
++    return { shouldSave: false, shouldStop: state.knownStreak >= 2, knownStreak: state.knownStreak };
++  }
++  throw new Error(`unknown catch-up status: ${status}`);
++}
++
++export async function processCatchUpEntries({ state, entries, statuses, save, shouldContinue = () => true, onItem = async () => {} }) {
++  if (!state || !(state.processed instanceof Set)) throw new TypeError('processed state required');
++  if (!Array.isArray(entries) || !Array.isArray(statuses) || entries.length !== statuses.length) {
++    throw new TypeError('entries and statuses must have equal lengths');
++  }
++  if (typeof save !== 'function') throw new TypeError('save callback required');
++  let processedCount = 0;
++  for (let index = 0; index < entries.length; index += 1) {
++    if (!shouldContinue()) { state.active = false; break; }
++    const entry = entries[index];
++    if (!entry || !entry.tweetId || state.processed.has(entry.tweetId)) continue;
++    state.processed.add(entry.tweetId);
++    processedCount += 1;
++    const status = statuses[index];
++    if (status === 'new') await save(entry);
++    const decision = applyCatchUpStatus(state, status);
++    await onItem({ entry, status });
++    if (decision.shouldStop) return { boundaryReached: true, processedCount };
++  }
++  return { boundaryReached: false, processedCount };
++}
++
++export function catchUpSummary({ imported = 0, boundaryReached = false, error = null } = {}) {
++  if (error) return `Bookmark import stopped — imported ${imported} so far.`;
++  if (boundaryReached && imported === 0) return 'Already caught up.';
++  if (imported > 0) return `Imported ${imported} bookmark${imported === 1 ? '' : 's'} from X.`;
++  return 'No new bookmarks to import.';
++}
++
++export function catchUpPreflightResult(response) {
++  if (response?.ok && response.hasKnownHistory === false) return { ok: false, noBoundary: true };
++  return null;
++}
++
++export function importSaveOptions(mode) {
++  return { force: mode !== 'catch-up' };
++}
+diff --git a/extension/content/x-bookmark-watcher.js b/extension/content/x-bookmark-watcher.js
+index 5673f9e4cecd484c4d5b80651066d830e3d1b81b..376f179a088ca4bf3a57708d0b5f750e4e2ba551 100644
+--- a/extension/content/x-bookmark-watcher.js
++++ b/extension/content/x-bookmark-watcher.js
+@@ -366,6 +366,13 @@ function findCaption(article) {
+   return captionEl ? captionEl.innerText.trim() : '';
+ }
+ 
++function findTweetCreatedAt(article) {
++  const timeEl = article.querySelector('time[datetime]');
++  if (!timeEl) return null;
++  const ms = Date.parse(timeEl.getAttribute('datetime') || '');
++  return Number.isFinite(ms) ? ms : null;
++}
++
+ // Tweet video extraction. X embeds video as a <video> element with
+ // one or more <source> children — usually a single MP4 source with
+ // the highest available bitrate already pre-selected. Returns the
+@@ -565,6 +572,7 @@ document.addEventListener('click', async (e) => {
+   const author = findAuthorInfo(article);
+   const avatarUrl = findAvatarUrl(article);
+   const caption = findCaption(article);
++  const tweetCreatedAt = findTweetCreatedAt(article);
+ 
+   // Skip only when there's genuinely nothing to save — no images, no
+   // usable video/poster, AND no text. Text-only tweets (caption but no
+@@ -622,6 +630,7 @@ document.addEventListener('click', async (e) => {
+       imageUrls,
+       videoUrl: tweetVideo?.videoUrl || null,
+       posterUrl: tweetVideo?.posterUrl || null,
++      tweetCreatedAt,
+     },
+   };
+   // If we've seen this tweet's conversation, save it as a thread (root +
+diff --git a/extension/content/x-graphql-interceptor.js b/extension/content/x-graphql-interceptor.js
+index c54b9dfd3e03fb5732b157bc90ae62dc00c5b123..7b7d9579c4bf88f0de25acdf7f87b495af6e9dc6 100644
+--- a/extension/content/x-graphql-interceptor.js
++++ b/extension/content/x-graphql-interceptor.js
+@@ -266,6 +266,9 @@
+       authorAvatarUrl: avatarUrl,
+       caption: legacy.full_text || '',
+       imageUrls,
++      tweetCreatedAt: Number.isFinite(Date.parse(legacy.created_at || ''))
++        ? Date.parse(legacy.created_at)
++        : null,
+     };
+   }
+ 
+@@ -367,6 +370,9 @@
+       imageUrls,
+       videoUrl,
+       posterUrl,
++      tweetCreatedAt: Number.isFinite(Date.parse(legacy.created_at || ''))
++        ? Date.parse(legacy.created_at)
++        : null,
+       // Ordered media list — lets a multi-video tweet bring in every
+       // video. The desktop's primary download follows media[0].
+       media: buildMediaList(legacy),
+diff --git a/extension/import-limit.mjs b/extension/import-limit.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..f62dae14d67432ddd41d9dcfe2457bbdbc2e7c37
+--- /dev/null
++++ b/extension/import-limit.mjs
+@@ -0,0 +1,30 @@
++export function importProcessedCount(state) {
++  return state && state.processed && typeof state.processed.size === 'number'
++    ? state.processed.size
++    : 0;
++}
++
++export function importLimitReached(state) {
++  return !!(state && importProcessedCount(state) >= state.limit);
++}
++
++export function claimImportItem(state, id) {
++  if (!state || !state.active || !id || !state.processed) return false;
++  if (state.processed.has(id)) return false;
++  if (importLimitReached(state)) return false;
++  state.processed.add(id);
++  return true;
++}
++
++export function rememberImportEntries(state, entries, key = 'tweetId') {
++  if (!state || !state.seenIds || !Array.isArray(entries)) return 0;
++  let added = 0;
++  for (const entry of entries) {
++    const id = entry && entry[key];
++    if (id && !state.seenIds.has(id)) {
++      state.seenIds.add(id);
++      added += 1;
++    }
++  }
++  return added;
++}
+diff --git a/extension/panel.js b/extension/panel.js
+index c66458c3f859a058eac1e41d161a657ec53c4374..9ecfbb0e29c437de6b6ce455c601af4a391495c7 100644
+--- a/extension/panel.js
++++ b/extension/panel.js
+@@ -157,6 +157,7 @@
+             <option value="100">Most recent 100</option>
+             <option value="200">Most recent 200</option>
+             <option value="500">Most recent 500</option>
++            <option value="catch-up">Catch up to latest saved</option>
+             <option value="0">All bookmarks</option>
+           </select>
+           <button class="import-go" id="importGo" disabled>Import</button>
+@@ -228,6 +229,7 @@
+     if (chrome.runtime.lastError) { showText(msgEl, 'Could not reach the extension. Reload it and try again.'); return; }
+     if (!resp || resp.ok) { close(); return; } // success — import runs in the background
+     if (resp.needsSignIn) { showSignIn(msgEl, label, url); return; }
++    if (resp.noBoundary) { showText(msgEl, 'No previous X bookmark found. Choose a fixed amount instead.'); return; }
+     if (resp.appClosed) { showText(msgEl, 'Open GatherLocal first, then import.'); return; }
+     if (resp.disabled) { showText(msgEl, 'Import is temporarily unavailable.'); return; }
+     if (resp.busy) { showText(msgEl, 'An import is already running.'); return; }
+@@ -254,7 +256,7 @@
+ 
+   const count = root.getElementById('count');
+   const syncCount = () => {
+-    selectedLimit = count.value === '' ? null : Number(count.value); // 0 = all
++    selectedLimit = count.value === '' ? null : (count.value === 'catch-up' ? 'catch-up' : Number(count.value)); // 0 = all
+     importGo.disabled = selectedLimit === null;
+   };
+   count.addEventListener('change', syncCount);
+@@ -265,7 +267,10 @@
+     if (selectedLimit === null) return; // nothing picked yet
+     clearMsg(msg);
+     importGo.disabled = true;
+-    chrome.runtime.sendMessage({ type: 'gatheros:import-bookmarks', limit: selectedLimit }, (resp) => {
++    const request = { type: 'gatheros:import-bookmarks' };
++    if (selectedLimit === 'catch-up') request.mode = 'catch-up';
++    else request.limit = selectedLimit;
++    chrome.runtime.sendMessage(request, (resp) => {
+       handleImportResult(resp, { goBtn: importGo, msgEl: msg, label: 'X', url: 'https://x.com/i/bookmarks' });
+     });
+   });
+diff --git a/extension/save-response.mjs b/extension/save-response.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..9cf3630bf0136b0d19701bf6e346c316972f5d07
+--- /dev/null
++++ b/extension/save-response.mjs
+@@ -0,0 +1,14 @@
++export function isAcceptedSaveResponse(response) {
++  return !!(
++    response
++    && response.ok
++    && !response.skipped
++    && !response.syncDisabled
++  );
++}
++
++export function isNewImportedSaveResponse(response) {
++  return isAcceptedSaveResponse(response)
++    && !response.duplicate
++    && !response.dismissed;
++}
+diff --git a/extension/social-import-progress.mjs b/extension/social-import-progress.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..28fb035fb475f8b22465b264b0563b2ffda40ae2
+--- /dev/null
++++ b/extension/social-import-progress.mjs
+@@ -0,0 +1,74 @@
++const HOST_NAME = 'co.gatheros.host';
++const STAGES = new Set(['starting', 'scanning', 'saving', 'stopping', 'complete', 'stopped', 'failed']);
++
++export function createSocialImportProgress({
++  sendNativeMessage,
++  hostName = HOST_NAME,
++  randomUUID = () => globalThis.crypto.randomUUID(),
++  log = () => {},
++} = {}) {
++  if (typeof sendNativeMessage !== 'function') throw new TypeError('sendNativeMessage required');
++  if (typeof randomUUID !== 'function') throw new TypeError('randomUUID required');
++  let snapshot = null;
++  let cancelRequested = false;
++  let warned = false;
++
++  async function report() {
++    if (!snapshot) return { ok: false, cancelRequested };
++    try {
++      const response = await sendNativeMessage(hostName, { type: 'social-import-status', ...snapshot });
++      cancelRequested = !!response?.cancelRequested;
++      return { ok: response?.ok !== false, cancelRequested };
++    } catch (error) {
++      if (!warned) {
++        warned = true;
++        try { log('[gatheros] social import progress unavailable:', error?.message || error); } catch { /* ignore */ }
++      }
++      return { ok: false, cancelRequested };
++    }
++  }
++
++  async function start({ platform, mode, target = null, startedAt = Date.now(), message = null } = {}) {
++    snapshot = {
++      runId: randomUUID(), platform, mode, stage: 'starting',
++      scanned: 0, saved: 0, known: 0, failed: 0,
++      target: target === undefined ? null : target, startedAt, message,
++    };
++    cancelRequested = false;
++    warned = false;
++    await report();
++    return getSnapshot();
++  }
++
++  async function update(patch = {}) {
++    if (!snapshot) throw new Error('progress run not started');
++    const next = { ...snapshot, ...patch };
++    if (!STAGES.has(next.stage)) throw new Error('invalid stage');
++    if (cancelRequested && ['starting', 'scanning', 'saving'].includes(next.stage)) next.stage = 'stopping';
++    for (const key of ['scanned', 'saved', 'known', 'failed']) {
++      if (!Number.isInteger(next[key]) || next[key] < snapshot[key]) throw new Error(`${key} must be monotonic`);
++    }
++    snapshot = next;
++    const response = await report();
++    return { ...getSnapshot(), ...response };
++  }
++
++  async function finish(stage = 'complete', message = null) {
++    if (!['complete', 'stopped', 'failed'].includes(stage)) throw new Error('invalid terminal stage');
++    return update({ stage, message });
++  }
++
++  function getSnapshot() {
++    return snapshot ? { ...snapshot, cancelRequested } : null;
++  }
++
++  return {
++    start,
++    update,
++    finish,
++    report,
++    getSnapshot,
++    isCancellationRequested: () => cancelRequested,
++    beforeNext: () => !cancelRequested,
++  };
++}
+diff --git a/extension/x-import-transport.mjs b/extension/x-import-transport.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..b92d7ed2c2ad3e417885b6d06afe348bfd4b4aed
+--- /dev/null
++++ b/extension/x-import-transport.mjs
+@@ -0,0 +1,80 @@
++import { processCatchUpEntries, importSaveOptions } from './catch-up-import.mjs';
++import { claimImportItem, importLimitReached } from './import-limit.mjs';
++
++export async function runCatchUpTransportBatch({
++  state, entries, classify, save, isAccepted, isNew, progress = null,
++}) {
++  state.known = Number(state.known) || 0;
++  state.failed = Number(state.failed) || 0;
++  const statuses = await classify(entries);
++  const acceptedIds = [];
++  const result = await processCatchUpEntries({
++    state,
++    entries,
++    statuses,
++    save: async (entry) => {
++      if (progress && !progress.beforeNext()) {
++        state.active = false;
++        const error = new Error('import stopped');
++        error.code = 'IMPORT_STOPPED';
++        throw error;
++      }
++      let response;
++      try { response = await save(entry, importSaveOptions('catch-up')); }
++      catch (error) {
++        state.failed += 1;
++        if (progress) await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
++        throw error;
++      }
++      if (!isAccepted(response)) {
++        state.failed += 1;
++        if (progress) await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
++        throw new Error(response?.error || 'save rejected');
++      }
++      if (isNew(response)) state.imported += 1;
++      acceptedIds.push(entry.tweetId);
++    },
++    shouldContinue: () => !progress || progress.beforeNext(),
++    onItem: async ({ status }) => {
++      if (status === 'known-active' || status === 'known-dismissed') state.known += 1;
++      if (progress) await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
++    },
++  });
++  return { boundaryReached: result.boundaryReached, acceptedIds };
++}
++
++export async function runFixedTransportBatch({
++  state, entries, save, isAccepted, isNew, onError = () => {}, progress = null,
++}) {
++  state.known = Number(state.known) || 0;
++  state.failed = Number(state.failed) || 0;
++  const acceptedIds = [];
++  const attemptedIds = [];
++  let reachedLimit = false;
++  for (const entry of entries) {
++    if (progress && !progress.beforeNext()) { state.active = false; break; }
++    if (!claimImportItem(state, entry?.tweetId)) {
++      if (importLimitReached(state)) { reachedLimit = true; break; }
++      continue;
++    }
++    if (importLimitReached(state)) reachedLimit = true;
++    attemptedIds.push(entry.tweetId);
++    try {
++      const response = await save(entry, importSaveOptions(state.mode));
++      if (isNew(response)) state.imported += 1;
++      if (isAccepted(response)) {
++        if (!isNew(response)) state.known += 1;
++        acceptedIds.push(entry.tweetId);
++      } else {
++        state.failed += 1;
++      }
++      if (progress) await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
++    } catch (error) {
++      state.failed += 1;
++      if (progress) await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
++      onError(error, entry);
++    }
++    if (reachedLimit) break;
++  }
++  return { reachedLimit, acceptedIds, attemptedIds };
++}
+diff --git a/src/main/db.js b/src/main/db.js
+index b0a6d66cf6802e8fbc5387eacb4f22c22f102fc3..959f4784c29f0ed71995440497028a574c02bf92 100644
+--- a/src/main/db.js
++++ b/src/main/db.js
+@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
+ const { app } = require('electron');
+ const Database = require('better-sqlite3');
+ const { migrateWithLocalOverlay } = require('./gatherlocal/local-migrations');
++const { deriveXTweetCreatedAt } = require('./x-tweet-date');
+ 
+ const SCHEMA = `
+ CREATE TABLE IF NOT EXISTS saves (
+@@ -445,8 +446,63 @@ const MIGRATIONS = [
+   (database) => {
+     addColumnIfMissing(database, 'saves', 'viewed_at', 'INTEGER');
+   },
++  // Repair older X saves whose extension payload predated tweetCreatedAt.
++  (database) => {
++    repairMissingXTweetCreatedAt(database);
++  },
++  // Stable social-post identity. Keep every existing row; assign only the
++  // oldest active copy so future active duplicates can be rejected safely.
++  (database) => {
++    addColumnIfMissing(database, 'saves', 'source_key', 'TEXT');
++    const rows = database.prepare(`
++      SELECT id, source_url
++        FROM saves
++       WHERE deleted_at IS NULL AND source_url IS NOT NULL AND tweet_meta IS NOT NULL
++       ORDER BY created_at ASC, id ASC
++    `).all();
++    const claimed = new Set();
++    const assign = database.prepare('UPDATE saves SET source_key = ? WHERE id = ?');
++    for (const row of rows) {
++      const key = sourceKeyFromUrl(row.source_url);
++      if (!key || claimed.has(key)) continue;
++      claimed.add(key);
++      assign.run(key, row.id);
++    }
++    database.exec(`
++      CREATE UNIQUE INDEX IF NOT EXISTS idx_saves_active_source_key
++        ON saves(source_key)
++       WHERE deleted_at IS NULL AND source_key IS NOT NULL;
++    `);
++  },
+ ];
+ 
++function repairMissingXTweetCreatedAt(database) {
++  const rows = database.prepare(`
++    SELECT id, source_url, tweet_meta
++      FROM saves
++     WHERE source != 'instagram'
++       AND source_url LIKE '%/status/%'
++  `).all();
++  const update = database.prepare('UPDATE saves SET tweet_meta = ? WHERE id = ?');
++  let repaired = 0;
++  for (const row of rows) {
++    let meta;
++    try {
++      meta = row.tweet_meta ? JSON.parse(row.tweet_meta) : {};
++    } catch {
++      continue;
++    }
++    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) continue;
++    const existing = Number(meta.tweetCreatedAt);
++    if (Number.isFinite(existing) && existing > 0) continue;
++    const derived = deriveXTweetCreatedAt(row.source_url);
++    if (derived === null) continue;
++    update.run(JSON.stringify({ ...meta, tweetCreatedAt: derived }), row.id);
++    repaired += 1;
++  }
++  return repaired;
++}
++
+ function addColumnIfMissing(database, table, name, type) {
+   const cols = database.prepare(`PRAGMA table_info(${table})`).all();
+   if (!cols.find((c) => c.name === name)) {
+@@ -546,6 +602,7 @@ function insertSave({
+   height,
+   fileSize,
+   sourceUrl,
++  sourceKey,
+   title,
+   // Optional pre-populated notes — currently set by the X-bookmark
+   // capture path with the tweet's caption text so the user sees the
+@@ -584,6 +641,7 @@ function insertSave({
+     title: title || null,
+     notes: notes || null,
+     source_url: sourceUrl || null,
++    source_key: tweetMeta ? (sourceKey || sourceKeyFromUrl(sourceUrl) || null) : null,
+     width: width || null,
+     height: height || null,
+     file_size: fileSize || null,
+@@ -599,9 +657,9 @@ function insertSave({
+   };
+   db.prepare(`
+     INSERT INTO saves
+-      (id, file_path, thumb_path, title, notes, source_url, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, source, created_at)
++      (id, file_path, thumb_path, title, notes, source_url, source_key, width, height, file_size, palette, palette_lab, content_hash, kind, tweet_meta, source, created_at)
+     VALUES
+-      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @source, @created_at)
++      (@id, @file_path, @thumb_path, @title, @notes, @source_url, @source_key, @width, @height, @file_size, @palette, @palette_lab, @content_hash, @kind, @tweet_meta, @source, @created_at)
+   `).run(record);
+   return record;
+ }
+@@ -1087,6 +1145,59 @@ function sourceKeyFromUrl(url) {
+   return tweetKeyFromUrl(url) || igKeyFromUrl(url);
+ }
+ 
++function findActiveSaveBySourceKey(key) {
++  if (!key) return undefined;
++  return getDatabase().prepare(
++    'SELECT * FROM saves WHERE source_key = ? AND deleted_at IS NULL LIMIT 1',
++  ).get(key);
++}
++
++// Classify ordered X bookmark URLs against desktop save/tombstone history.
++// Desktop DB remains boundary source; extension seen-set is intentionally
++// excluded because baseline IDs may never have been saved.
++function classifyXBookmarkUrls(tweetUrls) {
++  if (!Array.isArray(tweetUrls)) throw new TypeError('tweetUrls must be an array');
++  if (tweetUrls.length > 100) throw new RangeError('tweetUrls batch too large');
++  if (tweetUrls.some((url) => typeof url !== 'string')) throw new TypeError('tweetUrls entries must be strings');
++
++  const database = getDatabase();
++  const keys = tweetUrls.map((url) => {
++    const key = sourceKeyFromUrl(url);
++    return key && key.startsWith('tw:') ? key : null;
++  });
++  const requestedKeys = [...new Set(keys.filter(Boolean))];
++  const active = new Set();
++  const dismissed = new Set();
++  if (requestedKeys.length > 0) {
++    const placeholders = requestedKeys.map(() => '?').join(', ');
++    for (const row of database.prepare(`
++      SELECT source_key FROM saves
++       WHERE deleted_at IS NULL AND source_key IN (${placeholders})
++    `).all(...requestedKeys)) active.add(row.source_key);
++    for (const row of database.prepare(`
++      SELECT tweet_key FROM dismissed_tweets
++       WHERE tweet_key IN (${placeholders})
++    `).all(...requestedKeys)) dismissed.add(row.tweet_key);
++  }
++
++  const hasKnownHistory = !!database.prepare(`
++    SELECT 1 FROM saves
++     WHERE deleted_at IS NULL AND source_key LIKE 'tw:%'
++     LIMIT 1
++  `).get() || !!database.prepare(`
++    SELECT 1 FROM dismissed_tweets
++     WHERE tweet_key LIKE 'tw:%'
++     LIMIT 1
++  `).get();
++  const statuses = keys.map((key) => {
++    if (!key) return 'new';
++    if (dismissed.has(key)) return 'known-dismissed';
++    if (active.has(key)) return 'known-active';
++    return 'new';
++  });
++  return { hasKnownHistory, statuses };
++}
++
+ function isTweetDismissed(key) {
+   if (!key) return false;
+   return !!getDatabase()
+@@ -1990,6 +2101,8 @@ module.exports = {
+   tweetKeyFromUrl,
+   igKeyFromUrl,
+   sourceKeyFromUrl,
++  findActiveSaveBySourceKey,
++  classifyXBookmarkUrls,
+   isTweetDismissed,
+   dismissTweet,
+   undismissTweet,
+@@ -2032,6 +2145,7 @@ module.exports = {
+   deleteUnusedTags,
+   getIntegrityResult,
+   getMigrationReport,
++  repairMissingXTweetCreatedAt,
+   // Boards
+   listBoards,
+   listBoardsWithThumbs,
+diff --git a/src/main/extension-server.js b/src/main/extension-server.js
+index 3b3610d328fadc2deaa2c033305b6565bd45f181..f16a610fa4566e0b049a92dcd5dac8215d174968 100644
+--- a/src/main/extension-server.js
++++ b/src/main/extension-server.js
+@@ -17,6 +17,7 @@ const {
+   CAPTURE_HOST: HOST,
+   CAPTURE_PORT: PORT,
+ } = require('../shared/runtime-identity');
++const { deriveXTweetCreatedAt } = require('./x-tweet-date');
+ 
+ // Big enough for a base64 screen-capture data URL (the extension's
+ // "capture page / area"). The native-messaging bridge caps the source
+@@ -25,7 +26,9 @@ const {
+ const MAX_BODY = 2 * 1024 * 1024;
+ 
+ let server = null;
++let socialImportStatusHandler = null;
+ let cachedToken = null;
++const socialSaveLocks = new Map();
+ 
+ // --- Sync ordering ------------------------------------------------------
+ // The extension streams a social sync (X bookmarks / IG saved) newest-
+@@ -81,6 +84,17 @@ function sendJson(res, status, body) {
+   res.end(json);
+ }
+ 
++async function completeSavedResponse({ res, record, notify, duplicate = false } = {}) {
++  if (!record?.id) throw new Error('saved record id required');
++  if (typeof notify === 'function') {
++    try { notify(record); } catch { /* saved response is authoritative */ }
++  }
++  const body = { ok: true, id: record.id };
++  if (duplicate) body.duplicate = true;
++  sendJson(res, 200, body);
++  return body;
++}
++
+ function readJsonBody(req) {
+   return new Promise((resolve, reject) => {
+     let bytes = 0;
+@@ -106,6 +120,29 @@ function readJsonBody(req) {
+   });
+ }
+ 
++function validateExtensionRequest(req, res) {
++  const origin = req.headers.origin || '';
++  if (origin && !origin.startsWith('chrome-extension://') && !origin.startsWith('moz-extension://')) {
++    sendJson(res, 403, { ok: false, error: 'forbidden origin' });
++    return false;
++  }
++  const token = req.headers['x-gatheros-token'];
++  if (!token || token !== getOrCreateToken()) {
++    sendJson(res, 401, { ok: false, error: 'invalid token' });
++    return false;
++  }
++  return true;
++}
++
++async function readPostBody(req, res) {
++  try {
++    return { body: await readJsonBody(req) };
++  } catch {
++    sendJson(res, 400, { ok: false, error: 'invalid body' });
++    return null;
++  }
++}
++
+ // A custom-protocol URL the renderer resolves to a local file — same
+ // scheme src/renderer/lib/fileUrl.js produces, so a media item rewritten
+ // to this loads from disk just like a primary save.
+@@ -141,17 +178,7 @@ async function handleSave(req, res) {
+   // Defense in depth: the token is the real check, but rejecting
+   // anything that isn't a browser-extension origin keeps stray
+   // web-page fetches from even reaching the auth path.
+-  const origin = req.headers.origin || '';
+-  if (origin && !origin.startsWith('chrome-extension://') && !origin.startsWith('moz-extension://')) {
+-    sendJson(res, 403, { ok: false, error: 'forbidden origin' });
+-    return;
+-  }
+-
+-  const token = req.headers['x-gatheros-token'];
+-  if (!token || token !== getOrCreateToken()) {
+-    sendJson(res, 401, { ok: false, error: 'invalid token' });
+-    return;
+-  }
++  if (!validateExtensionRequest(req, res)) return;
+ 
+   // Free tier: new saves require an upgrade. Surface the prompt in the
+   // app window and tell the extension so it can show its own notice.
+@@ -165,13 +192,9 @@ async function handleSave(req, res) {
+     }
+   } catch { /* fail open */ }
+ 
+-  let body;
+-  try {
+-    body = await readJsonBody(req);
+-  } catch {
+-    sendJson(res, 400, { ok: false, error: 'invalid body' });
+-    return;
+-  }
++  const parsed = await readPostBody(req, res);
++  if (!parsed) return;
++  const { body } = parsed;
+ 
+   const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
+   const videoUrl = typeof body?.videoUrl === 'string' ? body.videoUrl.trim() : '';
+@@ -189,6 +212,13 @@ async function handleSave(req, res) {
+   // by tag. Anything unrecognised falls back to 'x' so a malformed
+   // value can't orphan a row out of the existing views.
+   const source = body?.source === 'instagram' ? 'instagram' : 'x';
++  if (source === 'x' && tweetMeta) {
++    const suppliedTweetCreatedAt = Number(tweetMeta.tweetCreatedAt);
++    if (!Number.isFinite(suppliedTweetCreatedAt) || suppliedTweetCreatedAt <= 0) {
++      const derivedTweetCreatedAt = deriveXTweetCreatedAt(pageUrl);
++      if (derivedTweetCreatedAt !== null) tweetMeta.tweetCreatedAt = derivedTweetCreatedAt;
++    }
++  }
+   // Need at least one of: an image, a video, or a page URL. The X-
+   // bookmark capture sends videoUrl for video-only tweets; right-click
+   // sends an http(s) imageUrl; the extension's "capture page / area"
+@@ -209,9 +239,12 @@ async function handleSave(req, res) {
+     return;
+   }
+ 
++  let releaseSocialSave = null;
+   try {
+     const { saveImageFromUrl, saveVideoFromUrl } = require('./storage');
+-    const { insertSave, isTweetDismissed, sourceKeyFromUrl } = require('./db');
++    const {
++      insertSave, isTweetDismissed, sourceKeyFromUrl, findActiveSaveBySourceKey,
++    } = require('./db');
+     const { notifySaved, notifyDuplicate, notifyBookmarkSaved } = require('./notify');
+ 
+     // X bookmark / IG saved-post syncs (tweetMeta present) get the
+@@ -220,6 +253,26 @@ async function handleSave(req, res) {
+     // entirely — the tombstone makes deletions stick across re-scrolls.
+     // sourceKeyFromUrl resolves either an X status or an IG permalink.
+     const isBookmark = !!tweetMeta;
++    const tweetKey = sourceKeyFromUrl(pageUrl);
++
++    // Same social post can arrive from catch-up, passive watcher, or a
++    // retried native message at once. Serialize by stable post identity,
++    // then return the canonical active save before doing media work.
++    if (isBookmark && tweetKey) {
++      while (socialSaveLocks.has(tweetKey)) await socialSaveLocks.get(tweetKey);
++      const existing = findActiveSaveBySourceKey(tweetKey);
++      if (existing) {
++        await completeSavedResponse({ res, record: existing, notify: notifyDuplicate, duplicate: true });
++        return;
++      }
++      let unlock;
++      const pending = new Promise((resolve) => { unlock = resolve; });
++      socialSaveLocks.set(tweetKey, pending);
++      releaseSocialSave = () => {
++        if (socialSaveLocks.get(tweetKey) === pending) socialSaveLocks.delete(tweetKey);
++        unlock();
++      };
++    }
+ 
+     // Master sync switches (Settings → Capture → Syncing). When a source
+     // is turned off, drop its social captures here so they never enter the
+@@ -236,7 +289,6 @@ async function handleSave(req, res) {
+       }
+     }
+ 
+-    const tweetKey = sourceKeyFromUrl(pageUrl);
+     // Explicit "Import bookmarks" backfill sends forceImport: the user is
+     // deliberately pulling their X bookmarks, so honor it even for ones
+     // they previously removed — lift the tombstone and save. Passive sync
+@@ -390,10 +442,58 @@ async function handleSave(req, res) {
+       else notifyError('Couldn\u2019t save from the extension \u2014 try again');
+     } catch { /* toast is best-effort */ }
+     sendJson(res, 500, { ok: false, error: err?.message || 'save failed' });
++  } finally {
++    releaseSocialSave?.();
++  }
++}
++
++async function handleXBookmarkStatus(req, res) {
++  if (!validateExtensionRequest(req, res)) return;
++  const parsed = await readPostBody(req, res);
++  if (!parsed) return;
++  const { body } = parsed;
++  try {
++    const { classifyXBookmarkUrls } = require('./db');
++    const result = classifyXBookmarkUrls(body?.tweetUrls);
++    sendJson(res, 200, { ok: true, ...result });
++  } catch (err) {
++    sendJson(res, 400, { ok: false, error: err?.message || 'invalid tweetUrls' });
+   }
+ }
+ 
+-function start() {
++async function handleSocialImportStatus(req, res, handler = socialImportStatusHandler) {
++  if (!validateExtensionRequest(req, res)) return;
++  const parsed = await readPostBody(req, res);
++  if (!parsed) return;
++  const { body } = parsed;
++  const allowed = new Set(['runId', 'platform', 'mode', 'stage', 'scanned', 'saved', 'known', 'failed', 'target', 'startedAt', 'message']);
++  const keys = Object.keys(body || {});
++  if (keys.some((key) => !allowed.has(key)) || keys.length !== allowed.size) {
++    sendJson(res, 400, { ok: false, error: 'invalid social import payload' });
++    return;
++  }
++  try {
++    const { validateSnapshot } = require('./social-import-state');
++    const error = validateSnapshot(body);
++    if (error) {
++      sendJson(res, 400, { ok: false, error });
++      return;
++    }
++    const result = typeof handler === 'function'
++      ? await handler(body)
++      : { ok: true, cancelRequested: false };
++    if (result?.ok === false) {
++      sendJson(res, 400, { ok: false, error: result.error || 'social import status rejected', cancelRequested: !!result.cancelRequested });
++      return;
++    }
++    sendJson(res, 200, { ok: true, cancelRequested: !!result?.cancelRequested });
++  } catch (err) {
++    sendJson(res, 400, { ok: false, error: err?.message || 'invalid social import payload' });
++  }
++}
++
++function start({ onSocialImportStatus } = {}) {
++  socialImportStatusHandler = typeof onSocialImportStatus === 'function' ? onSocialImportStatus : null;
+   if (server) return;
+   // Trigger the token init now so the renderer's first prefs read
+   // already sees it.
+@@ -420,6 +520,14 @@ function start() {
+       handleSave(req, res);
+       return;
+     }
++    if (req.method === 'POST' && req.url === '/x-bookmark-status') {
++      handleXBookmarkStatus(req, res);
++      return;
++    }
++    if (req.method === 'POST' && req.url === '/social-import-status') {
++      handleSocialImportStatus(req, res);
++      return;
++    }
+     sendJson(res, 404, { ok: false, error: 'not found' });
+   });
+ 
+@@ -433,9 +541,19 @@ function start() {
+ }
+ 
+ function stop() {
++  socialImportStatusHandler = null;
+   if (!server) return;
+   server.close();
+   server = null;
+ }
+ 
+-module.exports = { start, stop, getOrCreateToken, PORT };
++module.exports = {
++  start,
++  stop,
++  getOrCreateToken,
++  completeSavedResponse,
++  deriveXTweetCreatedAt,
++  PORT,
++  handleXBookmarkStatus,
++  handleSocialImportStatus,
++};
+diff --git a/src/main/index.js b/src/main/index.js
+index ad28ab1b467ef97fa24fa1e096877b169f434730..0b49ae4b411360489be31be1b2dd40764eb107bc 100644
+--- a/src/main/index.js
++++ b/src/main/index.js
+@@ -66,6 +66,7 @@ const { getPref } = require('./settings');
+ const { hasSession: hasAiSession, analyzeImage, embedText } = require('./openai');
+ const licensing = require('./licensing');
+ const { URL_SCHEME: LICENSE_URL_SCHEME } = require('../shared/licensing-config');
++const { createSocialImportState } = require('./social-import-state');
+ 
+ // Register the custom URL scheme so the OS knows magic-link emails
+ // (gatherlocal://auth/verify?token=…) should open this app. macOS
+@@ -150,6 +151,13 @@ const isDev = !app.isPackaged;
+ const DEV_URL = 'http://localhost:5173';
+ 
+ let mainWindow = null;
++const socialImportState = createSocialImportState({
++  onChange: (snapshot) => {
++    for (const win of BrowserWindow.getAllWindows()) {
++      try { win.webContents.send('social-import:status', snapshot); } catch { /* renderer may be closing */ }
++    }
++  },
++});
+ let tray = null;
+ 
+ // macOS Dock-drop queue. The 'open-file' event can fire BEFORE app
+@@ -1054,7 +1062,9 @@ app.whenReady().then(() => {
+   // as a fresh install and wrongly handed a 14-day trial.
+   try { require('./entitlement').ensureTrialDecided(); }
+   catch (err) { console.warn('[gatheros] trial init failed:', err?.message || err); }
+-  registerIpcHandlers();
++  registerIpcHandlers({
++    socialImportState,
++  });
+   createMainWindow();
+   // Apply the macOS application menu now that mainWindow exists so
+   // the menu can target webContents.send() at the right window.
+@@ -1062,7 +1072,9 @@ app.whenReady().then(() => {
+   Menu.setApplicationMenu(buildAppMenu({ getMainWindow: () => mainWindow }));
+   createTray();
+   registerCaptureHotkey();
+-  extensionServer.start();
++  extensionServer.start({
++    onSocialImportStatus: (payload) => socialImportState.update(payload),
++  });
+   // Drop the native-messaging host manifest into every Chromium-
+   // family browser's user dir so the extension can connect without
+   // the user ever touching the filesystem.
+diff --git a/src/main/ipc.js b/src/main/ipc.js
+index 6dbb791982f3b378d3d1c14e4bc4b48f6b2aa8ef..0be574366ab636c839b2bfe5bbeb8552c4cbd57b 100644
+--- a/src/main/ipc.js
++++ b/src/main/ipc.js
+@@ -97,7 +97,14 @@ async function embedQueryCached(queryText) {
+   return vec;
+ }
+ 
+-function registerIpcHandlers() {
++function registerIpcHandlers({ socialImportState = null } = {}) {
++  ipcMain.handle('social-import:get', () => socialImportState?.get?.() || null);
++  ipcMain.handle('social-import:cancel', (_event, runId) => (
++    socialImportState?.cancel?.(runId) || { ok: false, error: 'social import unavailable' }
++  ));
++  ipcMain.handle('social-import:dismiss', (_event, runId) => (
++    socialImportState?.dismiss?.(runId) || { ok: false, error: 'social import unavailable' }
++  ));
+   // Merges saves whose extracted palette is perceptually similar to a
+   // named color in the query (e.g. "orange", "navy") into the existing
+   // result set. Same view filters (collection/explicit colorHex) get
+diff --git a/src/main/native-host.js b/src/main/native-host.js
+index d95ab001a40a0772f1718eaad7be92dfc7800939..908567b7324a2ab77f91e5eebf62594197588bc2 100644
+--- a/src/main/native-host.js
++++ b/src/main/native-host.js
+@@ -188,14 +188,14 @@ async function ensureAppRunning({ background = false } = {}) {
+   return false;
+ }
+ 
+-function postToApp(body, token) {
++function postToApp(body, token, path = '/save') {
+   return new Promise((resolve) => {
+     const payload = Buffer.from(JSON.stringify(body), 'utf8');
+     const req = http.request(
+       {
+         host: SERVER_HOST,
+         port: SERVER_PORT,
+-        path: '/save',
++        path,
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+@@ -294,6 +294,39 @@ async function handleMessage(msg) {
+     writeMessage(result.body);
+     return;
+   }
++  if (msg.type === 'x-bookmark-status') {
++    const ready = await ensureAppRunning({ background: true });
++    if (!ready) {
++      writeMessage({ ok: false, error: 'app not running' });
++      return;
++    }
++    const token = readToken();
++    if (!token) {
++      writeMessage({ ok: false, error: 'GatherLocal is not installed or has never been launched.' });
++      return;
++    }
++    const result = await postToApp({ tweetUrls: msg.tweetUrls }, token, '/x-bookmark-status');
++    debug('handleMessage: x-bookmark-status result', JSON.stringify(result.body).slice(0, 200));
++    writeMessage(result.body);
++    return;
++  }
++  if (msg.type === 'social-import-status') {
++    const ready = await ensureAppRunning({ background: true });
++    if (!ready) {
++      writeMessage({ ok: false, error: 'app not running', cancelRequested: false });
++      return;
++    }
++    const token = readToken();
++    if (!token) {
++      writeMessage({ ok: false, error: 'GatherLocal is not installed or has never been launched.', cancelRequested: false });
++      return;
++    }
++    const { type: _type, ...payload } = msg;
++    const result = await postToApp(payload, token, '/social-import-status');
++    debug('handleMessage: social-import-status result', JSON.stringify(result.body).slice(0, 200));
++    writeMessage(result.body);
++    return;
++  }
+   writeMessage({ ok: false, error: `unknown message type: ${msg.type}` });
+ }
+ 
+diff --git a/src/main/preload.js b/src/main/preload.js
+index 94a57db370de70d7fb0a1c75bdc9994c89578210..38580f146c73a9e88db592e503405b8ae811628f 100644
+--- a/src/main/preload.js
++++ b/src/main/preload.js
+@@ -241,6 +241,11 @@ contextBridge.exposeInMainWorld('moodmark', {
+   entitlement: {
+     get: () => ipcRenderer.invoke('entitlement:get'),
+   },
++  socialImport: {
++    get: () => ipcRenderer.invoke('social-import:get'),
++    cancel: (runId) => ipcRenderer.invoke('social-import:cancel', runId),
++    dismiss: (runId) => ipcRenderer.invoke('social-import:dismiss', runId),
++  },
+   on: (channel, listener) => {
+     const allowed = new Set([
+       'save:created',
+@@ -260,6 +265,7 @@ contextBridge.exposeInMainWorld('moodmark', {
+       'library:switched',
+       'licensing:auth-result',
+       'menu:command',
++      'social-import:status',
+     ]);
+     if (!allowed.has(channel)) return () => {};
+     const wrapped = (_event, ...args) => listener(...args);
+diff --git a/src/main/settings.js b/src/main/settings.js
+index 3848c4db2f312f95713a0723d9425b72953b9b09..969b4738a52f11fee37aa95d0082f4339e1a4d4a 100644
+--- a/src/main/settings.js
++++ b/src/main/settings.js
+@@ -49,6 +49,7 @@ const DEFAULT_PREFS = {
+   // image/page saves from the extension are unaffected. Default on.
+   syncXEnabled: true,
+   syncInstagramEnabled: true,
++  sortXBookmarksByTweetDate: false,
+ 
+   // ── Trial / free tier ────────────────────────────────────────
+   // Timestamp (ms) of when the local no-account trial started, set on
+diff --git a/src/main/social-import-state.js b/src/main/social-import-state.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..7180c3bc71c73fdc7fdda9f3e18b4bd81340c8fb
+--- /dev/null
++++ b/src/main/social-import-state.js
+@@ -0,0 +1,97 @@
++const PLATFORMS = new Set(['x', 'instagram']);
++const MODES = new Set(['catch-up', 'fixed', 'all']);
++const STAGES = new Set(['starting', 'scanning', 'saving', 'stopping', 'complete', 'stopped', 'failed']);
++const COUNTERS = ['scanned', 'saved', 'known', 'failed'];
++
++function validateSnapshot(value) {
++  if (!value || typeof value !== 'object') return 'snapshot must be an object';
++  if (typeof value.runId !== 'string' || value.runId.length === 0 || value.runId.length > 200) return 'runId required';
++  if (!PLATFORMS.has(value.platform)) return 'invalid platform';
++  if (!MODES.has(value.mode)) return 'invalid mode';
++  if (!STAGES.has(value.stage)) return 'invalid stage';
++  if (!Number.isFinite(value.startedAt) || value.startedAt < 0) return 'invalid startedAt';
++  if (!(value.target === null || (Number.isInteger(value.target) && value.target > 0))) return 'invalid target';
++  for (const key of COUNTERS) {
++    if (!Number.isInteger(value[key]) || value[key] < 0) return `invalid ${key}`;
++  }
++  if (value.message !== null && typeof value.message !== 'string') return 'invalid message';
++  return null;
++}
++
++function createSocialImportState({
++  now = () => Date.now(),
++  setTimer = (fn, ms) => setTimeout(fn, ms),
++  clearTimer = (id) => clearTimeout(id),
++  onChange = () => {},
++} = {}) {
++  let active = null;
++  let cancelRequested = false;
++  let staleTimer = null;
++  let lastHeartbeatAt = 0;
++  let stalled = false;
++
++  const view = () => (active ? { ...active, cancelRequested, stalled } : null);
++  const emit = () => { try { onChange(view()); } catch { /* renderer notification is best effort */ } };
++  const armStaleTimer = () => {
++    if (staleTimer !== null) clearTimer(staleTimer);
++    if (!active || ['complete', 'stopped', 'failed'].includes(active.stage)) return;
++    staleTimer = setTimer(() => {
++      staleTimer = null;
++      if (!active || now() - lastHeartbeatAt < 30_000) return;
++      stalled = true;
++      emit();
++    }, Math.max(0, 30_000 - (now() - lastHeartbeatAt)));
++    if (staleTimer && typeof staleTimer.unref === 'function') staleTimer.unref();
++  };
++
++  function update(snapshot) {
++    const error = validateSnapshot(snapshot);
++    if (error) return { ok: false, error };
++    if (!active) {
++      if (snapshot.stage !== 'starting') return { ok: false, error: 'run must start with starting stage' };
++    } else if (snapshot.stage === 'starting' && ['complete', 'stopped', 'failed'].includes(active.stage)) {
++      cancelRequested = false;
++      active = null;
++    } else if (snapshot.runId !== active.runId) {
++      return { ok: false, error: 'runId mismatch' };
++    }
++    for (const key of COUNTERS) {
++      if (active && snapshot[key] < active[key]) return { ok: false, error: `${key} cannot decrease` };
++    }
++    active = { ...snapshot };
++    lastHeartbeatAt = now();
++    stalled = false;
++    if (snapshot.stage === 'starting') cancelRequested = false;
++    if (['complete', 'stopped', 'failed'].includes(snapshot.stage)) {
++      if (staleTimer !== null) clearTimer(staleTimer);
++    } else {
++      armStaleTimer();
++    }
++    emit();
++    return { ok: true, cancelRequested };
++  }
++
++  function cancel(runId) {
++    if (!active || active.runId !== runId || ['complete', 'stopped', 'failed'].includes(active.stage)) {
++      return { ok: false, error: 'run not active' };
++    }
++    cancelRequested = true;
++    if (active.stage !== 'stopping') active = { ...active, stage: 'stopping', message: active.message || 'Stopping…' };
++    emit();
++    return { ok: true, cancelRequested: true };
++  }
++
++  function dismiss(runId) {
++    if (!active || active.runId !== runId || !['complete', 'stopped', 'failed'].includes(active.stage)) {
++      return { ok: false, error: 'not dismissible' };
++    }
++    active = null;
++    cancelRequested = false;
++    emit();
++    return { ok: true };
++  }
++
++  return { update, cancel, dismiss, get: view, validateSnapshot };
++}
++
++module.exports = { createSocialImportState, validateSnapshot };
+diff --git a/src/main/x-tweet-date.js b/src/main/x-tweet-date.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..72ff0903099d462f14da79ce4342bf5ecbaddc38
+--- /dev/null
++++ b/src/main/x-tweet-date.js
+@@ -0,0 +1,17 @@
++const X_SNOWFLAKE_EPOCH_MS = 1288834974657n;
++
++function deriveXTweetCreatedAt(pageUrl) {
++  if (typeof pageUrl !== 'string') return null;
++  const match = pageUrl.match(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/[^/]+\/status\/(\d+)(?:[/?#]|$)/i);
++  if (!match) return null;
++  try {
++    const timestamp = Number((BigInt(match[1]) >> 22n) + X_SNOWFLAKE_EPOCH_MS);
++    return Number.isSafeInteger(timestamp) && timestamp > Number(X_SNOWFLAKE_EPOCH_MS)
++      ? timestamp
++      : null;
++  } catch {
++    return null;
++  }
++}
++
++module.exports = { deriveXTweetCreatedAt };
+diff --git a/src/renderer/App.jsx b/src/renderer/App.jsx
+index e9722100d04a36090dd56c257c2878c6623881fa..8dc9ed423e36e7ba49a239bb9da5749bccb15f14 100644
+--- a/src/renderer/App.jsx
++++ b/src/renderer/App.jsx
+@@ -96,6 +96,7 @@ import { extractDropImageUrls } from './lib/dropUrls.js';
+ import { fileUrl } from './lib/fileUrl.js';
+ import { flyToCollection } from './lib/flyToCollection.js';
+ import { seededShuffle } from './lib/shuffle.js';
++import { getSaveSortDate } from './lib/saveSortDate.mjs';
+ import { tweetTypeOf } from './lib/tweetType.js';
+ import { configureSaveSound, DEFAULT_SAVE_SOUND, playEmptyTrashSound } from './lib/sounds.js';
+ import OnboardingOverlay from './onboarding/OnboardingOverlay.jsx';
+@@ -103,6 +104,8 @@ import { useOnboarding, ONBOARDING_DONE_PREF } from './onboarding/OnboardingCont
+ import { EntitlementProvider, requestUpgrade, PENDING_UPGRADE_KEY } from './context/entitlement.jsx';
+ import UpgradeModal from './components/UpgradeModal.jsx';
+ import UpgradeBanner from './components/UpgradeBanner.jsx';
++import SocialImportActivity from './components/SocialImportActivity.jsx';
++import { isTerminalStage } from './lib/socialImportView.mjs';
+ 
+ // Lucide-backed icon shims. Component names are kept identical to
+ // the previous inline SVG defs so every existing call site (right-
+@@ -231,6 +234,60 @@ export default function App({ entitlement } = {}) {
+     freshIds,
+   } = useLibrary();
+ 
++  // Explicit X / Instagram imports are owned by main process state. Keep a
++  // local snapshot for immediate UI updates, then rehydrate on app launch.
++  const [socialImportSnapshot, setSocialImportSnapshot] = useState(null);
++  const [socialImportNow, setSocialImportNow] = useState(() => Date.now());
++  const socialImportReloadedRef = useRef(new Set());
++
++  useEffect(() => {
++    let mounted = true;
++    const unwrap = (value) => value?.snapshot || value?.status || value?.data || value;
++    const accept = (value) => {
++      if (!mounted) return;
++      const next = unwrap(value);
++      if (!next?.runId || !next?.platform) return;
++      setSocialImportSnapshot(next);
++      setSocialImportNow(Date.now());
++    };
++    try {
++      const off = window.moodmark?.on?.('social-import:status', accept);
++      Promise.resolve(window.moodmark?.socialImport?.get?.()).then(accept).catch(() => {});
++      return () => {
++        mounted = false;
++        try { off?.(); } catch { /* ignore */ }
++      };
++    } catch {
++      mounted = false;
++      return undefined;
++    }
++  }, []);
++
++  useEffect(() => {
++    if (!socialImportSnapshot) return undefined;
++    const timer = setInterval(() => setSocialImportNow(Date.now()), 1000);
++    return () => clearInterval(timer);
++  }, [socialImportSnapshot?.runId, socialImportSnapshot?.stage]);
++
++  useEffect(() => {
++    const snapshot = socialImportSnapshot;
++    if (!snapshot || !isTerminalStage(snapshot.stage)) return undefined;
++    if (snapshot.saved > 0 && !socialImportReloadedRef.current.has(snapshot.runId)) {
++      socialImportReloadedRef.current.add(snapshot.runId);
++      reload();
++    }
++    return undefined;
++  }, [socialImportSnapshot, reload]);
++
++  const cancelSocialImport = useCallback((runId) => {
++    return window.moodmark?.socialImport?.cancel?.(runId);
++  }, []);
++
++  const dismissSocialImport = useCallback((runId) => {
++    Promise.resolve(window.moodmark?.socialImport?.dismiss?.(runId)).catch(() => {});
++    setSocialImportSnapshot((current) => current?.runId === runId ? null : current);
++  }, []);
++
+   // Cmd+Z undo stack. Mutations push a label + reversal closure; the
+   // global keydown handler at the end of this component pops & runs.
+   const undoStack = useUndoStack();
+@@ -2258,6 +2315,8 @@ export default function App({ entitlement } = {}) {
+   // seed is null this is a no-op; the same seed always produces the
+   // same permutation so the order stays stable across re-renders.
+   const displaySaves = useMemo(() => {
++    const useTweetDateForXBookmarks = prefs.sortXBookmarksByTweetDate === true
++      && (view.type === 'all' || view.type === 'bookmarks');
+     if (shuffleSeed) {
+       // Pull saves added AFTER the shuffle to the top in newest-first
+       // order so freshly-dropped images always show at position #1.
+@@ -2272,12 +2331,16 @@ export default function App({ entitlement } = {}) {
+       fresh.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+       return [...fresh, ...seededShuffle(settled, shuffleSeed)];
+     }
+-    if (sortMode === 'recent') return saves;
++    if (sortMode === 'recent' && !useTweetDateForXBookmarks) return saves;
+     // Clone before sorting so the underlying saves array (memoized
+     // higher up) isn't mutated.
+     const sorted = saves.slice();
+-    if (sortMode === 'oldest') {
+-      sorted.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
++    if (sortMode === 'recent' || sortMode === 'oldest') {
++      const dir = sortMode === 'oldest' ? 1 : -1;
++      sorted.sort((a, b) => (
++        getSaveSortDate(a, useTweetDateForXBookmarks)
++        - getSaveSortDate(b, useTweetDateForXBookmarks)
++      ) * dir);
+     } else if (sortMode === 'most-viewed') {
+       // view_count bumps as saves open in the focused view; ties fall
+       // back to recency so unviewed libraries still have a stable order.
+@@ -2285,7 +2348,7 @@ export default function App({ entitlement } = {}) {
+         || (b.created_at || 0) - (a.created_at || 0));
+     }
+     return sorted;
+-  }, [saves, shuffleSeed, shuffleAt, sortMode]);
++  }, [saves, shuffleSeed, shuffleAt, sortMode, prefs.sortXBookmarksByTweetDate, view.type]);
+ 
+   const visibleSaves = useMemo(() => {
+     let base = displaySaves;
+@@ -4103,6 +4166,12 @@ export default function App({ entitlement } = {}) {
+         />
+       )}
+ 
++      <SocialImportActivity
++        snapshot={socialImportSnapshot}
++        now={socialImportNow}
++        onCancel={cancelSocialImport}
++        onDismiss={dismissSocialImport}
++      />
+       <QuickLookOverlay
+         save={peekedSaveId ? saves.find((s) => s.id === peekedSaveId) || null : null}
+         onDismiss={() => setPeekedSaveId(null)}
+diff --git a/src/renderer/components/SettingsModal.jsx b/src/renderer/components/SettingsModal.jsx
+index 5b420ca42ab25641df429066377f2fee28395203..dc78305172865699c624f0e9f10873c8ad36ab4d 100644
+--- a/src/renderer/components/SettingsModal.jsx
++++ b/src/renderer/components/SettingsModal.jsx
+@@ -1506,6 +1506,13 @@ export default function SettingsModal({
+                     onChange={(v) => updatePref('syncXEnabled', v)}
+                   />
+                 </div>
++                <div className={styles.toggleRow}>
++                  <span className={styles.toggleLabel}>Use tweet date for X bookmarks</span>
++                  <ToggleSwitch
++                    on={prefs.sortXBookmarksByTweetDate === true}
++                    onChange={(v) => updatePref('sortXBookmarksByTweetDate', v)}
++                  />
++                </div>
+                 <div className={styles.toggleRow}>
+                   <span className={styles.toggleLabel}>Sync Instagram saves</span>
+                   <ToggleSwitch
+@@ -1514,9 +1521,10 @@ export default function SettingsModal({
+                   />
+                 </div>
+                 <span className={styles.fieldHint}>
+-                  When off, posts you bookmark on X or save on Instagram
+-                  stop flowing into your library. Saving images and pages
+-                  from the browser extension still works.
++                  When sorting by date, X bookmarks can use the tweet's
++                  publish date instead of the date they were saved to
++                  GatherLocal. Other items keep using their GatherLocal
++                  save date.
+                 </span>
+               </div>
+             </div>
+diff --git a/src/renderer/components/SocialImportActivity.jsx b/src/renderer/components/SocialImportActivity.jsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..b3620ad9ec43d2e7da48a523095ba4c57ab42791
+--- /dev/null
++++ b/src/renderer/components/SocialImportActivity.jsx
+@@ -0,0 +1,112 @@
++import React, { useEffect, useMemo, useRef, useState } from 'react';
++import { Instagram, LoaderCircle, Square, X } from 'lucide-react';
++import styles from './SocialImportActivity.module.css';
++import { toSocialImportView } from '../lib/socialImportView.mjs';
++
++function PlatformIcon({ platform }) {
++  if (platform === 'instagram') return <Instagram size={16} strokeWidth={1.8} aria-hidden="true" />;
++  return <span className={styles.xIcon} aria-hidden="true">𝕏</span>;
++}
++
++export default function SocialImportActivity({
++  snapshot,
++  onCancel,
++  onDismiss,
++  now = Date.now(),
++}) {
++  const [expanded, setExpanded] = useState(false);
++  const triggerRef = useRef(null);
++  const view = useMemo(() => toSocialImportView(snapshot, { now }), [snapshot, now]);
++
++  useEffect(() => {
++    if (!expanded) return undefined;
++    const onKeyDown = (event) => {
++      if (event.key !== 'Escape') return;
++      setExpanded(false);
++      triggerRef.current?.focus();
++    };
++    window.addEventListener('keydown', onKeyDown);
++    return () => window.removeEventListener('keydown', onKeyDown);
++  }, [expanded]);
++
++  useEffect(() => {
++    if (view?.terminal) setExpanded(false);
++  }, [view?.terminal, view?.runId]);
++
++  if (!view) return null;
++
++  const terminal = view.terminal;
++  const busy = view.stage === 'stopping';
++  const stageText = view.stalled ? 'Import may be stalled' : view.stageName;
++  const summary = `${stageText}; ${plural(view.saved, 'new save')} saved`;
++  const toggle = () => { if (!terminal) setExpanded((value) => !value); };
++
++  return (
++    <div
++      className={styles.activity}
++      data-terminal={terminal ? 'true' : 'false'}
++    >
++      {terminal && (
++        <button
++          type="button"
++          className={styles.dismiss}
++          aria-label="Dismiss import notification"
++          onClick={() => onDismiss?.(view.runId)}
++        >
++          <X size={14} strokeWidth={2} aria-hidden="true" />
++        </button>
++      )}
++      <button
++        ref={triggerRef}
++        type="button"
++        className={styles.trigger}
++        aria-expanded={expanded}
++        aria-label={`${view.headline}. ${summary}${terminal ? '' : '. Show import details'}`}
++        disabled={terminal}
++        onClick={toggle}
++      >
++        {!terminal && <LoaderCircle className={styles.spinner} size={16} strokeWidth={2} aria-hidden="true" />}
++        {terminal && <span className={styles.terminalDot} aria-hidden="true" />}
++        <PlatformIcon platform={view.platform} />
++        <span className={styles.triggerText}>
++          <span className={styles.headline}>{view.headline}</span>
++          <span className={styles.stage} aria-live="polite">{summary}</span>
++        </span>
++      </button>
++
++      {expanded && !terminal && (
++        <section className={styles.card} aria-label={`${view.platformName} import details`}>
++          <div className={styles.cardHeader}>
++            <div>
++              <div className={styles.eyebrow}>{view.modeName}</div>
++              <h2>{view.headline}</h2>
++            </div>
++            <span className={styles.elapsed}>{view.elapsed}</span>
++          </div>
++          <div className={styles.stageDetail} role="status" aria-live="polite">
++            {view.stalled ? 'Import may be stalled' : view.stageName}
++          </div>
++          <dl className={styles.counts}>
++            <div><dt>Scanned</dt><dd>{view.scanned}</dd></div>
++            <div><dt>Newly saved</dt><dd>{view.saved}</dd></div>
++            <div><dt>Already known</dt><dd>{view.known}</dd></div>
++            <div><dt>Failed</dt><dd>{view.failed}</dd></div>
++          </dl>
++          <button
++            type="button"
++            className={styles.stop}
++            onClick={(event) => { event.stopPropagation(); onCancel?.(view.runId); }}
++            disabled={busy || terminal}
++          >
++            <Square size={13} fill="currentColor" aria-hidden="true" />
++            {busy ? 'Stopping…' : 'Stop import'}
++          </button>
++        </section>
++      )}
++    </div>
++  );
++}
++
++function plural(value, singular) {
++  return `${value} ${value === 1 ? singular : `${singular}s`}`;
++}
+diff --git a/src/renderer/components/SocialImportActivity.module.css b/src/renderer/components/SocialImportActivity.module.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..cdbc1fc600d2ea254cb21e1a8ba137a459c9bb71
+--- /dev/null
++++ b/src/renderer/components/SocialImportActivity.module.css
+@@ -0,0 +1,114 @@
++.activity {
++  position: fixed;
++  left: 50%;
++  bottom: var(--social-import-bottom, 24px);
++  transform: translateX(-50%);
++  z-index: 95;
++  display: flex;
++  /* DOM keeps trigger first for keyboard order; visual stack reverses so
++     details open upward while collapsed pill stays anchored to FAB lane. */
++  flex-direction: column-reverse;
++  align-items: center;
++  gap: 8px;
++  max-width: min(360px, calc(100vw - 32px));
++  font-family: var(--font-ui);
++}
++
++.trigger,
++.card {
++  background: linear-gradient(180deg, var(--glass-from) 0%, var(--glass-to) 100%);
++  border: 0.5px solid var(--glass-border);
++  box-shadow: var(--shadow-glass);
++  backdrop-filter: blur(32px) saturate(1.5);
++  -webkit-backdrop-filter: blur(32px) saturate(1.5);
++}
++
++.trigger {
++  display: inline-flex;
++  align-items: center;
++  gap: 9px;
++  min-height: 46px;
++  max-width: 100%;
++  padding: 8px 13px 8px 11px;
++  border-radius: var(--radius-pill);
++  color: var(--text-primary);
++  cursor: pointer;
++  text-align: left;
++}
++
++.trigger:disabled { cursor: default; }
++
++.dismiss {
++  position: absolute;
++  top: 7px;
++  right: 7px;
++  z-index: 1;
++  display: grid;
++  width: 28px;
++  height: 28px;
++  place-items: center;
++  padding: 0;
++  border: 0;
++  border-radius: 50%;
++  background: transparent;
++  color: var(--text-secondary);
++  cursor: pointer;
++}
++.dismiss:hover { background: var(--hover-bg); color: var(--text-primary); }
++.dismiss:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
++.activity[data-terminal='true'] .trigger { padding-right: 42px; }
++
++.trigger:hover { background: var(--hover-bg); }
++.trigger:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 3px; }
++
++.triggerText {
++  display: flex;
++  flex-direction: column;
++  min-width: 0;
++  line-height: 1.2;
++}
++
++.headline,
++.stage { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.headline { font-size: var(--text-sm); font-weight: 650; }
++.stage { margin-top: 2px; color: var(--text-secondary); font-size: var(--text-xs); }
++
++.spinner { color: var(--accent); animation: spin 1s linear infinite; flex: none; }
++.terminalDot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
++.xIcon { width: 16px; font-size: 16px; line-height: 1; text-align: center; flex: none; }
++
++.card {
++  width: min(320px, calc(100vw - 32px));
++  padding: 15px;
++  border-radius: var(--radius-xl);
++  color: var(--text-primary);
++  animation: cardIn 160ms var(--ease-out, ease-out) both;
++}
++
++.cardHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
++.eyebrow { color: var(--text-tertiary); font-size: var(--text-xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
++.card h2 { margin: 3px 0 0; font-size: var(--text-md); font-weight: 650; }
++.elapsed { color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-xs); padding-top: 2px; }
++.stageDetail { margin-top: 12px; color: var(--text-secondary); font-size: var(--text-sm); }
++
++.counts { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 14px; margin: 14px 0; }
++.counts div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 5px; }
++.counts dt { color: var(--text-tertiary); font-size: var(--text-xs); }
++.counts dd { margin: 0; font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 650; }
++
++.stop { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border: 0; border-radius: var(--radius-pill); background: var(--hover-bg); color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
++.stop:hover:not(:disabled) { background: var(--border-subtle); }
++.stop:disabled { cursor: default; opacity: .55; }
++.stop:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
++
++@keyframes spin { to { transform: rotate(360deg); } }
++@keyframes cardIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
++
++@media (max-width: 560px) {
++  .activity { max-width: calc(100vw - 32px); }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .spinner { animation: none; }
++  .card { animation: none; }
++}
+diff --git a/src/renderer/lib/saveSortDate.mjs b/src/renderer/lib/saveSortDate.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..2e8ca8f8982de737725d7f4a190b4c068fd46ddd
+--- /dev/null
++++ b/src/renderer/lib/saveSortDate.mjs
+@@ -0,0 +1,18 @@
++export function getSaveSortDate(record, useTweetDateForXBookmarks = false) {
++  const fallback = Number.isFinite(record?.created_at) ? record.created_at : 0;
++  if (!useTweetDateForXBookmarks || record?.source !== 'x' || !record?.tweet_meta) {
++    return fallback;
++  }
++
++  try {
++    const meta = typeof record.tweet_meta === 'string'
++      ? JSON.parse(record.tweet_meta)
++      : record.tweet_meta;
++    const tweetCreatedAt = Number(meta?.tweetCreatedAt);
++    return Number.isFinite(tweetCreatedAt) && tweetCreatedAt > 0
++      ? tweetCreatedAt
++      : fallback;
++  } catch {
++    return fallback;
++  }
++}
+diff --git a/src/renderer/lib/socialImportView.mjs b/src/renderer/lib/socialImportView.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..7c4b56dee3c71ff834cd79192879767564a9ceac
+--- /dev/null
++++ b/src/renderer/lib/socialImportView.mjs
+@@ -0,0 +1,92 @@
++const TERMINAL_STAGES = new Set(['complete', 'stopped', 'failed']);
++const ACTIVE_STAGES = new Set(['starting', 'scanning', 'saving', 'stopping']);
++
++const PLATFORM_LABELS = {
++  x: 'X',
++  instagram: 'Instagram',
++};
++
++const MODE_LABELS = {
++  'catch-up': 'Catch-up',
++  fixed: 'Fixed count',
++  all: 'All available',
++};
++
++const STAGE_LABELS = {
++  starting: 'Starting import',
++  scanning: 'Scanning',
++  saving: 'Saving',
++  stopping: 'Stopping after current item',
++  complete: 'Import complete',
++  stopped: 'Import stopped',
++  failed: 'Import failed',
++};
++
++export function isTerminalStage(stage) {
++  return TERMINAL_STAGES.has(stage);
++}
++
++export function isActiveStage(stage) {
++  return ACTIVE_STAGES.has(stage);
++}
++
++export function platformLabel(platform) {
++  return PLATFORM_LABELS[platform] || 'Social';
++}
++
++export function modeLabel(mode) {
++  return MODE_LABELS[mode] || 'Import';
++}
++
++export function stageLabel(stage) {
++  return STAGE_LABELS[stage] || 'Importing';
++}
++
++export function pluralize(value, singular, plural = `${singular}s`) {
++  return `${value} ${value === 1 ? singular : plural}`;
++}
++
++export function formatElapsed(ms) {
++  const seconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
++  const minutes = Math.floor(seconds / 60);
++  const remainder = seconds % 60;
++  return minutes > 0
++    ? `${minutes}:${String(remainder).padStart(2, '0')}`
++    : `${remainder}s`;
++}
++
++export function toSocialImportView(snapshot, {
++  now = Date.now(),
++  stalledAfterMs = 30_000,
++} = {}) {
++  if (!snapshot?.runId || !snapshot.platform) return null;
++  const stage = snapshot.stage || 'starting';
++  const startedAt = Number.isFinite(snapshot.startedAt) ? snapshot.startedAt : now;
++  const lastUpdateAt = Number.isFinite(snapshot.lastProgressAt)
++    ? snapshot.lastProgressAt
++    : (Number.isFinite(snapshot.updatedAt) ? snapshot.updatedAt : now);
++  const terminal = isTerminalStage(stage);
++  const elapsedMs = Math.max(0, now - startedAt);
++  const stalled = !terminal && isActiveStage(stage)
++    && (snapshot.stalled === true || now - lastUpdateAt >= stalledAfterMs);
++  return {
++    ...snapshot,
++    stage,
++    scanned: Math.max(0, Number(snapshot.scanned) || 0),
++    saved: Math.max(0, Number(snapshot.saved) || 0),
++    known: Math.max(0, Number(snapshot.known) || 0),
++    failed: Math.max(0, Number(snapshot.failed) || 0),
++    platformName: platformLabel(snapshot.platform),
++    modeName: modeLabel(snapshot.mode),
++    stageName: stageLabel(stage),
++    elapsedMs,
++    elapsed: formatElapsed(elapsedMs),
++    stalled,
++    terminal,
++    headline: terminal
++      ? stageLabel(stage)
++      : `Importing ${platformLabel(snapshot.platform)}`,
++  };
++}
++
++export const SOCIAL_IMPORT_TERMINAL_STAGES = TERMINAL_STAGES;
+diff --git a/test/catch-up-import.test.js b/test/catch-up-import.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..ca448351111433509a00d5ca7136a507285f3e96
+--- /dev/null
++++ b/test/catch-up-import.test.js
+@@ -0,0 +1,108 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++async function helper() { return import('../extension/catch-up-import.mjs'); }
++
++function run(policy, apply) {
++  const state = { knownStreak: 0, imported: 0 };
++  let stopped = false;
++  for (const status of policy) {
++    const result = apply(state, status);
++    if (result.shouldSave) state.saves = (state.saves || 0) + 1;
++    if (result.shouldStop) { stopped = true; break; }
++  }
++  return { saves: state.saves || 0, stopped, knownStreak: state.knownStreak };
++}
++
++test('catch-up stops after two known bookmarks and saves new bookmark', async () => {
++  const { applyCatchUpStatus } = await helper();
++  assert.deepEqual(run(['new', 'known-active', 'known-active'], applyCatchUpStatus), {
++    saves: 1, stopped: true, knownStreak: 2,
++  });
++});
++
++test('catch-up repairs isolated missed bookmark between known entries', async () => {
++  const { applyCatchUpStatus } = await helper();
++  assert.deepEqual(run(['known-active', 'new', 'known-dismissed', 'known-active'], applyCatchUpStatus), {
++    saves: 1, stopped: true, knownStreak: 2,
++  });
++});
++
++test('dismissed and active known entries stop without save', async () => {
++  const { applyCatchUpStatus } = await helper();
++  assert.deepEqual(run(['known-dismissed', 'known-active'], applyCatchUpStatus), {
++    saves: 0, stopped: true, knownStreak: 2,
++  });
++});
++
++test('new resets known streak', async () => {
++  const { applyCatchUpStatus } = await helper();
++  assert.deepEqual(run(['known-active', 'new', 'known-active', 'known-active'], applyCatchUpStatus), {
++    saves: 1, stopped: true, knownStreak: 2,
++  });
++});
++
++test('ordered processor saves before resetting streak and stops at boundary', async () => {
++  const { processCatchUpEntries } = await helper();
++  const state = { knownStreak: 1, processed: new Set() };
++  const events = [];
++  const result = await processCatchUpEntries({
++    state,
++    entries: [{ tweetId: 'new' }, { tweetId: 'known-1' }, { tweetId: 'known-2' }, { tweetId: 'older' }],
++    statuses: ['new', 'known-active', 'known-dismissed', 'new'],
++    save: async (entry) => { events.push(`save:${entry.tweetId}:streak:${state.knownStreak}`); },
++  });
++  assert.deepEqual(events, ['save:new:streak:1']);
++  assert.deepEqual(result, { boundaryReached: true, processedCount: 3 });
++  assert.equal(state.knownStreak, 2);
++  assert.deepEqual([...state.processed], ['new', 'known-1', 'known-2']);
++});
++
++test('ordered processor stops on save failure before later statuses', async () => {
++  const { processCatchUpEntries } = await helper();
++  const state = { knownStreak: 1, processed: new Set() };
++  await assert.rejects(processCatchUpEntries({
++    state,
++    entries: [{ tweetId: 'new' }, { tweetId: 'later' }],
++    statuses: ['new', 'known-active'],
++    save: async () => { throw new Error('save rejected'); },
++  }), /save rejected/);
++  assert.equal(state.knownStreak, 1);
++  assert.deepEqual([...state.processed], ['new']);
++});
++
++test('ordered processor reports pagination page ended before boundary', async () => {
++  const { processCatchUpEntries } = await helper();
++  const state = { knownStreak: 0, processed: new Set() };
++  const result = await processCatchUpEntries({
++    state,
++    entries: [{ tweetId: 'new' }, { tweetId: 'known' }],
++    statuses: ['new', 'known-active'],
++    save: async () => {},
++  });
++  assert.deepEqual(result, { boundaryReached: false, processedCount: 2 });
++  assert.equal(state.knownStreak, 1);
++});
++
++test('catch-up summary distinguishes boundary, bottom, imported, and error', async () => {
++  const { catchUpSummary } = await helper();
++  assert.equal(catchUpSummary({ imported: 0, boundaryReached: true }), 'Already caught up.');
++  assert.equal(catchUpSummary({ imported: 0 }), 'No new bookmarks to import.');
++  assert.equal(catchUpSummary({ imported: 2 }), 'Imported 2 bookmarks from X.');
++  assert.equal(catchUpSummary({ imported: 1, error: new Error('x') }), 'Bookmark import stopped — imported 1 so far.');
++});
++
++test('preflight returns no-boundary without starting when history is empty', async () => {
++  const { catchUpPreflightResult } = await helper();
++  assert.deepEqual(catchUpPreflightResult({ ok: true, hasKnownHistory: false, statuses: [] }), {
++    ok: false, noBoundary: true,
++  });
++  assert.equal(catchUpPreflightResult({ ok: true, hasKnownHistory: true, statuses: [] }), null);
++});
++
++test('fixed and all modes force saves while catch-up preserves tombstones', async () => {
++  const { importSaveOptions } = await helper();
++  assert.deepEqual(importSaveOptions('fixed'), { force: true });
++  assert.deepEqual(importSaveOptions('all'), { force: true });
++  assert.deepEqual(importSaveOptions('catch-up'), { force: false });
++});
+diff --git a/test/import-limit.test.js b/test/import-limit.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..e3d417174690eba45c7db14f92a2d963ee53e910
+--- /dev/null
++++ b/test/import-limit.test.js
+@@ -0,0 +1,22 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++test('import limit claims each item once and stops exactly at the limit', async () => {
++  const { claimImportItem, importLimitReached, importProcessedCount } = await import('../extension/import-limit.mjs');
++  const state = { active: true, limit: 2, processed: new Set() };
++
++  assert.equal(claimImportItem(state, 'a'), true);
++  assert.equal(claimImportItem(state, 'a'), false);
++  assert.equal(claimImportItem(state, 'b'), true);
++  assert.equal(importProcessedCount(state), 2);
++  assert.equal(importLimitReached(state), true);
++  assert.equal(claimImportItem(state, 'c'), false);
++});
++
++test('remembered entries are deduplicated without consuming the traversal limit', async () => {
++  const { rememberImportEntries } = await import('../extension/import-limit.mjs');
++  const state = { seenIds: new Set(['a']) };
++
++  assert.equal(rememberImportEntries(state, [{ tweetId: 'a' }, { tweetId: 'b' }, { tweetId: 'b' }]), 1);
++  assert.deepEqual([...state.seenIds].sort(), ['a', 'b']);
++});
+diff --git a/test/save-response.test.js b/test/save-response.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..2b5f0bb813560ac6f4420f74a9ea3751e3b7c12c
+--- /dev/null
++++ b/test/save-response.test.js
+@@ -0,0 +1,24 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++test('save responses are accepted only when they are not skipped or sync-disabled', async () => {
++  const { isAcceptedSaveResponse } = await import('../extension/save-response.mjs');
++
++  assert.equal(isAcceptedSaveResponse({ ok: true }), true);
++  assert.equal(isAcceptedSaveResponse({ ok: true, duplicate: true }), true);
++  assert.equal(isAcceptedSaveResponse({ ok: true, dismissed: true }), true);
++  assert.equal(isAcceptedSaveResponse({ ok: true, skipped: true }), false);
++  assert.equal(isAcceptedSaveResponse({ ok: true, syncDisabled: true }), false);
++  assert.equal(isAcceptedSaveResponse({ ok: false }), false);
++  assert.equal(isAcceptedSaveResponse(null), false);
++});
++
++test('only genuinely new accepted saves count as imported', async () => {
++  const { isNewImportedSaveResponse } = await import('../extension/save-response.mjs');
++
++  assert.equal(isNewImportedSaveResponse({ ok: true }), true);
++  assert.equal(isNewImportedSaveResponse({ ok: true, duplicate: true }), false);
++  assert.equal(isNewImportedSaveResponse({ ok: true, dismissed: true }), false);
++  assert.equal(isNewImportedSaveResponse({ ok: true, skipped: true }), false);
++  assert.equal(isNewImportedSaveResponse({ ok: false }), false);
++});
+diff --git a/test/save-sort-date.test.js b/test/save-sort-date.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..48143718d67e22b2d2c73de20e93dbb165ff344e
+--- /dev/null
++++ b/test/save-sort-date.test.js
+@@ -0,0 +1,34 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++test('X bookmark date sort uses tweet date only when enabled', async () => {
++  const { getSaveSortDate } = await import('../src/renderer/lib/saveSortDate.mjs');
++  const savedAt = 1770000000000;
++  const tweetAt = 1700000000000;
++  const record = {
++    created_at: savedAt,
++    source: 'x',
++    tweet_meta: JSON.stringify({ tweetCreatedAt: tweetAt }),
++  };
++
++  assert.equal(getSaveSortDate(record, true), tweetAt);
++  assert.equal(getSaveSortDate(record, false), savedAt);
++});
++
++test('date sort falls back to save date for non-X and missing tweet dates', async () => {
++  const { getSaveSortDate } = await import('../src/renderer/lib/saveSortDate.mjs');
++  const savedAt = 1770000000000;
++
++  assert.equal(
++    getSaveSortDate({ created_at: savedAt, source: 'instagram', tweet_meta: JSON.stringify({ tweetCreatedAt: 1700000000000 }) }, true),
++    savedAt,
++  );
++  assert.equal(
++    getSaveSortDate({ created_at: savedAt, source: 'x', tweet_meta: JSON.stringify({ caption: 'No date' }) }, true),
++    savedAt,
++  );
++  assert.equal(
++    getSaveSortDate({ created_at: savedAt, source: 'x', tweet_meta: '{bad json' }, true),
++    savedAt,
++  );
++});
+diff --git a/test/social-import-progress.test.js b/test/social-import-progress.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..4c6fa79ee38d211db20375ac29173aa7c6c9edee
+--- /dev/null
++++ b/test/social-import-progress.test.js
+@@ -0,0 +1,73 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++async function progress() { return import('../extension/social-import-progress.mjs'); }
++
++test('reports full snapshots with monotonic counters and terminal state', async () => {
++  const calls = [];
++  const { createSocialImportProgress } = await progress();
++  const reporter = createSocialImportProgress({
++    randomUUID: () => 'run-1',
++    sendNativeMessage: async (_host, msg) => { calls.push(msg); return { ok: true, cancelRequested: false }; },
++  });
++  await reporter.start({ platform: 'x', mode: 'fixed', target: 2, startedAt: 1000 });
++  await reporter.update({ stage: 'scanning', scanned: 1 });
++  await reporter.update({ stage: 'saving', saved: 1 });
++  await reporter.finish('complete');
++  assert.equal(calls[0].type, 'social-import-status');
++  assert.deepEqual(calls.at(-1), {
++    type: 'social-import-status', runId: 'run-1', platform: 'x', mode: 'fixed', stage: 'complete',
++    scanned: 1, saved: 1, known: 0, failed: 0, target: 2, startedAt: 1000, message: null,
++  });
++  await assert.rejects(reporter.update({ scanned: 0 }), /monotonic/);
++});
++
++test('returns native cancellation and checks it before next work', async () => {
++  const { createSocialImportProgress } = await progress();
++  const reporter = createSocialImportProgress({
++    randomUUID: () => 'run-1',
++    sendNativeMessage: async () => ({ ok: true, cancelRequested: true }),
++  });
++  await reporter.start({ platform: 'instagram', mode: 'all' });
++  assert.equal(reporter.isCancellationRequested(), true);
++  assert.equal(reporter.beforeNext(), false);
++});
++
++test('native progress failure does not fail the import and logs once', async () => {
++  const logs = [];
++  const { createSocialImportProgress } = await progress();
++  const reporter = createSocialImportProgress({
++    randomUUID: () => 'run-1',
++    log: (...args) => logs.push(args),
++    sendNativeMessage: async () => { throw new Error('host down'); },
++  });
++  await reporter.start({ platform: 'x', mode: 'catch-up' });
++  await reporter.update({ stage: 'scanning', scanned: 1 });
++  assert.equal(logs.length, 1);
++  assert.equal(reporter.getSnapshot().stage, 'scanning');
++});
++
++test('default UUID generator calls crypto.randomUUID with its receiver', async () => {
++  const { createSocialImportProgress } = await progress();
++  const reporter = createSocialImportProgress({
++    sendNativeMessage: async () => ({ ok: true, cancelRequested: false }),
++  });
++  await reporter.start({ platform: 'x', mode: 'all' });
++  assert.equal(typeof reporter.getSnapshot().runId, 'string');
++});
++
++test('reports after each processed item so a cancel response prevents the next item', async () => {
++  const { createSocialImportProgress } = await progress();
++  const calls = [];
++  const reporter = createSocialImportProgress({
++    randomUUID: () => 'run-1',
++    sendNativeMessage: async (_host, payload) => {
++      calls.push(payload);
++      return { ok: true, cancelRequested: calls.length >= 2 };
++    },
++  });
++  await reporter.start({ platform: 'x', mode: 'fixed' });
++  await reporter.update({ stage: 'saving', scanned: 1, saved: 1 });
++  assert.equal(calls.length, 2);
++  assert.equal(reporter.beforeNext(), false);
++});
+diff --git a/test/social-import-state.test.js b/test/social-import-state.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..571a3a5950f0a2c7fda8d89ba4f77a6359408d06
+--- /dev/null
++++ b/test/social-import-state.test.js
+@@ -0,0 +1,78 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++
++const { createSocialImportState } = require('../src/main/social-import-state');
++
++function snapshot(overrides = {}) {
++  return {
++    runId: 'run-1', platform: 'x', mode: 'fixed', stage: 'starting',
++    scanned: 0, saved: 0, known: 0, failed: 0, target: 10,
++    startedAt: 1000, message: null, ...overrides,
++  };
++}
++
++test('accepts a starting snapshot and exposes cancel state', () => {
++  const changes = [];
++  const state = createSocialImportState({ onChange: (next) => changes.push(next) });
++  assert.deepEqual(state.update(snapshot()), { ok: true, cancelRequested: false });
++  assert.equal(state.get().runId, 'run-1');
++  assert.equal(changes.length, 1);
++});
++
++test('rejects counter decreases and mismatched run ids', () => {
++  const state = createSocialImportState();
++  state.update(snapshot({ scanned: 2 }));
++  assert.equal(state.update(snapshot({ scanned: 1 })).ok, false);
++  assert.equal(state.update(snapshot({ runId: 'run-2', stage: 'scanning' })).ok, false);
++});
++
++test('cancel marks the active run stopping and reports cancellation', () => {
++  const changes = [];
++  const state = createSocialImportState({ onChange: (next) => changes.push(next) });
++  state.update(snapshot());
++  state.update(snapshot({ stage: 'scanning' }));
++  assert.deepEqual(state.cancel('run-1'), { ok: true, cancelRequested: true });
++  assert.equal(state.get().stage, 'stopping');
++  assert.equal(state.get().cancelRequested, true);
++  assert.equal(changes.at(-1).stage, 'stopping');
++});
++
++test('derives stalled after heartbeat gap without changing stage', () => {
++  let now = 1000;
++  let staleTimer;
++  const changes = [];
++  const state = createSocialImportState({
++    now: () => now,
++    setTimer: (fn) => { staleTimer = fn; return 1; },
++    clearTimer: () => {},
++    onChange: (next) => changes.push(next),
++  });
++  state.update(snapshot());
++  state.update(snapshot({ stage: 'scanning' }));
++  now = 31_001;
++  staleTimer();
++  assert.equal(state.get().stage, 'scanning');
++  assert.equal(state.get().stalled, true);
++  assert.equal(changes.at(-1).stalled, true);
++});
++
++test('terminal snapshots remain until matching dismiss', () => {
++  const state = createSocialImportState();
++  state.update(snapshot());
++  state.update(snapshot({ stage: 'complete', scanned: 3, saved: 2 }));
++  assert.equal(state.get().stage, 'complete');
++  assert.deepEqual(state.dismiss('other'), { ok: false, error: 'not dismissible' });
++  assert.equal(state.get().runId, 'run-1');
++  assert.deepEqual(state.dismiss('run-1'), { ok: true });
++  assert.equal(state.get(), null);
++});
++
++test('new starting run resets terminal counter baseline', () => {
++  const state = createSocialImportState();
++  state.update(snapshot());
++  state.update(snapshot({ stage: 'complete', scanned: 3, saved: 2 }));
++  const result = state.update(snapshot({ runId: 'run-2', stage: 'starting', scanned: 0, saved: 0 }));
++  assert.deepEqual(result, { ok: true, cancelRequested: false });
++  assert.equal(state.get().runId, 'run-2');
++  assert.equal(state.get().scanned, 0);
++});
+diff --git a/test/social-import-view.test.js b/test/social-import-view.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..793595f078a4b66479476ded876bab7605238b7e
+--- /dev/null
++++ b/test/social-import-view.test.js
+@@ -0,0 +1,55 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++
++let view;
++test.before(async () => {
++  view = await import('../src/renderer/lib/socialImportView.mjs');
++});
++
++test('social import view labels mode, stage, and plural counts', () => {
++  assert.equal(view.platformLabel('x'), 'X');
++  assert.equal(view.platformLabel('instagram'), 'Instagram');
++  assert.equal(view.modeLabel('catch-up'), 'Catch-up');
++  assert.equal(view.stageLabel('saving'), 'Saving');
++  assert.equal(view.pluralize(1, 'save'), '1 save');
++  assert.equal(view.pluralize(2, 'save'), '2 saves');
++});
++
++test('social import view formats elapsed and stalled state', () => {
++  const snapshot = {
++    runId: 'run-1', platform: 'x', mode: 'fixed', stage: 'saving',
++    scanned: 4, saved: 1, known: 2, failed: 1,
++    startedAt: 1000, lastProgressAt: 31_000,
++  };
++  const result = view.toSocialImportView(snapshot, { now: 61_000 });
++  assert.equal(result.elapsed, '1:00');
++  assert.equal(result.stalled, true);
++  assert.equal(result.terminal, false);
++});
++
++test('terminal view persists without auto-dismiss metadata', () => {
++  const result = view.toSocialImportView({
++    runId: 'run-2', platform: 'instagram', mode: 'all', stage: 'complete',
++    scanned: 3, saved: 2, known: 1, failed: 0, startedAt: 1000,
++  }, { now: 5000 });
++  assert.equal(result.elapsed, '4s');
++  assert.equal(result.terminal, true);
++  assert.equal(result.autoDismissAt, undefined);
++  assert.equal(view.isTerminalStage('stopped'), true);
++});
++
++test('activity UI keeps preload/event contract and accessible controls', () => {
++  const root = path.join(__dirname, '..');
++  const component = fs.readFileSync(path.join(root, 'src/renderer/components/SocialImportActivity.jsx'), 'utf8');
++  const app = fs.readFileSync(path.join(root, 'src/renderer/App.jsx'), 'utf8');
++  assert.match(component, /aria-expanded/);
++  assert.match(component, /Stop import/);
++  assert.match(component, /aria-live/);
++  assert.match(component, /Dismiss import notification/);
++  assert.match(app, /socialImport\?\.get/);
++  assert.match(app, /social-import:status/);
++  assert.match(app, /socialImport\?\.cancel/);
++  assert.match(app, /socialImport\?\.dismiss/);
++});
+diff --git a/test/x-bookmark-status.test.js b/test/x-bookmark-status.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..c718631668cee2e0c13e8e1a6bf22e7d4f966ccf
+--- /dev/null
++++ b/test/x-bookmark-status.test.js
+@@ -0,0 +1,231 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const { deriveXTweetCreatedAt } = require('../src/main/extension-server');
++
++test('derives missing tweet creation time from X and Twitter status snowflakes', () => {
++  assert.equal(
++    deriveXTweetCreatedAt('https://x.com/mattpocockuk/status/2049506712801935611'),
++    Date.parse('2026-04-29T15:10:52.982Z'),
++  );
++  assert.equal(
++    deriveXTweetCreatedAt('https://twitter.com/example/status/2049506712801935611?ref=test'),
++    Date.parse('2026-04-29T15:10:52.982Z'),
++  );
++  assert.equal(deriveXTweetCreatedAt('https://example.com/status/2049506712801935611'), null);
++  assert.equal(deriveXTweetCreatedAt('https://x.com/example/status/not-a-number'), null);
++});
++
++test('repairs missing X tweet dates without changing save or deletion timestamps', withTempDb((db) => {
++  const createdAt = Date.parse('2026-07-11T01:28:45.266Z');
++  db.insertSave({
++    id: 'missing-deleted',
++    filePath: '/tmp/b.png',
++    thumbPath: '/tmp/b.png',
++    sourceUrl: 'https://twitter.com/example/status/2049506712801935611',
++    tweetMeta: {},
++    createdAt,
++  });
++  db.getDatabase().prepare('UPDATE saves SET deleted_at = ? WHERE id = ?').run(createdAt + 1, 'missing-deleted');
++  db.insertSave({
++    id: 'missing-active',
++    filePath: '/tmp/a.png',
++    thumbPath: '/tmp/a.png',
++    sourceUrl: 'https://x.com/mattpocockuk/status/2049506712801935611',
++    tweetMeta: { caption: 'Sandcastle' },
++    createdAt,
++  });
++
++  assert.equal(db.repairMissingXTweetCreatedAt(db.getDatabase()), 2);
++  const rows = db.getDatabase().prepare(`
++    SELECT id, created_at, deleted_at, tweet_meta FROM saves ORDER BY id
++  `).all();
++  for (const row of rows) {
++    assert.equal(row.created_at, createdAt);
++    assert.equal(JSON.parse(row.tweet_meta).tweetCreatedAt, Date.parse('2026-04-29T15:10:52.982Z'));
++  }
++  assert.equal(rows.find((row) => row.id === 'missing-active').deleted_at, null);
++  assert.equal(rows.find((row) => row.id === 'missing-deleted').deleted_at, createdAt + 1);
++  assert.equal(db.repairMissingXTweetCreatedAt(db.getDatabase()), 0);
++}));
++
++function loadDb(userData) {
++  const electronPath = require.resolve('electron');
++  require.cache[electronPath] = {
++    id: electronPath,
++    filename: electronPath,
++    loaded: true,
++    exports: { app: { getPath(name) { if (name !== 'userData') throw new Error('unexpected path'); return userData; } } },
++  };
++  for (const mod of ['../src/main/db.js', '../src/main/library-registry.js']) delete require.cache[require.resolve(mod)];
++  return require('../src/main/db.js');
++}
++
++function withTempDb(fn) {
++  return async () => {
++    const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-x-status-'));
++    const db = loadDb(userData);
++    try { db.initDatabase(); await fn(db, userData); }
++    finally { try { db.closeDatabase(); } catch {} fs.rmSync(userData, { recursive: true, force: true }); }
++  };
++}
++
++test('classifyXBookmarkUrls returns ordered active, dismissed, and new statuses', withTempDb((db) => {
++  db.insertSave({
++    id: 'active', filePath: '/tmp/a.png', thumbPath: '/tmp/a.png',
++    sourceUrl: 'https://x.com/a/status/101', tweetMeta: { caption: 'Post' },
++  });
++  db.dismissTweet('tw:202');
++  assert.deepEqual(db.classifyXBookmarkUrls([
++    'https://x.com/a/status/101',
++    'https://x.com/b/status/202',
++    'https://x.com/c/status/303',
++  ]), {
++    hasKnownHistory: true,
++    statuses: ['known-active', 'known-dismissed', 'new'],
++  });
++}));
++
++test('classifyXBookmarkUrls uses indexed source identity instead of scanning save URLs', withTempDb((db) => {
++  db.insertSave({
++    id: 'active', filePath: '/tmp/a.png', thumbPath: '/tmp/a.png',
++    sourceUrl: 'https://x.com/a/status/101', tweetMeta: { caption: 'Post' },
++  });
++  for (let i = 0; i < 250; i += 1) {
++    db.insertSave({
++      id: `unrelated-${i}`, filePath: `/tmp/${i}.png`, thumbPath: `/tmp/${i}.png`,
++      sourceUrl: `https://example.com/${i}`,
++    });
++  }
++
++  assert.deepEqual(db.classifyXBookmarkUrls([
++    'https://x.com/a/status/101',
++    'https://x.com/b/status/202',
++  ]), {
++    hasKnownHistory: true,
++    statuses: ['known-active', 'new'],
++  });
++
++  const plan = db.getDatabase().prepare(`
++    EXPLAIN QUERY PLAN
++    SELECT source_key FROM saves
++     WHERE deleted_at IS NULL AND source_key IN (?)
++  `).all('tw:101');
++  assert.match(plan.map((row) => row.detail).join(' '), /idx_saves_active_source_key/);
++}));
++
++test('active social source identity is unique while trashed rows release it', withTempDb((db) => {
++  const input = {
++    filePath: '/tmp/a.png', thumbPath: '/tmp/a.png',
++    sourceUrl: 'https://x.com/a/status/101',
++    tweetMeta: { caption: 'Post' },
++  };
++  db.insertSave({ id: 'first', ...input });
++  assert.throws(() => db.insertSave({ id: 'duplicate', ...input }), /UNIQUE constraint failed/);
++  db.getDatabase().prepare('UPDATE saves SET deleted_at = ? WHERE id = ?').run(Date.now(), 'first');
++  assert.doesNotThrow(() => db.insertSave({ id: 'replacement', ...input }));
++}));
++
++test('classifyXBookmarkUrls reports no boundary on empty history and invalid URLs as new', withTempDb((db) => {
++  assert.deepEqual(db.classifyXBookmarkUrls([]), { hasKnownHistory: false, statuses: [] });
++  assert.deepEqual(db.classifyXBookmarkUrls(['https://example.com/nope', 'not a url']), {
++    hasKnownHistory: false,
++    statuses: ['new', 'new'],
++  });
++}));
++
++test('classifyXBookmarkUrls rejects non-array and batches over 100', withTempDb((db) => {
++  assert.throws(() => db.classifyXBookmarkUrls(null), /tweetUrls must be an array/);
++  assert.throws(() => db.classifyXBookmarkUrls(Array.from({ length: 101 }, () => 'https://x.com/a/status/1')), /too large/);
++  assert.throws(() => db.classifyXBookmarkUrls(['https://x.com/a/status/1', null]), /strings/);
++}));
++
++test('x-bookmark-status HTTP handler authenticates and returns exact contract', async () => {
++  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-x-server-'));
++  const db = loadDb(userData);
++  db.initDatabase();
++  const server = require('../src/main/extension-server');
++  const { EventEmitter } = require('node:events');
++  function invoke(headers, body) {
++    return new Promise((resolve) => {
++      const req = new EventEmitter();
++      req.headers = headers;
++      const res = {
++        statusCode: 0,
++        writeHead(status, responseHeaders) { this.statusCode = status; this.headers = responseHeaders; },
++        end(payload) { resolve({ status: this.statusCode, body: JSON.parse(payload || '{}') }); },
++      };
++      server.handleXBookmarkStatus(req, res);
++      process.nextTick(() => { req.emit('data', Buffer.from(JSON.stringify(body))); req.emit('end'); });
++    });
++  }
++  try {
++    const token = server.getOrCreateToken();
++    const response = await invoke({ 'x-gatheros-token': token, origin: 'chrome-extension://test' }, { tweetUrls: ['https://x.com/a/status/1'] });
++    assert.equal(response.status, 200);
++    assert.deepEqual(response.body, { ok: true, hasKnownHistory: false, statuses: ['new'] });
++    const bad = await invoke({ 'x-gatheros-token': 'bad' }, {});
++    assert.equal(bad.status, 401);
++    const invalidElement = await invoke(
++      { 'x-gatheros-token': token, origin: 'chrome-extension://test' },
++      { tweetUrls: ['https://x.com/a/status/1', 2] },
++    );
++    assert.equal(invalidElement.status, 400);
++  } finally {
++    db.closeDatabase();
++    fs.rmSync(userData, { recursive: true, force: true });
++    delete require.cache[require.resolve('../src/main/extension-server')];
++  }
++});
++
++test('social import status HTTP handler authenticates and validates full snapshots', async () => {
++  const server = require('../src/main/extension-server');
++  const { EventEmitter } = require('node:events');
++  function invoke(headers, body) {
++    return new Promise((resolve) => {
++      const req = new EventEmitter(); req.headers = headers;
++      const res = {
++        statusCode: 0,
++        writeHead(status, responseHeaders) { this.statusCode = status; this.headers = responseHeaders; },
++        end(payload) { resolve({ status: this.statusCode, body: JSON.parse(payload || '{}') }); },
++      };
++      server.handleSocialImportStatus(req, res);
++      process.nextTick(() => { req.emit('data', Buffer.from(JSON.stringify(body))); req.emit('end'); });
++    });
++  }
++  const token = server.getOrCreateToken();
++  const body = {
++    runId: 'run-1', platform: 'x', mode: 'fixed', stage: 'starting',
++    scanned: 0, saved: 0, known: 0, failed: 0, target: 5, startedAt: 1000, message: null,
++  };
++  const response = await invoke({ 'x-gatheros-token': token, origin: 'chrome-extension://test' }, body);
++  assert.deepEqual(response.body, { ok: true, cancelRequested: false });
++  const invalid = await invoke({ 'x-gatheros-token': token, origin: 'chrome-extension://test' }, { ...body, extra: true });
++  assert.equal(invalid.status, 400);
++  const badToken = await invoke({ 'x-gatheros-token': 'bad' }, body);
++  assert.equal(badToken.status, 401);
++});
++
++test('social import status propagates controller rejection', async () => {
++  const server = require('../src/main/extension-server');
++  const { EventEmitter } = require('node:events');
++  const body = {
++    runId: 'run-1', platform: 'x', mode: 'fixed', stage: 'scanning',
++    scanned: 1, saved: 0, known: 0, failed: 0, target: 5, startedAt: 1000, message: null,
++  };
++  const token = server.getOrCreateToken();
++  const response = await new Promise((resolve) => {
++      const req = new EventEmitter(); req.headers = { 'x-gatheros-token': token, origin: 'chrome-extension://test' };
++      const res = {
++        statusCode: 0,
++        writeHead(status) { this.statusCode = status; },
++        end(payload) { resolve({ status: this.statusCode, body: JSON.parse(payload || '{}') }); },
++      };
++      server.handleSocialImportStatus(req, res, async () => ({ ok: false, error: 'runId mismatch' }));
++      process.nextTick(() => { req.emit('data', Buffer.from(JSON.stringify(body))); req.emit('end'); });
++  });
++    assert.equal(response.status, 400);
++    assert.deepEqual(response.body, { ok: false, error: 'runId mismatch', cancelRequested: false });
++});
+diff --git a/test/x-import-transport.test.js b/test/x-import-transport.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..ca87b6c46e08755aa961348eb65430e1be3703c3
+--- /dev/null
++++ b/test/x-import-transport.test.js
+@@ -0,0 +1,160 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++
++async function transport() { return import('../extension/x-import-transport.mjs'); }
++
++function catchUpState() {
++  return { active: true, mode: 'catch-up', knownStreak: 0, processed: new Set(), imported: 0 };
++}
++
++test('shared transport adapter executes ordered catch-up behavior', async () => {
++  const { runCatchUpTransportBatch } = await transport();
++  const state = catchUpState();
++  const saved = [];
++  const result = await runCatchUpTransportBatch({
++    state,
++    entries: [{ tweetId: 'known' }, { tweetId: 'missed' }, { tweetId: 'known-2' }, { tweetId: 'known-3' }],
++    classify: async () => ['known-active', 'new', 'known-dismissed', 'known-active'],
++    save: async (entry, options) => { saved.push([entry.tweetId, options]); return { ok: true, id: entry.tweetId }; },
++    isAccepted: (response) => response.ok,
++    isNew: (response) => !!response.id,
++  });
++  assert.deepEqual(saved, [['missed', { force: false }]]);
++  assert.deepEqual(result, { boundaryReached: true, acceptedIds: ['missed'] });
++  assert.equal(state.imported, 1);
++});
++
++test('save failure stops before later status with accurate partial progress', async () => {
++  const { runCatchUpTransportBatch } = await transport();
++  const state = catchUpState();
++  let saves = 0;
++  await assert.rejects(runCatchUpTransportBatch({
++    state,
++    entries: [{ tweetId: 'first' }, { tweetId: 'failed' }, { tweetId: 'later' }],
++    classify: async () => ['new', 'new', 'known-active'],
++    save: async (entry) => {
++      saves += 1;
++      if (entry.tweetId === 'failed') return { ok: false, error: 'rejected' };
++      return { ok: true, id: entry.tweetId };
++    },
++    isAccepted: (response) => response.ok,
++    isNew: (response) => !!response.id,
++  }), /rejected/);
++  assert.equal(saves, 2);
++  assert.equal(state.imported, 1);
++  assert.equal(state.knownStreak, 0);
++  assert.deepEqual([...state.processed], ['first', 'failed']);
++});
++
++test('classification failure performs no saves', async () => {
++  const { runCatchUpTransportBatch } = await transport();
++  let saves = 0;
++  await assert.rejects(runCatchUpTransportBatch({
++    state: catchUpState(), entries: [{ tweetId: 'a' }],
++    classify: async () => { throw new Error('classification unavailable'); },
++    save: async () => { saves += 1; },
++    isAccepted: () => true, isNew: () => true,
++  }), /classification unavailable/);
++  assert.equal(saves, 0);
++});
++
++test('fixed/all transport keeps force and limit behavior', async () => {
++  const { runFixedTransportBatch } = await transport();
++  for (const mode of ['fixed', 'all']) {
++    const state = { active: true, mode, limit: 2, processed: new Set(), imported: 0 };
++    const calls = [];
++    const result = await runFixedTransportBatch({
++      state,
++      entries: [{ tweetId: 'a' }, { tweetId: 'a' }, { tweetId: 'b' }, { tweetId: 'c' }],
++      save: async (entry, options) => { calls.push([entry.tweetId, options]); return { ok: true, id: entry.tweetId }; },
++      isAccepted: (response) => response.ok,
++      isNew: (response) => !!response.id,
++    });
++    assert.deepEqual(calls, [['a', { force: true }], ['b', { force: true }]]);
++    assert.equal(result.reachedLimit, true);
++    assert.deepEqual(result.attemptedIds, ['a', 'b']);
++    assert.equal(state.imported, 2);
++  }
++});
++
++test('transport reports known and failed counters after each item and stops on cancellation', async () => {
++  const { runCatchUpTransportBatch, runFixedTransportBatch } = await transport();
++  const knownState = { ...catchUpState(), known: 0, failed: 0 };
++  const updates = [];
++  const progress = { beforeNext: () => true, update: async (patch) => updates.push(patch) };
++  await runCatchUpTransportBatch({
++    state: knownState,
++    entries: [{ tweetId: 'known' }, { tweetId: 'new' }],
++    classify: async () => ['known-active', 'new'],
++    save: async () => ({ ok: true, id: 'new' }),
++    isAccepted: (response) => response.ok,
++    isNew: (response) => !!response.id,
++    progress,
++  });
++  assert.equal(knownState.known, 1);
++  assert.ok(updates.some((u) => u.known === 1));
++
++  let calls = 0;
++  const fixedState = { active: true, mode: 'fixed', limit: 5, processed: new Set(), imported: 0, known: 0, failed: 0 };
++  await runFixedTransportBatch({
++    state: fixedState,
++    entries: [{ tweetId: 'a' }, { tweetId: 'b' }],
++    save: async () => { calls += 1; return { ok: true, duplicate: true }; },
++    isAccepted: (response) => response.ok,
++    isNew: () => false,
++    progress: { beforeNext: () => calls < 1, update: async () => {} },
++  });
++  assert.equal(fixedState.known, 1);
++  assert.equal(calls, 1);
++
++  const failedState = { active: true, mode: 'fixed', limit: 2, processed: new Set(), imported: 0, known: 0, failed: 0 };
++  await runFixedTransportBatch({
++    state: failedState,
++    entries: [{ tweetId: 'failed' }, { tweetId: 'later' }],
++    save: async () => ({ ok: false, error: 'rejected' }),
++    isAccepted: (response) => response.ok,
++    isNew: () => false,
++    onError: () => {},
++  });
++  assert.equal(failedState.failed, 2);
++});
++
++test('fixed transport observes cancellation returned by per-item progress update', async () => {
++  const { runFixedTransportBatch } = await transport();
++  const state = { active: true, mode: 'fixed', limit: 5, processed: new Set(), imported: 0 };
++  let cancelled = false;
++  let saves = 0;
++  await runFixedTransportBatch({
++    state,
++    entries: [{ tweetId: 'a' }, { tweetId: 'b' }],
++    save: async () => { saves += 1; return { ok: true, id: `id-${saves}` }; },
++    isAccepted: (response) => response.ok,
++    isNew: () => true,
++    progress: {
++      beforeNext: () => !cancelled,
++      update: async () => { cancelled = true; },
++    },
++  });
++  assert.equal(saves, 1);
++});
++
++test('background wires catch-up adapter into API and scroll and preserves fallback mode', () => {
++  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
++  const fallbackCalls = source.match(/runXScrollImport\(limit, mode, progress, reservation\)/g) || [];
++  assert.equal(fallbackCalls.length, 4);
++  assert.deepEqual(new Set(fallbackCalls), new Set(['runXScrollImport(limit, mode, progress, reservation)']));
++  assert.equal((source.match(/runCatchUpTransportBatch\(\{/g) || []).length, 2);
++});
++
++test('explicit X and Instagram imports reserve before their first await', () => {
++  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
++  for (const name of ['handleImportBookmarks', 'handleImportSaved']) {
++    const start = source.indexOf(`async function ${name}`);
++    const end = source.indexOf('\n}', start);
++    const body = source.slice(start, end);
++    assert.ok(body.indexOf('reserveSocialImport(') >= 0);
++    assert.ok(body.indexOf('reserveSocialImport(') < body.indexOf('await '));
++  }
++});
+-- 
+2.50.1 (Apple Git-155)
+

@@ -12,8 +12,8 @@
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
     "canonical_evidence_ref": "refs/gatherlocal/evidence/overlay-v1",
-    "tip": "487967382314a7975f259be64e95b5e5f98780fd",
-    "resulting_tree": "229b9967964a9a7aedd2f8b102a3c3fdba5efeeb"
+    "tip": "734f88fafe96553e30f4331c9a2fcdfdff58543c",
+    "resulting_tree": "f1ac9bc608a82753e48d038723601725f070bc0e"
   },
   "acceptance": {
     "personal_policy": "never-auto-drop",
@@ -216,6 +216,84 @@
             "--test",
             "test/persistent-state.test.js",
             "test/local-migration-engine.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 70,
+      "id": "pending.x-social-import",
+      "revision": 1,
+      "class": "pending-contribution",
+      "contribution_state": "pending-local-only",
+      "subject": "Add X and social import workflow",
+      "source_commit": "f8380e3f793b65ae758fd8d4dfa0f63ca5b5f0ec",
+      "source_parent": "487967382314a7975f259be64e95b5e5f98780fd",
+      "source_tree": "3ae7f538902a0b2a51284de4fcfba6c8c6591ae2",
+      "logical_dependencies": [
+        "personal.runtime-identity",
+        "personal.data-rehearsal-seam"
+      ],
+      "patch_id_stable": "1ab65d2c0ab3b0bd659a97af71ae11e34845fb79",
+      "canonical_diff_sha256": "7f630a683dc2c2f47c3fcfb0243247257a6cad6e684fc720b2f93ca652e51341",
+      "artifact": "patches/0070-pending.x-social-import.patch",
+      "artifact_sha256": "732094af0d3a5480057058b8f98dc3a8fe5753252274c97c34a0bea1bacb046b",
+      "acceptance_policy": "exact-upstream-or-reviewed-contract",
+      "checks": [
+        {
+          "id": "x-social-import-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/save-sort-date.test.js",
+            "test/import-limit.test.js",
+            "test/save-response.test.js",
+            "test/catch-up-import.test.js",
+            "test/x-bookmark-status.test.js",
+            "test/x-import-transport.test.js",
+            "test/social-import-progress.test.js",
+            "test/social-import-state.test.js",
+            "test/social-import-view.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 80,
+      "id": "personal.local-ai-authorization",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Authorize user-owned local AI providers",
+      "source_commit": "734f88fafe96553e30f4331c9a2fcdfdff58543c",
+      "source_parent": "f8380e3f793b65ae758fd8d4dfa0f63ca5b5f0ec",
+      "source_tree": "f1ac9bc608a82753e48d038723601725f070bc0e",
+      "logical_dependencies": [
+        "personal.ai-providers",
+        "pending.x-social-import"
+      ],
+      "patch_id_stable": "7d156be4e0fe54537ae50276fbd3276f21737d0a",
+      "canonical_diff_sha256": "fa1820ec4856fc8fabc22ac48f6ea0af4d253840fc854df3bd182392248e63e9",
+      "artifact": "patches/0080-personal.local-ai-authorization.patch",
+      "artifact_sha256": "ba7f4742c7418c36086ae03f97c5c67f7fd6c430f7750d1628aff5f07a09f209",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "local-ai-authorization-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/ai-runtime.test.js",
+            "test/gatherlocal-ai-bootstrap.test.js",
+            "test/gatherlocal-ai-authorization.test.js",
+            "test/gatherlocal-ai-access-view.test.js",
+            "test/openai-runtime-compat.test.js",
+            "test/gatheros-proxy-adapter.test.js"
           ]
         }
       ]
