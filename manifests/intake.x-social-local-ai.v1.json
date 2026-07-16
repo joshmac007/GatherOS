@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "expected_tip": "487967382314a7975f259be64e95b5e5f98780fd",
+  "workflow_commit_subject": "Intake X social and local AI patches",
+  "patches": [
+    {
+      "id": "pending.x-social-import",
+      "revision": 1,
+      "class": "pending-contribution",
+      "subject": "Add X and social import workflow",
+      "source_commit": "f8380e3f793b65ae758fd8d4dfa0f63ca5b5f0ec",
+      "logical_dependencies": [
+        "personal.runtime-identity",
+        "personal.data-rehearsal-seam"
+      ],
+      "checks": [
+        {
+          "id": "x-social-import-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/save-sort-date.test.js",
+            "test/import-limit.test.js",
+            "test/save-response.test.js",
+            "test/catch-up-import.test.js",
+            "test/x-bookmark-status.test.js",
+            "test/x-import-transport.test.js",
+            "test/social-import-progress.test.js",
+            "test/social-import-state.test.js",
+            "test/social-import-view.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "personal.local-ai-authorization",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Authorize user-owned local AI providers",
+      "source_commit": "734f88fafe96553e30f4331c9a2fcdfdff58543c",
+      "logical_dependencies": [
+        "personal.ai-providers",
+        "pending.x-social-import"
+      ],
+      "checks": [
+        {
+          "id": "local-ai-authorization-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/ai-runtime.test.js",
+            "test/gatherlocal-ai-bootstrap.test.js",
+            "test/gatherlocal-ai-authorization.test.js",
+            "test/gatherlocal-ai-access-view.test.js",
+            "test/openai-runtime-compat.test.js",
+            "test/gatheros-proxy-adapter.test.js"
+          ]
+        }
+      ]
+    }
+  ]
+}

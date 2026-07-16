@@ -150,9 +150,8 @@ Never send mixed commit upstream.
 
 ## Develop a new personal feature
 
-Current safety status: feature development is possible, but personal-patch
-intake is not yet a one-command workflow. No `add-patch` controller exists.
-Future agents must not pretend otherwise.
+Personal-patch intake is a separate fail-closed command. It extends canonical
+evidence but never promotes the accepted app itself.
 
 Safe process:
 
@@ -164,7 +163,7 @@ Safe process:
 6. Run targeted tests, full Electron tests, renderer build, and diff inspection.
 7. Classify commit as `personal-overlay`, `personal-support`, or
    `pending-contribution`.
-8. Extend overlay manifest/artifact chain through an audited intake change.
+8. Create a checksummed intake spec and run `scripts/intake-overlay.mjs`.
 9. Preserve previous canonical evidence ref before moving it.
 10. Prove artifact checksum, canonical diff, stable patch ID, source tree,
     dependencies, and replay from exact accepted upstream target.
@@ -173,16 +172,14 @@ Safe process:
 12. Run full sync against current upstream SHA. Only successful promotion makes
     feature part of usable GatherLocal.
 
-Until an `add-patch` command exists, Josh should describe desired feature and
-tell agent:
+Josh can describe a desired feature and tell an agent:
 
 > Build this as a personal GatherLocal feature. Do not edit GatherLocal-Next.
 > Use an independent feature clone, keep changes as one coherent patch, update
 > the overlay evidence fail-closed, and run full sync acceptance before promotion.
 
-Agent must stop and design missing intake transaction if canonical evidence,
-manifest, accepted store, and recovery refs cannot move together safely. Manual
-ref edits without recovery evidence are forbidden.
+Intake must finish with a clean Workflow commit, verified canonical evidence,
+and a recovery ref. Manual ref edits without recovery evidence are forbidden.
 
 ## Develop a contribution
 

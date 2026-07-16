@@ -101,6 +101,20 @@ Passing copies are removed; failed copies are preserved and printed.
 
 ## Update controller
 
+Add an audited overlay stack extension from an isolated, push-disabled source
+repository:
+
+```sh
+node scripts/intake-overlay.mjs \
+  --source ../GatherLocal-Overlay-Work-YYYYMMDD \
+  --spec manifests/intake.feature-name.v1.json
+```
+
+Intake verifies a linear source chain, regenerates canonical patch metadata,
+commits only manifest artifacts, then atomically advances the acceptance
+store's evidence ref while preserving its previous tip under a recovery ref.
+Accepted app and pointer do not move until a later full sync passes.
+
 One-time setup:
 
 ```sh
