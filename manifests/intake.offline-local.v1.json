@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "expected_tip": "c8662f6802883b8235ac53b231bcc71ff845554d",
+  "workflow_commit_subject": "Intake GatherLocal offline mode",
+  "patches": [
+    {
+      "id": "personal.offline-local",
+      "revision": 1,
+      "class": "personal-overlay",
+      "subject": "Make GatherLocal fully local",
+      "source_commit": "646704edb7ab9d678b02af64e1c749bdad9ef9dc",
+      "logical_dependencies": [
+        "personal.local-ai-authorization",
+        "personal.runtime-identity"
+      ],
+      "checks": [
+        {
+          "id": "offline-local-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/gatherlocal-offline-mode.test.js",
+            "test/gatherlocal-ai-authorization.test.js",
+            "test/gatherlocal-ai-adapters.test.js",
+            "test/gatherlocal-ai-bootstrap.test.js",
+            "test/gatherlocal-ai-access-view.test.js",
+            "test/openai-runtime-compat.test.js"
+          ]
+        }
+      ]
+    }
+  ]
+}
