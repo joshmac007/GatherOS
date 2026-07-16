@@ -1,0 +1,72 @@
+name: Sync Brett updates
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 13 * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-brett-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out GatherLocal
+        uses: actions/checkout@v4
+        with:
+          ref: local
+          fetch-depth: 0
+
+      - name: Update clean mirror branch
+        id: update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add brett https://github.com/BrettfromDJ/GatherOS.git
+          git fetch brett main
+          git fetch origin main
+
+          current=$(git rev-parse origin/main)
+          incoming=$(git rev-parse brett/main)
+
+          if [[ "$current" == "$incoming" ]]; then
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git push origin brett/main:refs/heads/main \
+            --force-with-lease=refs/heads/main:"$current"
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open GatherLocal update pull request
+        if: steps.update.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          existing=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base local \
+            --head main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [[ -n "$existing" ]]; then
+            exit 0
+          fi
+
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base local \
+            --head main \
+            --title "Merge latest Brett updates" \
+            --body "Automated upstream update. Merge only after GatherLocal tests pass and local provider, server, auth, storage, and indexing behavior is verified."

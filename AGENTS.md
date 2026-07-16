@@ -6,6 +6,9 @@
 - Canonical path: `/Users/joshmcswain/Documents/GatherOS Remake/GatherLocal`.
 - GitHub fork: `joshmac007/GatherOS` (`origin`).
 - Brett's repository: `BrettfromDJ/GatherOS` (`upstream`, fetch only).
+- Brett's GitHub default/HEAD points to an outdated Claude branch. Never fetch,
+  merge, clone, or branch from remote HEAD. Brett's source is explicitly
+  `refs/heads/main` / `upstream/main`.
 - Before changing anything, run `git rev-parse --show-toplevel`,
   `git branch --show-current`, `git status --short`, and `git remote -v`.
 - Stop if repository, branch, or remote identity does not match the task.
@@ -23,7 +26,8 @@
 
 ## Update flow
 
-1. Fetch `upstream`.
+1. Fetch `refs/heads/main` from `upstream` explicitly. Never use its default
+   branch or remote HEAD.
 2. Fast-forward mirror branch `main` to `upstream/main`.
 3. Merge `main` into `local` through a tested update branch or pull request.
 4. Take Brett's complete update. Keep local behavior through explicit provider,
