@@ -12,8 +12,8 @@
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
     "canonical_evidence_ref": "refs/gatherlocal/evidence/overlay-v1",
-    "tip": "e00707dd3b4b690b5e2a89b3f71cfa41dc30f379",
-    "resulting_tree": "277db1f00e401dbb9d7f8451edc8a0c70f19d831"
+    "tip": "33469975ef6c36dbb08d1b0e3f356aa0ad0473f6",
+    "resulting_tree": "937fc5e2c207d79a1ba5511c51ba63baa2958b89"
   },
   "acceptance": {
     "personal_policy": "never-auto-drop",
@@ -437,23 +437,23 @@
     {
       "order": 130,
       "id": "pending.smart-indexing",
-      "revision": 1,
+      "revision": 2,
       "class": "pending-contribution",
       "contribution_state": "pending-local-only",
       "subject": "Add provider-neutral smart indexing",
-      "source_commit": "e00707dd3b4b690b5e2a89b3f71cfa41dc30f379",
+      "source_commit": "33469975ef6c36dbb08d1b0e3f356aa0ad0473f6",
       "source_parent": "646704edb7ab9d678b02af64e1c749bdad9ef9dc",
-      "source_tree": "277db1f00e401dbb9d7f8451edc8a0c70f19d831",
+      "source_tree": "937fc5e2c207d79a1ba5511c51ba63baa2958b89",
       "logical_dependencies": [
         "personal.local-migrations",
         "pending.ai-capability-runtime",
         "personal.ai-providers",
         "personal.local-ai-authorization"
       ],
-      "patch_id_stable": "4990a392e57170d280b2b7375f31c3c81999e53a",
-      "canonical_diff_sha256": "1d079380c0b07a0a470f7cb4b954ba678338049c8b4b6bd3db4ad7217f87ba3b",
+      "patch_id_stable": "d0a5382b96de751752402ce7dfdafae3066f4176",
+      "canonical_diff_sha256": "111de65daf5d13695f242dd3d7fe83d241b4457981939e6a91e32d7bfb51514e",
       "artifact": "patches/0130-pending.smart-indexing.patch",
-      "artifact_sha256": "19d37d710ee60a66dbf3574a2ac1d62ee14c4672ea485ade1a02958848a4f264",
+      "artifact_sha256": "ea35936c73ff3eece66f888cd7230a9451efa9764893e047704f1df23c13a6c7",
       "acceptance_policy": "exact-upstream-or-reviewed-contract",
       "checks": [
         {

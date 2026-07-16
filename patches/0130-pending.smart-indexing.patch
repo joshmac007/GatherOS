@@ -1,6 +1,6 @@
-From e00707dd3b4b690b5e2a89b3f71cfa41dc30f379 Mon Sep 17 00:00:00 2001
+From 33469975ef6c36dbb08d1b0e3f356aa0ad0473f6 Mon Sep 17 00:00:00 2001
 From: joshmac007 <joshmcswain007@gmail.com>
-Date: Wed, 15 Jul 2026 22:30:07 -0500
+Date: Wed, 15 Jul 2026 22:35:55 -0500
 Subject: [PATCH] Add provider-neutral smart indexing
 
 ---
@@ -36,7 +36,7 @@ Subject: [PATCH] Add provider-neutral smart indexing
  src/renderer/components/SmartChipRail.jsx     |   84 +-
  .../components/SmartChipRail.module.css       |   50 +
  .../components/VideoTagSuggestions.jsx        |  238 +++
- .../components/VideoTagSuggestions.module.css |  105 ++
+ .../components/VideoTagSuggestions.module.css |  104 ++
  src/renderer/hooks/useLibrary.js              |   51 +-
  test/ai-runtime.test.js                       |    3 +
  test/renderer-smart-semantic.test.js          |  174 ++
@@ -49,7 +49,7 @@ Subject: [PATCH] Add provider-neutral smart indexing
  test/video-semantic-provider-contract.test.js |  120 ++
  test/video-suggestions-bridge.test.js         |   69 +
  test/video-suggestions-component.test.js      |   60 +
- 45 files changed, 8539 insertions(+), 457 deletions(-)
+ 45 files changed, 8538 insertions(+), 457 deletions(-)
  create mode 100644 src/main/background-work-coordinator.js
  create mode 100644 src/main/foreground-activity.js
  create mode 100644 src/main/save-background-router.js
@@ -8221,10 +8221,10 @@ index 0000000000000000000000000000000000000000..fa54a16261d392a976b938266370580a
 +}
 diff --git a/src/renderer/components/VideoTagSuggestions.module.css b/src/renderer/components/VideoTagSuggestions.module.css
 new file mode 100644
-index 0000000000000000000000000000000000000000..58892b908786243655801838bd4c5fab544713ad
+index 0000000000000000000000000000000000000000..79835eaf77623255d3355c4d6da2bd0fb1f5ef5d
 --- /dev/null
 +++ b/src/renderer/components/VideoTagSuggestions.module.css
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,104 @@
 +.root {
 +  display: flex;
 +  flex-direction: column;
@@ -8329,7 +8329,6 @@ index 0000000000000000000000000000000000000000..58892b908786243655801838bd4c5fab
 +.error {
 +  margin: 0;
 +}
-+
 diff --git a/src/renderer/hooks/useLibrary.js b/src/renderer/hooks/useLibrary.js
 index de08297d2fb76a674fe740df0f1917328546d91a..11c83689ffafb896ab0dd0897aa88719724c53f3 100644
 --- a/src/renderer/hooks/useLibrary.js
