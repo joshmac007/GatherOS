@@ -122,6 +122,11 @@ test('desktop, native host, packaging, and updater cannot claim GatherOS identit
   assert.doesNotMatch(read('scripts/notarize.js'), /GatherOS-Notarize/);
   assert.doesNotMatch(read('scripts/predev.js'), /quit app "GatherOS"|Electron\.app\/Contents\/MacOS\/Electron/);
 
+  assert.match(read('src/renderer/index.html'), /<title>GatherLocal<\/title>/);
+  assert.match(read('src/renderer/toast.html'), /<title>GatherLocal toast<\/title>/);
+  assert.doesNotMatch(read('src/renderer/index.html'), /GatherOS/);
+  assert.doesNotMatch(read('src/renderer/toast.html'), /GatherOS/);
+
   const licensing = require('../src/shared/licensing-config');
   assert.equal(licensing.URL_SCHEME, identity.URL_SCHEME);
 });
