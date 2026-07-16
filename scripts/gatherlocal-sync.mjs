@@ -444,6 +444,7 @@ function validateCandidate({ candidate, descriptorFile, previousTarget, target, 
   const packageLog = path.join(runRoot, 'logs/app-package.log')
   runGate(checks, 'app.package-arm64', packageLog, () => run('./node_modules/.bin/electron-builder', [
     '--dir', '--mac', '--arm64', '--publish', 'never', '--config.mac.identity=null',
+    '--config.electronDist=node_modules/electron/dist',
   ], {
     cwd: candidate,
     env: {

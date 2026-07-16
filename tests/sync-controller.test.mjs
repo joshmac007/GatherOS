@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import {
   atomicPointSymlink,
   git,
@@ -14,6 +15,12 @@ import {
 
 const OLD = '1'.repeat(40)
 const NEW = '2'.repeat(40)
+const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+test('packaging uses pinned local Electron distribution', () => {
+  const controller = fs.readFileSync(path.join(workflowRoot, 'scripts/gatherlocal-sync.mjs'), 'utf8')
+  assert.match(controller, /--config\.electronDist=node_modules\/electron\/dist/)
+})
 
 test('sync CLI accepts only explicit upstream/main and full target SHA', () => {
   assert.deepEqual(parseSyncArguments(['sync', '--upstream-ref', 'upstream/main', '--target-sha', OLD]), {
