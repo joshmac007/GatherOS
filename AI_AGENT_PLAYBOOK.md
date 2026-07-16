@@ -72,14 +72,11 @@ open "/Users/joshmcswain/Documents/GatherOS Remake/GatherLocal-Next/dist/build/m
 This is GatherLocal, not Brett's GatherOS. Runtime identity, user-data root,
 extension identity, native host, protocol, and local AI adapters remain separate.
 
-Local AI authorization follows provider ownership:
-
-- `codex`, `local`, and `ollama` are user-owned and do not require Brett Pro.
-- `gatheros-proxy` consumes Brett's service and remains Brett-Pro-only.
-- unknown providers fail closed.
-
-Do not remove Brett cloud authorization or product save limits. Those are not
-local AI adapters.
+GatherLocal is composed without GatherOS login, licensing, remote
+announcements, AI proxy, free-plan limits, or upgrade UI. AI routes are
+user-owned (`codex`, `local`, and `ollama`); unknown providers fail closed and
+`proxy` is invalid. Keep this local-only composition in the personal overlay.
+Never copy it into `GatherOS-Contrib`.
 
 ## Receive Brett updates
 
@@ -299,8 +296,9 @@ Verified 2026-07-16; recheck live state before reuse:
 - Brett `main`: `527f92639aaa897458a6502dc0f49e2d0c2aade6`.
 - Accepted upstream target: same SHA.
 - Accepted reconstruction: `039961851d3d88f4558861ffa7ea2dca09ba67f5`.
-- Canonical overlay evidence: `c8662f6802883b8235ac53b231bcc71ff845554d`.
-- Personal stack: eleven ordered patches.
+- Canonical overlay evidence: `646704edb7ab9d678b02af64e1c749bdad9ef9dc`.
+- Personal stack: twelve ordered patches; newest patch awaits a passing full
+  sync before it becomes the accepted app.
 - Contribution branch tip: `c7e8552d6ea68ac9a8137d8f2b59bd9ffc06cac7`.
 - Installed app ASAR SHA-256:
   `b14ae82178bd46b6e12ad18b5a8b24c4fe878902b74b14bad60d1bd56898eb2b`.

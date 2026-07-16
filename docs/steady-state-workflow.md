@@ -38,10 +38,10 @@ into a named manifest patch only after its behavior and migration policy pass.
 Never copy personal AI endpoints, credentials, branding, or data assumptions
 into `GatherOS-Upstream` or `GatherOS-Contrib`.
 
-Provider ownership is the authorization boundary. User-owned providers
-(`codex`, `local`, and `ollama`) may run without Brett Pro. Brett's
-`gatheros-proxy` still requires Brett Pro. Unknown providers fail closed. Do not
-remove Brett service authorization or product save limits to enable local AI.
+GatherLocal has no GatherOS login, subscription, announcement, AI proxy, free
+plan, or save cap. Its AI routes are user-owned (`codex`, `local`, and
+`ollama`); unknown providers fail closed and `proxy` is invalid. This local-only
+composition belongs only in the personal overlay, never `GatherOS-Contrib`.
 
 ## Install accepted outputs
 
