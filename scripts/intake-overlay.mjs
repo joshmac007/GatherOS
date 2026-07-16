@@ -153,13 +153,25 @@ function verifyProposal(proposal, source) {
 }
 
 function advanceEvidence(manifest, oldTip, source) {
-  const id = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
-  const incoming = `refs/gatherlocal/incoming-overlay/${id}`
+  const pending = gitText([
+    'for-each-ref', '--format=%(refname) %(objectname)', 'refs/gatherlocal/incoming-overlay',
+  ], store).split('\n').filter(Boolean)
+  if (pending.length > 1) fail('multiple unfinished overlay intake refs require diagnosis')
+  let id
+  let incoming
+  if (pending.length === 1) {
+    const [ref, tip] = pending[0].split(' ')
+    if (tip !== manifest.source.tip) fail('unfinished overlay intake points at a different tip')
+    incoming = ref
+    id = path.basename(ref)
+  } else {
+    id = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
+    incoming = `refs/gatherlocal/incoming-overlay/${id}`
+    git(['fetch', '--no-tags', '--no-write-fetch-head', source, `${manifest.source.tip}:${incoming}`], store)
+  }
   const recovery = `refs/gatherlocal/evidence-recovery/${id}`
-  git(['fetch', '--no-tags', '--no-write-fetch-head', source, `${manifest.source.tip}:${incoming}`], store)
   const transaction = [
     'start',
-    `verify ${REF} ${oldTip}`,
     `create ${recovery} ${oldTip}`,
     `update ${REF} ${manifest.source.tip} ${oldTip}`,
     `delete ${incoming} ${manifest.source.tip}`,
