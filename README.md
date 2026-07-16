@@ -14,6 +14,7 @@ source or user data.
 | `GatherOS-Upstream` | Clean fetch-only mirror of Brett's public source |
 | `GatherOS-Contrib` | Clean optional `contrib/*` work for the user's fork |
 | `GatherLocal-Next` | Last accepted personal reconstruction |
+| `GatherLocal-Extension` | Stable unpacked Chrome extension for manual load/reload |
 | `GatherLocal-Workflow` | Controller, patch manifest, tests, and receipts |
 | `GatherLocal` | Preserved historical working tree until cutover |
 | `Preservation` | Recovery bundles, data snapshots, and checksums |
@@ -133,6 +134,10 @@ Sync is one-way. It fetches public source, builds a new candidate, replays the
 personal overlay, validates package and copied data, then promotes only if every
 gate passes. It cannot push or create a pull request. Failed candidates remain
 under `.gatherlocal-sync-runs`; current accepted app remains selected.
+
+Promotion does not replace `/Applications/GatherLocal.app` or change Chrome.
+Installing the accepted app and loading/reloading `GatherLocal-Extension` are
+separate, explicit steps after verification.
 
 See `docs/steady-state-workflow.md` for normal update and optional contribution
 flows.

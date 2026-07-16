@@ -12,7 +12,7 @@ optional pull requests. Brett is not involved in Josh's local update process.
 
 ## Mental model
 
-Do not think of this as one repository. It is five lanes with different jobs:
+Do not think of this as one repository. It is five code lanes with different jobs:
 
 | Path | Job | May edit? | May push? |
 |---|---|---:|---:|
@@ -28,6 +28,7 @@ Supporting stores:
 - `GatherLocal-Accepted.git` holds authoritative accepted and recovery refs.
 - `Preservation` holds recovery bundles, copied-data snapshots, and receipts.
 - `.gatherlocal-sync-runs` holds controller runs and failed candidates.
+- `GatherLocal-Extension` is the stable unpacked Chrome extension path.
 
 `GatherLocal-Next` is a symlink to one immutable reconstruction. Never edit it
 in place, switch its branch, reset it, clean it, install packages into it, or use
@@ -70,6 +71,15 @@ open "/Users/joshmcswain/Documents/GatherOS Remake/GatherLocal-Next/dist/build/m
 
 This is GatherLocal, not Brett's GatherOS. Runtime identity, user-data root,
 extension identity, native host, protocol, and local AI adapters remain separate.
+
+Local AI authorization follows provider ownership:
+
+- `codex`, `local`, and `ollama` are user-owned and do not require Brett Pro.
+- `gatheros-proxy` consumes Brett's service and remains Brett-Pro-only.
+- unknown providers fail closed.
+
+Do not remove Brett cloud authorization or product save limits. Those are not
+local AI adapters.
 
 ## Receive Brett updates
 
@@ -262,6 +272,13 @@ git diff --check
 Do not overwrite receipts. Use new run-specific paths. Never run migration tests
 against live user data. Copied-data rehearsal owns disposable copies only.
 
+## Install accepted outputs
+
+Sync promotion does not mutate installed apps or Chrome. After verification,
+installing the accepted bundle at `/Applications/GatherLocal.app` is one explicit
+action. Loading or reloading `GatherLocal-Extension` in `chrome://extensions` is
+another explicit action. Keep both separate from source promotion.
+
 ## Recovery rules
 
 - Accepted authority: `GatherLocal-Accepted.git:refs/gatherlocal/accepted`.
@@ -277,15 +294,20 @@ deletion, stash/drop, or live-data mutation as recovery shortcuts.
 
 ## Current verified baseline
 
-Verified 2026-07-15; recheck live state before reuse:
+Verified 2026-07-16; recheck live state before reuse:
 
 - Brett `main`: `527f92639aaa897458a6502dc0f49e2d0c2aade6`.
 - Accepted upstream target: same SHA.
-- Accepted reconstruction: `21bba2b3327174cba20b8095d018bf38b5323d47`.
+- Accepted reconstruction: `039961851d3d88f4558861ffa7ea2dca09ba67f5`.
+- Canonical overlay evidence: `c8662f6802883b8235ac53b231bcc71ff845554d`.
 - Personal stack: eleven ordered patches.
+- Contribution branch tip: `c7e8552d6ea68ac9a8137d8f2b59bd9ffc06cac7`.
+- Installed app ASAR SHA-256:
+  `b14ae82178bd46b6e12ad18b5a8b24c4fe878902b74b14bad60d1bd56898eb2b`.
+- Stable extension version: `0.13.2`.
 - Original `GatherLocal`: preserved with unfinished local work; not accepted app.
 - Last full sync evidence:
-  `Preservation/GatherLocal-Sync-20260715T051228Z-b711a913`.
+  `Preservation/GatherLocal-Sync-20260716T011316Z-a6a2a797`.
 
 These hashes are evidence, not future update inputs. Always fetch Brett's current
 full SHA before sync.

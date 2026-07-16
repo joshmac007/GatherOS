@@ -9,6 +9,9 @@ Three separate code lanes:
 3. **Optional contribution:** `GatherOS-Contrib`. Clean Brett source plus one
    generic improvement suitable for a future pull request.
 
+`GatherLocal-Extension` is the stable unpacked Chrome extension. It stays
+separate from immutable app reconstructions so Chrome can keep one durable path.
+
 Brett need not review, approve, or do anything for updates to work.
 
 ## Receive an update
@@ -34,6 +37,24 @@ Personal work belongs in overlay reconstruction. Convert each coherent change
 into a named manifest patch only after its behavior and migration policy pass.
 Never copy personal AI endpoints, credentials, branding, or data assumptions
 into `GatherOS-Upstream` or `GatherOS-Contrib`.
+
+Provider ownership is the authorization boundary. User-owned providers
+(`codex`, `local`, and `ollama`) may run without Brett Pro. Brett's
+`gatheros-proxy` still requires Brett Pro. Unknown providers fail closed. Do not
+remove Brett service authorization or product save limits to enable local AI.
+
+## Install accepted outputs
+
+After a passing sync, verify the promoted bundle first. Replacing
+`/Applications/GatherLocal.app` is a separate local install action. Chrome also
+requires a separate user-approved load/reload of this folder:
+
+```text
+/Users/joshmcswain/Documents/GatherOS Remake/GatherLocal-Extension
+```
+
+In `chrome://extensions`, enable developer mode, choose **Load unpacked** for a
+first install, or click **Reload** on the existing GatherLocal extension.
 
 ## Contribute optionally
 
