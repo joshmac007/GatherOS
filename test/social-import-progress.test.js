@@ -2,11 +2,20 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 async function progress() { return import('../extension/social-import-progress.mjs'); }
+const HOST_NAME = 'co.gatherlocal.host';
+
+test('requires caller-owned native host identity', async () => {
+  const { createSocialImportProgress } = await progress();
+  assert.throws(() => createSocialImportProgress({
+    sendNativeMessage: async () => ({ ok: true }),
+  }), /hostName required/);
+});
 
 test('reports full snapshots with monotonic counters and terminal state', async () => {
   const calls = [];
   const { createSocialImportProgress } = await progress();
   const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
     randomUUID: () => 'run-1',
     sendNativeMessage: async (_host, msg) => { calls.push(msg); return { ok: true, cancelRequested: false }; },
   });
@@ -25,6 +34,7 @@ test('reports full snapshots with monotonic counters and terminal state', async 
 test('returns native cancellation and checks it before next work', async () => {
   const { createSocialImportProgress } = await progress();
   const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
     randomUUID: () => 'run-1',
     sendNativeMessage: async () => ({ ok: true, cancelRequested: true }),
   });
@@ -37,6 +47,7 @@ test('native progress failure does not fail the import and logs once', async () 
   const logs = [];
   const { createSocialImportProgress } = await progress();
   const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
     randomUUID: () => 'run-1',
     log: (...args) => logs.push(args),
     sendNativeMessage: async () => { throw new Error('host down'); },
@@ -50,6 +61,7 @@ test('native progress failure does not fail the import and logs once', async () 
 test('default UUID generator calls crypto.randomUUID with its receiver', async () => {
   const { createSocialImportProgress } = await progress();
   const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
     sendNativeMessage: async () => ({ ok: true, cancelRequested: false }),
   });
   await reporter.start({ platform: 'x', mode: 'all' });
@@ -60,6 +72,7 @@ test('reports after each processed item so a cancel response prevents the next i
   const { createSocialImportProgress } = await progress();
   const calls = [];
   const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
     randomUUID: () => 'run-1',
     sendNativeMessage: async (_host, payload) => {
       calls.push(payload);
