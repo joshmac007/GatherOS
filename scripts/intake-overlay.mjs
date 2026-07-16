@@ -47,6 +47,7 @@ function parseArgs(argv) {
   let source
   let spec
   let resume = false
+  let reviseLast = false
   for (let index = 0; index < argv.length;) {
     const flag = argv[index]
     if (flag === '--resume') {
@@ -54,14 +55,22 @@ function parseArgs(argv) {
       index += 1
       continue
     }
+    if (flag === '--revise-last') {
+      reviseLast = true
+      index += 1
+      continue
+    }
     const value = argv[index + 1]
-    if (!value || !['--source', '--spec'].includes(flag)) fail('usage: intake-overlay.mjs --source PATH --spec RELATIVE_PATH')
+    if (!value || !['--source', '--spec'].includes(flag)) {
+      fail('usage: intake-overlay.mjs [--resume | --revise-last] --source PATH --spec RELATIVE_PATH')
+    }
     if (flag === '--source') source = path.resolve(value)
     if (flag === '--spec') spec = path.resolve(root, value)
     index += 2
   }
+  if (resume && reviseLast) fail('--resume and --revise-last are mutually exclusive')
   if (!source || !spec) fail('both --source and --spec are required')
-  return { source: fs.realpathSync(source), spec: fs.realpathSync(spec), resume }
+  return { source: fs.realpathSync(source), spec: fs.realpathSync(spec), resume, reviseLast }
 }
 
 function assertRepositoryBoundaries(source) {
@@ -132,6 +141,78 @@ function buildProposal(manifest, spec, source) {
   return { manifest: next, artifacts, subject: spec.workflow_commit_subject }
 }
 
+function exactEqual(actual, expected) {
+  return JSON.stringify(actual) === JSON.stringify(expected)
+}
+
+export function buildRevisionProposal(manifest, spec, source) {
+  if (spec.schema_version !== 1) fail('intake spec schema_version must be 1')
+  if (spec.expected_tip !== manifest.source.tip) fail('intake spec expected_tip is stale')
+  if (!Array.isArray(spec.patches) || spec.patches.length !== 1) {
+    fail('revision spec must contain exactly one patch')
+  }
+  if (typeof spec.workflow_commit_subject !== 'string' || !spec.workflow_commit_subject) {
+    fail('workflow commit subject required')
+  }
+
+  const current = manifest.patches.at(-1)
+  const declared = spec.patches[0]
+  if (!current) fail('revision requires an existing final patch')
+  if (declared.id !== current.id) fail('revision may replace only the final patch id')
+  if (declared.revision !== current.revision + 1) {
+    fail('revision must increment final patch revision by exactly one')
+  }
+  if (declared.class !== current.class) fail(`${current.id}: revision class mismatch`)
+  if (declared.subject !== current.subject) fail(`${current.id}: revision subject mismatch`)
+  if (!exactEqual(declared.logical_dependencies, current.logical_dependencies)) {
+    fail(`${current.id}: revision logical dependencies mismatch`)
+  }
+  if (!exactEqual(declared.checks, current.checks)) fail(`${current.id}: revision checks mismatch`)
+  if (!SHA.test(declared.source_commit || '')) fail(`${current.id}: source_commit must be a full SHA`)
+  if (declared.source_commit === current.source_commit) fail(`${current.id}: revision source_commit is unchanged`)
+
+  const oldCommit = git(
+    ['rev-parse', '--verify', `${current.source_commit}^{commit}`],
+    source,
+    { allowFailure: true },
+  )
+  if (oldCommit.status !== 0 || oldCommit.stdout.trim() !== current.source_commit) {
+    fail('overlay source does not contain current final patch evidence')
+  }
+  if (gitText(['rev-parse', 'HEAD'], source) !== declared.source_commit) {
+    fail('overlay source HEAD must equal revised source_commit; extra commits are forbidden')
+  }
+
+  const parent = gitText(['rev-parse', `${declared.source_commit}^`], source)
+  if (parent !== current.source_parent) {
+    fail(`${current.id}: revised source parent must equal original source parent`)
+  }
+  const subject = gitText(['log', '-1', '--format=%s', declared.source_commit], source)
+  if (subject !== current.subject) fail(`${current.id}: source subject mismatch`)
+
+  const diff = git(['show', '--format=', '--full-index', '--binary', declared.source_commit], source).stdout
+  const artifact = git(['format-patch', '-1', '--stdout', '--full-index', '--binary', declared.source_commit], source).stdout
+  const entry = {
+    ...current,
+    revision: declared.revision,
+    source_commit: declared.source_commit,
+    source_parent: parent,
+    source_tree: gitText(['rev-parse', `${declared.source_commit}^{tree}`], source),
+    patch_id_stable: patchId(diff),
+    canonical_diff_sha256: sha256(diff),
+    artifact_sha256: sha256(artifact),
+  }
+  const next = structuredClone(manifest)
+  next.patches[next.patches.length - 1] = entry
+  next.source.tip = entry.source_commit
+  next.source.resulting_tree = entry.source_tree
+  return {
+    manifest: next,
+    artifacts: [{ relative: current.artifact, bytes: artifact }],
+    subject: spec.workflow_commit_subject,
+  }
+}
+
 function verifyProposal(proposal, source) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'gatherlocal-overlay-intake.'))
   try {
@@ -197,6 +278,42 @@ function publishProposal(proposal, oldTip, source) {
   return advanceEvidence(proposal.manifest, oldTip, source)
 }
 
+function replaceFileAtomically(file, bytes) {
+  const temporary = `${file}.intake-${process.pid}-${crypto.randomBytes(8).toString('hex')}`
+  fs.writeFileSync(temporary, bytes, { flag: 'wx' })
+  try {
+    fs.renameSync(temporary, file)
+  } finally {
+    fs.rmSync(temporary, { force: true })
+  }
+}
+
+function publishRevisionProposal(proposal, oldTip, source) {
+  const artifact = proposal.artifacts[0]
+  const artifactFile = path.join(root, artifact.relative)
+  const oldArtifact = fs.readFileSync(artifactFile)
+  const oldManifest = fs.readFileSync(manifestFile)
+  const newManifest = Buffer.from(`${JSON.stringify(proposal.manifest, null, 2)}\n`)
+  const generated = ['manifests/overlay.v1.json', artifact.relative]
+  let committed = false
+  try {
+    replaceFileAtomically(artifactFile, artifact.bytes)
+    replaceFileAtomically(manifestFile, newManifest)
+    git(['add', '--', ...generated], root)
+    git(['diff', '--check', '--cached', '--', '.', ':(exclude)patches/*.patch'], root)
+    git(['commit', '-m', proposal.subject, '--', ...generated], root)
+    committed = true
+  } finally {
+    if (!committed) {
+      replaceFileAtomically(artifactFile, oldArtifact)
+      replaceFileAtomically(manifestFile, oldManifest)
+      git(['add', '--', ...generated], root)
+    }
+  }
+  return advanceEvidence(proposal.manifest, oldTip, source)
+}
+
+function main() {
 try {
   const options = parseArgs(process.argv.slice(2))
   assertRepositoryBoundaries(options.source)
@@ -212,12 +329,19 @@ try {
     process.exit(0)
   }
   const manifest = loadAndVerifyManifest({ root, source: store })
-  const proposal = buildProposal(manifest, spec, options.source)
+  const proposal = options.reviseLast
+    ? buildRevisionProposal(manifest, spec, options.source)
+    : buildProposal(manifest, spec, options.source)
   verifyProposal(proposal, options.source)
-  const result = publishProposal(proposal, manifest.source.tip, options.source)
+  const result = options.reviseLast
+    ? publishRevisionProposal(proposal, manifest.source.tip, options.source)
+    : publishProposal(proposal, manifest.source.tip, options.source)
   console.log(`PASS: overlay intake ${result.tip}`)
   console.log(`Recovery ref: ${result.recovery}`)
 } catch (error) {
   console.error(`FAIL: ${error.message}`)
   process.exit(1)
 }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()
