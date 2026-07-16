@@ -693,6 +693,7 @@ function sync(id, runRoot, env, logFile, options) {
     newTip: candidateState.tip,
     previousTarget: topology.previousTarget,
     target: fetched.target,
+    upstreamFreshness: fetched.freshness,
     checks,
     packageReceipt: validation.packageReceipt,
     extension: validation.extension,

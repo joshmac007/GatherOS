@@ -301,17 +301,18 @@ Verified 2026-07-16; recheck live state before reuse:
 
 - Brett `main`: `527f92639aaa897458a6502dc0f49e2d0c2aade6`.
 - Accepted upstream target: same SHA.
-- Accepted reconstruction: `039961851d3d88f4558861ffa7ea2dca09ba67f5`.
+- Accepted reconstruction: `907035faae81a2fc35ab7d7bb716be26be52cf0e`.
 - Canonical overlay evidence: `646704edb7ab9d678b02af64e1c749bdad9ef9dc`.
-- Personal stack: twelve ordered patches; newest patch awaits a passing full
-  sync before it becomes the accepted app.
+- Personal stack: twelve ordered patches, all accepted.
 - Contribution branch tip: `c7e8552d6ea68ac9a8137d8f2b59bd9ffc06cac7`.
-- Installed app ASAR SHA-256:
-  `b14ae82178bd46b6e12ad18b5a8b24c4fe878902b74b14bad60d1bd56898eb2b`.
+- Accepted app ASAR SHA-256:
+  `aa62ca0683a9e3b2280ecf1aa27b74fea0b4125d880d9e6674b2b8d3fec1434a`.
 - Stable extension version: `0.13.2`.
 - Original `GatherLocal`: preserved with unfinished local work; not accepted app.
-- Last full sync evidence:
-  `Preservation/GatherLocal-Sync-20260716T011316Z-a6a2a797`.
+- Last full acceptance evidence:
+  `Preservation/GatherLocal-Sync-20260716T015732Z-04c82588`.
+- That acceptance was an offline rebuild against already accepted Brett target
+  `527f92639aaa897458a6502dc0f49e2d0c2aade6`; GitHub freshness was not checked.
 
 These hashes are evidence, not future update inputs. Always fetch Brett's current
 full SHA before sync.
