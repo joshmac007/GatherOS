@@ -1,13 +1,13 @@
-const HOST_NAME = 'co.gatheros.host';
 const STAGES = new Set(['starting', 'scanning', 'saving', 'stopping', 'complete', 'stopped', 'failed']);
 
 export function createSocialImportProgress({
   sendNativeMessage,
-  hostName = HOST_NAME,
+  hostName,
   randomUUID = () => globalThis.crypto.randomUUID(),
   log = () => {},
 } = {}) {
   if (typeof sendNativeMessage !== 'function') throw new TypeError('sendNativeMessage required');
+  if (typeof hostName !== 'string' || !hostName.trim()) throw new TypeError('hostName required');
   if (typeof randomUUID !== 'function') throw new TypeError('randomUUID required');
   let snapshot = null;
   let cancelRequested = false;
