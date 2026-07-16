@@ -446,34 +446,6 @@ const MIGRATIONS = [
   (database) => {
     addColumnIfMissing(database, 'saves', 'viewed_at', 'INTEGER');
   },
-  // Repair older X saves whose extension payload predated tweetCreatedAt.
-  (database) => {
-    repairMissingXTweetCreatedAt(database);
-  },
-  // Stable social-post identity. Keep every existing row; assign only the
-  // oldest active copy so future active duplicates can be rejected safely.
-  (database) => {
-    addColumnIfMissing(database, 'saves', 'source_key', 'TEXT');
-    const rows = database.prepare(`
-      SELECT id, source_url
-        FROM saves
-       WHERE deleted_at IS NULL AND source_url IS NOT NULL AND tweet_meta IS NOT NULL
-       ORDER BY created_at ASC, id ASC
-    `).all();
-    const claimed = new Set();
-    const assign = database.prepare('UPDATE saves SET source_key = ? WHERE id = ?');
-    for (const row of rows) {
-      const key = sourceKeyFromUrl(row.source_url);
-      if (!key || claimed.has(key)) continue;
-      claimed.add(key);
-      assign.run(key, row.id);
-    }
-    database.exec(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_saves_active_source_key
-        ON saves(source_key)
-       WHERE deleted_at IS NULL AND source_key IS NOT NULL;
-    `);
-  },
 ];
 
 function repairMissingXTweetCreatedAt(database) {
