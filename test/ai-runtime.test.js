@@ -7,6 +7,7 @@ const { AiRuntimeError, CODES } = require('../src/main/ai/errors');
 function adapter(id, overrides = {}) {
   return {
     id,
+    model: 'm',
     isConfigured: () => true,
     health: async () => ({ ok: true }),
     completeJson: async () => ({ ok: true }),
@@ -31,6 +32,8 @@ test('runtime routes each capability independently', async () => {
 
   assert.equal(runtime.providerFor(CAPABILITIES.STRUCTURED_JSON), 'codex');
   assert.equal(runtime.providerFor(CAPABILITIES.EMBEDDING), 'ollama');
+  assert.equal(runtime.modelFor(CAPABILITIES.EMBEDDING), 'm');
+  assert.equal(runtime.modelFor(CAPABILITIES.IMAGE_GENERATION), null);
   assert.equal(runtime.isConfigured(CAPABILITIES.IMAGE_GENERATION), false);
   assert.deepEqual(await runtime.completeJson({ input: 'x' }), { ok: true });
   assert.deepEqual(await runtime.embed({ text: 'x' }), { vector: [1], provider: 'ollama', model: 'm', dimension: 1 });

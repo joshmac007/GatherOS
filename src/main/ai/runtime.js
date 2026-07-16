@@ -52,6 +52,11 @@ function createAiRuntime({ authorize, routes = {} } = {}) {
     return providerId(routeFor(capability));
   }
 
+  function modelFor(capability) {
+    const model = routeFor(capability)?.model;
+    return typeof model === 'string' && model.trim() ? model.trim() : null;
+  }
+
   function unconfigured(capability, adapter = routeFor(capability)) {
     return new AiRuntimeError(CODES.CAPABILITY_UNCONFIGURED, `AI capability ${capability} is not configured`, {
       capability,
@@ -131,6 +136,7 @@ function createAiRuntime({ authorize, routes = {} } = {}) {
     capabilities: CAPABILITIES,
     isConfigured,
     providerFor,
+    modelFor,
     health,
     completeJson: (request) => execute(CAPABILITIES.STRUCTURED_JSON, 'completeJson', request),
     embed: (request) => execute(CAPABILITIES.EMBEDDING, 'embed', request),
