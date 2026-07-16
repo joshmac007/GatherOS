@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import {
-  History, User, Sparkles, Hash, Database, Info, Trash2, SquareLibrary as Library, Pencil, Plus, RefreshCw, MoreHorizontal,
+  History, Sparkles, Hash, Database, Info, Trash2, SquareLibrary as Library, Pencil, Plus, RefreshCw, MoreHorizontal,
   Palette as PaletteIcon,
   Camera as CameraIcon,
   Download as DownloadIcon,
@@ -12,8 +12,6 @@ import {
   Crop as CropIcon,
   AppWindow as AppWindowIcon,
   Maximize as MaximizeIcon,
-  LogOut as LogOutIcon,
-  CreditCard as CreditCardIcon,
   FileArchive as FileArchiveIcon,
   Eraser as EraserIcon,
   Volume2 as SoundIcon,
@@ -28,8 +26,6 @@ import PrivacyModal from './PrivacyModal.jsx';
 import {
   SAVE_SOUNDS, DEFAULT_SAVE_SOUND, previewSaveSound, configureSaveSound,
 } from '../lib/sounds.js';
-import { requestUpgrade, useEntitlementValue } from '../context/entitlement.jsx';
-import { priceSummary, YEARLY_SAVINGS } from '../lib/pricing.js';
 
 const SUPPORT_EMAIL = 'hey@gatheros.co';
 
@@ -39,10 +35,9 @@ const SUPPORT_EMAIL = 'hey@gatheros.co';
 // in the content switch below — beats the old drawer accordion as
 // the surface area grows.
 const NAV_ITEMS = [
-  { id: 'account',    label: 'Account',    Icon: User },
   { id: 'appearance', label: 'Appearance', Icon: PaletteIcon },
   { id: 'libraries',  label: 'Libraries',  Icon: Library },
-  { id: 'ai',         label: 'AI Usage',   Icon: Sparkles },
+  { id: 'ai',         label: 'Local AI',   Icon: Sparkles },
   { id: 'tags',       label: 'Tags',       Icon: Hash },
   { id: 'capture',    label: 'Capture',    Icon: CameraIcon },
   { id: 'syncing',    label: 'Syncing',    Icon: SyncIcon },
@@ -52,77 +47,6 @@ const NAV_ITEMS = [
   { id: 'data',       label: 'Data',       Icon: Database },
   { id: 'about',      label: 'About',      Icon: Info },
 ];
-
-function formatPlanLabel(account) {
-  if (!account) return '—';
-  const sub = account.subscription;
-  if (sub) {
-    const plan = sub.plan === 'yearly' ? 'Yearly' : sub.plan === 'monthly' ? 'Monthly' : '';
-    const status = sub.status;
-    if (status === 'trialing') return plan ? `${plan} · Trial` : 'Trial';
-    if (status === 'past_due') return plan ? `${plan} · Past due` : 'Past due';
-    if (status === 'canceled') return plan ? `${plan} · Canceled` : 'Canceled';
-    if (status === 'paused') return plan ? `${plan} · Paused` : 'Paused';
-    return plan || 'Active';
-  }
-  if (account.reason === 'trial') return 'Trial';
-  return 'Free';
-}
-
-function formatPeriodEnd(ts) {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleDateString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric',
-  });
-}
-
-function formatTokens(n) {
-  if (!Number.isFinite(n) || n <= 0) return '0';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return String(n);
-}
-
-// Usage meter for the AI page. Shows the current monthly token total
-// against the soft cap as a thin bar — the bar tints amber as the
-// user nears the cap and red once they're over it. We're "fail-open":
-// requests still go through even past the cap, but the visual cue
-// nudges power users toward an upgrade path.
-function UsageMeter({ usage }) {
-  const total = usage?.total_tokens || 0;
-  const cap = usage?.soft_cap || 0;
-  const overCap = !!usage?.over_cap;
-  const ratio = cap > 0 ? Math.min(1, total / cap) : 0;
-  const requests = usage?.request_count || 0;
-  const fillClass = overCap
-    ? styles.usageMeterFillOver
-    : ratio > 0.8
-      ? styles.usageMeterFillWarn
-      : '';
-
-  return (
-    <div className={styles.usageMeter}>
-      <div className={styles.usageMeterRow}>
-        <span>This month · {requests} {requests === 1 ? 'request' : 'requests'}</span>
-        <span className={styles.usageMeterTokens}>
-          {formatTokens(total)} / {formatTokens(cap)} tokens
-        </span>
-      </div>
-      <div className={styles.usageMeterTrack}>
-        <div
-          className={`${styles.usageMeterFill} ${fillClass}`}
-          style={{ width: `${Math.max(2, ratio * 100)}%` }}
-        />
-      </div>
-      {overCap && (
-        <div className={styles.usageMeterOverNote}>
-          Monthly limit reached. New requests will be blocked until the
-          start of next month.
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Libraries settings page — replaces the inline rename/delete
 // affordances that used to live next to the LibrarySwitcher trigger.
@@ -887,12 +811,8 @@ export default function SettingsModal({
   onRenameLibrary,
   onDeleteLibrary,
 }) {
-  // Whether the licensing session is present — proxy-mode AI is
-  // gated on it, not on a per-user OpenAI key. AppGate already shows
-  // the signin screen when this is false, so for the most part this
-  // flag stays true throughout Settings.
+  // Whether user-owned local AI routes are configured.
   const [hasAi, setHasAi] = useState(false);
-  const [usage, setUsage] = useState(null);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, theme: 'light' });
   const [unindexed, setUnindexed] = useState(0);
   const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
@@ -901,7 +821,7 @@ export default function SettingsModal({
   const [snapshots, setSnapshots] = useState([]);
   const [snapshotState, setSnapshotState] = useState({ running: false, message: null });
   const [snapshotsListOpen, setSnapshotsListOpen] = useState(false);
-  const [activePage, setActivePage] = useState('account');
+  const [activePage, setActivePage] = useState('appearance');
   const [tags, setTags] = useState([]);
   const [tagDraft, setTagDraft] = useState({ id: null, name: '' });
   const [tagBusy, setTagBusy] = useState(false);
@@ -911,21 +831,7 @@ export default function SettingsModal({
   const [tagShowAll, setTagShowAll] = useState(false);
   const [acksOpen, setAcksOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
-  const [account, setAccount] = useState(null);
-  const [portalState, setPortalState] = useState({ running: false, message: null });
   const appVersion = window.moodmark?.app?.version || '';
-
-  // Local-trial / free state for the Account page status block. The
-  // local 14-day trial only applies to users who aren't signed in; once
-  // signed in, the server subscription state drives the Plan row below.
-  const ent = useEntitlementValue();
-  const onLocalTrial = ent?.mode === 'trial' && !!ent?.trial?.active;
-  const trialDaysLeft = ent?.trial?.daysLeft ?? 0;
-  // Single plan label shown for every mode. Paid → the real subscription
-  // label (Monthly / Yearly …), or "Pro" if we only know the mode.
-  const planLabel = ent?.mode === 'paid'
-    ? (account?.subscription ? formatPlanLabel(account) : 'Pro')
-    : onLocalTrial ? 'Free trial' : 'Free plan';
 
   async function handleWipeLibrary() {
     if (wipeState.running) return;
@@ -972,17 +878,15 @@ export default function SettingsModal({
     let cancelled = false;
     Promise.all([
       window.moodmark.ai.hasSession(),
-      window.moodmark.ai.usage(),
       window.moodmark.settings.getPrefs(),
       window.moodmark.ai.unindexedCount(),
-    ]).then(([sessionExists, u, p, count]) => {
+    ]).then(([sessionExists, p, count]) => {
       if (cancelled) return;
       setHasAi(!!sessionExists);
       // Mirror up to App.jsx so AI buttons in DetailPanel etc. light
       // up correctly when this is the first time AI is observed in
       // the session.
       onConfiguredChange?.(!!sessionExists);
-      setUsage(u && u.ok ? u : null);
       setPrefs(p);
       setUnindexed(count || 0);
     });
@@ -1052,49 +956,6 @@ export default function SettingsModal({
     });
     return () => { cancelled = true; };
   }, [open]);
-
-  // Pull the latest license/entitlement view when Settings opens so
-  // the Account drawer renders with fresh email + plan + status.
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    window.moodmark.licensing.verify({ force: false }).then((result) => {
-      if (!cancelled) setAccount(result || null);
-    });
-    setPortalState({ running: false, message: null });
-    return () => { cancelled = true; };
-  }, [open]);
-
-  async function handleOpenCustomerPortal() {
-    if (portalState.running) return;
-    setPortalState({ running: true, message: null });
-    const result = await window.moodmark.licensing.openCustomerPortal();
-    setPortalState({
-      running: false,
-      message: result?.ok
-        ? null
-        : result?.error === 'no_customer'
-          ? 'You don’t have a subscription yet.'
-          : 'Couldn’t open the billing portal. Try again in a moment.',
-    });
-  }
-
-  async function handleSignOut() {
-    const ok = await confirm({
-      title: 'Sign out of GatherOS?',
-      message: 'Your library stays on this Mac. You can sign back in any time with the same email.',
-      confirmLabel: 'Sign out',
-    });
-    if (!ok) return;
-    // Route through AppGate so useLicense flips state to unauth in
-    // the same tick. Calling the IPC directly here would leave the
-    // renderer thinking it was still entitled until the next focus-
-    // triggered verify, which is exactly the delay users see.
-    window.dispatchEvent(new CustomEvent('moodmark:request-signout'));
-    // Closing settings before AppGate flips back to the SigninScreen
-    // avoids a brief flash of Settings on top of the new takeover.
-    onClose?.();
-  }
 
   async function handleSnapshotNow() {
     if (snapshotState.running) return;
@@ -1282,126 +1143,6 @@ export default function SettingsModal({
             {NAV_ITEMS.find((p) => p.id === activePage)?.label}
           </h2>
 
-          {activePage === 'account' && (
-            <div className={styles.page}>
-              {/* Plan status — entitlement-driven so it's right in every
-                  mode (Free plan / Free trial / paid). All the key/value
-                  facts live together in one bordered card so the rows read
-                  as a single summary with an even rhythm, instead of loose
-                  lines floating under the title. Actions/notes sit below it. */}
-              <div className={styles.accountCard}>
-                <div className={styles.aboutRow}>
-                  <span className={styles.aboutLabel}>Current plan</span>
-                  <span className={styles.aboutValue}>{planLabel}</span>
-                </div>
-                {onLocalTrial && (
-                  <div className={styles.aboutRow}>
-                    <span className={styles.aboutLabel}>Trial</span>
-                    <span className={styles.aboutValue}>
-                      {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'} left
-                    </span>
-                  </div>
-                )}
-                {/* Show what upgrading costs to anyone without an active
-                    subscription (free / trial / signed-out). */}
-                {!account?.subscription && (
-                  <div className={styles.aboutRow}>
-                    <span className={styles.aboutLabel}>Pro price</span>
-                    <span className={styles.aboutValue}>
-                      {priceSummary()} <span className={styles.priceSave}>(save {YEARLY_SAVINGS} yearly)</span>
-                    </span>
-                  </div>
-                )}
-                {account?.state !== 'unauth' && (
-                  <div className={styles.aboutRow}>
-                    <span className={styles.aboutLabel}>Email</span>
-                    <span className={styles.aboutValue}>
-                      {account?.user?.email || '—'}
-                    </span>
-                  </div>
-                )}
-                {account?.state !== 'unauth' && account?.subscription?.current_period_end && (
-                  <div className={styles.aboutRow}>
-                    <span className={styles.aboutLabel}>
-                      {account.subscription.cancel_at_period_end
-                        ? 'Ends'
-                        : account.subscription.status === 'trialing'
-                          ? 'Trial ends'
-                          : 'Renews'}
-                    </span>
-                    <span className={styles.aboutValue}>
-                      {formatPeriodEnd(account.subscription.current_period_end)}
-                    </span>
-                  </div>
-                )}
-              </div>
-              {account?.state === 'unauth' ? (
-                <>
-                  <div className={styles.signedOutNote}>
-                    <Info size={15} strokeWidth={1.8} className={styles.signedOutIcon} aria-hidden="true" />
-                    <p className={styles.sectionHint} style={{ margin: 0 }}>
-                      You're signed out. Sign back in to sync your AI
-                      usage and manage your subscription. Your library
-                      stays on this Mac either way.
-                    </p>
-                  </div>
-                  <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 16 }}>
-                    <button
-                      type="button"
-                      className={`${styles.btn} ${styles.btnPrimary}`}
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent('moodmark:request-signin'));
-                        onClose?.();
-                      }}
-                    >
-                      Sign in
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className={`${styles.actions} ${styles.actionsStart}`} style={{ marginTop: 16 }}>
-                    <button
-                      type="button"
-                      className={`${styles.btn} ${styles.btnDanger}`}
-                      onClick={handleSignOut}
-                    >
-                      <LogOutIcon size={14} strokeWidth={1.7} aria-hidden="true" />
-                      Sign out
-                    </button>
-                    {account?.subscription ? (
-                      <button
-                        type="button"
-                        className={`${styles.btn} ${styles.btnPrimary}`}
-                        onClick={handleOpenCustomerPortal}
-                        disabled={portalState.running}
-                      >
-                        <CreditCardIcon size={14} strokeWidth={1.7} aria-hidden="true" />
-                        {portalState.running ? 'Opening…' : 'Manage subscription'}
-                      </button>
-                    ) : (
-                      // Signed in but no subscription → offer the upgrade
-                      // directly. Closes Settings so the upgrade modal
-                      // (rendered at the app root) isn't hidden behind it.
-                      <button
-                        type="button"
-                        className={`${styles.btn} ${styles.btnPrimary}`}
-                        onClick={() => { onClose?.(); requestUpgrade(null); }}
-                      >
-                        Upgrade
-                      </button>
-                    )}
-                  </div>
-                  {portalState.message && (
-                    <div className={styles.sectionHint} style={{ marginTop: 8 }}>
-                      {portalState.message}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
           {activePage === 'appearance' && (
             <div className={styles.page}>
               <p className={styles.sectionHint}>
@@ -1563,20 +1304,16 @@ export default function SettingsModal({
             <div className={styles.page}>
               <p className={styles.sectionHint}>
                 Auto-tagging, auto-titles, semantic search, and image-prompt
-                generation run on a managed OpenAI integration that ships
-                with your subscription — no API key to set up.
+                generation use providers configured on this Mac. GatherLocal
+                does not send these requests through GatherOS servers.
               </p>
 
               {!hasAi && (
                 <div className={styles.statusRow}>
                   <span className={`${styles.status} ${styles.statusMuted}`}>
-                    Sign in to unlock AI features
+                    Configure a local AI provider to enable these features
                   </span>
                 </div>
-              )}
-
-              {hasAi && usage && (
-                <UsageMeter usage={usage} />
               )}
 
               <div className={styles.divider} />

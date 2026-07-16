@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Link as LinkIcon } from 'lucide-react';
 import styles from './PasteToSavePrompt.module.css';
-import { requestUpgrade } from '../context/entitlement.jsx';
 
 // Paste-aware "save a URL" prompt. When the window regains focus and a
 // fresh http(s) link is on the clipboard, this slides in from the corner
@@ -98,7 +97,6 @@ export default function PasteToSavePrompt({ onSaved, onVisibleChange, paused = f
     setSaving(true);
     try {
       const res = await window.moodmark?.saves?.captureUrl?.(link);
-      if (res?.needsUpgrade) { handledRef.current.add(link); reset(); requestUpgrade('save'); return; }
       if (!res?.ok) { setSaving(false); return; }
       handledRef.current.add(link);
       setSaved(true);

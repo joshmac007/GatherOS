@@ -57,7 +57,7 @@ test('route composition keeps Codex structured and Ollama embedding simultaneous
   assert.equal(routes[CAPABILITIES.IMAGE_GENERATION], null);
 });
 
-test('proxy selected only when explicitly configured', () => {
+test('proxy route is unavailable even when injected', () => {
   const proxyStructured = { provider: 'proxy', completeJson: async () => ({ ok: true }) };
   const routes = createGatherLocalRoutes({
     config: {
@@ -70,7 +70,7 @@ test('proxy selected only when explicitly configured', () => {
     },
     proxyAdapter: proxyStructured,
   });
-  assert.equal(routes[CAPABILITIES.STRUCTURED_JSON], proxyStructured);
+  assert.equal(routes[CAPABILITIES.STRUCTURED_JSON], null);
   assert.equal(routes[CAPABILITIES.IMAGE_GENERATION], null);
 });
 

@@ -10,7 +10,6 @@ import TagSuggestions from './TagSuggestions.jsx';
 import { fuzzyMatch } from '../lib/fuzzy.js';
 import { findNearDuplicateTag } from '../lib/tagSimilarity.js';
 import { CollectionIcon } from './Sidebar.jsx';
-import { requestUpgrade } from '../context/entitlement.jsx';
 
 const SUGGESTION_LIMIT = 6;
 
@@ -193,7 +192,6 @@ export default function DetailPanel({
   allCollections = [],
   allTags = [],
   aiConfigured = false,
-  aiRequiresUpgrade = false,
   aiIndexing = false,
   onClose,
   onCollectionsChanged,
@@ -457,7 +455,6 @@ export default function DetailPanel({
 
   async function handleAutoTag() {
     if (autoTagging) return;
-    if (aiRequiresUpgrade) { requestUpgrade('ai'); return; }
     if (!aiConfigured) {
       onOpenSettings?.();
       return;
@@ -484,7 +481,6 @@ export default function DetailPanel({
 
   async function handleGeneratePrompt() {
     if (promptGenerating) return;
-    if (aiRequiresUpgrade) { requestUpgrade('ai'); return; }
     if (!aiConfigured) {
       onOpenSettings?.();
       return;
