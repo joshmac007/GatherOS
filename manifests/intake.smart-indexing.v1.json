@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "expected_tip": "646704edb7ab9d678b02af64e1c749bdad9ef9dc",
+  "workflow_commit_subject": "Intake smart indexing patch",
+  "patches": [
+    {
+      "id": "pending.smart-indexing",
+      "revision": 1,
+      "class": "pending-contribution",
+      "subject": "Add provider-neutral smart indexing",
+      "source_commit": "e00707dd3b4b690b5e2a89b3f71cfa41dc30f379",
+      "logical_dependencies": [
+        "personal.local-migrations",
+        "pending.ai-capability-runtime",
+        "personal.ai-providers",
+        "personal.local-ai-authorization"
+      ],
+      "checks": [
+        {
+          "id": "smart-indexing-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/ai-runtime.test.js",
+            "test/local-migration-artifacts.test.js",
+            "test/local-migration-engine.test.js",
+            "test/renderer-smart-semantic.test.js",
+            "test/smart-indexing-bootstrap.test.js",
+            "test/smart-indexing-core.test.js",
+            "test/smart-indexing-db.test.js",
+            "test/smart-indexing-ipc.test.js",
+            "test/video-analysis-provider-neutral.test.js",
+            "test/video-frame-extractor-provider-neutral.test.js",
+            "test/video-semantic-provider-contract.test.js",
+            "test/video-suggestions-bridge.test.js",
+            "test/video-suggestions-component.test.js"
+          ]
+        }
+      ]
+    }
+  ]
+}
