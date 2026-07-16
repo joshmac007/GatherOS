@@ -6,12 +6,31 @@
 
 const { getAiRuntime } = require('./ai/bootstrap');
 const { CAPABILITIES } = require('./ai/runtime');
+const { providerAccess } = require('./gatherlocal/ai/authorization');
 
 function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
   function hasSession() {
     // Compatibility name: callers use this as "AI can be used", while
     // account-session state remains owned by licensing:has-session.
     return runtime.isConfigured(CAPABILITIES.STRUCTURED_JSON);
+  }
+
+  function capabilityAccess(capability) {
+    const provider = runtime.providerFor(capability);
+    return {
+      capability,
+      provider,
+      configured: runtime.isConfigured(capability),
+      ...providerAccess(provider),
+    };
+  }
+
+  function getAccess() {
+    return {
+      structuredJson: capabilityAccess(CAPABILITIES.STRUCTURED_JSON),
+      embedding: capabilityAccess(CAPABILITIES.EMBEDDING),
+      imageGeneration: capabilityAccess(CAPABILITIES.IMAGE_GENERATION),
+    };
   }
 
   async function autoTagImage(filePath, { signal } = {}) {
@@ -117,6 +136,7 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
 
   return {
     hasSession,
+    getAccess,
     autoTagImage,
     analyzeImage,
     generateImagePrompt,

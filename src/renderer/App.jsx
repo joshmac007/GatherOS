@@ -106,6 +106,7 @@ import UpgradeModal from './components/UpgradeModal.jsx';
 import UpgradeBanner from './components/UpgradeBanner.jsx';
 import SocialImportActivity from './components/SocialImportActivity.jsx';
 import { isTerminalStage } from './lib/socialImportView.mjs';
+import { canUseCapability, capabilityRequiresUpgrade } from './lib/aiAccess.mjs';
 
 // Lucide-backed icon shims. Component names are kept identical to
 // the previous inline SVG defs so every existing call site (right-
@@ -834,6 +835,7 @@ export default function App({ entitlement } = {}) {
   }, []);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
+  const [aiAccess, setAiAccess] = useState(null);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, semanticSearch: true });
 
   // Imperative handles for the global keyboard shortcuts.
@@ -861,7 +863,12 @@ export default function App({ entitlement } = {}) {
   // boolean so back-to-back creates each re-trigger the rename.
   const [renameViewSignal, setRenameViewSignal] = useState(0);
   useEffect(() => {
-    window.moodmark.ai.hasSession().then(setAiConfigured);
+    window.moodmark.ai.access().then((access) => {
+      setAiAccess(access || null);
+      setAiConfigured(!!access?.structuredJson?.configured);
+    }).catch(() => {
+      window.moodmark.ai.hasSession().then(setAiConfigured).catch(() => setAiConfigured(false));
+    });
     window.moodmark.settings.getPrefs().then((p) => {
       setPrefs(p);
       // Prime the save-sound engine from saved prefs.
@@ -892,7 +899,11 @@ export default function App({ entitlement } = {}) {
   // license session — search will route through embeddings rather
   // than LIKE. Locked in the free tier (semantic search is pro); the
   // app falls back to plain LIKE search, which still works fine.
-  const semanticSearchActive = aiConfigured && !!prefs.semanticSearch && !proLocked;
+  const embeddingAccess = aiAccess?.embedding;
+  const semanticSearchActive = !!prefs.semanticSearch
+    && canUseCapability(embeddingAccess, proLocked);
+  const structuredAccess = aiAccess?.structuredJson;
+  const aiRequiresUpgrade = capabilityRequiresUpgrade(structuredAccess, proLocked);
 
   // Set of save ids the main process is currently AI-indexing. Driven
   // by save:indexing-start / save:indexing-end events. DetailPanel
@@ -3884,6 +3895,7 @@ export default function App({ entitlement } = {}) {
             allCollections={collections}
             allTags={allTags}
             aiConfigured={aiConfigured}
+            aiRequiresUpgrade={aiRequiresUpgrade}
             aiIndexing={indexingIds.has(focused.id)}
             altImageIdx={focusedAltImageIdx}
             onAltImageIdxChange={setFocusedAltImageIdx}
