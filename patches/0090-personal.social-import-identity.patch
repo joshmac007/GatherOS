@@ -1,0 +1,117 @@
+From 93ec84083f66bbb020bfe3b61c8856bacceeeff3 Mon Sep 17 00:00:00 2001
+From: GatherLocal overlay intake <gatherlocal-overlay@invalid.local>
+Date: Wed, 15 Jul 2026 19:57:00 -0500
+Subject: [PATCH] Require explicit social import host identity
+
+---
+ extension/background.js              |  8 ++++----
+ extension/social-import-progress.mjs |  4 ++--
+ test/social-import-progress.test.js  | 13 +++++++++++++
+ 3 files changed, 19 insertions(+), 6 deletions(-)
+
+diff --git a/extension/background.js b/extension/background.js
+index 83281ca0b2520071f4892e1c1094684bff5d8789..8fb5c1d9b5ce055771b170a2904ff2f56854cb94 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -494,8 +494,8 @@ async function handleImportBookmarks(msg) {
+       const boundary = await requestXBookmarkStatus([]);
+       if (!boundary || !boundary.ok) {
+         releaseSocialImport('x', reservation);
+-        notify('Could not reach GatherOS.');
+-        return { ok: false, error: 'Could not reach GatherOS.' };
++        notify('Could not reach GatherLocal.');
++        return { ok: false, error: 'Could not reach GatherLocal.' };
+       }
+       const preflight = catchUpPreflightResult(boundary);
+       if (preflight) {
+@@ -504,8 +504,8 @@ async function handleImportBookmarks(msg) {
+       }
+     } catch {
+       releaseSocialImport('x', reservation);
+-      notify('Could not reach GatherOS.');
+-      return { ok: false, error: 'Could not reach GatherOS.' };
++      notify('Could not reach GatherLocal.');
++      return { ok: false, error: 'Could not reach GatherLocal.' };
+     }
+   }
+ 
+diff --git a/extension/social-import-progress.mjs b/extension/social-import-progress.mjs
+index 28fb035fb475f8b22465b264b0563b2ffda40ae2..9cb85e0be073a7dc1aae34717a9adb426b1fbadc 100644
+--- a/extension/social-import-progress.mjs
++++ b/extension/social-import-progress.mjs
+@@ -1,13 +1,13 @@
+-const HOST_NAME = 'co.gatheros.host';
+ const STAGES = new Set(['starting', 'scanning', 'saving', 'stopping', 'complete', 'stopped', 'failed']);
+ 
+ export function createSocialImportProgress({
+   sendNativeMessage,
+-  hostName = HOST_NAME,
++  hostName,
+   randomUUID = () => globalThis.crypto.randomUUID(),
+   log = () => {},
+ } = {}) {
+   if (typeof sendNativeMessage !== 'function') throw new TypeError('sendNativeMessage required');
++  if (typeof hostName !== 'string' || !hostName.trim()) throw new TypeError('hostName required');
+   if (typeof randomUUID !== 'function') throw new TypeError('randomUUID required');
+   let snapshot = null;
+   let cancelRequested = false;
+diff --git a/test/social-import-progress.test.js b/test/social-import-progress.test.js
+index 4c6fa79ee38d211db20375ac29173aa7c6c9edee..2552d4bdad5ce91672356b393e9a196b2b97000b 100644
+--- a/test/social-import-progress.test.js
++++ b/test/social-import-progress.test.js
+@@ -2,11 +2,20 @@ const test = require('node:test');
+ const assert = require('node:assert/strict');
+ 
+ async function progress() { return import('../extension/social-import-progress.mjs'); }
++const HOST_NAME = 'co.gatherlocal.host';
++
++test('requires caller-owned native host identity', async () => {
++  const { createSocialImportProgress } = await progress();
++  assert.throws(() => createSocialImportProgress({
++    sendNativeMessage: async () => ({ ok: true }),
++  }), /hostName required/);
++});
+ 
+ test('reports full snapshots with monotonic counters and terminal state', async () => {
+   const calls = [];
+   const { createSocialImportProgress } = await progress();
+   const reporter = createSocialImportProgress({
++    hostName: HOST_NAME,
+     randomUUID: () => 'run-1',
+     sendNativeMessage: async (_host, msg) => { calls.push(msg); return { ok: true, cancelRequested: false }; },
+   });
+@@ -25,6 +34,7 @@ test('reports full snapshots with monotonic counters and terminal state', async
+ test('returns native cancellation and checks it before next work', async () => {
+   const { createSocialImportProgress } = await progress();
+   const reporter = createSocialImportProgress({
++    hostName: HOST_NAME,
+     randomUUID: () => 'run-1',
+     sendNativeMessage: async () => ({ ok: true, cancelRequested: true }),
+   });
+@@ -37,6 +47,7 @@ test('native progress failure does not fail the import and logs once', async ()
+   const logs = [];
+   const { createSocialImportProgress } = await progress();
+   const reporter = createSocialImportProgress({
++    hostName: HOST_NAME,
+     randomUUID: () => 'run-1',
+     log: (...args) => logs.push(args),
+     sendNativeMessage: async () => { throw new Error('host down'); },
+@@ -50,6 +61,7 @@ test('native progress failure does not fail the import and logs once', async ()
+ test('default UUID generator calls crypto.randomUUID with its receiver', async () => {
+   const { createSocialImportProgress } = await progress();
+   const reporter = createSocialImportProgress({
++    hostName: HOST_NAME,
+     sendNativeMessage: async () => ({ ok: true, cancelRequested: false }),
+   });
+   await reporter.start({ platform: 'x', mode: 'all' });
+@@ -60,6 +72,7 @@ test('reports after each processed item so a cancel response prevents the next i
+   const { createSocialImportProgress } = await progress();
+   const calls = [];
+   const reporter = createSocialImportProgress({
++    hostName: HOST_NAME,
+     randomUUID: () => 'run-1',
+     sendNativeMessage: async (_host, payload) => {
+       calls.push(payload);
+-- 
+2.50.1 (Apple Git-155)
+

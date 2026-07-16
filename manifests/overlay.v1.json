@@ -12,8 +12,8 @@
     "repository_sibling": "GatherLocal-Next",
     "branch": "codex/personal-overlay-0.7",
     "canonical_evidence_ref": "refs/gatherlocal/evidence/overlay-v1",
-    "tip": "734f88fafe96553e30f4331c9a2fcdfdff58543c",
-    "resulting_tree": "f1ac9bc608a82753e48d038723601725f070bc0e"
+    "tip": "93ec84083f66bbb020bfe3b61c8856bacceeeff3",
+    "resulting_tree": "2a04d0344274718d4438c24baa38a388ba0969dc"
   },
   "acceptance": {
     "personal_policy": "never-auto-drop",
@@ -294,6 +294,39 @@
             "test/gatherlocal-ai-access-view.test.js",
             "test/openai-runtime-compat.test.js",
             "test/gatheros-proxy-adapter.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "order": 90,
+      "id": "personal.social-import-identity",
+      "revision": 1,
+      "class": "personal-support",
+      "subject": "Require explicit social import host identity",
+      "source_commit": "93ec84083f66bbb020bfe3b61c8856bacceeeff3",
+      "source_parent": "734f88fafe96553e30f4331c9a2fcdfdff58543c",
+      "source_tree": "2a04d0344274718d4438c24baa38a388ba0969dc",
+      "logical_dependencies": [
+        "personal.runtime-identity",
+        "pending.x-social-import"
+      ],
+      "patch_id_stable": "e6463c50741cffd37e91a573c91d8e89c7b9ad62",
+      "canonical_diff_sha256": "48021749f80bb00ecd5343de0988dacc2aafff35e0bf3adc490eea67057c1831",
+      "artifact": "patches/0090-personal.social-import-identity.patch",
+      "artifact_sha256": "af00680cf47e0508e5a89ebc580add9bb99c94a91953b25344a3480012e83eea",
+      "acceptance_policy": "never-auto-drop",
+      "checks": [
+        {
+          "id": "social-import-identity-tests",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1"
+          },
+          "argv": [
+            "./node_modules/.bin/electron",
+            "--test",
+            "test/runtime-identity.test.js",
+            "test/social-import-progress.test.js"
           ]
         }
       ]
