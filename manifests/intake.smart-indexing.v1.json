@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "expected_tip": "646704edb7ab9d678b02af64e1c749bdad9ef9dc",
-  "workflow_commit_subject": "Intake smart indexing patch",
+  "expected_tip": "e00707dd3b4b690b5e2a89b3f71cfa41dc30f379",
+  "workflow_commit_subject": "Revise smart indexing patch",
   "patches": [
     {
       "id": "pending.smart-indexing",
-      "revision": 1,
+      "revision": 2,
       "class": "pending-contribution",
       "subject": "Add provider-neutral smart indexing",
-      "source_commit": "e00707dd3b4b690b5e2a89b3f71cfa41dc30f379",
+      "source_commit": "33469975ef6c36dbb08d1b0e3f356aa0ad0473f6",
       "logical_dependencies": [
         "personal.local-migrations",
         "pending.ai-capability-runtime",
