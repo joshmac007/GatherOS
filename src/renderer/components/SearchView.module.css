@@ -427,25 +427,26 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
   transition: transform var(--dur-pronounced) var(--ease-out);
 }
-/* Resting state is a CALM deck — cards aligned at 0°, each layer
-   peeking a clear ~6px above the one in front (the translateY values
-   compensate the scale inset, (1-s)·74/2, so the step stays visible).
-   The old splayed-fan resting pose (four rotations per stack × five
-   stacks) made the whole landing read scattered; the playful fan now
-   only appears on hover. */
-.collFan img:nth-child(1) { transform: translateY(-18px) scale(0.78); z-index: 1; }
-.collFan img:nth-child(2) { transform: translateY(-9px)  scale(0.86); z-index: 2; }
-.collFan img:nth-child(3) { transform: translateY(-1px)  scale(0.93); z-index: 3; }
-.collFan img:nth-child(4) { transform: translateY(8px); z-index: 4; }
+/* Resting state is a CALM deck — cards aligned at 0°, each layer peeking a
+   clear step above the one in front. It's anchored on the FRONT (top-most)
+   card, which sits dead-centre, with the cards behind it fanning upward.
+   Counting from the front (nth-last-child) is what keeps the visible stack
+   centred no matter how many covers a collection has: a 1- or 2-image stack
+   no longer floats high the way a front-counted nth-child deck did, where
+   the missing lower cards left everything top-heavy. The scale insets are
+   compensated by the translateY so each step stays visible. The playful
+   splayed fan only appears on hover. */
+.collFan img:nth-last-child(1) { transform: none;                        z-index: 4; }
+.collFan img:nth-last-child(2) { transform: translateY(-8px)  scale(0.90); z-index: 3; }
+.collFan img:nth-last-child(3) { transform: translateY(-15px) scale(0.82); z-index: 2; }
+.collFan img:nth-last-child(4) { transform: translateY(-21px) scale(0.75); z-index: 1; }
 .collCard:hover .collFan img:nth-child(1) { transform: rotate(-15deg) translate(-26px, 6px); }
 .collCard:hover .collFan img:nth-child(2) { transform: rotate(-5deg)  translate(-10px, -2px); }
 .collCard:hover .collFan img:nth-child(3) { transform: rotate(6deg)   translate(12px, -2px); }
 .collCard:hover .collFan img:nth-child(4) { transform: rotate(16deg)  translate(28px, 6px); }
-/* A one-image stack has no deck to offset against — the positional
-   nth-child(1) rule above would shove it up and shrink it. Keep the lone
-   cover centered at rest and let it grow straight from the center on
-   hover instead of flying off like a fanned card. */
-.collFan img:only-child { transform: none; }
+/* A one-image stack is already centred by the nth-last-child(1) rule above;
+   on hover, let the lone cover grow straight from the centre instead of
+   flying off like a fanned card. */
 .collCard:hover .collFan img:only-child { transform: scale(1.06); }
 .collFanEmpty { color: var(--icon-muted); }
 .collFanEmpty svg { width: 30px; height: 30px; }
