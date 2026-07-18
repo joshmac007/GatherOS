@@ -394,14 +394,20 @@
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  padding: 0;
-  background: transparent;
-  border: none;
+  box-sizing: border-box;
+  padding: 12px;
+  /* Outlined card that matches the pills — same border, surface and
+     hover treatment as .chip below. */
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font: inherit;
   color: inherit;
   text-align: left;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
+.collCard:hover { background: var(--hover-bg); border-color: var(--border-strong); }
 .collFan {
   position: relative;
   height: 94px;
@@ -435,6 +441,12 @@
 .collCard:hover .collFan img:nth-child(2) { transform: rotate(-5deg)  translate(-10px, -2px); }
 .collCard:hover .collFan img:nth-child(3) { transform: rotate(6deg)   translate(12px, -2px); }
 .collCard:hover .collFan img:nth-child(4) { transform: rotate(16deg)  translate(28px, 6px); }
+/* A one-image stack has no deck to offset against — the positional
+   nth-child(1) rule above would shove it up and shrink it. Keep the lone
+   cover centered at rest and let it grow straight from the center on
+   hover instead of flying off like a fanned card. */
+.collFan img:only-child { transform: none; }
+.collCard:hover .collFan img:only-child { transform: scale(1.06); }
 .collFanEmpty { color: var(--icon-muted); }
 .collFanEmpty svg { width: 30px; height: 30px; }
 
