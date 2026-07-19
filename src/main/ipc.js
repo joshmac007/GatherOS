@@ -1100,8 +1100,25 @@ function registerIpcHandlers() {
     const targets = getUnindexedSaves();
     const total = targets.length;
 
+    // Codes that mean "no point continuing" — an entitlement/auth lapse
+    // or a hit monthly cap fails identically for every remaining save.
+    // Bailing keeps us from firing N doomed proxy calls and lets the
+    // renderer show why nothing indexed instead of a hollow "0 of N".
+    const FATAL_CODES = new Set([
+      'not_entitled', 'unauthenticated',
+      'http_401', 'http_402', 'monthly_cap_reached',
+    ]);
+    const fatalReason = {
+      not_entitled: 'not-entitled',
+      http_402: 'not-entitled',
+      unauthenticated: 'no-session',
+      http_401: 'no-session',
+      monthly_cap_reached: 'cap-reached',
+    };
+
     let processed = 0;
     let failed = 0;
+    let aborted = null;
     for (let i = 0; i < targets.length; i += 1) {
       const row = targets[i];
       event.sender.send('save:indexing-start', row.id);
@@ -1132,6 +1149,9 @@ function registerIpcHandlers() {
       } catch (err) {
         console.error('Reindex failed for save', row.id, '-', err.message);
         failed += 1;
+        if (FATAL_CODES.has(err.code)) {
+          aborted = fatalReason[err.code] || 'error';
+        }
       } finally {
         event.sender.send('save:indexing-end', row.id);
       }
@@ -1140,7 +1160,9 @@ function registerIpcHandlers() {
         total,
         failed,
       });
+      if (aborted) break;
     }
+    if (aborted) return { ok: false, reason: aborted, processed, failed, total };
     return { ok: true, processed, failed, total };
   });
 

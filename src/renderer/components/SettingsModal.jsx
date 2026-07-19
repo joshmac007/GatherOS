@@ -76,6 +76,20 @@ function formatPeriodEnd(ts) {
   });
 }
 
+// Turn a failed ai:reindex-library result into a one-line explanation.
+// The key case is entitlement/auth lapse — the reason the reindex used
+// to "run" and silently do nothing.
+function reindexErrorMessage(result) {
+  const reason = result?.reason || result?.code || '';
+  if (reason === 'no-session' || reason === 'unauthenticated') {
+    return "You're signed out — sign in to index your saves.";
+  }
+  if (reason === 'not-entitled' || reason === 'not_entitled') {
+    return 'Indexing needs an active subscription.';
+  }
+  return "Indexing couldn't finish. Please try again.";
+}
+
 function formatTokens(n) {
   if (!Number.isFinite(n) || n <= 0) return '0';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -896,7 +910,7 @@ export default function SettingsModal({
   const [usage, setUsage] = useState(null);
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, theme: 'light' });
   const [unindexed, setUnindexed] = useState(0);
-  const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0 });
+  const [reindexState, setReindexState] = useState({ running: false, processed: 0, total: 0, error: null });
   const [exportState, setExportState] = useState({ running: false, message: null });
   const [wipeState, setWipeState] = useState({ running: false, message: null });
   const [snapshots, setSnapshots] = useState([]);
@@ -927,6 +941,16 @@ export default function SettingsModal({
   const planLabel = ent?.mode === 'paid'
     ? (account?.subscription ? formatPlanLabel(account) : 'Pro')
     : onLocalTrial ? 'Free trial' : 'Free plan';
+
+  // AI features run through the metered server proxy, which only honors a
+  // real subscription — a paid plan or the Lemon Squeezy variant trial.
+  // The local no-account 14-day trial does NOT cover AI (there's no
+  // server-side trial; see wrangler.toml TRIAL_DAYS). So AI is usable only
+  // when the user is signed in (a session token exists) AND server-
+  // entitled. A signed-in local-trial user gets an upgrade prompt instead
+  // of controls that would silently 402 on every call.
+  const aiEntitled = !!(ent?.paid || ent?.serverTrialing);
+  const aiUsable = hasAi && aiEntitled;
 
   async function handleWipeLibrary() {
     if (wipeState.running) return;
@@ -992,6 +1016,7 @@ export default function SettingsModal({
     // each time the user pops back in.
     setExportState({ running: false, message: null });
     setWipeState({ running: false, message: null });
+    setReindexState((s) => (s.running ? s : { running: false, processed: 0, total: 0, error: null }));
     return () => { cancelled = true; };
   }, [open]);
 
@@ -1005,18 +1030,34 @@ export default function SettingsModal({
 
   async function handleReindex() {
     if (reindexState.running || unindexed === 0) return;
-    setReindexState({ running: true, processed: 0, total: unindexed });
+    setReindexState({ running: true, processed: 0, total: unindexed, error: null });
     const result = await window.moodmark.ai.reindexLibrary();
+    // Don't report a hollow success: if the run couldn't index anything
+    // because the session/entitlement lapsed (or every save errored),
+    // say so instead of quietly finishing at "0 of N".
+    const failedEverything = result?.ok === false
+      || ((result?.processed || 0) === 0 && (result?.failed || 0) > 0);
+    const error = failedEverything ? reindexErrorMessage(result) : null;
     setReindexState({
       running: false,
       processed: result?.processed || 0,
       total: result?.total || 0,
+      error,
     });
     const fresh = await window.moodmark.ai.unindexedCount();
     setUnindexed(fresh || 0);
   }
 
   async function togglePref(name) {
+    // The two AI toggles (autoNameOnSave / semanticSearch) drive the
+    // metered proxy, so flipping them on only means anything once the
+    // user is signed in and entitled. For a non-entitled user, send them
+    // to upgrade instead of persisting a pref that can't take effect.
+    if ((name === 'autoNameOnSave' || name === 'semanticSearch') && !aiUsable) {
+      onClose?.();
+      requestUpgrade('ai');
+      return;
+    }
     const next = !prefs[name];
     const updated = { ...prefs, [name]: next };
     setPrefs(updated);
@@ -1568,7 +1609,30 @@ export default function SettingsModal({
                 </div>
               )}
 
-              {hasAi && usage && (
+              {/* Signed in but not on a paid/trialing subscription — the
+                  local trial doesn't cover the metered AI proxy, so point
+                  the user at upgrade rather than showing controls that
+                  would fail on every call. */}
+              {hasAi && !aiEntitled && (
+                <div className={styles.reindexBox}>
+                  <div className={styles.reindexCopy}>
+                    <strong>AI features are part of a subscription</strong>
+                    <span className={styles.toggleSub}>
+                      Auto-titles, visual search, and indexing run on the
+                      managed OpenAI integration. Subscribe to turn them on.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    onClick={() => { onClose?.(); requestUpgrade('ai'); }}
+                  >
+                    Upgrade
+                  </button>
+                </div>
+              )}
+
+              {aiUsable && usage && (
                 <UsageMeter usage={usage} />
               )}
 
@@ -1582,7 +1646,7 @@ export default function SettingsModal({
                   </span>
                 </span>
                 <ToggleSwitch
-                  on={hasAi && !!prefs.autoNameOnSave}
+                  on={aiUsable && !!prefs.autoNameOnSave}
                   onChange={() => togglePref('autoNameOnSave')}
                 />
               </div>
@@ -1594,12 +1658,12 @@ export default function SettingsModal({
                   </span>
                 </span>
                 <ToggleSwitch
-                  on={hasAi && !!prefs.semanticSearch}
+                  on={aiUsable && !!prefs.semanticSearch}
                   onChange={() => togglePref('semanticSearch')}
                 />
               </div>
 
-              {hasAi && (unindexed > 0 || reindexState.running) && (
+              {aiUsable && (unindexed > 0 || reindexState.running) && (
                 <div className={styles.reindexBox}>
                   <div className={styles.reindexCopy}>
                     {reindexState.running ? (
@@ -1613,7 +1677,9 @@ export default function SettingsModal({
                       <>
                         <strong>{unindexed} {unindexed === 1 ? 'save needs' : 'saves need'} indexing</strong>
                         <span className={styles.toggleSub}>
-                          Older saves won't appear in semantic results until they're processed.
+                          {reindexState.error
+                            ? reindexState.error
+                            : "Older saves won't appear in semantic results until they're processed."}
                         </span>
                       </>
                     )}
