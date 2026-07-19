@@ -347,6 +347,16 @@ export default function DetailPanel({
   const [memberships, setMemberships] = useState([]);
   const [picker, setPicker] = useState(null); // { x, y }
   const addBtnRef = useRef(null);
+  // Inline "create a new collection" input, mirroring the tag add flow —
+  // so a save can be filed into a brand-new collection without leaving
+  // the panel to make it first.
+  const [addingCollection, setAddingCollection] = useState(false);
+  const [collectionDraft, setCollectionDraft] = useState('');
+  const collectionInputRef = useRef(null);
+  // Guards against Enter + the resulting blur both firing a create — a
+  // collection create is not idempotent, so a double-fire would spawn a
+  // duplicate.
+  const committingCollectionRef = useRef(false);
 
   // Spaces this save appears on (image items where data.saveId
   // matches). Loaded alongside collections / tags below.
@@ -619,6 +629,44 @@ export default function DetailPanel({
     refreshMemberships();
   }
 
+  function startAddingCollection() {
+    setPicker(null);
+    setCollectionDraft('');
+    setAddingCollection(true);
+    requestAnimationFrame(() => collectionInputRef.current?.focus());
+  }
+
+  // Create a collection from the typed name (or reuse one that already
+  // matches, case-insensitively, so we don't spawn duplicates) and file
+  // this save into it. Empty input just cancels.
+  async function commitNewCollection() {
+    if (committingCollectionRef.current) return;
+    committingCollectionRef.current = true;
+    try {
+      const name = collectionDraft.trim();
+      if (name) {
+        const existing = allCollections.find(
+          (c) => c.name.trim().toLowerCase() === name.toLowerCase(),
+        );
+        const target = existing || await window.moodmark.collections.create({ name });
+        if (target?.id) await addToCollection(target.id);
+      }
+    } finally {
+      setCollectionDraft('');
+      setAddingCollection(false);
+      committingCollectionRef.current = false;
+    }
+  }
+
+  function handleCollectionKeyDown(e) {
+    if (e.key === 'Enter') { e.preventDefault(); commitNewCollection(); }
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      setCollectionDraft('');
+      setAddingCollection(false);
+    }
+  }
+
   const memberIds = new Set(memberships.map((c) => c.id));
   const availableToAdd = allCollections.filter((c) => !memberIds.has(c.id));
 
@@ -642,7 +690,12 @@ export default function DetailPanel({
       const base = buildAdd(c);
       tops.push(kids.length > 0 ? { ...base, children: kids.map(buildAdd) } : base);
     }
-    return tops.length > 0 ? [{ type: 'header', label: 'Add to collection' }, ...tops] : [];
+    // Always offer a way to make a new collection — the reported gap was
+    // a picker that only ever listed collections that already existed.
+    const createRow = { label: '+ Create new collection', onClick: startAddingCollection };
+    return tops.length > 0
+      ? [{ type: 'header', label: 'Add to collection' }, ...tops, createRow]
+      : [createRow];
     // addToCollection is stable enough for this panel's lifetime; rebuild
     // only when the collection set or the save's memberships change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1110,7 +1163,19 @@ export default function DetailPanel({
           Collections
         </div>
         <div className={styles.collectionPills}>
-          {availableToAdd.length > 0 && (
+          {addingCollection ? (
+            <span className={styles.tagInputAnchor}>
+              <input
+                ref={collectionInputRef}
+                className={styles.tagInput}
+                value={collectionDraft}
+                onChange={(e) => setCollectionDraft(e.target.value)}
+                onKeyDown={handleCollectionKeyDown}
+                onBlur={commitNewCollection}
+                placeholder="new collection"
+              />
+            </span>
+          ) : availableToAdd.length > 0 ? (
             <button
               ref={addBtnRef}
               type="button"
@@ -1118,6 +1183,16 @@ export default function DetailPanel({
               onClick={openPicker}
             >
               + Add
+            </button>
+          ) : (
+            // No existing collections left to pick from — offer creation
+            // directly so the user is never stranded with nowhere to file.
+            <button
+              type="button"
+              className={styles.addPillBtn}
+              onClick={startAddingCollection}
+            >
+              + New collection
             </button>
           )}
           {memberships.map((c) => (
@@ -1136,9 +1211,6 @@ export default function DetailPanel({
               </button>
             </span>
           ))}
-          {memberships.length === 0 && availableToAdd.length === 0 && (
-            <span className={styles.collectionsEmpty}>No collections yet</span>
-          )}
         </div>
       </div>
 
