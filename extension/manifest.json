@@ -42,12 +42,6 @@
     },
     {
       "matches": ["https://www.cosmos.so/*", "https://cosmos.so/*"],
-      "js": ["content/cosmos-interceptor.js"],
-      "run_at": "document_start",
-      "world": "MAIN"
-    },
-    {
-      "matches": ["https://www.cosmos.so/*", "https://cosmos.so/*"],
       "js": ["content/cosmos-watcher.js"],
       "run_at": "document_end"
     }

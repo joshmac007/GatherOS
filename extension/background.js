@@ -157,10 +157,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleImportSaved(msg, sender).then(sendResponse);
     return true;
   }
-  // Cosmos saved-element sync. The interceptor (content/cosmos-interceptor.js)
-  // extracts saved elements from cosmos.so's network responses; the watcher
-  // relays the batch here. Mirrors the Instagram flow with its own "seen"
-  // baseline.
+  // Cosmos saved-element sync. The watcher (content/cosmos-watcher.js) reads
+  // saved elements off the rendered cosmos.so profile grid and relays the
+  // batch here. Mirrors the Instagram flow with its own "seen" baseline.
   if (msg.type === 'gatheros:cosmos-saved-batch') {
     handleCosmosSavedBatch(msg.elements);
     return false;
