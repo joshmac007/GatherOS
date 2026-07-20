@@ -394,39 +394,60 @@
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   padding: 12px;
-  /* Bordered, contained card — --border-strong is the design system's
-     canonical card stroke. */
+  /* Outlined card that matches the pills — same border, surface and
+     hover treatment as .chip below. */
   background: var(--surface-1);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   cursor: pointer;
   font: inherit;
   color: inherit;
   text-align: left;
-  transition: background var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
+  transition: background var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
-.collCard:hover {
-  background: var(--hover-bg-soft);
-  box-shadow: var(--shadow-control);
-}
-
-/* Cover art — a single collection thumbnail, centered within the card. */
+.collCard:hover { background: var(--hover-bg); border-color: var(--border-strong); }
 .collFan {
-  height: 96px;
+  position: relative;
+  height: 94px;
   display: flex;
   align-items: center;
   justify-content: center;
+  perspective: 600px;
   margin-bottom: 10px;
 }
 .collFan img {
-  width: 72px;
-  height: 72px;
+  position: absolute;
+  width: 74px;
+  height: 74px;
   border-radius: var(--radius-md);
   object-fit: cover;
   background: rgba(0, 0, 0, 0.04);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(255, 255, 255, 0.55) inset;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  transition: transform var(--dur-pronounced) var(--ease-out);
 }
+/* Resting state is a CALM deck — cards aligned at 0°, each layer peeking a
+   clear step above the one in front. It's anchored on the FRONT (top-most)
+   card, which sits dead-centre, with the cards behind it fanning upward.
+   Counting from the front (nth-last-child) is what keeps the visible stack
+   centred no matter how many covers a collection has: a 1- or 2-image stack
+   no longer floats high the way a front-counted nth-child deck did, where
+   the missing lower cards left everything top-heavy. The scale insets are
+   compensated by the translateY so each step stays visible. The playful
+   splayed fan only appears on hover. */
+.collFan img:nth-last-child(1) { transform: none;                        z-index: 4; }
+.collFan img:nth-last-child(2) { transform: translateY(-8px)  scale(0.90); z-index: 3; }
+.collFan img:nth-last-child(3) { transform: translateY(-15px) scale(0.82); z-index: 2; }
+.collFan img:nth-last-child(4) { transform: translateY(-21px) scale(0.75); z-index: 1; }
+.collCard:hover .collFan img:nth-child(1) { transform: rotate(-15deg) translate(-26px, 6px); }
+.collCard:hover .collFan img:nth-child(2) { transform: rotate(-5deg)  translate(-10px, -2px); }
+.collCard:hover .collFan img:nth-child(3) { transform: rotate(6deg)   translate(12px, -2px); }
+.collCard:hover .collFan img:nth-child(4) { transform: rotate(16deg)  translate(28px, 6px); }
+/* A one-image stack is already centred by the nth-last-child(1) rule above;
+   on hover, let the lone cover grow straight from the centre instead of
+   flying off like a fanned card. */
+.collCard:hover .collFan img:only-child { transform: scale(1.06); }
 .collFanEmpty { color: var(--icon-muted); }
 .collFanEmpty svg { width: 30px; height: 30px; }
 
@@ -455,7 +476,8 @@
 }
 
 .link {
-  margin-left: auto;
+  /* Sits right next to the section title (via the sectionHead gap) rather
+     than floating out at the far right edge. */
   border: none;
   background: transparent;
   font-family: var(--font-ui);

@@ -714,7 +714,7 @@ export default function SearchView({
               </div>
               <div className={styles.collRow} ref={collRef} onScroll={updateCollArrows}>
                 {collections.map((c) => {
-                  const cover = Array.isArray(c.thumbs) ? c.thumbs[0] : null;
+                  const covers = Array.isArray(c.thumbs) ? c.thumbs.slice(0, 4) : [];
                   return (
                     <button
                       key={c.id}
@@ -722,9 +722,11 @@ export default function SearchView({
                       className={styles.collCard}
                       onClick={() => onOpenCollection?.(c.id)}
                     >
-                      {cover ? (
+                      {covers.length > 0 ? (
                         <span className={styles.collFan} aria-hidden="true">
-                          <img src={fileUrl(cover)} alt="" draggable={false} />
+                          {covers.map((src, i) => (
+                            <img key={i} src={fileUrl(src)} alt="" draggable={false} />
+                          ))}
                         </span>
                       ) : (
                         <span className={`${styles.collFan} ${styles.collFanEmpty}`} aria-hidden="true">

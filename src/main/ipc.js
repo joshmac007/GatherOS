@@ -29,7 +29,7 @@ const {
   captureFullscreen,
   captureWindow,
 } = require('./capture');
-const { notifySaved, notifyDuplicate, refreshTray } = require('./notify');
+const { notifySaved, notifyDuplicate, refreshTray, openSaveInApp } = require('./notify');
 const { setToastInteractive, onToastsEmpty } = require('./toast-window');
 const settings = require('./settings');
 const { quitAndInstall } = require('./updater');
@@ -1283,6 +1283,13 @@ function registerIpcHandlers() {
 
   ipcMain.on('toast:empty', () => {
     onToastsEmpty();
+  });
+
+  // Clicking the save toast opens the asset inside Gather (focused view)
+  // rather than handing the file off to the OS Preview app.
+  ipcMain.handle('toast:open-save', (_e, saveId) => {
+    openSaveInApp(saveId);
+    return { ok: true };
   });
 
   // Undo from the save toast — soft-delete the records that were just
