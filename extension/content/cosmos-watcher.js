@@ -123,6 +123,31 @@ function collectElements() {
   return out;
 }
 
+// The user's own collection links, read off the profile root. Cosmos shows
+// each collection as a card linking to /<username>/<slug>; the backfill crawl
+// visits each of these after the profile's uncategorized grid. Returns [] on
+// any page that isn't the user's own profile root (so collection pages don't
+// re-enqueue themselves).
+function collectOwnCollectionLinks() {
+  const parts = profilePathParts();
+  if (!parts || parts.length !== 1 || !isOwnPage()) return [];
+  const username = parts[0].toLowerCase();
+  const out = new Set();
+  for (const a of document.querySelectorAll('a[href]')) {
+    let href;
+    try { href = new URL(a.getAttribute('href'), location.origin); }
+    catch { continue; }
+    if (href.host !== location.host) continue;
+    const p = href.pathname.split('/').filter(Boolean);
+    if (p.length !== 2) continue;                       // /<username>/<slug> only
+    if (p[0].toLowerCase() !== username) continue;      // our own collections
+    const slug = p[1].toLowerCase();
+    if (slug === 'saved' || RESERVED_PATHS.has(slug)) continue;
+    out.add(`${href.origin}/${p[0]}/${p[1]}`);
+  }
+  return [...out];
+}
+
 let timer = null;
 function stop() {
   try { observer.disconnect(); } catch { /* ignore */ }
@@ -202,11 +227,16 @@ async function runImportScroll() {
   }
   const wasActive = importScrollActive;
   importScrollActive = false;
-  // Reached the bottom on our own (not stopped by the background) — let it
-  // finalize the run and post the summary toast.
+  // Reached the bottom on our own (not stopped by the background). Report it,
+  // along with any collections found here (only the profile root has them),
+  // so the background can crawl each collection next.
   if (wasActive && chrome.runtime && chrome.runtime.id) {
-    try { chrome.runtime.sendMessage({ type: 'gatheros:cosmos-import-scrolled' }); }
-    catch { /* extension reloaded */ }
+    const collections = collectOwnCollectionLinks();
+    console.log('[gatheros] cosmos import — finished', location.pathname,
+      collections.length ? `| queued ${collections.length} collection(s): ${collections.join(', ')}` : '| no collections to crawl');
+    try {
+      chrome.runtime.sendMessage({ type: 'gatheros:cosmos-import-scrolled', collections });
+    } catch { /* extension reloaded */ }
   }
 }
 

@@ -193,7 +193,7 @@
             <option value="0">All saves</option>
           </select>
           <button class="import-go" id="cosmosGo" disabled>Import</button>
-          <div class="scope-note">Opens your Cosmos profile and imports your saves in the background — duplicates are skipped.</div>
+          <div class="scope-note">Opens your Cosmos profile and each collection, importing every save in the background — duplicates are skipped.</div>
           <div class="scope-msg" id="cosmosMsg" hidden></div>
         </div>
       </div>

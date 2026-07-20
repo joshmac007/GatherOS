@@ -169,11 +169,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleImportCosmos(msg).then(sendResponse);
     return true;
   }
-  // The Cosmos import tab reached the bottom of the profile grid — no more
-  // tiles will load, so finalize the run (after a beat for trailing saves).
+  // The Cosmos import tab reached the bottom of the current page. Enqueue any
+  // collections the watcher found (profile only), then advance to the next
+  // one — or finish if there are none left.
   if (msg.type === 'gatheros:cosmos-import-scrolled') {
     if (cosmosImportState && cosmosImportState.active) {
-      setTimeout(() => { endCosmosImport('bottom'); }, 2500);
+      const found = Array.isArray(msg.collections) ? msg.collections : [];
+      for (const url of found) {
+        if (typeof url === 'string'
+          && !cosmosImportState.visited.has(url)
+          && !cosmosImportState.queue.includes(url)) {
+          cosmosImportState.queue.push(url);
+        }
+      }
+      // Give this page's trailing saves a moment to land before navigating.
+      setTimeout(() => { advanceCosmosImport(); }, 2500);
     }
     return false;
   }
@@ -785,10 +795,9 @@ const COSMOS_SEEN_KEY = 'gatherosCosmosSeen';
 // it sees the owner's profile. The backfill import needs it to know which
 // profile URL to open (Cosmos saves live at cosmos.so/<username>).
 const COSMOS_USERNAME_KEY = 'gatherosCosmosUsername';
-// Same tuning as the X/Instagram backfills: a handful of empty sweeps or a
-// run that outlasts the watchdog ends the import.
-const COSMOS_IMPORT_STAGNANT_BATCHES_LIMIT = 4;
-const COSMOS_IMPORT_WATCHDOG_MS = 6 * 60 * 1000;
+// Per-page watchdog: if a single page (the profile, or one collection) hasn't
+// finished scrolling within this window, give up on it and move on / stop.
+const COSMOS_IMPORT_WATCHDOG_MS = 4 * 60 * 1000;
 let cosmosImportState = null;
 
 async function readCosmosSeen() {
@@ -832,11 +841,11 @@ async function handleCosmosSavedBatch(elements) {
   if (sent) await writeCosmosSeen(seen);
 
   // Backfill bookkeeping: stream the running count to the tab's toast and
-  // stop once we hit the requested limit. (Reaching the bottom of the grid
-  // is signalled separately by the watcher via cosmos-import-scrolled.)
+  // stop the whole run once we hit the requested count. Reaching the bottom
+  // of a page (and advancing to the next collection) is driven separately by
+  // the watcher via cosmos-import-scrolled — not by batch stagnation, which
+  // would wrongly end the crawl the moment one collection ran dry.
   if (importing && cosmosImportState && cosmosImportState.active) {
-    if (sent > 0) cosmosImportState.stagnant = 0;
-    else cosmosImportState.stagnant += 1;
     if (cosmosImportState.tabId != null) {
       chrome.tabs.sendMessage(cosmosImportState.tabId, {
         type: 'gatheros:import-progress',
@@ -844,17 +853,20 @@ async function handleCosmosSavedBatch(elements) {
         processed: cosmosImportState.processed.size,
       }, () => { void chrome.runtime.lastError; });
     }
-    const reachedLimit = cosmosImportState.processed.size >= cosmosImportState.limit;
-    if (reachedLimit || cosmosImportState.stagnant >= COSMOS_IMPORT_STAGNANT_BATCHES_LIMIT) {
-      await endCosmosImport(reachedLimit ? 'limit' : 'bottom');
+    if (cosmosImportState.processed.size >= cosmosImportState.limit) {
+      await endCosmosImport('limit');
     }
   }
 }
 
 // Panel-triggered Cosmos backfill. Cosmos exposes no clean saved-elements
-// API to replay (its grid is Apollo GraphQL + Next.js RSC), so — like the X
-// scroll fallback — we open the user's profile and auto-scroll it while the
-// watcher reads each saved tile off the rendered grid and relays it here.
+// API to replay (its grid is Apollo GraphQL + Next.js RSC, cached at page
+// load), so — like the X scroll fallback — we open the user's profile and
+// auto-scroll it while the watcher reads each saved tile off the rendered
+// grid. A Cosmos element lives in exactly one place: the profile's
+// uncategorized pool OR one collection. So to get everything we crawl the
+// profile first, then each collection the watcher found on it, one at a time
+// in the same tab.
 async function handleImportCosmos(msg) {
   if (cosmosImportState && cosmosImportState.active) {
     notify('A Cosmos import is already running.');
@@ -892,11 +904,32 @@ async function handleImportCosmos(msg) {
     limit,
     processed: new Set(),
     imported: 0,
-    stagnant: 0,
+    queue: [],              // collection URLs still to crawl (found on the profile)
+    visited: new Set(),     // collection URLs already crawled — no repeats
     watchdog: setTimeout(() => { endCosmosImport('timeout'); }, COSMOS_IMPORT_WATCHDOG_MS),
   };
   scheduleCosmosImportStart(tab.id);
   return { ok: true };
+}
+
+// A page (profile or collection) finished scrolling. Enqueue any collections
+// the watcher found (only the profile reports them), then — after a beat for
+// this page's trailing saves to land — move on to the next collection, or
+// finish when the queue is empty.
+function advanceCosmosImport() {
+  if (!cosmosImportState || !cosmosImportState.active) return;
+  if (cosmosImportState.processed.size >= cosmosImportState.limit) { endCosmosImport('limit'); return; }
+  const next = cosmosImportState.queue.shift();
+  if (!next) { endCosmosImport('done'); return; }
+  cosmosImportState.visited.add(next);
+  const tabId = cosmosImportState.tabId;
+  // Fresh watchdog for the new page so a long crawl can't trip the timeout.
+  if (cosmosImportState.watchdog) clearTimeout(cosmosImportState.watchdog);
+  cosmosImportState.watchdog = setTimeout(() => { endCosmosImport('timeout'); }, COSMOS_IMPORT_WATCHDOG_MS);
+  chrome.tabs.update(tabId, { url: next }, () => {
+    void chrome.runtime.lastError; // tab may have closed — onRemoved handles it
+    scheduleCosmosImportStart(tabId);
+  });
 }
 
 // Tell the profile tab's watcher to begin auto-scrolling. The content
