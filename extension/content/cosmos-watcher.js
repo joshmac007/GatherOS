@@ -56,14 +56,16 @@ function isOwnPage() {
     .some((el) => /edit profile/i.test(el.textContent || '') && isVisible(el));
 }
 
-// On a collection page (/<username>/<slug>, not /saved), the collection's
-// display name is the page <h1>; fall back to a prettified slug. Returns null
-// on the profile / saved tab (those aren't a named collection).
+// On a collection page (/<username>/<slug>, not /saved), name the collection
+// from the URL slug — deterministic and correct. (The page <h1> is unreliable:
+// on a collection page the first <h1> is often the profile name, not the
+// collection title.) Returns null on the profile / saved tab.
 function collectionNameFor(parts) {
   if (parts.length !== 2 || parts[1].toLowerCase() === 'saved') return null;
-  const h1 = (document.querySelector('h1')?.textContent || '').trim();
-  if (h1) return h1.slice(0, 80);
-  return parts[1].replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return parts[1]
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .slice(0, 80);
 }
 
 function collectElements() {
@@ -115,6 +117,11 @@ function schedule() {
 const observer = new MutationObserver(schedule);
 observer.observe(document.documentElement, { childList: true, subtree: true });
 window.addEventListener('load', schedule);
+// Belt-and-suspenders: Cosmos lazy-loads tiles by swapping an existing
+// <img>'s src (an attribute change childList won't catch) and streams more in
+// on scroll — so also re-sweep on a timer. seen dedupes, so re-scans are
+// cheap and never re-send. Scroll the grid to pull the whole collection in.
+setInterval(schedule, 2000);
 console.log('[gatheros] cosmos watcher active on', location.href);
 // One-time gate self-report after the page has rendered — makes it obvious in
 // the console whether this page is being treated as your own saves.
