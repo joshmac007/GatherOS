@@ -7,10 +7,8 @@
 // page for those, dedupe by the CDN id, and relay batches to the background
 // worker, which routes them through the desktop /save pipeline.
 //
-// Scope guard: only scrape the user's OWN profile grid (their saved
-// elements), never the home feed or someone else's profile. Cosmos shows an
-// "Edit profile" control only on your own profile, so we use that as the
-// gate — if it's absent, we don't capture, which fails safe.
+// Scope: only the user's OWN pages — their profile grid and their own
+// collections — never the home feed, explore, or anyone else's profile.
 
 const CDN_HOST = 'cdn.cosmos.so';
 const seen = new Set();
@@ -21,47 +19,60 @@ function idFromCdnUrl(url) {
   return m ? m[1] : null;
 }
 
-// Strict gate: only scrape the user's OWN profile grid, never the home feed
-// or anyone else's profile. Two signals must BOTH hold:
-//   1. The URL is a profile path — /<username> (Profile tab) or
-//      /<username>/saved (Saved tab) — not the feed (/), explore, search, etc.
-//   2. A *visible* "Edit profile" control is present, which Cosmos only shows
-//      on your own profile (an "Edit profile" link buried in a global menu is
-//      hidden, so offsetParent is null and it won't count).
+// Top-level cosmos.so routes that are NOT the user's own content.
 const RESERVED_PATHS = new Set([
   'home', 'explore', 'search', 'settings', 'notifications', 'about',
   'login', 'signup', 'onboarding', 'e', 'element', 'cluster', 'clusters',
 ]);
-function onOwnSavesPage() {
+
+// URL shapes we sync:
+//   /<username>            → profile grid
+//   /<username>/saved      → the "Saved" tab
+//   /<username>/<slug>     → one of the user's collections
+// The feed (/), explore, search, etc. are excluded by segment count / the
+// reserved list.
+function profilePathParts() {
   const parts = location.pathname.split('/').filter(Boolean);
-  const first = (parts[0] || '').toLowerCase();
-  const looksLikeProfile =
-    (parts.length === 1 && !RESERVED_PATHS.has(first))
-    || (parts.length === 2 && !RESERVED_PATHS.has(first) && parts[1].toLowerCase() === 'saved');
-  if (!looksLikeProfile) return false;
+  if (parts.length < 1 || parts.length > 2) return null;
+  if (RESERVED_PATHS.has(parts[0].toLowerCase())) return null;
+  return parts;
+}
+
+// Ownership check: only the signed-in user's own pages show a *visible*
+// "Edit profile" control. The home feed keeps that link in a hidden menu
+// (offsetParent null), and other people's pages show "Follow" instead — so
+// this reliably means "this is mine."
+function isOwnPage() {
   return [...document.querySelectorAll('a, button')]
     .some((el) => /edit profile/i.test(el.textContent || '') && el.offsetParent !== null);
 }
 
+// On a collection page (/<username>/<slug>, not /saved), the collection's
+// display name is the page <h1>; fall back to a prettified slug. Returns null
+// on the profile / saved tab (those aren't a named collection).
+function collectionNameFor(parts) {
+  if (parts.length !== 2 || parts[1].toLowerCase() === 'saved') return null;
+  const h1 = (document.querySelector('h1')?.textContent || '').trim();
+  if (h1) return h1.slice(0, 80);
+  return parts[1].replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function collectElements() {
-  if (!onOwnSavesPage()) return [];
+  const parts = profilePathParts();
+  if (!parts || !isOwnPage()) return [];
+  const collection = collectionNameFor(parts);
   const out = [];
   for (const img of document.querySelectorAll(`img[src*="${CDN_HOST}"]`)) {
     const src = img.currentSrc || img.src || '';
-    // Skip chrome, not saves: Cosmos serves default avatars from a
-    // /default-avatars/ path, and avatars / small preview thumbs render at a
-    // tiny width (the ?w= cap). Real grid tiles come down at w>=200.
+    // Skip chrome, not saves: default avatars live under /default-avatars/,
+    // and avatars / small preview thumbs render tiny (?w=<200).
     if (src.includes('/default-avatars/')) continue;
     const wMatch = /[?&]w=(\d+)/.exec(src);
     if (wMatch && parseInt(wMatch[1], 10) < 200) continue;
     const id = idFromCdnUrl(src);
     if (!id || seen.has(id)) continue;
-    // Full resolution: rebuild the URL WITHOUT the rendered-size (w=) cap so
-    // we save the original, not the 400px grid thumbnail. format=webp is the
-    // form Cosmos already serves; sharp handles webp on the desktop side.
+    // Full resolution: rebuild the URL WITHOUT the rendered-size (w=) cap.
     const mediaUrl = `https://${CDN_HOST}/${id}?format=webp`;
-    // When the tile is a link, that's the element's page on Cosmos; keep it
-    // for "Open on Cosmos". Fall back to the image URL when there's no link.
     const a = img.closest('a[href]');
     let pageUrl = mediaUrl;
     if (a) {
@@ -69,7 +80,7 @@ function collectElements() {
       catch { /* keep the fallback */ }
     }
     seen.add(id);
-    out.push({ id, mediaUrl, pageUrl, type: 'image', caption: img.alt || '' });
+    out.push({ id, mediaUrl, pageUrl, type: 'image', caption: img.alt || '', collection });
   }
   return out;
 }
@@ -77,12 +88,14 @@ function collectElements() {
 function flush() {
   const elements = collectElements();
   if (elements.length) {
-    console.log('[gatheros] cosmos: sending', elements.length, 'saved element(s) to GatherOS');
+    const where = elements[0].collection ? `collection "${elements[0].collection}"` : 'profile';
+    console.log('[gatheros] cosmos: sending', elements.length, `saved element(s) from ${where} to GatherOS`);
     chrome.runtime.sendMessage({ type: 'gatheros:cosmos-saved-batch', elements });
   }
 }
 
-// Debounce so a burst of lazy-loaded tiles becomes one batch.
+// Debounce so a burst of lazy-loaded tiles becomes one batch. seen resets
+// per page load, so navigating to a different collection re-collects fresh.
 let scheduled = false;
 function schedule() {
   if (scheduled) return;
@@ -90,8 +103,6 @@ function schedule() {
   setTimeout(() => { scheduled = false; flush(); }, 700);
 }
 
-// Grid tiles render (and lazy-load on scroll) after the initial paint, so
-// watch the tree and sweep on load.
 const observer = new MutationObserver(schedule);
 observer.observe(document.documentElement, { childList: true, subtree: true });
 window.addEventListener('load', schedule);

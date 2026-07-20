@@ -275,6 +275,23 @@ async function handleSave(req, res) {
       }
     };
 
+    // Optional collection name (Cosmos cluster). File the save into a
+    // GatherOS collection of the same name, creating it once and reusing it
+    // (case-insensitive) on later saves so a cluster maps to one collection.
+    const collectionName = typeof body?.collection === 'string' ? body.collection.trim() : '';
+    const attachCollection = (saveId) => {
+      if (!collectionName) return;
+      try {
+        const { getAllCollections, createCollection, addSaveToCollection } = require('./db');
+        const existing = getAllCollections()
+          .find((c) => (c.name || '').trim().toLowerCase() === collectionName.toLowerCase());
+        const col = existing || createCollection({ name: collectionName });
+        if (col && col.id) addSaveToCollection({ collectionId: col.id, saveId });
+      } catch (err) {
+        console.warn('[ext-server] collection attach failed:', err?.message || err);
+      }
+    };
+
     // Text-only tweet (no media): render the tweet card itself to an
     // image so it lands in the library like any other save, with the
     // structured tweet_meta preserved for the X badge + detail card.
@@ -307,6 +324,7 @@ async function handleSave(req, res) {
         createdAt: nextSyncCreatedAt(),
       });
       attachTags(tweetRecord.id);
+      attachCollection(tweetRecord.id);
       notifyNew(tweetRecord);
       sendJson(res, 200, { ok: true, id: tweetRecord.id });
       return;
@@ -376,6 +394,7 @@ async function handleSave(req, res) {
       createdAt: tweetMeta ? nextSyncCreatedAt() : undefined,
     });
     attachTags(record.id);
+    attachCollection(record.id);
     notifyNew(record);
     sendJson(res, 200, { ok: true, id: record.id });
   } catch (err) {

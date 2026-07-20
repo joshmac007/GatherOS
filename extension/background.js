@@ -812,6 +812,10 @@ async function syncCosmosElementToGather(el) {
     type: 'save',
     source: 'cosmos',
     tags: ['cosmos'],
+    // When the element came from one of the user's collections, carry its
+    // name so the desktop can file the save into a matching GatherOS
+    // collection. Null for plain profile saves.
+    collection: el.collection || null,
     pageUrl: el.pageUrl || el.mediaUrl || null,
     tweetMeta: {
       authorName: el.authorName || '',
