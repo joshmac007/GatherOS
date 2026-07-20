@@ -841,11 +841,11 @@
   margin-top: 2px;
 }
 /* X-style layouts by image count. */
-/* Two images stack full-width instead of sitting in two half-width
-   columns — a landscape image (screenshot, photo) then keeps its real
-   orientation rather than being cropped into a tall vertical strip. */
+/* Two images sit side by side, but each tile is landscape (16:10) rather
+   than a tall half-column — so a landscape image keeps its orientation
+   instead of being cropped into a vertical strip. */
 .thumbsTwo {
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
 }
 .thumbsTwo .tweetThumb {
   aspect-ratio: 16 / 10;
