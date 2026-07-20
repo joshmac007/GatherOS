@@ -872,7 +872,7 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
       conditions.push(`id IN (
         SELECT save_id FROM save_tags
         JOIN tags ON save_tags.tag_id = tags.id
-        WHERE tags.name IN ('bookmark', 'instagram', 'x:bookmark', 'instagram:save')
+        WHERE tags.name IN ('bookmark', 'instagram', 'x:bookmark', 'instagram:save', 'cosmos')
       )`);
     } else if (view === 'onThisDay') {
       // Same calendar month + day as today, in any prior year. Local
@@ -1324,7 +1324,7 @@ function getSmartViewCounts() {
       AND id IN (
         SELECT save_id FROM save_tags
         JOIN tags ON save_tags.tag_id = tags.id
-        WHERE tags.name IN ('bookmark', 'instagram', 'x:bookmark', 'instagram:save')
+        WHERE tags.name IN ('bookmark', 'instagram', 'x:bookmark', 'instagram:save', 'cosmos')
       )
   `).get();
   // Saves whose calendar date matches today in some prior year — same

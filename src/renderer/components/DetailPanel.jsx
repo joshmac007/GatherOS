@@ -157,6 +157,18 @@ function XGlyphIcon() {
   );
 }
 
+// Placeholder Cosmos mark (planet + orbit) — swap for the real cosmos.so
+// brand asset when we have it.
+function CosmosGlyphIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)" />
+    </svg>
+  );
+}
+
 function InstagramGlyphIcon() {
   return (
     <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
@@ -217,8 +229,9 @@ export default function DetailPanel({
     try { return JSON.parse(record.tweet_meta); }
     catch { return null; }
   }, [record?.tweet_meta]);
-  // Picks the source glyph + open label on the card (Instagram vs X).
+  // Picks the source glyph + open label on the card (X / Instagram / Cosmos).
   const igSource = record?.source === 'instagram';
+  const cosmosSource = record?.source === 'cosmos';
   // Domain shown in the tweet card footer.
   const sourceDomain = (() => {
     try { return new URL(record?.source_url).hostname.replace(/^www\./, ''); }
@@ -1039,7 +1052,7 @@ export default function DetailPanel({
 
             <div className={styles.tweetFooter}>
               <span className={styles.tweetFooterSrc} aria-hidden="true">
-                {igSource ? <InstagramGlyphIcon /> : <XGlyphIcon />}
+                {cosmosSource ? <CosmosGlyphIcon /> : igSource ? <InstagramGlyphIcon /> : <XGlyphIcon />}
               </span>
               {sourceDomain && <span>{sourceDomain}</span>}
               <span className={styles.tweetFooterDot} aria-hidden="true">·</span>
@@ -1051,7 +1064,7 @@ export default function DetailPanel({
                   type="button"
                   className={styles.tweetFooterOpen}
                   onClick={() => window.moodmark?.shell?.openUrl?.(record.source_url)}
-                  title={igSource ? 'Open on Instagram' : 'Open on X'}
+                  title={cosmosSource ? 'Open on Cosmos' : igSource ? 'Open on Instagram' : 'Open on X'}
                 >
                   Open
                   <ExternalLink size={12} strokeWidth={1.9} aria-hidden="true" />

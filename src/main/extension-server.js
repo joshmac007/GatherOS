@@ -185,7 +185,8 @@ async function handleSave(req, res) {
   // so the grid can badge it and the combined "Saved" view can filter
   // by tag. Anything unrecognised falls back to 'x' so a malformed
   // value can't orphan a row out of the existing views.
-  const source = body?.source === 'instagram' ? 'instagram' : 'x';
+  const ALLOWED_SOURCES = new Set(['x', 'instagram', 'cosmos']);
+  const source = ALLOWED_SOURCES.has(body?.source) ? body.source : 'x';
   // Need at least one of: an image, a video, or a page URL. The X-
   // bookmark capture sends videoUrl for video-only tweets; right-click
   // sends an http(s) imageUrl; the extension's "capture page / area"
@@ -224,9 +225,10 @@ async function handleSave(req, res) {
     // image/page/URL saves (no tweetMeta) are never gated by this.
     if (isBookmark) {
       const settings = require('./settings');
-      const sourceEnabled = source === 'instagram'
-        ? settings.getPref('syncInstagramEnabled', true) !== false
-        : settings.getPref('syncXEnabled', true) !== false;
+      const syncPrefKey = source === 'instagram' ? 'syncInstagramEnabled'
+        : source === 'cosmos' ? 'syncCosmosEnabled'
+          : 'syncXEnabled';
+      const sourceEnabled = settings.getPref(syncPrefKey, true) !== false;
       if (!sourceEnabled) {
         sendJson(res, 200, { ok: true, skipped: true, syncDisabled: true });
         return;

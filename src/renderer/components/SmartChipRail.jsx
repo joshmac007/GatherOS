@@ -48,14 +48,27 @@ const TYPE_FILTERS = [
   { value: 'video', label: 'Video',     Icon: Film },
 ];
 
-// Saved-view source filter — a segmented control (All · X · Instagram)
-// shown only on the Saved view. 'all' is the no-op default; X and
-// Instagram are icon-only segments.
+// Saved-view source filter — a segmented control (All · X · Instagram ·
+// Cosmos) shown only on the Saved view. 'all' is the no-op default; the
+// rest are icon-only segments.
 const SOURCE_FILTERS = [
   { value: 'all',       label: 'All', Icon: null },
   { value: 'x',         label: 'X',   Icon: XGlyph },
   { value: 'instagram', label: 'Instagram', Icon: InstagramGlyph },
+  { value: 'cosmos',    label: 'Cosmos', Icon: CosmosGlyph },
 ];
+
+// Placeholder Cosmos mark (planet + orbit) — swap for the real cosmos.so
+// brand asset. Matches the lucide icon API so it slots into the toggle.
+function CosmosGlyph({ size = 15 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)" />
+    </svg>
+  );
+}
 
 // Instagram mark, drawn to match the lucide icon API (takes a `size`)
 // so it slots beside the X glyph in the source toggle.

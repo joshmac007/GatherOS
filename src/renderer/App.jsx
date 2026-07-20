@@ -2386,10 +2386,13 @@ export default function App({ entitlement } = {}) {
   // outside the Saved view, where the toggle isn't shown.
   const sourceCounts = useMemo(() => {
     if (view.type !== 'bookmarks') return null;
-    const counts = { all: 0, x: 0, instagram: 0 };
+    const counts = { all: 0, x: 0, instagram: 0, cosmos: 0 };
     for (const s of saves) {
       counts.all += 1;
-      counts[(s.source || 'x') === 'instagram' ? 'instagram' : 'x'] += 1;
+      const src = s.source === 'instagram' ? 'instagram'
+        : s.source === 'cosmos' ? 'cosmos'
+          : 'x';
+      counts[src] += 1;
     }
     return counts;
   }, [saves, view.type]);

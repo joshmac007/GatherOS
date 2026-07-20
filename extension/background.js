@@ -157,6 +157,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleImportSaved(msg, sender).then(sendResponse);
     return true;
   }
+  // Cosmos saved-element sync. The interceptor (content/cosmos-interceptor.js)
+  // extracts saved elements from cosmos.so's network responses; the watcher
+  // relays the batch here. Mirrors the Instagram flow with its own "seen"
+  // baseline.
+  if (msg.type === 'gatheros:cosmos-saved-batch') {
+    handleCosmosSavedBatch(msg.elements);
+    return false;
+  }
   // Panel-driven actions. The in-page panel (panel.js) doesn't know
   // its window/tab ids, so we fill them from the message sender. Each
   // capture runs async and reports its result through notify().
@@ -753,6 +761,67 @@ async function syncBookmarkToGather(b, { force = false } = {}) {
   }
   // else: text-only tweet — send tweet_meta with no media; the desktop
   // renders the tweet card to an image (handled by /save's text branch).
+  return chrome.runtime.sendNativeMessage(HOST_NAME, payload);
+}
+
+// ── Cosmos saved-element sync ──────────────────────────────────────
+// Local "seen" set so a re-scroll of your Cosmos saves doesn't re-send
+// everything. The desktop also dedupes by content hash, so this is just
+// politeness, not correctness.
+const COSMOS_SEEN_KEY = 'gatherosCosmosSeen';
+
+async function readCosmosSeen() {
+  try {
+    const { [COSMOS_SEEN_KEY]: arr } = await chrome.storage.local.get(COSMOS_SEEN_KEY);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch { return new Set(); }
+}
+async function writeCosmosSeen(seen) {
+  try {
+    // Cap the persisted list so it can't grow without bound.
+    await chrome.storage.local.set({ [COSMOS_SEEN_KEY]: [...seen].slice(-5000) });
+  } catch { /* ignore */ }
+}
+
+async function handleCosmosSavedBatch(elements) {
+  if (!Array.isArray(elements) || !elements.length) return;
+  const seen = await readCosmosSeen();
+  const fresh = elements.filter((el) => el && el.id && !seen.has(el.id));
+  for (const el of fresh) {
+    try { await syncCosmosElementToGather(el); }
+    catch (err) { console.warn('[gatheros] cosmos sync failed:', err); }
+    seen.add(el.id);
+  }
+  if (fresh.length) await writeCosmosSeen(seen);
+}
+
+// Map one Cosmos element to the same native-message /save payload the X and
+// Instagram syncs use. source:'cosmos' + the 'cosmos' tag drop it into the
+// Saved view and badge it as Cosmos on the desktop side.
+async function syncCosmosElementToGather(el) {
+  const isVideo = el.type === 'video' && !!el.mediaUrl;
+  const payload = {
+    type: 'save',
+    source: 'cosmos',
+    tags: ['cosmos'],
+    pageUrl: el.pageUrl || el.mediaUrl || null,
+    tweetMeta: {
+      authorName: el.authorName || '',
+      authorHandle: el.authorHandle || '',
+      caption: el.caption || '',
+      imageUrls: el.mediaUrl && !isVideo ? [el.mediaUrl] : [],
+      videoUrl: isVideo ? el.mediaUrl : null,
+      posterUrl: el.posterUrl || '',
+    },
+  };
+  if (isVideo) {
+    payload.videoUrl = el.mediaUrl;
+    payload.posterUrl = el.posterUrl || '';
+  } else if (el.mediaUrl) {
+    payload.imageUrl = el.mediaUrl;
+  } else {
+    return; // nothing to save
+  }
   return chrome.runtime.sendNativeMessage(HOST_NAME, payload);
 }
 
