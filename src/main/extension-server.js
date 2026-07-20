@@ -371,12 +371,14 @@ async function handleSave(req, res) {
       notes: notes || null,
       tweetMeta,
       source,
-      // A live save (realtime: a single Cosmos save you just made) is stamped
-      // NOW so it lands at the top of the grid, like a manual save. Batch
-      // history syncs (tweetMeta present, no realtime flag) ride the descending
-      // sync clock so a newest-first stream keeps its order; one-off image
-      // saves keep the default now-timestamp.
-      createdAt: body?.realtime ? Date.now() : (tweetMeta ? nextSyncCreatedAt() : undefined),
+      // Cosmos saves are ordered purely by when they were added to GatherOS —
+      // ignore any Cosmos-side timing, just stamp NOW so a live save lands at
+      // the top of the grid. Other synced batches (X/IG history) keep the
+      // descending sync clock so a newest-first stream keeps its order; one-off
+      // image saves keep the default now-timestamp.
+      createdAt: source === 'cosmos'
+        ? Date.now()
+        : (tweetMeta ? nextSyncCreatedAt() : undefined),
     });
     attachTags(record.id);
     notifyNew(record);

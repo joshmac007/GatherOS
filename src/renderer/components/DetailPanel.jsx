@@ -943,7 +943,7 @@ export default function DetailPanel({
           </div>
         </label>
 
-        {tweetMeta && (
+        {tweetMeta && !cosmosSource && (
           // Glass tweet card. Sits directly under the URL field so
           // the "where this came from" surfaces (URL + the richer
           // tweet card) cluster together. Shows author + handle +
