@@ -8,7 +8,8 @@
 // worker, which routes them through the desktop /save pipeline.
 //
 // Scope: only the user's OWN pages — their profile grid and their own
-// collections — never the home feed, explore, or anyone else's profile.
+// collections — and, within a collection, only the actual saves (not the
+// "Similar" recommendations shown below them).
 
 const CDN_HOST = 'cdn.cosmos.so';
 const seen = new Set();
@@ -19,18 +20,12 @@ function idFromCdnUrl(url) {
   return m ? m[1] : null;
 }
 
-// Top-level cosmos.so routes that are NOT the user's own content.
 const RESERVED_PATHS = new Set([
   'home', 'explore', 'search', 'settings', 'notifications', 'about',
   'login', 'signup', 'onboarding', 'e', 'element', 'cluster', 'clusters',
 ]);
 
-// URL shapes we sync:
-//   /<username>            → profile grid
-//   /<username>/saved      → the "Saved" tab
-//   /<username>/<slug>     → one of the user's collections
-// The feed (/), explore, search, etc. are excluded by segment count / the
-// reserved list.
+// URL shapes we sync: /<username>, /<username>/saved, /<username>/<slug>.
 function profilePathParts() {
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts.length < 1 || parts.length > 2) return null;
@@ -38,28 +33,18 @@ function profilePathParts() {
   return parts;
 }
 
-// Is an element actually rendered (visible)? getClientRects() returns boxes
-// for anything laid out — including position:fixed/sticky elements, which
-// offsetParent wrongly reports as hidden — and nothing for display:none. So
-// this catches a real, visible control without false-negatives on a sticky
-// sidebar.
 function isVisible(el) {
   return el.getClientRects().length > 0;
 }
 
-// Ownership check: only the signed-in user's own pages show a *visible*
-// "Edit profile" control. The home feed keeps that link in a hidden menu
-// (display:none), and other people's pages show "Follow" instead — so a
-// visible "Edit profile" reliably means "this is mine."
+// Only the signed-in user's own pages show a *visible* "Edit profile" control.
 function isOwnPage() {
   return [...document.querySelectorAll('a, button')]
     .some((el) => /edit profile/i.test(el.textContent || '') && isVisible(el));
 }
 
-// On a collection page (/<username>/<slug>, not /saved), name the collection
-// from the URL slug — deterministic and correct. (The page <h1> is unreliable:
-// on a collection page the first <h1> is often the profile name, not the
-// collection title.) Returns null on the profile / saved tab.
+// Name a collection from its URL slug (deterministic; the page <h1> is often
+// the profile name, not the collection title). Null on profile / saved tab.
 function collectionNameFor(parts) {
   if (parts.length !== 2 || parts[1].toLowerCase() === 'saved') return null;
   return parts[1]
@@ -68,22 +53,36 @@ function collectionNameFor(parts) {
     .slice(0, 80);
 }
 
+// A collection page shows a "Similar" recommendations section BELOW the real
+// grid, introduced by a standalone "Similar" label (a span/heading, not a
+// toolbar button). Everything below that label is recommendations, not saves —
+// so we treat its vertical position as a cutoff. Returns Infinity when there's
+// no such section (small collections, the profile grid, etc.).
+function similarCutoffY() {
+  const marks = [...document.querySelectorAll('span, h1, h2, h3, h4, p, div')]
+    .filter((el) => el.childElementCount === 0
+      && /^similar$/i.test((el.textContent || '').trim())
+      && !el.closest('button') && !el.closest('a'));
+  if (!marks.length) return Infinity;
+  return Math.min(...marks.map((el) => el.getBoundingClientRect().top + window.scrollY));
+}
+
 function collectElements() {
   const parts = profilePathParts();
   if (!parts || !isOwnPage()) return [];
   const collection = collectionNameFor(parts);
+  const cutoffY = similarCutoffY();
   const out = [];
   for (const img of document.querySelectorAll(`img[src*="${CDN_HOST}"]`)) {
     const src = img.currentSrc || img.src || '';
-    // Skip chrome, not saves: default avatars live under /default-avatars/,
-    // and avatars / small preview thumbs render tiny (?w=<200).
-    if (src.includes('/default-avatars/')) continue;
+    if (src.includes('/default-avatars/')) continue;          // avatars
     const wMatch = /[?&]w=(\d+)/.exec(src);
-    if (wMatch && parseInt(wMatch[1], 10) < 200) continue;
+    if (wMatch && parseInt(wMatch[1], 10) < 200) continue;    // small chrome thumbs
+    // Skip anything in the "Similar" recommendations section below the grid.
+    if (img.getBoundingClientRect().top + window.scrollY >= cutoffY) continue;
     const id = idFromCdnUrl(src);
     if (!id || seen.has(id)) continue;
-    // Full resolution: rebuild the URL WITHOUT the rendered-size (w=) cap.
-    const mediaUrl = `https://${CDN_HOST}/${id}?format=webp`;
+    const mediaUrl = `https://${CDN_HOST}/${id}?format=webp`;  // full-res
     const a = img.closest('a[href]');
     let pageUrl = mediaUrl;
     if (a) {
@@ -96,17 +95,27 @@ function collectElements() {
   return out;
 }
 
+let timer = null;
+function stop() {
+  try { observer.disconnect(); } catch { /* ignore */ }
+  if (timer) { clearInterval(timer); timer = null; }
+}
+
 function flush() {
+  // If the extension was reloaded, this old content script is orphaned — bail
+  // (and stop the timer) instead of spamming "Extension context invalidated".
+  if (!chrome.runtime || !chrome.runtime.id) { stop(); return; }
   const elements = collectElements();
-  if (elements.length) {
-    const where = elements[0].collection ? `collection "${elements[0].collection}"` : 'profile';
-    console.log('[gatheros] cosmos: sending', elements.length, `saved element(s) from ${where} to GatherOS`);
+  if (!elements.length) return;
+  const where = elements[0].collection ? `collection "${elements[0].collection}"` : 'profile';
+  try {
     chrome.runtime.sendMessage({ type: 'gatheros:cosmos-saved-batch', elements });
+    console.log('[gatheros] cosmos: sending', elements.length, `saved element(s) from ${where} to GatherOS`);
+  } catch {
+    stop();
   }
 }
 
-// Debounce so a burst of lazy-loaded tiles becomes one batch. seen resets
-// per page load, so navigating to a different collection re-collects fresh.
 let scheduled = false;
 function schedule() {
   if (scheduled) return;
@@ -117,14 +126,11 @@ function schedule() {
 const observer = new MutationObserver(schedule);
 observer.observe(document.documentElement, { childList: true, subtree: true });
 window.addEventListener('load', schedule);
-// Belt-and-suspenders: Cosmos lazy-loads tiles by swapping an existing
-// <img>'s src (an attribute change childList won't catch) and streams more in
-// on scroll — so also re-sweep on a timer. seen dedupes, so re-scans are
-// cheap and never re-send. Scroll the grid to pull the whole collection in.
-setInterval(schedule, 2000);
+// Cosmos lazy-loads tiles by swapping an <img>'s src (an attribute change
+// childList won't catch) and streams more in on scroll — so also re-sweep on a
+// timer. seen dedupes, so re-scans never re-send. Scroll to pull it all in.
+timer = setInterval(schedule, 2000);
 console.log('[gatheros] cosmos watcher active on', location.href);
-// One-time gate self-report after the page has rendered — makes it obvious in
-// the console whether this page is being treated as your own saves.
 setTimeout(() => {
   console.log(
     '[gatheros] cosmos gate —', location.pathname,
