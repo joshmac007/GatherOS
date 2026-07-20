@@ -12,7 +12,22 @@
 // "Similar" recommendations shown below them).
 
 const CDN_HOST = 'cdn.cosmos.so';
+const COSMOS_USERNAME_KEY = 'gatherosCosmosUsername';
 const seen = new Set();
+
+// Remember the owner's username the first time we're on their own profile,
+// so the panel's "Import saves" backfill knows which profile URL to open.
+// (Cosmos saves live at cosmos.so/<username>; there's no generic entry point.)
+let rememberedUsername = null;
+function rememberUsername() {
+  const parts = profilePathParts();
+  if (!parts || !isOwnPage()) return; // only trust our own, visible profile
+  const username = parts[0];
+  if (!username || username === rememberedUsername) return;
+  rememberedUsername = username;
+  try { chrome.storage.local.set({ [COSMOS_USERNAME_KEY]: username }); }
+  catch { /* extension reloaded / no storage */ }
+}
 
 // Real-time saves: the MAIN-world interceptor (cosmos-interceptor.js) detects
 // the save mutation and posts the saved element here. Relay it straight to the
@@ -118,6 +133,7 @@ function flush() {
   // If the extension was reloaded, this old content script is orphaned — bail
   // (and stop the timer) instead of spamming "Extension context invalidated".
   if (!chrome.runtime || !chrome.runtime.id) { stop(); return; }
+  rememberUsername();
   const elements = collectElements();
   if (!elements.length) return;
   const where = elements[0].collection ? `collection "${elements[0].collection}"` : 'profile';
@@ -152,3 +168,112 @@ setTimeout(() => {
   );
 }, 1500);
 schedule();
+
+// ── Backfill import ("Import saves" from the panel) ─────────────────
+// The background opens this profile tab and sends 'gatheros:start-import'.
+// We auto-scroll the grid at a gentle pace so Cosmos keeps loading older
+// tiles for the sweep to relay, and stop when the page stops growing (grid
+// bottom) — telling the background so it can finalize. The background also
+// stops us early via 'gatheros:stop-import' when the requested count is hit.
+let importScrollActive = false;
+function importSleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+async function runImportScroll() {
+  if (importScrollActive) return; // already running — ignore duplicate start
+  importScrollActive = true;
+  showCosmosToast('Importing Cosmos saves…', { sticky: true });
+
+  const TICK_MS = 1500;   // gentle — Cosmos lazy-loads tiles on scroll
+  const MAX_TICKS = 400;  // backstop so a stuck page can't scroll forever
+  const BOTTOM_STAGNANT_TICKS = 4; // grid height flat this long = bottom
+  let ticks = 0;
+  let lastHeight = 0;
+  let flat = 0;
+  while (importScrollActive && ticks < MAX_TICKS) {
+    const scroller = document.scrollingElement || document.documentElement;
+    const height = scroller ? scroller.scrollHeight : 0;
+    if (scroller) window.scrollTo(0, height);
+    schedule(); // pull in the tiles the scroll just rendered
+    flat = height <= lastHeight ? flat + 1 : 0;
+    lastHeight = height;
+    if (flat >= BOTTOM_STAGNANT_TICKS) break; // reached the bottom of the grid
+    ticks += 1;
+    await importSleep(TICK_MS);
+  }
+  const wasActive = importScrollActive;
+  importScrollActive = false;
+  // Reached the bottom on our own (not stopped by the background) — let it
+  // finalize the run and post the summary toast.
+  if (wasActive && chrome.runtime && chrome.runtime.id) {
+    try { chrome.runtime.sendMessage({ type: 'gatheros:cosmos-import-scrolled' }); }
+    catch { /* extension reloaded */ }
+  }
+}
+
+function stopImportScroll(summary) {
+  importScrollActive = false;
+  const n = summary && typeof summary.imported === 'number' ? summary.imported : null;
+  if (n !== null) {
+    showCosmosToast(
+      n > 0 ? `Done — imported ${n} save${n === 1 ? '' : 's'}` : 'No new saves to import',
+      {}, // non-sticky → auto-dismisses
+    );
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (!msg) return undefined;
+  if (msg.type === 'gatheros:start-import') { runImportScroll(); return false; }
+  if (msg.type === 'gatheros:import-progress') {
+    if (importScrollActive) {
+      const saved = typeof msg.imported === 'number' ? msg.imported : 0;
+      const scanned = typeof msg.processed === 'number' ? msg.processed : 0;
+      showCosmosToast(
+        saved > 0 ? `Importing… ${saved} saved` : `Importing… ${scanned} scanned`,
+        { sticky: true },
+      );
+    }
+    return false;
+  }
+  if (msg.type === 'gatheros:stop-import') { stopImportScroll(msg.summary); return false; }
+  return undefined;
+});
+
+// Small glass toast (mirrors the X watcher's) so the backfill has visible
+// progress in the tab it opens.
+let cosmosToastEl = null;
+let cosmosToastTimer = null;
+function showCosmosToast(message, { sticky = false } = {}) {
+  if (!cosmosToastEl) {
+    cosmosToastEl = document.createElement('div');
+    cosmosToastEl.style.cssText = [
+      'position:fixed', 'right:24px', 'bottom:24px', 'z-index:2147483647',
+      'display:flex', 'align-items:center', 'gap:8px', 'padding:10px 14px',
+      'font:500 13px/1.2 -apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif',
+      'color:rgba(255,255,255,0.95)', 'background:rgba(20,20,22,0.78)',
+      'backdrop-filter:blur(20px) saturate(1.8)', '-webkit-backdrop-filter:blur(20px) saturate(1.8)',
+      'border:0.5px solid rgba(255,255,255,0.14)', 'border-radius:999px',
+      'box-shadow:0 1px 2px rgba(0,0,0,0.2),0 8px 22px rgba(0,0,0,0.28)',
+      'opacity:0', 'transform:translateY(8px)',
+      'transition:opacity 160ms ease,transform 160ms ease', 'pointer-events:none',
+    ].join(';');
+    (document.body || document.documentElement).appendChild(cosmosToastEl);
+  }
+  cosmosToastEl.innerHTML =
+    '<span style="width:6px;height:6px;border-radius:50%;background:rgba(110,220,140,0.95);display:inline-block"></span><span></span>';
+  cosmosToastEl.querySelector('span:last-child').textContent = message;
+  requestAnimationFrame(() => {
+    if (!cosmosToastEl) return;
+    cosmosToastEl.style.opacity = '1';
+    cosmosToastEl.style.transform = 'translateY(0)';
+  });
+  if (cosmosToastTimer) { clearTimeout(cosmosToastTimer); cosmosToastTimer = null; }
+  if (!sticky) {
+    cosmosToastTimer = setTimeout(() => {
+      if (!cosmosToastEl) return;
+      cosmosToastEl.style.opacity = '0';
+      cosmosToastEl.style.transform = 'translateY(8px)';
+      setTimeout(() => { if (cosmosToastEl) { cosmosToastEl.remove(); cosmosToastEl = null; } }, 220);
+    }, 4200);
+  }
+}

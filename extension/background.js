@@ -164,6 +164,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleCosmosSavedBatch(msg.elements);
     return false;
   }
+  // Panel-triggered Cosmos backfill.
+  if (msg.type === 'gatheros:import-cosmos') {
+    handleImportCosmos(msg).then(sendResponse);
+    return true;
+  }
+  // The Cosmos import tab reached the bottom of the profile grid — no more
+  // tiles will load, so finalize the run (after a beat for trailing saves).
+  if (msg.type === 'gatheros:cosmos-import-scrolled') {
+    if (cosmosImportState && cosmosImportState.active) {
+      setTimeout(() => { endCosmosImport('bottom'); }, 2500);
+    }
+    return false;
+  }
   // Panel-driven actions. The in-page panel (panel.js) doesn't know
   // its window/tab ids, so we fill them from the message sender. Each
   // capture runs async and reports its result through notify().
@@ -768,6 +781,15 @@ async function syncBookmarkToGather(b, { force = false } = {}) {
 // everything. The desktop also dedupes by content hash, so this is just
 // politeness, not correctness.
 const COSMOS_SEEN_KEY = 'gatherosCosmosSeen';
+// The user's own cosmos.so username, learned passively by the watcher when
+// it sees the owner's profile. The backfill import needs it to know which
+// profile URL to open (Cosmos saves live at cosmos.so/<username>).
+const COSMOS_USERNAME_KEY = 'gatherosCosmosUsername';
+// Same tuning as the X/Instagram backfills: a handful of empty sweeps or a
+// run that outlasts the watchdog ends the import.
+const COSMOS_IMPORT_STAGNANT_BATCHES_LIMIT = 4;
+const COSMOS_IMPORT_WATCHDOG_MS = 6 * 60 * 1000;
+let cosmosImportState = null;
 
 async function readCosmosSeen() {
   try {
@@ -784,10 +806,13 @@ async function writeCosmosSeen(seen) {
 
 async function handleCosmosSavedBatch(elements) {
   if (!Array.isArray(elements) || !elements.length) return;
+  const importing = !!(cosmosImportState && cosmosImportState.active);
   const seen = await readCosmosSeen();
   const fresh = elements.filter((el) => el && el.id && !seen.has(el.id));
   let sent = 0;
   for (const el of fresh) {
+    // Stop syncing once a backfill has traversed its requested count.
+    if (importing && cosmosImportState.processed.size >= cosmosImportState.limit) break;
     try {
       const res = await syncCosmosElementToGather(el);
       // Only remember it as "sent" once the desktop actually accepted it —
@@ -796,12 +821,128 @@ async function handleCosmosSavedBatch(elements) {
       if (res && res.ok === false) throw new Error(res.error || 'save rejected');
       seen.add(el.id);
       sent += 1;
+      if (importing) {
+        cosmosImportState.processed.add(el.id);
+        if (res && res.ok && !res.duplicate && !res.dismissed) cosmosImportState.imported += 1;
+      }
     } catch (err) {
       console.warn('[gatheros] cosmos sync failed (will retry):', err?.message || err);
     }
   }
   if (sent) await writeCosmosSeen(seen);
+
+  // Backfill bookkeeping: stream the running count to the tab's toast and
+  // stop once we hit the requested limit. (Reaching the bottom of the grid
+  // is signalled separately by the watcher via cosmos-import-scrolled.)
+  if (importing && cosmosImportState && cosmosImportState.active) {
+    if (sent > 0) cosmosImportState.stagnant = 0;
+    else cosmosImportState.stagnant += 1;
+    if (cosmosImportState.tabId != null) {
+      chrome.tabs.sendMessage(cosmosImportState.tabId, {
+        type: 'gatheros:import-progress',
+        imported: cosmosImportState.imported,
+        processed: cosmosImportState.processed.size,
+      }, () => { void chrome.runtime.lastError; });
+    }
+    const reachedLimit = cosmosImportState.processed.size >= cosmosImportState.limit;
+    if (reachedLimit || cosmosImportState.stagnant >= COSMOS_IMPORT_STAGNANT_BATCHES_LIMIT) {
+      await endCosmosImport(reachedLimit ? 'limit' : 'bottom');
+    }
+  }
 }
+
+// Panel-triggered Cosmos backfill. Cosmos exposes no clean saved-elements
+// API to replay (its grid is Apollo GraphQL + Next.js RSC), so — like the X
+// scroll fallback — we open the user's profile and auto-scroll it while the
+// watcher reads each saved tile off the rendered grid and relays it here.
+async function handleImportCosmos(msg) {
+  if (cosmosImportState && cosmosImportState.active) {
+    notify('A Cosmos import is already running.');
+    return { ok: false, busy: true };
+  }
+  const status = await pingApp();
+  if (!status || status.hostMissing || !status.appRunning) {
+    notify('Open GatherOS first, then run Import saves.');
+    return { ok: false, appClosed: true };
+  }
+  // We need the user's profile URL. The watcher stores their username the
+  // first time it sees their own profile; if it hasn't yet, ask them to
+  // visit it once.
+  let username = null;
+  try {
+    const { [COSMOS_USERNAME_KEY]: u } = await chrome.storage.local.get(COSMOS_USERNAME_KEY);
+    if (u && typeof u === 'string') username = u;
+  } catch { /* ignore */ }
+  if (!username) return { ok: false, needsProfile: true };
+
+  // 0 / missing / non-positive = "all".
+  const n = Number(msg && msg.limit);
+  const limit = Number.isFinite(n) && n > 0 ? n : Infinity;
+
+  let tab;
+  try {
+    tab = await chrome.tabs.create({ url: `https://www.cosmos.so/${encodeURIComponent(username)}`, active: true });
+  } catch {
+    notify("Couldn't open your Cosmos profile.");
+    return { ok: false };
+  }
+  cosmosImportState = {
+    active: true,
+    tabId: tab.id,
+    limit,
+    processed: new Set(),
+    imported: 0,
+    stagnant: 0,
+    watchdog: setTimeout(() => { endCosmosImport('timeout'); }, COSMOS_IMPORT_WATCHDOG_MS),
+  };
+  scheduleCosmosImportStart(tab.id);
+  return { ok: true };
+}
+
+// Tell the profile tab's watcher to begin auto-scrolling. The content
+// script may not have loaded the instant the tab opens, so retry with
+// backoff until the message lands.
+function scheduleCosmosImportStart(tabId, attempt = 0) {
+  setTimeout(() => {
+    if (!cosmosImportState || !cosmosImportState.active || cosmosImportState.tabId !== tabId) return;
+    chrome.tabs.sendMessage(tabId, { type: 'gatheros:start-import' }, () => {
+      if (chrome.runtime.lastError && attempt < 6) {
+        scheduleCosmosImportStart(tabId, attempt + 1);
+      }
+    });
+  }, attempt === 0 ? 3000 : 1200);
+}
+
+async function endCosmosImport(_reason) {
+  if (!cosmosImportState || !cosmosImportState.active) return; // guards double-end
+  cosmosImportState.active = false;
+  const { tabId, imported, watchdog } = cosmosImportState;
+  if (watchdog) clearTimeout(watchdog);
+
+  const summary = { imported };
+  if (tabId != null) {
+    chrome.tabs.sendMessage(tabId, { type: 'gatheros:stop-import', summary }, () => {
+      void chrome.runtime.lastError; // tab may have closed — ignore
+    });
+  }
+  notify(imported > 0
+    ? `Imported ${imported} save${imported === 1 ? '' : 's'} from Cosmos.`
+    : 'No new saves to import.');
+
+  // Swallow any trailing batches until the watcher stops scrolling, then
+  // fully clear.
+  setTimeout(() => { if (cosmosImportState && !cosmosImportState.active) cosmosImportState = null; }, 8000);
+}
+
+// If the user closes the import tab mid-run, stop cleanly.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (cosmosImportState && cosmosImportState.active && cosmosImportState.tabId === tabId) {
+    if (cosmosImportState.watchdog) clearTimeout(cosmosImportState.watchdog);
+    const imported = cosmosImportState.imported;
+    cosmosImportState = null;
+    if (imported > 0) notify(`Cosmos import stopped — imported ${imported} so far.`);
+  }
+});
 
 // Map one Cosmos element to the same native-message /save payload the X and
 // Instagram syncs use. source:'cosmos' + the 'cosmos' tag drop it into the

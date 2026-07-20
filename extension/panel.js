@@ -28,6 +28,7 @@
     open: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
     close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     instagram: '<rect width="20" height="20" x="2" y="2" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>',
+    cosmos: '<circle cx="12" cy="12" r="4"/><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/>',
   };
   const svg = (paths, w = 17) =>
     `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -180,6 +181,22 @@
           <div class="scope-msg" id="igMsg" hidden></div>
         </div>
       </div>
+      <div class="import" id="cosmosImport">
+        <button class="btn" id="importCosmos"><span class="ico">${svg(ICONS.cosmos, 15)}</span><span class="txt"><span class="label">Import saves</span><span class="sub" id="cosmosSub">Backfill your Cosmos saves</span></span></button>
+        <div class="scope" id="cosmosScope" hidden>
+          <select class="count" id="cosmosCount">
+            <option value="25" selected>Most recent 25</option>
+            <option value="50">Most recent 50</option>
+            <option value="100">Most recent 100</option>
+            <option value="200">Most recent 200</option>
+            <option value="500">Most recent 500</option>
+            <option value="0">All saves</option>
+          </select>
+          <button class="import-go" id="cosmosGo" disabled>Import</button>
+          <div class="scope-note">Opens your Cosmos profile and imports your saves in the background — duplicates are skipped.</div>
+          <div class="scope-msg" id="cosmosMsg" hidden></div>
+        </div>
+      </div>
       <button class="open" id="open"><span class="ico">${svg(ICONS.open, 15)}</span><span>Open GatherOS</span></button>
       <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">Checking…</span></div>
     </div>
@@ -212,10 +229,10 @@
   // notification that's easy to miss. On success, close the panel.
   const clearMsg = (el) => { el.hidden = true; el.textContent = ''; };
   const showText = (el, text) => { el.textContent = text; el.hidden = false; };
-  const showSignIn = (el, label, url) => {
+  const showSignIn = (el, label, url, leadText) => {
     el.textContent = '';
     const span = document.createElement('span');
-    span.textContent = `Sign in to ${label} to import. `;
+    span.textContent = leadText || `Sign in to ${label} to import. `;
     const a = document.createElement('a');
     a.className = 'msg-link';
     a.textContent = `Open ${label} ↗`;
@@ -228,6 +245,7 @@
     if (chrome.runtime.lastError) { showText(msgEl, 'Could not reach the extension. Reload it and try again.'); return; }
     if (!resp || resp.ok) { close(); return; } // success — import runs in the background
     if (resp.needsSignIn) { showSignIn(msgEl, label, url); return; }
+    if (resp.needsProfile) { showSignIn(msgEl, label, url, 'Open your Cosmos profile once, then import. '); return; }
     if (resp.appClosed) { showText(msgEl, 'Open GatherOS first, then import.'); return; }
     if (resp.disabled) { showText(msgEl, 'Import is temporarily unavailable.'); return; }
     if (resp.busy) { showText(msgEl, 'An import is already running.'); return; }
@@ -300,6 +318,41 @@
     igGo.disabled = true;
     chrome.runtime.sendMessage({ type: 'gatheros:import-saved', limit: igSelectedLimit }, (resp) => {
       handleImportResult(resp, { goBtn: igGo, msgEl: igMsg, label: 'Instagram', url: 'https://www.instagram.com/' });
+    });
+  });
+
+  // Import saves (Cosmos) — same two-step flow as the others. Cosmos has no
+  // replayable API, so the background opens the user's profile and drives a
+  // gentle auto-scroll while the watcher relays each saved element.
+  const cosmosImportEl = root.getElementById('cosmosImport');
+  const cosmosScope = root.getElementById('cosmosScope');
+  const cosmosSub = root.getElementById('cosmosSub');
+  const cosmosGo = root.getElementById('cosmosGo');
+  const cosmosCount = root.getElementById('cosmosCount');
+  let cosmosSelectedLimit = null;
+
+  root.getElementById('importCosmos').addEventListener('click', () => {
+    cosmosScope.hidden = !cosmosScope.hidden;
+    cosmosImportEl.classList.toggle('expanded', !cosmosScope.hidden);
+    cosmosSub.textContent = cosmosScope.hidden
+      ? 'Backfill your Cosmos saves'
+      : 'Choose how many, then import';
+  });
+
+  const syncCosmosCount = () => {
+    cosmosSelectedLimit = cosmosCount.value === '' ? null : Number(cosmosCount.value); // 0 = all
+    cosmosGo.disabled = cosmosSelectedLimit === null;
+  };
+  cosmosCount.addEventListener('change', syncCosmosCount);
+  syncCosmosCount();
+
+  const cosmosMsg = root.getElementById('cosmosMsg');
+  cosmosGo.addEventListener('click', () => {
+    if (cosmosSelectedLimit === null) return;
+    clearMsg(cosmosMsg);
+    cosmosGo.disabled = true;
+    chrome.runtime.sendMessage({ type: 'gatheros:import-cosmos', limit: cosmosSelectedLimit }, (resp) => {
+      handleImportResult(resp, { goBtn: cosmosGo, msgEl: cosmosMsg, label: 'Cosmos', url: 'https://www.cosmos.so/' });
     });
   });
 
