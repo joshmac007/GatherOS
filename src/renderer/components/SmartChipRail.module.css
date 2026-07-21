@@ -61,6 +61,33 @@
   transform: scale(0.94);
 }
 
+/* ⋯ collection-options button, sits just after the title. Borderless
+   until hover so it stays quiet next to the title text. */
+.titleMenuBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  margin-left: 2px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: center;
+  transition: background var(--dur-instant) ease, color var(--dur-instant) ease, transform var(--dur-instant) ease;
+}
+.titleMenuBtn:hover {
+  background: var(--hover-bg-soft);
+  color: var(--text-primary);
+}
+.titleMenuBtn:active {
+  transform: scale(0.94);
+}
+
 .title {
   font-family: var(--font-ui);
   font-size: var(--text-lg);

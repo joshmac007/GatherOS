@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ChevronLeft, Grid2x2, Square, Images, Inbox, Trash2,
-  Clock, History, Eye, EyeOff,
+  Clock, History, Eye, EyeOff, MoreHorizontal,
   Type, Image as ImageIcon, Film, Bookmark,
 } from 'lucide-react';
 import styles from './SmartChipRail.module.css';
@@ -125,6 +125,9 @@ export default function SmartChipRail({
   // top-level collections.
   parentCrumb = null,
   // Optional inline-rename callback. When provided, clicking the
+  // Opens the collection options menu (⋯ beside the title). Given the
+  // click's screen position; null hides the button (non-collection views).
+  onTitleMenu = null,
   // viewTitle swaps it for an editable input. Only wired in for
   // collection views — there's no rename for All/Unsorted/Trash.
   onRenameViewTitle = null,
@@ -241,6 +244,20 @@ export default function SmartChipRail({
                 }
               }}
             />
+            {onTitleMenu && (
+              <button
+                type="button"
+                className={styles.titleMenuBtn}
+                title="Collection options"
+                aria-label="Collection options"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  onTitleMenu({ x: Math.round(r.left), y: Math.round(r.bottom + 4) });
+                }}
+              >
+                <MoreHorizontal size={18} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+            )}
           </>
         ) : (
           // "Hidden" is just another smart-view tab — same look and

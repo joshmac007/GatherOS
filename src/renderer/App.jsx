@@ -70,6 +70,7 @@ import {
   Search,
   Images,
   ImagePlus,
+  SquarePen,
   Folder,
   Eclipse,
   Moon,
@@ -1178,6 +1179,8 @@ export default function App({ entitlement } = {}) {
 
   // Card context menu
   const [cardCtx, setCardCtx] = useState(null); // { saveId, x, y, items }
+  // Collection-options (⋯) menu opened from the collection title. { x, y }.
+  const [collectionMenu, setCollectionMenu] = useState(null);
   // Bulk "Add to Collection" picker, anchored above the selection bar.
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
   const [bulkTagPicker, setBulkTagPicker] = useState(null); // { x, y } | null
@@ -3759,6 +3762,9 @@ export default function App({ entitlement } = {}) {
                     onRenameViewTitle={view.type === 'collection'
                       ? (name) => handleRenameCollection({ id: view.id, name })
                       : null}
+                    onTitleMenu={view.type === 'collection'
+                      ? (pos) => setCollectionMenu(pos)
+                      : null}
                     autoRenameSignal={renameViewSignal}
                   />
                 )}
@@ -4116,6 +4122,39 @@ export default function App({ entitlement } = {}) {
           y={cardCtx.y}
           items={cardCtx.items}
           onClose={() => setCardCtx(null)}
+        />
+      )}
+
+      {collectionMenu && view.type === 'collection' && (
+        <ContextMenu
+          x={collectionMenu.x}
+          y={collectionMenu.y}
+          onClose={() => setCollectionMenu(null)}
+          items={[
+            {
+              label: 'Rename',
+              icon: <SquarePen {...ICON} />,
+              onClick: () => setRenameViewSignal((s) => s + 1),
+            },
+            {
+              label: 'Reset cover to automatic',
+              icon: <RestoreIcon />,
+              onClick: async () => {
+                try {
+                  await window.moodmark.collections.setCover(view.id, null);
+                  loadCollections();
+                } catch (err) {
+                  console.error('[cover] reset failed:', err);
+                }
+              },
+            },
+            {
+              label: 'Delete collection',
+              icon: <TrashIcon />,
+              danger: true,
+              onClick: () => handleDeleteCollection(view.id),
+            },
+          ]}
         />
       )}
 

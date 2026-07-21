@@ -67,6 +67,24 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
     if (el) el.scrollIntoView({ behavior: instant ? 'instant' : 'smooth', inline: 'center', block: 'nearest' });
   }, []);
 
+  // The crate scrolls horizontally, but a plain mouse wheel is vertical
+  // only — translate a vertical-dominant wheel into horizontal scroll so
+  // mouse users can browse too. Trackpad horizontal gestures (deltaX
+  // dominant) fall through to native scrolling untouched. Attached
+  // non-passively so preventDefault stops the page from also scrolling.
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!open || !el) return undefined;
+    const onWheel = (e) => {
+      if (e.deltaY !== 0 && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        el.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return undefined;
     // Arrow navigation hands control to the keyboard: clear the pointer
@@ -123,8 +141,8 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
   return (
     <div
       className={styles.scrim}
-      role="dialog"
-      aria-label="Browse collections"
+      role="region"
+      aria-label="Collections"
       /* Opt the whole crate out of the app-shell's horizontal-swipe
          navigation — without this, sideways-scrolling the sleeves trips
          the global wheel handler that flips between smart views and
