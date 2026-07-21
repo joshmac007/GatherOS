@@ -223,10 +223,13 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --sidebar-bg: rgba(28, 28, 30, 0.78);
-  --content-bg: #1C1C1E;
-  --titlebar-bg: #1C1C1E;
-  --surface-1: #242426;
+  /* Canvas goes true black to match the collections crate's stage; panels
+     and cards (sidebar, surface-1) stay a step above black so they still
+     read as elevated. */
+  --sidebar-bg: rgba(20, 20, 22, 0.82);
+  --content-bg: #000000;
+  --titlebar-bg: #000000;
+  --surface-1: #1A1A1C;
 
   --border: rgba(255, 255, 255, 0.09);
   /* In light mode --border-strong is meaningfully heavier than
