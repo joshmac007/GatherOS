@@ -1480,6 +1480,10 @@ function getAllCollectionsWithThumbs() {
                WHEN LOWER(s.file_path) LIKE '%.gif' THEN s.file_path
                ELSE COALESCE(NULLIF(s.thumb_path, ''), s.file_path)
              END AS thumb_or_file,
+             -- Full-quality cover for large renders (the collections
+             -- crate paints a ~320px-wide sleeve; thumb_path is too
+             -- small and reads blurry there).
+             COALESCE(NULLIF(s.preview_path, ''), NULLIF(s.file_path, ''), s.thumb_path) AS cover_or_file,
              ROW_NUMBER() OVER (
                PARTITION BY m.cid
                ORDER BY m.added_at DESC, s.created_at DESC
@@ -1501,7 +1505,9 @@ function getAllCollectionsWithThumbs() {
     )
     SELECT c.id, c.name, c.color, c.created_at, c.order_index, c.parent_id,
            (SELECT COUNT(*) FROM membership m WHERE m.cid = c.id) AS save_count,
-           tt.thumbs AS thumbs_blob
+           tt.thumbs AS thumbs_blob,
+           (SELECT r.cover_or_file FROM ranked r
+             WHERE r.collection_id = c.id AND r.rn = 1) AS cover
     FROM collections c
     LEFT JOIN top_thumbs tt ON tt.collection_id = c.id
     ORDER BY c.order_index ASC, c.created_at ASC

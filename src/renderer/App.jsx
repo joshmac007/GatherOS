@@ -27,7 +27,6 @@ import Grid from './components/Grid.jsx';
 import FeaturedBuckets from './components/FeaturedBuckets.jsx';
 import ChildCollectionsRail from './components/ChildCollectionsRail.jsx';
 import CollectionDropDock from './components/CollectionDropDock.jsx';
-import FolderGrid from './components/FolderGrid.jsx';
 import BoardGrid from './components/BoardGrid.jsx';
 import SmartChipRail from './components/SmartChipRail.jsx';
 import DetailPanelV1 from './components/DetailPanel.jsx';
@@ -1181,8 +1180,6 @@ export default function App({ entitlement } = {}) {
   const [bulkPicker, setBulkPicker] = useState(null); // { x, y }
   const [bulkTagPicker, setBulkTagPicker] = useState(null); // { x, y } | null
   const [rediscoverOpen, setRediscoverOpen] = useState(false);
-  // Collections crate — the full-screen record-crate browse mode.
-  const [crateOpen, setCrateOpen] = useState(false);
 
   const buildCardMenuItems = useCallback((saveId, memberIds) => {
     // If the right-clicked save is part of an active multi-selection,
@@ -3502,7 +3499,6 @@ export default function App({ entitlement } = {}) {
       { id: 'new-space', label: 'New space', hint: '⌘⇧N', keywords: 'create board canvas moodboard', Icon: () => <SquarePlus {...ICON} />, run: () => { handleCreateBoard?.().then((b) => { if (b?.id) setView({ type: 'board', id: b.id }); }); } },
       { id: 'capture-screenshot', label: 'Capture screenshot', hint: '⌘⇧S', keywords: 'screen shot grab region', Icon: () => <Camera {...ICON} />, run: () => window.moodmark.capture?.screenshot?.() },
       { id: 'rediscover', label: 'Rediscover', hint: '⌘⇧R', keywords: 'review shuffle triage deck', Icon: () => <Shuffle {...ICON} />, run: () => setRediscoverOpen(true) },
-      { id: 'browse-crate', label: 'Browse the crate', keywords: 'collections records sleeves vinyl shelf browse', Icon: () => <Library {...ICON} />, run: () => setCrateOpen(true) },
       { id: 'go-search', label: 'Go to search', keywords: 'find query', Icon: () => <Search {...ICON} />, run: () => handleModeChange('search') },
       { id: 'go-library', label: 'Go to library', hint: '⌘1', keywords: 'home all saves grid', Icon: () => <Images {...ICON} />, run: () => handleModeChange('library') },
       { id: 'go-collections', label: 'Go to collections', hint: '⌘2', keywords: 'folders buckets', Icon: () => <Folder {...ICON} />, run: () => handleModeChange('folders') },
@@ -3669,7 +3665,6 @@ export default function App({ entitlement } = {}) {
                   onOpenCommandPalette={() => setQuickSwitcherOpen(true)}
                   collections={topLevelCollections}
                   onOpenCollection={handleOpenCollectionFromSearch}
-                  onBrowseCrate={() => setCrateOpen(true)}
                   searchInputRef={searchInputRef}
                   scrollRef={setGridScrollNode}
                   saves={visibleSaves}
@@ -3694,24 +3689,15 @@ export default function App({ entitlement } = {}) {
                   highlightId={highlightId}
                 />
               ) : appMode === 'folders' && view.type === 'all' ? (
-                // Folders mode, no folder picked yet → tile grid of
-                // root-level folders. Clicking a tile sets view to
-                // that collection; back-to-all returns here.
-                <FolderGrid
-                  folders={collections}
-                  parentId={null}
-                  onCreateChildFolder={handleCreateChildCollection}
-                  onPickFolder={(id) => handleViewChange({ type: 'collection', id })}
-                  onCreateFolder={handleCreateAndOpenCollection}
-                  onRenameFolder={handleRenameCollection}
-                  onDeleteFolder={handleDeleteCollection}
-                  onReorderFolders={handleReorderCollections}
-                  onAddSavesToBucket={handleAddSavesToBucket}
-                  onDropFilesToBucket={handleDropFilesToBucket}
-                  onExternalDropToBucket={handleExternalDropToBucket}
-                  onSetAppDragging={setDragging}
-                  onOpenCollectionAsSpace={handleOpenCollectionAsSpace}
-                  scrollRef={setGridScrollNode}
+                // Collections tab, no collection picked yet → the crate:
+                // every top-level collection as a record sleeve. Clicking
+                // a sleeve sets view to that collection; back-to-all
+                // returns here. The floating mode pill (z 45) stays above
+                // the crate's stage (z 40), so tab switching keeps working.
+                <CollectionsCrate
+                  open
+                  collections={topLevelCollections}
+                  onOpenCollection={(id) => handleViewChange({ type: 'collection', id })}
                 />
               ) : appMode === 'boards' ? (
                 // Boards mode → tile grid of every board. Clicking
@@ -4215,16 +4201,6 @@ export default function App({ entitlement } = {}) {
           onClose={() => setBulkTagPicker(null)}
         />
       )}
-
-      <CollectionsCrate
-        open={crateOpen}
-        collections={collections}
-        onOpenCollection={(id) => {
-          setCrateOpen(false);
-          handleOpenCollectionFromSearch(id);
-        }}
-        onClose={() => setCrateOpen(false)}
-      />
 
       <RediscoverMode
         open={rediscoverOpen}

@@ -5,7 +5,9 @@
 .scrim {
   position: fixed;
   inset: 0;
-  z-index: 9400;
+  /* Below the floating mode pill (z 45) so the Collections tab stays
+     switchable while the crate is the active tab's view. */
+  z-index: 40;
   background: #000;
   font-family: var(--font-ui);
   color: #fff;

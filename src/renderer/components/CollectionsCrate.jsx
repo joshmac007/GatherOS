@@ -75,7 +75,7 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose?.(); return; }
+      if (e.key === 'Escape' && onClose) { e.preventDefault(); onClose(); return; }
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         setSel((s) => { const next = Math.max(0, s - 1); centerOn(next); return next; });
@@ -123,7 +123,9 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
         onScroll={onScroll}
       >
         {items.map((c, i) => {
-          const thumb = Array.isArray(c.thumbs) ? c.thumbs[0] : null;
+          // Full-quality cover (preview/original) for the big sleeve face —
+          // thumb_path is grid-tile sized and reads blurry at 320px wide.
+          const face = c.cover || (Array.isArray(c.thumbs) ? c.thumbs[0] : null);
           const cls = [
             styles.slot,
             i === hovIdx ? styles.hov : '',
@@ -150,8 +152,8 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
               <div className={styles.covw}>
                 <div className={styles.c3d}>
                   <div className={styles.cov}>
-                    {thumb ? (
-                      <img src={fileUrl(thumb)} alt="" draggable={false} />
+                    {face ? (
+                      <img src={fileUrl(face)} alt="" draggable={false} />
                     ) : (
                       <span className={styles.letter}>{(c.name || '?').trim().charAt(0).toUpperCase()}</span>
                     )}
@@ -166,7 +168,11 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
         {N === 0 && <div className={styles.empty}>No collections yet</div>}
       </div>
       <div className={styles.deck}>
-        <div className={styles.hint}>← → to browse · click a sleeve to open · esc to close</div>
+        <div className={styles.hint}>
+          {onClose
+            ? '← → to browse · click a sleeve to open · esc to close'
+            : '← → to browse · click a sleeve to open'}
+        </div>
       </div>
     </div>
   );
