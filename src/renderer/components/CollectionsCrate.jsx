@@ -18,8 +18,14 @@ const FALLBACK_SPINE = '#55555a';
 // through a tiny canvas; wrapped in try/catch so a tainted/unreadable
 // image just keeps the neutral fallback. Keyed by id+cover so changing a
 // collection's cover re-samples the spine rather than reusing the old one.
+// A video file can't be painted into an <img>. Cosmos videos have no
+// poster thumbnail, so their cover resolves to the .mp4 itself — treat
+// that as "no face" (blank sleeve) rather than a broken image.
+const VIDEO_EXT_RE = /\.(mp4|webm|mov|mkv|m4v|avi)$/i;
 function coverOf(c) {
-  return c.cover || (Array.isArray(c.thumbs) ? c.thumbs[0] : null);
+  const src = c.cover || (Array.isArray(c.thumbs) ? c.thumbs[0] : null);
+  if (src && VIDEO_EXT_RE.test(src)) return null;
+  return src;
 }
 function useSpineColors(collections, open) {
   const [colors, setColors] = useState({});

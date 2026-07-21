@@ -69,6 +69,16 @@ function extFromUrl(url) {
   }
 }
 
+// Video container extension from a content-type (video/mp4 → mp4).
+function videoExtFromMime(mime) {
+  if (!mime) return null;
+  const m = mime.toLowerCase().match(/^video\/([\w+.-]+)/);
+  if (!m) return null;
+  const map = { quicktime: 'mov', 'x-matroska': 'mkv', mpeg: 'mpg' };
+  const ext = map[m[1]] || m[1];
+  return /^[a-z0-9]{2,4}$/.test(ext) ? ext : 'mp4';
+}
+
 async function saveImageFromUrl(url) {
   const sharp = require('sharp');
 
@@ -91,14 +101,22 @@ async function saveImageFromUrl(url) {
     throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`);
   }
   const contentType = res.headers.get('content-type') || '';
-  if (!contentType.startsWith('image/') && !extFromUrl(url)) {
-    throw new Error(`Response is not an image: ${contentType || 'unknown'}`);
-  }
-  const ext = extFromMime(contentType) || extFromUrl(url) || 'png';
   const buffer = Buffer.from(await res.arrayBuffer());
   if (buffer.length === 0) {
     throw new Error('Empty image response');
   }
+  // The URL was sent as an image but actually served a video — e.g. a
+  // Cosmos video save, whose cdn URL returns mp4 regardless of the
+  // ?format=webp hint. Save it as a video (from the bytes we already
+  // have) instead of handing an mp4 to the image decoder.
+  if (contentType.startsWith('video/')) {
+    const vext = videoExtFromMime(contentType) || 'mp4';
+    return _writeVideoFiles(buffer, { ext: vext, posterUrl: null, videoUrl: url });
+  }
+  if (!contentType.startsWith('image/') && !extFromUrl(url)) {
+    throw new Error(`Response is not an image: ${contentType || 'unknown'}`);
+  }
+  const ext = extFromMime(contentType) || extFromUrl(url) || 'png';
   return _writeImageFiles(buffer, ext, sharp);
 }
 
@@ -528,7 +546,17 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
     throw new Error(`Failed to fetch video: ${vres.status} ${vres.statusText}`);
   }
   const videoBuffer = Buffer.from(await vres.arrayBuffer());
-  if (videoBuffer.length === 0) {
+  const ext = (extFromUrl(videoUrl)
+    || videoExtFromMime(vres.headers.get('content-type'))
+    || 'mp4').toLowerCase();
+  return _writeVideoFiles(videoBuffer, { ext, posterUrl, videoUrl });
+}
+
+// Persist already-fetched video bytes. Shared by saveVideoFromUrl and the
+// saveImageFromUrl fallback (a supposed image URL that actually serves a
+// video — e.g. a Cosmos video element, whose cdn URL returns mp4).
+async function _writeVideoFiles(videoBuffer, { ext = 'mp4', posterUrl = null, videoUrl = null } = {}) {
+  if (!videoBuffer || videoBuffer.length === 0) {
     throw new Error('Empty video response');
   }
 
@@ -548,7 +576,6 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
   }
 
   const id = crypto.randomUUID();
-  const ext = (extFromUrl(videoUrl) || 'mp4').toLowerCase();
   const filePath = path.join(getImagesDir(), `${id}.${ext}`);
   fs.writeFileSync(filePath, videoBuffer);
 
@@ -558,7 +585,7 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
   // doesn't follow that pattern (older / non-twimg sources).
   let width = null;
   let height = null;
-  const urlDims = videoUrl.match(/\/(\d{2,5})x(\d{2,5})\//);
+  const urlDims = videoUrl ? videoUrl.match(/\/(\d{2,5})x(\d{2,5})\//) : null;
   if (urlDims) {
     width = parseInt(urlDims[1], 10);
     height = parseInt(urlDims[2], 10);
