@@ -49,7 +49,7 @@ function createSaveBackgroundRouter({
     retryTimer?.unref?.();
   }
 
-  async function finishClaim(record, { enrich = false, taskRouteSave = null } = {}) {
+  async function finishClaim(record, { enrich = false, changed = false, taskRouteSave = null } = {}) {
     try {
       if (enrich) {
         try { await enrichImageSave(record); } catch (error) {
@@ -58,7 +58,7 @@ function createSaveBackgroundRouter({
       }
       const current = typeof getSave === 'function' ? getSave(record.id) || record : record;
       const routeSave = taskRouteSave || backgroundRuntime.routeSave.bind(backgroundRuntime);
-      const routed = await routeSave(current, { changed: enrich });
+      const routed = await routeSave(current, { changed: enrich || changed });
       const semanticReason = routed?.semanticWarning?.detail || routed?.semanticWarning?.reason;
       if (routed?.ok === false) throw new Error(routed.reason || 'background-route-failed');
       if (routed?.semanticWarning && !DEFERRED_SEMANTIC_REASONS.has(semanticReason)) {
@@ -77,7 +77,7 @@ function createSaveBackgroundRouter({
     }
   }
 
-  function enqueue(record, { duplicate = false } = {}) {
+  function enqueue(record, { duplicate = false, changed = false } = {}) {
     if (!record?.id) return { ok: false, reason: 'save_not_found' };
     noteActivity?.({ kind: duplicate ? 'duplicate' : 'save', saveId: record.id });
     const route = repository.getSaveBackgroundRoute(record.id);
@@ -91,7 +91,7 @@ function createSaveBackgroundRouter({
         if (!isCurrent()) return { ok: false, reason: 'library_epoch_stale' };
         const claim = repository.claimSaveBackgroundRoute(record.id, now());
         if (!claim) return { ok: true, skipped: 'duplicate' };
-        return finishClaim(record, { enrich: image, taskRouteSave: routeSave });
+        return finishClaim(record, { enrich: image, changed, taskRouteSave: routeSave });
       } finally {
         scheduledSaveIds.delete(record.id);
       }

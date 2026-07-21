@@ -11,6 +11,14 @@ export const ACKNOWLEDGMENTS = [
       { name: 'nanoid', license: 'MIT', url: 'https://github.com/ai/nanoid' },
       { name: 'node-vibrant', license: 'MIT', url: 'https://github.com/Vibrant-Colors/node-vibrant' },
       { name: 'sharp', license: 'Apache-2.0', url: 'https://github.com/lovell/sharp' },
+      { name: 'AI SDK', license: 'Apache-2.0', url: 'https://github.com/vercel/ai' },
+      { name: '@ai-sdk/openai', license: 'Apache-2.0', url: 'https://github.com/vercel/ai/tree/main/packages/openai' },
+      { name: 'Ajv', license: 'MIT', url: 'https://github.com/ajv-validator/ajv' },
+      {
+        name: 'OpenCode Codex OAuth reference (849c2598)',
+        license: 'MIT',
+        url: 'https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/plugin/openai/codex.ts',
+      },
     ],
   },
   {

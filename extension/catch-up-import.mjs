@@ -19,7 +19,7 @@ export async function processCatchUpEntries({ state, entries, statuses, save, sh
   if (typeof save !== 'function') throw new TypeError('save callback required');
   let processedCount = 0;
   for (let index = 0; index < entries.length; index += 1) {
-    if (!shouldContinue()) { state.active = false; break; }
+    if (!shouldContinue()) { state.stopRequested = true; break; }
     const entry = entries[index];
     if (!entry || !entry.tweetId || state.processed.has(entry.tweetId)) continue;
     state.processed.add(entry.tweetId);

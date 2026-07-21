@@ -10,6 +10,7 @@ const MIGRATION_SPECS = Object.freeze([
   Object.freeze({ ordinal: 5, id: 'save-background-routing', file: '005-save-background-routing.js' }),
   Object.freeze({ ordinal: 6, id: 'x-tweet-created-at-repair', file: '006-x-tweet-created-at-repair.js' }),
   Object.freeze({ ordinal: 7, id: 'social-source-key', file: '007-social-source-key.js' }),
+  Object.freeze({ ordinal: 8, id: 'smart-category-assignment-state', file: '008-smart-category-assignment-state.js' }),
 ]);
 
 function checksumArtifact(filePath) {

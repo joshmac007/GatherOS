@@ -19,6 +19,7 @@ const EXPECTED_IDS = Object.freeze([
   'save-background-routing',
   'x-tweet-created-at-repair',
   'social-source-key',
+  'smart-category-assignment-state',
 ]);
 
 const UPSTREAM_SCHEMA = `
@@ -59,7 +60,7 @@ function artifactPath(ordinal, id) {
 test('manifest is one frozen, unique, byte-checksummed linear history', () => {
   const manifest = loadManifest();
   assert.equal(Object.isFrozen(manifest), true);
-  assert.deepEqual(manifest.map((entry) => entry.ordinal), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(manifest.map((entry) => entry.ordinal), [1, 2, 3, 4, 5, 6, 7, 8]);
   assert.deepEqual(manifest.map((entry) => entry.id), EXPECTED_IDS);
   assert.equal(new Set(manifest.map((entry) => entry.id)).size, manifest.length);
 
@@ -84,7 +85,7 @@ test('checksum helper changes when one artifact byte changes', (t) => {
   assert.notEqual(checksumArtifact(copy), before);
 });
 
-test('fresh upstream schema reaches all seven postconditions idempotently', (t) => {
+test('fresh upstream schema reaches all eight postconditions idempotently', (t) => {
   const database = freshUpstreamDatabase();
   t.after(() => database.close());
 
@@ -130,6 +131,7 @@ test('preserved version-21 shape proves exactly first six artifacts', (t) => {
     true,
     true,
     true,
+    false,
     false,
   ]);
   assert.equal(

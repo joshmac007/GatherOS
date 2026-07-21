@@ -79,3 +79,29 @@ test('runtime never falls back when route is missing', async () => {
     (error) => error.code === CODES.CAPABILITY_UNCONFIGURED && error.capability === CAPABILITIES.EMBEDDING,
   );
 });
+
+test('runtime reports provider usability without blocking adapter auth errors', async () => {
+  let calls = 0;
+  const oauthCodex = adapter('codex', {
+    isUsable: () => false,
+    async completeJson() {
+      calls += 1;
+      throw new AiRuntimeError(CODES.AUTH_REQUIRED, 'Codex sign in required');
+    },
+  });
+  const local = adapter('local');
+  const codexRuntime = createAiRuntime({
+    authorize: () => true,
+    routes: { [CAPABILITIES.STRUCTURED_JSON]: oauthCodex },
+  });
+  const localRuntime = createAiRuntime({
+    authorize: () => true,
+    routes: { [CAPABILITIES.STRUCTURED_JSON]: local },
+  });
+
+  assert.equal(codexRuntime.isConfigured(CAPABILITIES.STRUCTURED_JSON), true);
+  assert.equal(codexRuntime.isUsable(CAPABILITIES.STRUCTURED_JSON), false);
+  await assert.rejects(codexRuntime.completeJson({}), (error) => error.code === CODES.AUTH_REQUIRED);
+  assert.equal(calls, 1);
+  assert.equal(localRuntime.isUsable(CAPABILITIES.STRUCTURED_JSON), true);
+});

@@ -20,3 +20,10 @@ test('remembered entries are deduplicated without consuming the traversal limit'
   assert.equal(rememberImportEntries(state, [{ tweetId: 'a' }, { tweetId: 'b' }, { tweetId: 'b' }]), 1);
   assert.deepEqual([...state.seenIds].sort(), ['a', 'b']);
 });
+
+test('stop request blocks new claims without deactivating finalization state', async () => {
+  const { claimImportItem } = await import('../extension/import-limit.mjs');
+  const state = { active: true, stopRequested: true, processed: new Set(), limit: Infinity };
+  assert.equal(claimImportItem(state, 'a'), false);
+  assert.equal(state.active, true);
+});

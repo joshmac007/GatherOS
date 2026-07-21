@@ -3,6 +3,7 @@ const MODES = new Set(['catch-up', 'fixed', 'all']);
 const STAGES = new Set(['starting', 'scanning', 'saving', 'stopping', 'complete', 'stopped', 'failed']);
 const TERMINAL_STAGES = new Set(['complete', 'stopped', 'failed']);
 const COUNTERS = ['scanned', 'saved', 'known', 'failed'];
+const STALE_AFTER_MS = 30_000;
 
 function validateSnapshot(value) {
   if (!value || typeof value !== 'object') return 'snapshot must be an object';
@@ -38,10 +39,10 @@ function createSocialImportState({
     if (!active || ['complete', 'stopped', 'failed'].includes(active.stage)) return;
     staleTimer = setTimer(() => {
       staleTimer = null;
-      if (!active || now() - lastHeartbeatAt < 30_000) return;
+      if (!active || now() - lastHeartbeatAt < STALE_AFTER_MS) return;
       stalled = true;
       emit();
-    }, Math.max(0, 30_000 - (now() - lastHeartbeatAt)));
+    }, Math.max(0, STALE_AFTER_MS - (now() - lastHeartbeatAt)));
     if (staleTimer && typeof staleTimer.unref === 'function') staleTimer.unref();
   };
 
@@ -50,7 +51,8 @@ function createSocialImportState({
     if (error) return { ok: false, error };
     if (!active) {
       if (snapshot.stage !== 'starting') return { ok: false, error: 'run must start with starting stage' };
-    } else if (snapshot.stage === 'starting' && ['complete', 'stopped', 'failed'].includes(active.stage)) {
+    } else if (snapshot.stage === 'starting' && (TERMINAL_STAGES.has(active.stage)
+      || now() - lastHeartbeatAt >= STALE_AFTER_MS)) {
       cancelRequested = false;
       active = null;
     } else if (snapshot.runId !== active.runId) {
@@ -97,4 +99,4 @@ function createSocialImportState({
   return { update, cancel, dismiss, get: view, validateSnapshot };
 }
 
-module.exports = { createSocialImportState, validateSnapshot };
+module.exports = { createSocialImportState, validateSnapshot, STALE_AFTER_MS };

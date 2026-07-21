@@ -14,6 +14,7 @@
 
 const { BrowserWindow } = require('electron');
 const { saveImageFromBuffer } = require('./storage');
+const { throwIfCancelled } = require('./save-cancellation');
 
 // Viewport size for the capture. 16:9-ish at a desktop-typical
 // breakpoint — wide enough that most responsive layouts pick the
@@ -28,7 +29,8 @@ const SETTLE_MS = 1500;
 // indefinitely.
 const LOAD_TIMEOUT_MS = 20000;
 
-async function captureUrl(url) {
+async function captureUrl(url, { signal, onCreated } = {}) {
+  throwIfCancelled(signal);
   if (!/^https?:\/\//i.test(url)) {
     throw new Error('Only http(s) URLs are supported');
   }
@@ -75,6 +77,7 @@ async function captureUrl(url) {
       }, LOAD_TIMEOUT_MS);
       win.loadURL(url).catch(reject);
     });
+    throwIfCancelled(signal);
 
     // Pull the page title before capturing — saves the user from
     // editing it manually for the common case.
@@ -87,8 +90,9 @@ async function captureUrl(url) {
     } catch { /* non-fatal — leave title empty */ }
 
     const image = await win.webContents.capturePage();
+    throwIfCancelled(signal);
     const buffer = image.toJPEG(85);
-    const imgData = await saveImageFromBuffer(buffer, 'jpg');
+    const imgData = await saveImageFromBuffer(buffer, 'jpg', { signal, onCreated });
 
     return { ...imgData, title: typeof title === 'string' ? title.trim() : '' };
   } finally {

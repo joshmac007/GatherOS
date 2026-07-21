@@ -225,6 +225,18 @@ contextBridge.exposeInMainWorld('moodmark', {
     unindexedCount: () => ipcRenderer.invoke('ai:unindexed-count'),
     reindexLibrary: () => ipcRenderer.invoke('ai:reindex-library'),
     similarSaves: (saveId, limit) => ipcRenderer.invoke('ai:similar-saves', saveId, limit),
+    auth: {
+      status: () => ipcRenderer.invoke('ai:auth:status'),
+      login: () => ipcRenderer.invoke('ai:auth:login'),
+      cancel: () => ipcRenderer.invoke('ai:auth:cancel'),
+      logout: () => ipcRenderer.invoke('ai:auth:logout'),
+      onStatus: (callback) => {
+        if (typeof callback !== 'function') throw new TypeError('AI auth status callback must be a function');
+        const handler = (_event, status) => callback(status);
+        ipcRenderer.on('ai:auth:status', handler);
+        return () => ipcRenderer.removeListener('ai:auth:status', handler);
+      },
+    },
   },
   semanticIndex: {
     status: () => ipcRenderer.invoke('semantic-index:status'),

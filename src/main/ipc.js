@@ -42,13 +42,32 @@ const { ingestZip } = require('./zipImport');
 const { installStarterPack, removeStarterPack, restoreSnapshot } = require('./starterPack');
 const { captureUrl } = require('./urlCapture');
 const { unwrapSearchEngineUrl } = require('../shared/unwrapSearchUrl');
-const {
-  hasSession: hasAiSession,
-  autoTagImage,
-  generateImagePrompt,
-  getUsage: getAiUsage,
-} = require('./openai');
 const { detectColorName } = require('./colorNames');
+
+const AI_AUTH_STATES = new Set([
+  'loading', 'signed_out', 'authorizing', 'exchanging',
+  'authenticated', 'corrupt', 'unavailable',
+]);
+
+function sanitizeAiAuthStatus(value) {
+  const state = AI_AUTH_STATES.has(value?.state) ? value.state : 'unavailable';
+  const messages = new Map([
+    ['AI_AUTH_CANCELLED', 'Sign in cancelled'],
+    ['AI_AUTH_TIMEOUT', 'Sign in timed out'],
+    ['AI_AUTH_BUSY', 'Sign in already in progress'],
+    ['AI_AUTH_CALLBACK_INVALID', 'Sign in callback was rejected'],
+    ['AI_AUTH_PERSIST_FAILED', 'Could not securely save sign in'],
+    ['AI_AUTH_UNAVAILABLE', 'Secure sign in is unavailable'],
+  ]);
+  const error = value?.error && typeof value.error === 'object'
+    ? (() => {
+      const code = typeof value.error.code === 'string' && /^[A-Z0-9_]+$/.test(value.error.code)
+        ? value.error.code : 'AI_AUTH_FAILED';
+      return { code, message: messages.get(code) || 'Authentication failed' };
+    })()
+    : null;
+  return { state, authenticated: state === 'authenticated', error };
+}
 
 function isVideoSave(save) {
   return save?.kind === 'video' || /\.(?:mp4|mov|m4v|webm)$/i.test(save?.file_path || '');
@@ -61,7 +80,20 @@ function registerIpcHandlers({
   backgroundRuntime = null,
   cleanupDerivedCache = null,
   socialImportState = null,
+  aiFacade = require('./openai'),
+  aiRuntime = null,
+  aiAuth = null,
+  onAiAuthenticated = null,
 } = {}) {
+  void aiRuntime;
+
+  function broadcastAiAuthStatus(status = aiAuth?.snapshot?.()) {
+    const safe = sanitizeAiAuthStatus(status);
+    for (const win of BrowserWindow.getAllWindows()) {
+      try { win.webContents.send('ai:auth:status', safe); } catch { /* renderer may be closing */ }
+    }
+    return safe;
+  }
   async function cleanupSaveDerived(saveId) {
     if (!saveId) return;
     if (typeof backgroundRuntime?.cleanupSaveDerived === 'function') {
@@ -922,13 +954,55 @@ function registerIpcHandlers({
     }
   });
 
-  // ── Local AI configuration ────────────────────────────────────────────
-  ipcMain.handle('ai:has-session', () => hasAiSession());
-  ipcMain.handle('ai:access', () => require('./openai').getAccess());
+  // ── User-owned AI configuration ───────────────────────────────────────
+  ipcMain.handle('ai:has-session', () => aiFacade.hasSession());
+  ipcMain.handle('ai:access', () => aiFacade.getAccess());
 
   ipcMain.handle('ai:usage', async () => {
-    const usage = await getAiUsage();
+    const usage = await aiFacade.getUsage();
     return usage || { ok: false };
+  });
+
+  ipcMain.handle('ai:auth:status', () => sanitizeAiAuthStatus(aiAuth?.snapshot?.()));
+  ipcMain.handle('ai:auth:login', async () => {
+    if (!aiAuth?.beginAuthorization) return sanitizeAiAuthStatus({ state: 'unavailable' });
+    let authorization;
+    try {
+      // beginAuthorization resolves only after localhost callback listener is ready.
+      authorization = await aiAuth.beginAuthorization();
+    } catch (error) {
+      return broadcastAiAuthStatus(aiAuth.snapshot?.() || {
+        state: 'unavailable', error: { code: error?.code, message: error?.message },
+      });
+    }
+    try {
+      await shell.openExternal(authorization.url);
+    } catch (error) {
+      try { aiAuth.cancelAuthorization?.(); } catch {}
+      return broadcastAiAuthStatus(aiAuth.snapshot?.() || {
+        state: 'unavailable', error: { code: error?.code, message: error?.message },
+      });
+    }
+    Promise.resolve(authorization.completion).then(
+      () => {
+        const status = broadcastAiAuthStatus(aiAuth.snapshot());
+        if (status.authenticated) onAiAuthenticated?.();
+      },
+      () => broadcastAiAuthStatus(aiAuth.snapshot()),
+    );
+    return broadcastAiAuthStatus(aiAuth.snapshot());
+  });
+  ipcMain.handle('ai:auth:cancel', () => {
+    try { aiAuth?.cancelAuthorization?.(); } catch {}
+    return broadcastAiAuthStatus(aiAuth?.snapshot?.());
+  });
+  ipcMain.handle('ai:auth:logout', () => {
+    try {
+      return broadcastAiAuthStatus(aiAuth?.logout?.() || aiAuth?.snapshot?.());
+    } catch (error) {
+      const current = aiAuth?.snapshot?.() || { state: 'unavailable' };
+      return broadcastAiAuthStatus({ ...current, error });
+    }
   });
 
   ipcMain.handle('settings:get-prefs', () => settings.getPrefs());
@@ -1112,13 +1186,13 @@ function registerIpcHandlers({
   // emits save:updated so the renderer's local copy patches in place.
   ipcMain.handle('ai:generate-prompt', async (event, saveId) => {
     if (!saveId) return { ok: false, reason: 'no-save-id' };
-    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
+    if (!aiFacade.hasSession()) return { ok: false, reason: 'no-session' };
     const save = getSave(saveId);
     if (!save) return { ok: false, reason: 'save-not-found' };
 
     event.sender.send('save:indexing-start', saveId);
     try {
-      const prompt = await generateImagePrompt(save.file_path);
+      const prompt = await aiFacade.generateImagePrompt(save.file_path);
       if (!prompt) return { ok: false, reason: 'empty-response' };
       updateSave({ id: saveId, aiPrompt: prompt });
       const updated = getSave(saveId);
@@ -1135,11 +1209,11 @@ function registerIpcHandlers({
 
   ipcMain.handle('ai:auto-tag', async (_e, saveId) => {
     if (!saveId) return { ok: false, reason: 'no-save-id' };
-    if (!hasAiSession()) return { ok: false, reason: 'no-session' };
+    if (!aiFacade.hasSession()) return { ok: false, reason: 'no-session' };
     const save = getSave(saveId);
     if (!save) return { ok: false, reason: 'save-not-found' };
     try {
-      const tags = await autoTagImage(save.file_path);
+      const tags = await aiFacade.autoTagImage(save.file_path);
       // Persist via the existing tag pipeline so dedupe + creation
       // semantics match the manual flow.
       const added = [];
@@ -1221,4 +1295,4 @@ function registerIpcHandlers({
 
 }
 
-module.exports = { registerIpcHandlers };
+module.exports = { registerIpcHandlers, sanitizeAiAuthStatus };

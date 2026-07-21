@@ -18,6 +18,7 @@ const {
   CAPTURE_PORT: PORT,
 } = require('../shared/runtime-identity');
 const { deriveXTweetCreatedAt } = require('./x-tweet-date');
+const { createSaveCancellation, throwIfCancelled, isSaveCancelled } = require('./save-cancellation');
 
 // Big enough for a base64 screen-capture data URL (the extension's
 // "capture page / area"). The native-messaging bridge caps the source
@@ -91,12 +92,14 @@ async function completeSavedResponse({
   notify,
   routeSave = backgroundSaveRouter,
   duplicate = false,
+  changed = false,
 } = {}) {
   if (!record?.id) throw new Error('saved record id required');
   let background = null;
   if (typeof routeSave === 'function') {
     try {
-      const routed = await routeSave(record, { duplicate });
+      const routeOptions = changed ? { duplicate, changed: true } : { duplicate };
+      const routed = await routeSave(record, routeOptions);
       const warning = routed?.semanticWarning?.detail
         || (routed?.ok === false ? routed.reason || 'Background routing unavailable' : null);
       if (warning) background = { ok: false, warning };
@@ -172,22 +175,29 @@ function localMediaUrl(absPath) {
 // Download an Instagram save's secondary carousel media to disk and
 // rewrite the tweet_meta media list to point at the local copies, so
 // they survive Instagram's signed-URL expiry. Mutates tweetMeta in place.
-async function localizeInstagramMedia(tweetMeta) {
+async function localizeInstagramMedia(tweetMeta, { signal, onCreated } = {}) {
   if (!tweetMeta || !Array.isArray(tweetMeta.media) || tweetMeta.media.length < 2) return;
   const { saveAuxMedia } = require('./storage');
   for (let i = 1; i < tweetMeta.media.length; i += 1) {
     const item = tweetMeta.media[i];
     if (!item || typeof item.url !== 'string' || /^moodmark-file:/i.test(item.url)) continue;
     try {
-      const saved = await saveAuxMedia(item.url);
-      if (saved) item.url = localMediaUrl(saved.path);
+      const saved = await saveAuxMedia(item.url, { signal, onCreated });
+      if (saved) {
+        onCreated?.(saved.path);
+        item.url = localMediaUrl(saved.path);
+      }
       // A secondary video's poster (used by the detail-strip thumbnail)
       // expires too — persist it as well.
       if (item.poster && /^https?:\/\//i.test(item.poster)) {
-        const p = await saveAuxMedia(item.poster);
-        if (p) item.poster = localMediaUrl(p.path);
+        const p = await saveAuxMedia(item.poster, { signal, onCreated });
+        if (p) {
+          onCreated?.(p.path);
+          item.poster = localMediaUrl(p.path);
+        }
       }
     } catch (err) {
+      if (signal?.aborted) throw err;
       console.warn('[ext-server] localize media failed:', err?.message || err);
     }
   }
@@ -202,6 +212,9 @@ async function handleSave(req, res) {
   const parsed = await readPostBody(req, res);
   if (!parsed) return;
   const { body } = parsed;
+  const cancellation = createSaveCancellation();
+  const { signal } = cancellation;
+  req.once?.('aborted', () => cancellation.cancel('request closed'));
 
   const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
   const videoUrl = typeof body?.videoUrl === 'string' ? body.videoUrl.trim() : '';
@@ -247,10 +260,16 @@ async function handleSave(req, res) {
   }
 
   let releaseSocialSave = null;
+  let committed = false;
+  const createdFiles = new Set();
+  const rememberMedia = (media) => {
+    if (media?.filePath) createdFiles.add(media.filePath);
+    if (media?.thumbPath) createdFiles.add(media.thumbPath);
+  };
   try {
     const { saveImageFromUrl, saveVideoFromUrl } = require('./storage');
     const {
-      insertSave, isTweetDismissed, sourceKeyFromUrl, findActiveSaveBySourceKey,
+      insertSave, isTweetDismissed, sourceKeyFromUrl, enrichActiveSaveBySourceKey,
     } = require('./db');
     const { notifySaved, notifyDuplicate, notifyBookmarkSaved } = require('./notify');
 
@@ -262,14 +281,35 @@ async function handleSave(req, res) {
     const isBookmark = !!tweetMeta;
     const tweetKey = sourceKeyFromUrl(pageUrl);
 
+    // Source gates are authoritative. Check them before touching the social
+    // lock or canonical row so disabled sync is a true no-op, even on a
+    // duplicate carrying richer metadata.
+    if (isBookmark) {
+      throwIfCancelled(signal);
+      const settings = require('./settings');
+      const sourceEnabled = source === 'instagram'
+        ? settings.getPref('syncInstagramEnabled', true) !== false
+        : settings.getPref('syncXEnabled', true) !== false;
+      if (!sourceEnabled) {
+        sendJson(res, 200, { ok: true, skipped: true, syncDisabled: true });
+        return;
+      }
+    }
+
     // Same social post can arrive from catch-up, passive watcher, or a
     // retried native message at once. Serialize by stable post identity,
     // then return the canonical active save before doing media work.
     if (isBookmark && tweetKey) {
       while (socialSaveLocks.has(tweetKey)) await socialSaveLocks.get(tweetKey);
-      const existing = findActiveSaveBySourceKey(tweetKey);
-      if (existing) {
-        await completeSavedResponse({ res, record: existing, notify: notifyDuplicate, duplicate: true });
+      // A request can expire while waiting for another capture of this post.
+      // Never let that stale caller mutate the canonical metadata afterward.
+      throwIfCancelled(signal);
+      const enriched = enrichActiveSaveBySourceKey(tweetKey, tweetMeta);
+      if (enriched.record) {
+        await completeSavedResponse({
+          res, record: enriched.record, notify: notifyDuplicate,
+          duplicate: true, changed: enriched.changed,
+        });
         return;
       }
       let unlock;
@@ -279,21 +319,6 @@ async function handleSave(req, res) {
         if (socialSaveLocks.get(tweetKey) === pending) socialSaveLocks.delete(tweetKey);
         unlock();
       };
-    }
-
-    // Master sync switches (Settings → Capture → Syncing). When a source
-    // is turned off, drop its social captures here so they never enter the
-    // library — regardless of what the extension keeps sending. Manual
-    // image/page/URL saves (no tweetMeta) are never gated by this.
-    if (isBookmark) {
-      const settings = require('./settings');
-      const sourceEnabled = source === 'instagram'
-        ? settings.getPref('syncInstagramEnabled', true) !== false
-        : settings.getPref('syncXEnabled', true) !== false;
-      if (!sourceEnabled) {
-        sendJson(res, 200, { ok: true, skipped: true, syncDisabled: true });
-        return;
-      }
     }
 
     // Explicit "Import bookmarks" backfill sends forceImport: the user is
@@ -341,12 +366,12 @@ async function handleSave(req, res) {
     // Must come before the URL-only branch below — a text tweet still
     // carries pageUrl (the tweet permalink), which we must NOT
     // screenshot; we render the card instead.
-    if (!imageUrl && !videoUrl && tweetMeta && (
+    if (!imageUrl && !videoUrl && tweetMeta && !tweetMeta.article && (
       (typeof tweetMeta.caption === 'string' && tweetMeta.caption.trim())
       || (typeof tweetMeta.authorName === 'string' && tweetMeta.authorName.trim())
     )) {
       const { captureTweetCard } = require('./tweetCardCapture');
-      const captured = await captureTweetCard(tweetMeta);
+      const captured = await captureTweetCard(tweetMeta, { signal, onCreated: (filePath) => createdFiles.add(filePath) });
       if (captured.duplicateOf) {
         await completeSavedResponse({
           res,
@@ -356,6 +381,8 @@ async function handleSave(req, res) {
         });
         return;
       }
+      rememberMedia(captured);
+      throwIfCancelled(signal);
       const tweetRecord = insertSave({
         ...captured,
         sourceUrl: pageUrl || null,
@@ -370,6 +397,7 @@ async function handleSave(req, res) {
         // Descending clock so a newest-first sync keeps its order.
         createdAt: nextSyncCreatedAt(),
       });
+      committed = true;
       attachTags(tweetRecord.id);
       await completeSavedResponse({ res, record: tweetRecord, notify: notifyNew });
       return;
@@ -380,7 +408,7 @@ async function handleSave(req, res) {
     // a kind='url' save, mirroring the drag-drop-a-URL path.
     if (!imageUrl && !videoUrl && pageUrl) {
       const { captureUrl } = require('./urlCapture');
-      const captured = await captureUrl(pageUrl);
+      const captured = await captureUrl(pageUrl, { signal, onCreated: (filePath) => createdFiles.add(filePath) });
       if (captured.duplicateOf) {
         await completeSavedResponse({
           res,
@@ -390,14 +418,21 @@ async function handleSave(req, res) {
         });
         return;
       }
+      rememberMedia(captured);
+      throwIfCancelled(signal);
       const pageTitle = typeof body?.pageTitle === 'string' ? body.pageTitle.trim() : '';
       const urlRecord = insertSave({
         ...captured,
         sourceUrl: pageUrl,
         title: pageTitle || captured.title || null,
+        tweetMeta,
+        source,
         kind: 'url',
+        createdAt: tweetMeta ? nextSyncCreatedAt() : undefined,
       });
-      await completeSavedResponse({ res, record: urlRecord, notify: notifySaved });
+      committed = true;
+      attachTags(urlRecord.id);
+      await completeSavedResponse({ res, record: urlRecord, notify: notifyNew });
       return;
     }
 
@@ -406,8 +441,8 @@ async function handleSave(req, res) {
     // (the still is what the user usually wants in a moodboard); we
     // only enter the video branch when there's no image at all.
     const mediaData = (videoUrl && !imageUrl)
-      ? await saveVideoFromUrl(videoUrl, posterUrl || null)
-      : await saveImageFromUrl(imageUrl);
+      ? await saveVideoFromUrl(videoUrl, posterUrl || null, { signal, onCreated: (filePath) => createdFiles.add(filePath) })
+      : await saveImageFromUrl(imageUrl, { signal, onCreated: (filePath) => createdFiles.add(filePath) });
     if (mediaData.duplicateOf) {
       await completeSavedResponse({
         res,
@@ -417,6 +452,7 @@ async function handleSave(req, res) {
       });
       return;
     }
+    rememberMedia(mediaData);
     // pageUrl (parsed above) preserves the page the user was browsing
     // — that's the whole value of a browser save over drag-drop.
     // Optional title — both current extension flows leave it blank
@@ -431,8 +467,9 @@ async function handleSave(req, res) {
     // already-downloaded primary, rendered from file_path, so only
     // secondaries need persisting.
     if (source === 'instagram') {
-      await localizeInstagramMedia(tweetMeta);
+      await localizeInstagramMedia(tweetMeta, { signal, onCreated: (filePath) => createdFiles.add(filePath) });
     }
+    throwIfCancelled(signal);
     const record = insertSave({
       ...mediaData,
       sourceUrl: pageUrl || imageUrl || videoUrl,
@@ -445,6 +482,7 @@ async function handleSave(req, res) {
       // saves keep the default now-timestamp.
       createdAt: tweetMeta ? nextSyncCreatedAt() : undefined,
     });
+    committed = true;
     attachTags(record.id);
     await completeSavedResponse({ res, record, notify: notifyNew });
   } catch (err) {
@@ -457,8 +495,17 @@ async function handleSave(req, res) {
       if (tweetMeta) notifyBookmarkFailed();
       else notifyError('Couldn\u2019t save from the extension \u2014 try again');
     } catch { /* toast is best-effort */ }
-    sendJson(res, 500, { ok: false, error: err?.message || 'save failed' });
+    sendJson(res, isSaveCancelled(err) || signal.aborted ? 504 : 500, {
+      ok: false,
+      error: isSaveCancelled(err) || signal.aborted ? 'save deadline exceeded' : err?.message || 'save failed',
+    });
   } finally {
+    cancellation.dispose();
+    if (!committed) {
+      for (const filePath of createdFiles) {
+        try { require('node:fs').unlinkSync(filePath); } catch { /* only files from this request */ }
+      }
+    }
     releaseSocialSave?.();
   }
 }
@@ -574,4 +621,5 @@ module.exports = {
   PORT,
   handleXBookmarkStatus,
   handleSocialImportStatus,
+  handleSave,
 };

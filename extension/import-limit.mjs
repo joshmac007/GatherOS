@@ -9,7 +9,7 @@ export function importLimitReached(state) {
 }
 
 export function claimImportItem(state, id) {
-  if (!state || !state.active || !id || !state.processed) return false;
+  if (!state || state.stopRequested || state.ended || !id || !state.processed) return false;
   if (state.processed.has(id)) return false;
   if (importLimitReached(state)) return false;
   state.processed.add(id);

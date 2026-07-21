@@ -9,6 +9,27 @@ const INTENTS = new Set([
   'tool-reference', 'tutorial', 'inspiration', 'opinion', 'research', 'quote', 'other',
 ]);
 
+const TOPIC_PROFILE_OUTPUT_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    summary: { type: 'string', minLength: 1, maxLength: 600 },
+    concepts: {
+      type: 'array', minItems: 3, maxItems: 8,
+      items: { type: 'string', minLength: 1, maxLength: 80 },
+    },
+    content_type: {
+      type: 'string', enum: [...CONTENT_TYPES],
+    },
+    intent: {
+      type: 'string', enum: [...INTENTS],
+    },
+    visible_text: { type: 'string', maxLength: 4000 },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+  },
+  required: ['summary', 'concepts', 'content_type', 'intent', 'visible_text', 'confidence'],
+});
+
 function parseJson(raw, fallback = null) {
   if (!raw || typeof raw !== 'string') return fallback;
   try { return JSON.parse(raw); } catch { return fallback; }
@@ -104,10 +125,16 @@ async function createSaveTopicProfile({
       input: JSON.stringify(evidence.promptInput),
       imagePath: evidence.imagePath,
       maxOutputTokens: 700,
+      outputSchema: TOPIC_PROFILE_OUTPUT_SCHEMA,
       signal,
     });
   } catch (error) {
-    return { ok: false, reason: error?.code || 'provider-error', detail: error?.message || String(error) };
+    return {
+      ok: false,
+      reason: error?.code || 'provider-error',
+      detail: error?.message || String(error),
+      retryable: error?.retryable === true,
+    };
   }
   const validation = validateSaveTopicProfile(parsed);
   if (!validation.ok) return validation;
@@ -149,6 +176,7 @@ async function enrichSaveTopicProfile({
 
 module.exports = {
   buildSaveTopicEvidence,
+  TOPIC_PROFILE_OUTPUT_SCHEMA,
   validateSaveTopicProfile,
   createSaveTopicProfile,
   enrichSaveTopicProfile,

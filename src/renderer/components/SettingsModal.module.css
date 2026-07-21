@@ -287,6 +287,41 @@
   color: var(--text-tertiary);
 }
 
+.aiConnectionCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.aiConnectionCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.aiConnectionTitle {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.aiConnectionStatus,
+.aiConnectionError {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.aiConnectionError { color: var(--status-error); }
+.aiConnectionActions { flex: 0 0 auto; }
+
 
 .actions {
   display: flex;

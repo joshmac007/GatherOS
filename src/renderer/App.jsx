@@ -766,6 +766,8 @@ export default function App() {
   }, []);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
+  const [aiAccess, setAiAccess] = useState(null);
+  const [aiAuthStatus, setAiAuthStatus] = useState({ state: 'loading', authenticated: false, error: null });
   const [prefs, setPrefs] = useState({ autoNameOnSave: true, semanticSearch: true });
   const [semanticStatus, setSemanticStatus] = useState(null);
 
@@ -848,10 +850,25 @@ export default function App() {
   // boolean so back-to-back creates each re-trigger the rename.
   const [renameViewSignal, setRenameViewSignal] = useState(0);
   useEffect(() => {
-    window.moodmark.ai.access().then((access) => {
+    let active = true;
+    const applyAccess = (access) => {
+      if (!active) return;
+      setAiAccess(access || null);
       setAiConfigured(!!access?.structuredJson?.configured);
-    }).catch(() => {
+    };
+    window.moodmark.ai.access().then(applyAccess).catch(() => {
       window.moodmark.ai.hasSession().then(setAiConfigured).catch(() => setAiConfigured(false));
+    });
+    window.moodmark.ai.auth?.status?.().then((status) => {
+      if (active && status) setAiAuthStatus(status);
+    }).catch(() => {});
+    const offAuth = window.moodmark.ai.auth?.onStatus?.((status) => {
+      if (!active || !status) return;
+      setAiAuthStatus(status);
+      window.moodmark.ai.access().then(applyAccess).catch(() => {
+        if (status.state === 'authenticated') setAiConfigured(true);
+        else if (status.state === 'signed_out') setAiConfigured(false);
+      });
     });
     window.moodmark.settings.getPrefs().then((p) => {
       setPrefs(p);
@@ -869,6 +886,10 @@ export default function App() {
         onboarding.start();
       }
     });
+    return () => {
+      active = false;
+      try { offAuth?.(); } catch {}
+    };
     // onboarding.start is stable; intentionally a mount-only effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -4344,6 +4365,8 @@ export default function App() {
         drawerHint={settingsDrawerHint}
         onClose={() => setSettingsOpen(false)}
         onConfiguredChange={setAiConfigured}
+        aiAccess={aiAccess}
+        aiAuthStatus={aiAuthStatus}
         onPrefsChange={setPrefs}
         libraries={libraries}
         activeLibraryId={activeLibraryId}

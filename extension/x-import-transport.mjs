@@ -13,8 +13,8 @@ export async function runCatchUpTransportBatch({
     entries,
     statuses,
     save: async (entry) => {
-      if (progress && !progress.beforeNext()) {
-        state.active = false;
+      if (state.stopRequested || (progress && !progress.beforeNext())) {
+        state.stopRequested = true;
         const error = new Error('import stopped');
         error.code = 'IMPORT_STOPPED';
         throw error;
@@ -36,7 +36,7 @@ export async function runCatchUpTransportBatch({
       if (isNew(response)) state.imported += 1;
       acceptedIds.push(entry.tweetId);
     },
-    shouldContinue: () => !progress || progress.beforeNext(),
+    shouldContinue: () => !state.stopRequested && (!progress || progress.beforeNext()),
     onItem: async ({ status }) => {
       if (status === 'known-active' || status === 'known-dismissed') state.known += 1;
       if (progress) await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
@@ -79,7 +79,7 @@ export async function runFixedTransportBatch({
   const attemptedIds = [];
   let reachedLimit = false;
   for (const entry of entries) {
-    if (progress && !progress.beforeNext()) { state.active = false; break; }
+    if (state.stopRequested || (progress && !progress.beforeNext())) { state.stopRequested = true; break; }
     if (!claimImportItem(state, entry?.tweetId)) {
       if (importLimitReached(state)) { reachedLimit = true; break; }
       continue;

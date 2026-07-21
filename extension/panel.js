@@ -233,7 +233,7 @@
     if (resp.appClosed) { showText(msgEl, 'Open GatherLocal first, then import.'); return; }
     if (resp.disabled) { showText(msgEl, 'Import is temporarily unavailable.'); return; }
     if (resp.busy) { showText(msgEl, 'An import is already running.'); return; }
-    close();
+    showText(msgEl, resp.error || 'Could not start import. Try again.');
   };
 
   // Import bookmarks — a two-step flow nested inside the button:

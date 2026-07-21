@@ -1,8 +1,5 @@
 'use strict';
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 const { CAPABILITIES } = require('../../ai/runtime');
 
 const STRUCTURED_PROVIDERS = new Set(['codex', 'local']);
@@ -30,29 +27,6 @@ function selected(env, name, allowed, fallback) {
     throw new TypeError(`${name} must be one of: ${Array.from(allowed).join(', ')}`);
   }
   return normalized;
-}
-
-function executable(filePath) {
-  try {
-    fs.accessSync(filePath, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function codexBin(env) {
-  const configured = clean(env.GATHERLOCAL_CODEX_BIN);
-  if (configured) return configured;
-  if (process.platform === 'darwin') {
-    const bundledCandidates = [
-      '/Applications/ChatGPT.app/Contents/Resources/codex',
-      path.join(os.homedir(), 'Applications/ChatGPT.app/Contents/Resources/codex'),
-    ];
-    const bundled = bundledCandidates.find(executable);
-    if (bundled) return bundled;
-  }
-  return 'codex';
 }
 
 /**
@@ -89,10 +63,9 @@ function readGatherLocalAiConfig(env = process.env) {
       [CAPABILITIES.IMAGE_GENERATION]: imageProvider,
     },
     codex: {
-      bin: codexBin(source),
-      model: clean(source.GATHERLOCAL_CODEX_MODEL),
-      cwd: clean(source.GATHERLOCAL_CODEX_CWD) || process.cwd(),
+      model: clean(source.GATHERLOCAL_CODEX_MODEL) || 'gpt-5.6-sol',
       timeoutMs: positiveInteger(source.GATHERLOCAL_CODEX_TIMEOUT_MS, 120000),
+      maxImageBytes: positiveInteger(source.GATHERLOCAL_CODEX_MAX_IMAGE_BYTES, 2 * 1024 * 1024),
     },
     local: {
       baseUrl: url(source.GATHERLOCAL_LOCAL_AI_BASE_URL, 'http://127.0.0.1:11434/v1'),

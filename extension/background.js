@@ -18,6 +18,7 @@ import {
   runFixedTransportBatch,
 } from './x-import-transport.mjs';
 import { createSocialImportProgress } from './social-import-progress.mjs';
+import { startSocialImportLease } from './social-import-start.mjs';
 
 // Service worker for the GatherLocal browser extension.
 //
@@ -443,8 +444,8 @@ function reserveSocialImport(platform) {
 }
 
 function releaseSocialImport(platform, reservation) {
-  if (platform === 'x' && importState === reservation) importState = null;
-  if (platform === 'instagram' && igImportState === reservation) igImportState = null;
+  if (platform === 'x' && (importState === reservation || importState?.reservation === reservation)) importState = null;
+  if (platform === 'instagram' && (igImportState === reservation || igImportState?.reservation === reservation)) igImportState = null;
 }
 
 // Signed-in checks via each platform's real login cookie (auth_token /
@@ -465,35 +466,37 @@ async function igSignedIn() {
 }
 
 async function handleImportBookmarks(msg) {
+  const n = Number(msg && msg.limit);
+  const mode = msg && msg.mode === 'catch-up' ? 'catch-up' : (Number.isFinite(n) && n > 0 ? 'fixed' : 'all');
+  const limit = mode === 'catch-up' ? Infinity : (mode === 'fixed' ? n : Infinity);
   const reservation = reserveSocialImport('x');
   if (!reservation) {
     notify('A bookmark import is already running.');
-    return { ok: false, busy: true };
+    return { ok: false, busy: true, error: 'Another social import is already running.' };
   }
-  const { [STORAGE_IMPORT_DISABLED_KEY]: disabled } =
-    await chrome.storage.local.get(STORAGE_IMPORT_DISABLED_KEY);
-  if (disabled) {
-    releaseSocialImport('x', reservation);
-    notify('Bookmark import is temporarily unavailable.');
-    return { ok: false, disabled: true };
-  }
-  if (!(await xSignedIn())) {
-    releaseSocialImport('x', reservation);
-    return { ok: false, needsSignIn: true, platform: 'x' };
-  }
+  try {
+    const { [STORAGE_IMPORT_DISABLED_KEY]: disabled } =
+      await chrome.storage.local.get(STORAGE_IMPORT_DISABLED_KEY);
+    if (disabled) {
+      releaseSocialImport('x', reservation);
+      notify('Bookmark import is temporarily unavailable.');
+      return { ok: false, disabled: true };
+    }
+    if (!(await xSignedIn())) {
+      releaseSocialImport('x', reservation);
+      return { ok: false, needsSignIn: true, platform: 'x' };
+    }
 
-  // No point opening x.com and scrolling if the desktop can't receive
-  // saves — every import would just fail. Tell the user to open it.
-  const status = await pingApp();
-  if (!status || status.hostMissing || !status.appRunning) {
-    releaseSocialImport('x', reservation);
-    notify('Open GatherLocal first, then run Import bookmarks.');
-    return { ok: false, appClosed: true };
-  }
+    // No point opening x.com and scrolling if the desktop can't receive
+    // saves — every import would just fail. Tell the user to open it.
+    const status = await pingApp();
+    if (!status || status.hostMissing || !status.appRunning) {
+      releaseSocialImport('x', reservation);
+      notify('Open GatherLocal first, then run Import bookmarks.');
+      return { ok: false, appClosed: true };
+    }
 
-  const mode = msg && msg.mode === 'catch-up' ? 'catch-up' : 'fixed';
-  if (mode === 'catch-up') {
-    try {
+    if (mode === 'catch-up') {
       const boundary = await requestXBookmarkStatus([]);
       if (!boundary || !boundary.ok) {
         releaseSocialImport('x', reservation);
@@ -505,21 +508,29 @@ async function handleImportBookmarks(msg) {
         releaseSocialImport('x', reservation);
         return preflight;
       }
-    } catch {
-      releaseSocialImport('x', reservation);
-      notify('Could not reach GatherLocal.');
-      return { ok: false, error: 'Could not reach GatherLocal.' };
     }
+
+    const progress = createImportProgress('x', mode, mode === 'fixed' ? limit : null);
+    const lease = await startSocialImportLease({
+      progress,
+      startArgs: { platform: 'x', mode, target: mode === 'fixed' ? limit : null },
+      release: () => releaseSocialImport('x', reservation),
+    });
+    if (!lease.ok) return lease;
+
+    // Background import — replay the captured Bookmarks request and follow
+    // the cursor, no tab or auto-scroll (mirrors the Instagram path).
+    void runXApiImport(limit, mode, reservation, progress).catch(async (error) => {
+      releaseSocialImport('x', reservation);
+      try { await progress.finish('failed', error?.message || null); } catch { /* terminal already sent */ }
+      notify('Bookmark import failed.');
+    });
+    return { ok: true };
+  } catch (error) {
+    releaseSocialImport('x', reservation);
+    notify('Could not start bookmark import.');
+    return { ok: false, error: error?.message || 'Could not start bookmark import.' };
   }
-
-  // 0 / missing / non-positive = "all".
-  const n = Number(msg && msg.limit);
-  const limit = mode === 'catch-up' ? Infinity : (Number.isFinite(n) && n > 0 ? n : Infinity);
-
-  // Background import — replay the captured Bookmarks request and follow
-  // the cursor, no tab or auto-scroll (mirrors the Instagram path).
-  runXApiImport(limit, mode, reservation);
-  return { ok: true };
 }
 
 async function requestXBookmarkStatus(tweetUrls) {
@@ -566,7 +577,7 @@ function extractBottomCursor(json) {
 // Fixed/all imports override tombstones; catch-up preserves them.
 // Uses the stored bearer + a fresh ct0 cookie;
 // no tab, no scroll.
-async function runXApiImport(limit, mode = 'fixed', reservation = null) {
+async function runXApiImport(limit, mode = 'fixed', reservation = null, progress = null) {
   // Signed-in check first. auth_token is X's real login cookie (ct0 is
   // the CSRF token and can exist for guests), so check it before doing
   // anything — a signed-out user gets a clear message instead of being
@@ -585,8 +596,15 @@ async function runXApiImport(limit, mode = 'fixed', reservation = null) {
     return;
   }
 
-  const progress = createImportProgress('x', mode, mode === 'fixed' && Number.isFinite(limit) ? limit : null);
-  await progress.start({ platform: 'x', mode, target: mode === 'fixed' && Number.isFinite(limit) ? limit : null });
+  if (!progress) {
+    progress = createImportProgress('x', mode, mode === 'fixed' && Number.isFinite(limit) ? limit : null);
+    await progress.start({ platform: 'x', mode, target: mode === 'fixed' && Number.isFinite(limit) ? limit : null });
+  }
+  if (!progress.beforeNext()) {
+    releaseSocialImport('x', reservation);
+    await progress.finish('stopped');
+    return;
+  }
 
   const { [STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(STORAGE_TEMPLATE_KEY);
 
@@ -622,6 +640,10 @@ async function runXApiImport(limit, mode = 'fixed', reservation = null) {
 
   const state = {
     active: true,
+    stopRequested: false,
+    stopReason: null,
+    finalizePromise: null,
+    ended: false,
     apiMode: true,
     limit,
     imported: 0,
@@ -645,8 +667,8 @@ async function runXApiImport(limit, mode = 'fixed', reservation = null) {
   let lastCursor = null;
   let pages = 0;
   try {
-    while (state.active && !importLimitReached(state) && pages < MAX_PAGES) {
-      if (!progress.beforeNext()) { state.active = false; break; }
+    while (!state.stopRequested && !importLimitReached(state) && pages < MAX_PAGES) {
+      if (!progress.beforeNext()) { state.stopRequested = true; state.stopReason = 'stopped'; break; }
       await progress.update({ stage: 'scanning', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
       if (mode !== 'catch-up') rememberImportEntries(state, entries);
       if (mode === 'catch-up') {
@@ -665,7 +687,7 @@ async function runXApiImport(limit, mode = 'fixed', reservation = null) {
           state.boundaryReached = result.boundaryReached;
           for (const id of result.acceptedIds) state.seenIds.add(id);
         } catch (err) {
-          if (err?.code === 'IMPORT_STOPPED') { state.active = false; break; }
+          if (err?.code === 'IMPORT_STOPPED') { state.stopRequested = true; state.stopReason = 'stopped'; break; }
           state.error = err;
           console.warn('[gatheros] X catch-up save failed:', err?.message || err);
         }
@@ -688,7 +710,7 @@ async function runXApiImport(limit, mode = 'fixed', reservation = null) {
         }
       }
       await progress.update({ stage: 'saving', scanned: state.processed.size, saved: state.imported, known: state.known, failed: state.failed });
-      if (state.error || state.boundaryReached || !state.active) break;
+      if (state.error || state.boundaryReached || state.stopRequested) break;
       pages += 1;
       const next = extractBottomCursor(json);
       // Stop at the bottom: no cursor, an unchanging cursor, an empty
@@ -697,7 +719,7 @@ async function runXApiImport(limit, mode = 'fixed', reservation = null) {
       lastCursor = next;
       cursor = next;
       await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
-      if (!progress.beforeNext()) { state.active = false; break; }
+      if (!progress.beforeNext()) { state.stopRequested = true; state.stopReason = 'stopped'; break; }
       let res;
       try {
         res = await fetch(xWithCursor(template.url, cursor), { method: 'GET', credentials: 'include', headers });
@@ -707,18 +729,18 @@ async function runXApiImport(limit, mode = 'fixed', reservation = null) {
       entries = pollExtractBookmarkEntries(json);
     }
   } catch (err) {
-    if (err?.code === 'IMPORT_STOPPED') state.active = false;
+    if (err?.code === 'IMPORT_STOPPED') { state.stopRequested = true; state.stopReason = 'stopped'; }
     else state.error = err;
   } finally {
     const imported = state.imported;
-    if (importState === state) importState = null;
+    releaseSocialImport('x', reservation);
     try {
       const { seen } = await readSeenSet();
       for (const id of state.seenIds) seen.add(id);
       await writeSeenSet(seen, { baseline: true, version: CAPTURE_VERSION });
     } catch { /* ignore */ }
     if (state.error) await progress.finish('failed', state.error?.message || null);
-    else if (!state.active && !state.boundaryReached) await progress.finish('stopped');
+    else if (state.stopRequested && !state.boundaryReached) await progress.finish('stopped');
     else await progress.finish('complete');
     notify(catchUpSummary(state));
   }
@@ -744,6 +766,10 @@ async function runXScrollImport(limit, mode = 'fixed', progress = null, reservat
   }
   const run = {
     active: true,
+    stopRequested: false,
+    stopReason: null,
+    finalizePromise: null,
+    ended: false,
     tabId: tab.id,
     limit,
     processed: new Set(),
@@ -757,7 +783,7 @@ async function runXScrollImport(limit, mode = 'fixed', progress = null, reservat
     error: null,
     progress: progress || createImportProgress('x', mode, mode === 'fixed' && Number.isFinite(limit) ? limit : null),
     reservation,
-    watchdog: setTimeout(() => { endImport('timeout'); }, IMPORT_WATCHDOG_MS),
+    watchdog: setTimeout(() => { void endImport('timeout'); }, IMPORT_WATCHDOG_MS),
   };
   run.batchQueue = createImportBatchQueue({
     processBatch: (bookmarks) => handleImportBatch(run, bookmarks),
@@ -773,7 +799,7 @@ async function runXScrollImport(limit, mode = 'fixed', progress = null, reservat
 // times with backoff until the message is received.
 function scheduleImportStart(tabId, attempt = 0) {
   setTimeout(() => {
-    if (!importState || !importState.active || importState.scrollPaused || importState.tabId !== tabId) return;
+    if (!importState || !importState.active || importState.stopRequested || importState.scrollPaused || importState.tabId !== tabId) return;
     chrome.tabs.sendMessage(tabId, { type: 'gatheros:start-import' }, () => {
       if (chrome.runtime.lastError && attempt < 6) {
         scheduleImportStart(tabId, attempt + 1);
@@ -792,9 +818,9 @@ function pauseImportScroll(state) {
 }
 
 async function handleImportBatch(state, bookmarks) {
-  if (!state || !state.active || state.apiMode) return;
+  if (!state || !state.active || state.stopRequested || state.apiMode) return;
   if (importState !== state) return;
-  if (state.progress && !state.progress.beforeNext()) { await endImport('stopped'); return; }
+  if (state.progress && !state.progress.beforeNext()) { void endImport('stopped'); return; }
   let foundNew = false;
   let reachedLimit = false;
   const resolvedIds = [];
@@ -820,7 +846,7 @@ async function handleImportBatch(state, bookmarks) {
         pauseImportScroll(state);
       }
     } catch (err) {
-      if (err?.code === 'IMPORT_STOPPED') { state.active = false; await endImport('stopped'); return; }
+      if (err?.code === 'IMPORT_STOPPED') { state.stopRequested = true; void endImport('stopped'); return; }
       state.error = err;
       console.warn('[gatheros] backfill import failed:', err?.message || err);
     }
@@ -842,7 +868,7 @@ async function handleImportBatch(state, bookmarks) {
   // Keep the seen-set current so the normal incremental poll doesn't
   // re-handle these later.
   await markBookmarksSeen(resolvedIds);
-  if (!state.active || importState !== state) return;
+  if (state.stopRequested || importState !== state) { void endImport(state.stopReason || 'stopped'); return; }
 
   // Stream the running count to the tab so the import toast updates live.
   if (state.tabId != null) {
@@ -857,19 +883,31 @@ async function handleImportBatch(state, bookmarks) {
   else state.stagnant += 1;
 
   if (state.error) {
-    await endImport('error');
+    void endImport('error');
   } else if (state.progress && !state.progress.beforeNext()) {
-    await endImport('stopped');
+    void endImport('stopped');
   } else if (reachedLimit || state.stagnant >= IMPORT_STAGNANT_BATCHES_LIMIT) {
-    await endImport(reachedLimit ? 'limit' : 'bottom');
+    void endImport(reachedLimit ? 'limit' : 'bottom');
   }
 }
 
-async function endImport(_reason) {
+function endImport(reason) {
   const run = importState;
-  if (!run || !run.active) return; // guards double-end
-  run.active = false;
+  if (!run) return Promise.resolve();
+  if (!run.stopRequested || reason === 'error') run.stopReason = reason;
+  run.stopRequested = true;
   run.batchQueue?.close();
+  pauseImportScroll(run);
+  if (run.finalizePromise) return run.finalizePromise;
+  run.finalizePromise = Promise.resolve(run.batchQueue?.whenIdle())
+    .then(() => finalizeImport(run));
+  return run.finalizePromise;
+}
+
+async function finalizeImport(run) {
+  if (!run || run.ended) return;
+  run.ended = true;
+  run.active = false;
   const { tabId, imported, watchdog } = run;
   if (watchdog) clearTimeout(watchdog);
 
@@ -890,26 +928,22 @@ async function endImport(_reason) {
   }
   notify(catchUpSummary(run));
   if (run.progress) {
-    const terminal = (_reason === 'error' || _reason === 'timeout') ? 'failed' : (_reason === 'stopped' ? 'stopped' : 'complete');
+    const terminal = (run.stopReason === 'error' || run.stopReason === 'timeout') ? 'failed' : (run.stopReason === 'stopped' ? 'stopped' : 'complete');
     await run.progress.finish(terminal);
   }
+  releaseSocialImport('x', run.reservation);
 
   // Keep the (now-inactive) state around briefly to swallow trailing
   // cursor pages until the watcher stops scrolling + the interceptor's
   // IMPORT_MODE is back off, then fully clear.
-  setTimeout(() => { if (importState === run && !run.active) importState = null; }, 8000);
+  setTimeout(() => { if (importState === run && run.ended) importState = null; }, 8000);
 }
 
 // If the user closes the bookmarks tab mid-import, stop cleanly.
 chrome.tabs.onRemoved.addListener((tabId) => {
   const run = importState;
   if (run && run.active && run.tabId === tabId) {
-    if (run.watchdog) clearTimeout(run.watchdog);
-    const imported = run.imported;
-    run.active = false;
-    if (importState === run) importState = null;
-    if (run.progress) void run.progress.finish('stopped');
-    if (imported > 0) notify(`Bookmark import stopped — imported ${imported} so far.`);
+    void endImport('stopped');
   }
 });
 
@@ -937,6 +971,7 @@ async function syncBookmarkToGather(b, { force = false } = {}) {
       posterUrl: b.posterUrl || '',
       tweetCreatedAt: Number.isFinite(Number(b.tweetCreatedAt)) ? Number(b.tweetCreatedAt) : null,
       quoted: b.quoted || null,
+      article: b.article || null,
     },
   };
   // Primary download follows media[0] when we have an explicit list, so
@@ -956,7 +991,7 @@ async function syncBookmarkToGather(b, { force = false } = {}) {
     payload.posterUrl = b.posterUrl;
   } else if (Array.isArray(b.imageUrls) && b.imageUrls.length > 0) {
     payload.imageUrl = b.imageUrls[0];
-  } else if (!(b.caption || '').trim()) {
+  } else if (!(b.caption || '').trim() && !b.article) {
     // No media and no text — nothing to save. Skip silently.
     return;
   }
@@ -1180,6 +1215,20 @@ function pollBuildMediaList(legacy) {
   return out;
 }
 
+function pollExtractArticle(tweet) {
+  const result = tweet && tweet.article && tweet.article.article_results
+    && tweet.article.article_results.result;
+  if (!result) return null;
+  const title = (result.title || (result.metadata && result.metadata.title) || '').trim();
+  const excerpt = (result.preview_text || result.previewText || '').trim();
+  if (!title && !excerpt) return null;
+  const cover = (result.cover_media_results && result.cover_media_results.result)
+    || result.cover_media || null;
+  const coverUrl = (cover && (cover.media_url_https
+    || (cover.media_info && (cover.media_info.original_img_url || cover.media_info.url)))) || '';
+  return { title, excerpt, coverUrl };
+}
+
 function pollParseTweetForBookmark(result) {
   const t = result.tweet || result;
   const legacy = t.legacy;
@@ -1224,11 +1273,13 @@ function pollParseTweetForBookmark(result) {
       }
     }
   }
+  const article = pollExtractArticle(t);
+  if (article && article.coverUrl && imageUrls.length === 0) imageUrls.push(article.coverUrl);
 
   // Allow text-only tweets through (caption but no media) — the desktop
   // renders the tweet card to an image. Only bail when there's nothing
   // at all: no media and no text.
-  if (imageUrls.length === 0 && !videoUrl && !(legacy.full_text || '').trim()) return null;
+  if (imageUrls.length === 0 && !videoUrl && !(legacy.full_text || '').trim() && !article) return null;
 
   return {
     tweetId,
@@ -1245,6 +1296,7 @@ function pollParseTweetForBookmark(result) {
       : null,
     media: pollBuildMediaList(legacy),
     quoted: pollExtractTweetCore(t.quoted_status_result && t.quoted_status_result.result),
+    ...(article ? { article } : {}),
   };
 }
 
@@ -1350,39 +1402,57 @@ function isSavedPageUrl(url) {
 }
 
 async function handleImportSaved(msg, sender) {
+  const n = Number(msg && msg.limit);
+  const mode = Number.isFinite(n) && n > 0 ? 'fixed' : 'all';
+  const limit = mode === 'fixed' ? n : Infinity;
   const reservation = reserveSocialImport('instagram');
   if (!reservation) {
     notify('A saved-post import is already running.');
-    return { ok: false, busy: true };
+    return { ok: false, busy: true, error: 'Another social import is already running.' };
   }
-  const { [IG_STORAGE_IMPORT_DISABLED_KEY]: disabled } =
-    await chrome.storage.local.get(IG_STORAGE_IMPORT_DISABLED_KEY);
-  if (disabled) {
-    releaseSocialImport('instagram', reservation);
-    notify('Saved-post import is temporarily unavailable.');
-    return { ok: false, disabled: true };
-  }
-  if (!(await igSignedIn())) {
-    releaseSocialImport('instagram', reservation);
-    return { ok: false, needsSignIn: true, platform: 'instagram' };
-  }
+  try {
+    const { [IG_STORAGE_IMPORT_DISABLED_KEY]: disabled } =
+      await chrome.storage.local.get(IG_STORAGE_IMPORT_DISABLED_KEY);
+    if (disabled) {
+      releaseSocialImport('instagram', reservation);
+      notify('Saved-post import is temporarily unavailable.');
+      return { ok: false, disabled: true };
+    }
+    if (!(await igSignedIn())) {
+      releaseSocialImport('instagram', reservation);
+      return { ok: false, needsSignIn: true, platform: 'instagram' };
+    }
 
-  const status = await pingApp();
-  if (!status || status.hostMissing || !status.appRunning) {
+    const status = await pingApp();
+    if (!status || status.hostMissing || !status.appRunning) {
+      releaseSocialImport('instagram', reservation);
+      notify('Open GatherLocal first, then run Import saved.');
+      return { ok: false, appClosed: true };
+    }
+
+    const progress = createImportProgress('instagram', mode, mode === 'fixed' ? limit : null);
+    const lease = await startSocialImportLease({
+      progress,
+      startArgs: { platform: 'instagram', mode, target: mode === 'fixed' ? limit : null },
+      release: () => releaseSocialImport('instagram', reservation),
+    });
+    if (!lease.ok) return lease;
+
+    // Import directly from Instagram's saved API in the background — no tab,
+    // no navigation, no username (the saved feed is session-scoped). Same
+    // request the mobile-sync poll replays, just paginated + forced. Runs
+    // async and reports progress via notifications.
+    void runIgApiImport(limit, mode, reservation, progress).catch(async (error) => {
+      releaseSocialImport('instagram', reservation);
+      try { await progress.finish('failed', error?.message || null); } catch { /* terminal already sent */ }
+      notify('Saved-post import failed.');
+    });
+    return { ok: true };
+  } catch (error) {
     releaseSocialImport('instagram', reservation);
-    notify('Open GatherLocal first, then run Import saved.');
-    return { ok: false, appClosed: true };
+    notify('Could not start saved-post import.');
+    return { ok: false, error: error?.message || 'Could not start saved-post import.' };
   }
-
-  const n = Number(msg && msg.limit);
-  const limit = Number.isFinite(n) && n > 0 ? n : Infinity;
-
-  // Import directly from Instagram's saved API in the background — no tab,
-  // no navigation, no username (the saved feed is session-scoped). Same
-  // request the mobile-sync poll replays, just paginated + forced. Runs
-  // async and reports progress via notifications.
-  runIgApiImport(limit, reservation);
-  return { ok: true };
 }
 
 // Paginate /api/v1/feed/saved/posts/ from the worker, following
@@ -1401,7 +1471,7 @@ function igWithMaxId(baseUrl, maxId) {
   }
 }
 
-async function runIgApiImport(limit, reservation = null) {
+async function runIgApiImport(limit, mode = 'fixed', reservation = null, progress = null) {
   // Signed-in check. Instagram sets `csrftoken` even for logged-out
   // visitors, so it's not proof of a session — the `sessionid` cookie is
   // the real auth cookie. Check it up front so a signed-out user gets a
@@ -1423,18 +1493,24 @@ async function runIgApiImport(limit, reservation = null) {
 
   const { [IG_STORAGE_TEMPLATE_KEY]: template } = await chrome.storage.local.get(IG_STORAGE_TEMPLATE_KEY);
   const baseUrl = (template && template.url) || IG_SAVED_FEED_URL;
-  const progress = createImportProgress('instagram', Number.isFinite(limit) ? 'fixed' : 'all', Number.isFinite(limit) ? limit : null);
-  await progress.start({
-    platform: 'instagram', mode: Number.isFinite(limit) ? 'fixed' : 'all',
-    target: Number.isFinite(limit) ? limit : null,
-  });
-  if (!progress.beforeNext()) { await progress.finish('stopped'); return; }
+  if (!progress) {
+    progress = createImportProgress('instagram', mode, mode === 'fixed' ? limit : null);
+    await progress.start({
+      platform: 'instagram', mode,
+      target: mode === 'fixed' ? limit : null,
+    });
+  }
+  if (!progress.beforeNext()) { releaseSocialImport('instagram', reservation); await progress.finish('stopped'); return; }
 
   const headers = { ...((template && template.headers) || {}), 'x-csrftoken': csrf, accept: '*/*' };
   if (!headers['x-ig-app-id']) headers['x-ig-app-id'] = IG_WEB_APP_ID;
 
   const state = {
     active: true,
+    stopRequested: false,
+    stopReason: null,
+    finalizePromise: null,
+    ended: false,
     apiMode: true,
     limit,
     imported: 0,
@@ -1454,9 +1530,9 @@ async function runIgApiImport(limit, reservation = null) {
   let pages = 0;
   let authFailedFirstPage = false;
   try {
-    while (igImportState && igImportState.active
+    while (igImportState && igImportState.active && !state.stopRequested
       && igImportState.processed < limit && pages < MAX_PAGES) {
-      if (!state.progress.beforeNext()) { state.active = false; break; }
+      if (!state.progress.beforeNext()) { state.stopRequested = true; state.stopReason = 'stopped'; break; }
       await state.progress.update({ stage: 'scanning', scanned: state.processed, saved: state.imported, known: state.known, failed: state.failed });
       let res;
       try {
@@ -1475,7 +1551,7 @@ async function runIgApiImport(limit, reservation = null) {
       const posts = pollExtractSavedPosts(json);
       for (const p of posts) {
         if (igImportState.processed >= limit) break;
-        if (!state.progress.beforeNext()) { state.active = false; break; }
+        if (!state.progress.beforeNext()) { state.stopRequested = true; state.stopReason = 'stopped'; break; }
         igImportState.processed += 1;
         try {
           const resp = await syncSavedPostToGather(p, { force: true });
@@ -1492,11 +1568,11 @@ async function runIgApiImport(limit, reservation = null) {
       if (!json.more_available || !json.next_max_id) break;
       maxId = json.next_max_id;
       await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
-      if (!state.progress.beforeNext()) { state.active = false; break; }
+      if (!state.progress.beforeNext()) { state.stopRequested = true; state.stopReason = 'stopped'; break; }
     }
   } finally {
     const imported = state.imported;
-    igImportState = null;
+    releaseSocialImport('instagram', reservation);
     // Establish the baseline so passive sync only imports newer posts.
     try {
       const { seen } = await readIgSeenSet();
@@ -1504,7 +1580,7 @@ async function runIgApiImport(limit, reservation = null) {
       await writeIgSeenSet(seen, { baseline: true, version: IG_CAPTURE_VERSION });
     } catch { /* ignore */ }
     if (state.error) await state.progress.finish('failed', state.error?.message || null);
-    else if (!state.active) await state.progress.finish('stopped');
+    else if (state.stopRequested) await state.progress.finish('stopped');
     else await state.progress.finish('complete');
     if (authFailedFirstPage) {
       notify('Could not read your Instagram saved feed. Open your Saved page once, then try again.');

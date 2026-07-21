@@ -6,6 +6,30 @@ function clean(value, max = 400) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
 }
 
+const SMART_CATEGORY_DISCOVERY_OUTPUT_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    categories: {
+      type: 'array', minItems: 1, maxItems: 12,
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 80 },
+          description: { type: 'string', minLength: 1, maxLength: 300 },
+          aliases: {
+            type: 'array', maxItems: 8,
+            items: { type: 'string', minLength: 1, maxLength: 80 },
+          },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
+        },
+        required: ['name', 'description', 'aliases', 'confidence'],
+      },
+    },
+  },
+  required: ['categories'],
+});
+
 function discoveryInput(profiles = [], { maxProfiles = 120 } = {}) {
   return {
     profiles: (Array.isArray(profiles) ? profiles : []).slice(0, maxProfiles).map((profile) => ({
@@ -81,11 +105,17 @@ async function discoverSmartCategories({
         'Prefer 3-8 useful themes. Avoid categories based only on file type, author, or one item.',
       input: JSON.stringify(input),
       maxOutputTokens: 1000,
+      outputSchema: SMART_CATEGORY_DISCOVERY_OUTPUT_SCHEMA,
       signal,
     });
   } catch (error) {
     if (signal?.aborted) return { ok: false, reason: 'aborted' };
-    return { ok: false, reason: error?.code || 'provider-error', detail: error?.message || String(error) };
+    return {
+      ok: false,
+      reason: error?.code || 'provider-error',
+      detail: error?.message || String(error),
+      retryable: error?.retryable === true,
+    };
   }
   if (signal?.aborted) return { ok: false, reason: 'aborted' };
   const validation = validateDiscoveredCategories(parsed);
@@ -94,6 +124,9 @@ async function discoverSmartCategories({
   const accepted = validation.categories
     .filter((category) => category.confidence >= minConfidence)
     .map((category) => ({ ...category, id: categoryId(category.name) }));
+  // Discovery with no accepted category is a failed bootstrap. Do not leave
+  // aliases or candidate rows behind when confidence gating rejects all output.
+  if (accepted.length === 0) return { ok: false, reason: 'no-categories', createdCount: 0, categories: [] };
   for (const category of accepted) {
     if (signal?.aborted) return { ok: false, reason: 'aborted' };
     const { id } = category;
@@ -119,5 +152,6 @@ module.exports = {
   discoveryInput,
   validateDiscoveredCategories,
   categoryId,
+  SMART_CATEGORY_DISCOVERY_OUTPUT_SCHEMA,
   discoverSmartCategories,
 };

@@ -803,6 +803,8 @@ export default function SettingsModal({
   drawerHint,
   onClose,
   onConfiguredChange,
+  aiAccess = null,
+  aiAuthStatus = null,
   onPrefsChange,
   onLibraryWiped,
   libraries = [],
@@ -876,10 +878,11 @@ export default function SettingsModal({
     if (!open) return;
     let cancelled = false;
     Promise.all([
-      window.moodmark.ai.hasSession(),
+      window.moodmark.ai.access(),
       window.moodmark.settings.getPrefs(),
-    ]).then(([sessionExists, p]) => {
+    ]).then(([access, p]) => {
       if (cancelled) return;
+      const sessionExists = !!access?.structuredJson?.configured;
       setHasAi(!!sessionExists);
       // Mirror up to App.jsx so AI buttons in DetailPanel etc. light
       // up correctly when this is the first time AI is observed in
@@ -894,6 +897,13 @@ export default function SettingsModal({
     setWipeState({ running: false, message: null });
     return () => { cancelled = true; };
   }, [open]);
+
+  useEffect(() => {
+    if (!aiAccess) return;
+    const configured = !!aiAccess.structuredJson?.configured;
+    setHasAi(configured);
+    onConfiguredChange?.(configured);
+  }, [aiAccess, onConfiguredChange]);
 
   async function togglePref(name) {
     const next = !prefs[name];
@@ -1283,6 +1293,48 @@ export default function SettingsModal({
                 generation use providers configured on this Mac. GatherLocal
                 does not send these requests through GatherOS servers.
               </p>
+
+              {aiAccess?.structuredJson?.provider === 'codex' && (
+                <div className={styles.aiConnectionCard}>
+                  <div className={styles.aiConnectionCopy}>
+                    <span className={styles.aiConnectionTitle}>ChatGPT Codex</span>
+                    <span className={styles.aiConnectionStatus}>
+                      {{
+                        loading: 'Checking connection…',
+                        signed_out: 'Not connected',
+                        authorizing: 'Waiting for sign in…',
+                        exchanging: 'Finishing sign in…',
+                        authenticated: 'Connected',
+                        corrupt: 'Saved sign in could not be read',
+                        unavailable: 'Secure sign in unavailable',
+                      }[aiAuthStatus?.state] || 'Secure sign in unavailable'}
+                    </span>
+                    {aiAuthStatus?.error?.message && (
+                      <span className={styles.aiConnectionError}>{aiAuthStatus.error.message}</span>
+                    )}
+                  </div>
+                  <div className={styles.aiConnectionActions}>
+                    {aiAuthStatus?.state === 'authenticated' ? (
+                      <button type="button" className={styles.btn} onClick={() => window.moodmark.ai.auth.logout()}>
+                        Log out
+                      </button>
+                    ) : ['authorizing', 'exchanging'].includes(aiAuthStatus?.state) ? (
+                      <button type="button" className={styles.btn} onClick={() => window.moodmark.ai.auth.cancel()}>
+                        Cancel
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.btn}
+                        disabled={['loading', 'unavailable'].includes(aiAuthStatus?.state)}
+                        onClick={() => window.moodmark.ai.auth.login()}
+                      >
+                        Connect
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {!hasAi && (
                 <div className={styles.statusRow}>

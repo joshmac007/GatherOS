@@ -1,71 +1,13 @@
 'use strict';
 
-const fs = require('node:fs');
 const { CAPABILITIES } = require('./config');
 const { requestJson, parseJsonObject, runtimeError, timeoutValue } = require('./transport-utils');
+const { boundedJpegDataUrl } = require('./image-input');
 
 const PROVIDER = 'local';
 
 function authHeaders(config) {
   return config.token ? { Authorization: `Bearer ${config.token}` } : {};
-}
-
-function loadSharp(dependencies) {
-  if (typeof dependencies.sharp === 'function') return dependencies.sharp;
-  try { return require('sharp'); } catch (cause) {
-    throw runtimeError('AI_PROVIDER_UNAVAILABLE', 'Local image transport requires JPEG encoding', {
-      capability: CAPABILITIES.STRUCTURED_JSON,
-      provider: PROVIDER,
-      retryable: false,
-      cause,
-    });
-  }
-}
-
-async function boundedJpegDataUrl(filePath, config, dependencies = {}) {
-  if (typeof dependencies.imageToDataUrl === 'function') {
-    return dependencies.imageToDataUrl(filePath, { maxBytes: config.maxImageBytes });
-  }
-  const imageToJpeg = dependencies.imageToJpeg;
-  if (typeof imageToJpeg === 'function') {
-    const encoded = await imageToJpeg(filePath, { maxBytes: config.maxImageBytes });
-    const buffer = Buffer.isBuffer(encoded) ? encoded : Buffer.from(encoded);
-    if (buffer.length > config.maxImageBytes) {
-      throw runtimeError('AI_INVALID_RESPONSE', 'Local image exceeds transport size limit', {
-        capability: CAPABILITIES.STRUCTURED_JSON,
-        provider: PROVIDER,
-        retryable: false,
-      });
-    }
-    return `data:image/jpeg;base64,${buffer.toString('base64')}`;
-  }
-  if (!filePath || !fs.existsSync(filePath)) {
-    throw runtimeError('AI_INVALID_RESPONSE', 'Local image file not found', {
-      capability: CAPABILITIES.STRUCTURED_JSON,
-      provider: PROVIDER,
-      retryable: false,
-    });
-  }
-
-  const sharp = loadSharp(dependencies);
-  const maxBytes = timeoutValue(config.maxImageBytes, 2 * 1024 * 1024);
-  let best;
-  for (const quality of [85, 75, 65, 55, 45, 35]) {
-    const buffer = await sharp(filePath)
-      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality })
-      .toBuffer();
-    best = buffer;
-    if (buffer.length <= maxBytes) break;
-  }
-  if (!best || best.length > maxBytes) {
-    throw runtimeError('AI_INVALID_RESPONSE', 'Local image exceeds transport size limit', {
-      capability: CAPABILITIES.STRUCTURED_JSON,
-      provider: PROVIDER,
-      retryable: false,
-    });
-  }
-  return `data:image/jpeg;base64,${best.toString('base64')}`;
 }
 
 function contentFromResponse(data) {
@@ -141,7 +83,7 @@ function createLocalStructuredAdapter(config = {}, dependencies = {}) {
       const userContent = imagePath
         ? [
           { type: 'text', text: inputText },
-          { type: 'image_url', image_url: { url: await boundedJpegDataUrl(imagePath, { ...config, maxImageBytes }, dependencies), detail: 'low' } },
+          { type: 'image_url', image_url: { url: await boundedJpegDataUrl(imagePath, { maxBytes: maxImageBytes, provider: PROVIDER }, dependencies), detail: 'low' } },
         ]
         : inputText;
       const body = {

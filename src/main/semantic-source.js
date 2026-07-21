@@ -36,12 +36,15 @@ function normalizedList(values, { lowercase = false } = {}) {
 function buildSemanticSource({ save = {}, tags = [], topicProfile = {} } = {}) {
   const tweetMeta = parseObject(save.tweet_meta ?? save.tweetMeta);
   const quoted = parseObject(tweetMeta.quoted);
+  const article = parseObject(tweetMeta.article);
   const fields = [
     ['Title', normalizeText(save.title)],
     ['Description', normalizeText(save.ai_description) || normalizeText(save.description)],
     ['Notes', normalizeText(save.notes)],
     ['Tweet', normalizeText(tweetMeta.caption) || normalizeText(tweetMeta.text)],
     ['Quoted tweet', normalizeText(quoted.caption) || normalizeText(quoted.text)],
+    ['Article', normalizeText(article.title)],
+    ['Article excerpt', normalizeText(article.excerpt)],
     ['Tags', normalizedList(tags, { lowercase: true }).join(', ')],
     ['OCR', normalizeText(save.ocr_text ?? save.ocrText)],
     ['Concepts', normalizedList(topicProfile.concepts).join(', ')],

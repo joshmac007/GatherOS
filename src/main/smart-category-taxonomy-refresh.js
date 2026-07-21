@@ -9,6 +9,72 @@ const DEFAULT_TAXONOMY_REFRESH_CONFIG = {
   maxCategories: 80,
 };
 
+const SMART_CATEGORY_TAXONOMY_OUTPUT_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    renames: {
+      type: 'array', maxItems: 80,
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          category_id: { type: 'string', minLength: 1, maxLength: 120 },
+          new_name: { type: 'string', minLength: 1, maxLength: 160 },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
+          reason: { type: 'string', minLength: 1, maxLength: 400 },
+        },
+        required: ['category_id', 'new_name', 'confidence', 'reason'],
+      },
+    },
+    aliases: {
+      type: 'array', maxItems: 80,
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          category_id: { type: 'string', minLength: 1, maxLength: 120 },
+          alias: { type: 'string', minLength: 1, maxLength: 160 },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
+          source: { type: 'string', maxLength: 40 },
+        },
+        required: ['category_id', 'alias', 'confidence', 'source'],
+      },
+    },
+    merges: {
+      type: 'array', maxItems: 80,
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          category_ids: {
+            type: 'array', minItems: 2, maxItems: 80,
+            items: { type: 'string', minLength: 1, maxLength: 120 },
+          },
+          proposed_name: { type: ['string', 'null'], maxLength: 160 },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
+          reason: { type: 'string', minLength: 1, maxLength: 400 },
+        },
+        required: ['category_ids', 'proposed_name', 'confidence', 'reason'],
+      },
+    },
+    splits: {
+      type: 'array', maxItems: 80,
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          category_id: { type: 'string', minLength: 1, maxLength: 120 },
+          proposed_names: {
+            type: 'array', minItems: 2, maxItems: 8,
+            items: { type: 'string', minLength: 1, maxLength: 160 },
+          },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
+          reason: { type: 'string', minLength: 1, maxLength: 400 },
+        },
+        required: ['category_id', 'proposed_names', 'confidence', 'reason'],
+      },
+    },
+  },
+  required: ['renames', 'aliases', 'merges', 'splits'],
+});
+
 function clean(value, max = 1000) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
 }
@@ -122,7 +188,21 @@ async function runSmartCategoryTaxonomyRefresh({
       },
     };
     if (!signal?.aborted) storage.recordSmartCategoryRun?.(run);
-    return { ...summary, run };
+    return {
+      ok: summary.ok !== false,
+      reason: summary.reason || null,
+      retryable: summary.retryable === true,
+      processedCount: Number(summary.processedCount) || 0,
+      completedCount: Number(summary.completedCount) || 0,
+      failedCount: Number(summary.failedCount) || 0,
+      ...summary,
+      ok: summary.ok !== false,
+      retryable: summary.retryable === true,
+      processedCount: Number(summary.processedCount) || 0,
+      completedCount: Number(summary.completedCount) || 0,
+      failedCount: Number(summary.failedCount) || 0,
+      run,
+    };
   };
   if (signal?.aborted) return finish({ ok: false, reason: 'aborted', failedCount: 0 });
   if (!input.categories.length) return finish({ ok: true, reason: 'no-categories', renamedCount: 0, aliasCount: 0, failedCount: 0 });
@@ -136,11 +216,18 @@ async function runSmartCategoryTaxonomyRefresh({
         'Each proposal needs category IDs, confidence, and reason. Prefer aliases over renames. Do not apply merges or splits.',
       input: JSON.stringify(input),
       maxOutputTokens: 1200,
+      outputSchema: SMART_CATEGORY_TAXONOMY_OUTPUT_SCHEMA,
       signal,
     });
   } catch (error) {
     if (signal?.aborted) return finish({ ok: false, reason: 'aborted', failedCount: 0 });
-    return finish({ ok: false, reason: error?.code || 'provider-error', failedCount: 1, error: error?.message || String(error) });
+    return finish({
+      ok: false,
+      reason: error?.code || 'provider-error',
+      retryable: error?.retryable === true,
+      failedCount: 1,
+      error: error?.message || String(error),
+    });
   }
   if (signal?.aborted) return finish({ ok: false, reason: 'aborted', failedCount: 0 });
   const validation = validateTaxonomyRefreshOutput(parsed, { categories: input.categories, config });
@@ -196,6 +283,7 @@ async function runSmartCategoryTaxonomyRefresh({
 
 module.exports = {
   DEFAULT_TAXONOMY_REFRESH_CONFIG,
+  SMART_CATEGORY_TAXONOMY_OUTPUT_SCHEMA,
   isCosmeticRename,
   buildTaxonomyRefreshInput,
   validateTaxonomyRefreshOutput,

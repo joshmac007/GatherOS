@@ -1,6 +1,6 @@
-# Open Source Acknowledgments
+# Open source acknowledgments
 
-GatherOS is built on top of a stack of generous open source software. Many thanks to all the maintainers and contributors of these projects.
+GatherLocal is built on generous open source software. Thanks to its maintainers and contributors.
 
 ## Runtime dependencies
 
@@ -18,6 +18,18 @@ GatherOS is built on top of a stack of generous open source software. Many thank
 
 - **[sharp](https://github.com/lovell/sharp)** — Apache License 2.0
   Image decoding, resizing, and thumbnail generation.
+
+- **[AI SDK](https://github.com/vercel/ai)** — Apache License 2.0
+  Structured generation runtime.
+
+- **[@ai-sdk/openai](https://github.com/vercel/ai/tree/main/packages/openai)** — Apache License 2.0
+  OpenAI Responses API provider.
+
+- **[Ajv](https://github.com/ajv-validator/ajv)** — MIT License
+  Strict validation for structured AI output.
+
+- **[OpenCode Codex OAuth reference](https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/plugin/openai/codex.ts)** — MIT License, pinned commit `849c2598abc7d2b40261e74b5826bc74ffc78308`
+  Reference for interoperable ChatGPT Codex OAuth behavior.
 
 ## Build & framework dependencies
 

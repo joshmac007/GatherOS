@@ -97,3 +97,129 @@ test('reports after each processed item so a cancel response prevents the next i
   assert.equal(calls.length, 2);
   assert.equal(reporter.beforeNext(), false);
 });
+
+test('coalesces concurrent progress updates behind one in-flight native send', async () => {
+  const { createSocialImportProgress } = await progress();
+  const calls = [];
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
+    randomUUID: () => 'run-1',
+    sendNativeMessage: async (_host, payload) => {
+      calls.push(payload);
+      if (calls.length === 1) await gate;
+      return { ok: true, cancelRequested: false };
+    },
+  });
+  const start = reporter.start({ platform: 'x', mode: 'all' });
+  await Promise.resolve();
+  const scanning = reporter.update({ stage: 'scanning', scanned: 1 });
+  const saving = reporter.update({ stage: 'saving', scanned: 2, saved: 1 });
+  release();
+  await Promise.all([start, scanning, saving]);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].stage, 'saving');
+  assert.equal(calls[1].scanned, 2);
+});
+
+test('controller rejection is typed and stops later work', async () => {
+  const { createSocialImportProgress } = await progress();
+  const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
+    randomUUID: () => 'run-1',
+    sendNativeMessage: async () => ({ ok: false, error: 'runId mismatch' }),
+  });
+  await reporter.start({ platform: 'x', mode: 'all' });
+  const result = await reporter.update({ stage: 'scanning', scanned: 1 });
+  assert.equal(result.outcome, 'controller-rejected');
+  assert.equal(reporter.beforeNext(), false);
+});
+
+test('starts heartbeat after accepted start at derived safe interval and unreferences it', async () => {
+  const { createSocialImportProgress, SOCIAL_IMPORT_HEARTBEAT_INTERVAL_MS, SOCIAL_IMPORT_STALE_AFTER_MS } = await progress();
+  let scheduled = null;
+  let unrefCalls = 0;
+  const timer = { unref: () => { unrefCalls += 1; } };
+  const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
+    randomUUID: () => 'run-1',
+    sendNativeMessage: async () => ({ ok: true, cancelRequested: false }),
+    setIntervalFn: (fn, ms) => { scheduled = { fn, ms }; return timer; },
+  });
+  await reporter.start({ platform: 'x', mode: 'all' });
+  assert.equal(SOCIAL_IMPORT_HEARTBEAT_INTERVAL_MS, 10_000);
+  assert.ok(SOCIAL_IMPORT_HEARTBEAT_INTERVAL_MS < SOCIAL_IMPORT_STALE_AFTER_MS);
+  assert.equal(scheduled.ms, SOCIAL_IMPORT_HEARTBEAT_INTERVAL_MS);
+  assert.equal(unrefCalls, 1);
+});
+
+test('heartbeat uses normal reporter path then stops on terminal finish', async () => {
+  const { createSocialImportProgress } = await progress();
+  let tick;
+  let cleared = 0;
+  const calls = [];
+  const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
+    randomUUID: () => 'run-1',
+    sendNativeMessage: async (_host, payload) => { calls.push(payload); return { ok: true, cancelRequested: false }; },
+    setIntervalFn: (fn) => { tick = fn; return 7; },
+    clearIntervalFn: (id) => { assert.equal(id, 7); cleared += 1; },
+  });
+  await reporter.start({ platform: 'x', mode: 'all' });
+  tick();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 2);
+  await reporter.finish('complete');
+  assert.equal(cleared, 1);
+});
+
+test('repeated heartbeat ticks coalesce while one native send is in flight', async () => {
+  const { createSocialImportProgress } = await progress();
+  let tick;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const calls = [];
+  const reporter = createSocialImportProgress({
+    hostName: HOST_NAME,
+    randomUUID: () => 'run-1',
+    sendNativeMessage: async (_host, payload) => {
+      calls.push(payload);
+      if (calls.length === 2) await gate;
+      return { ok: true, cancelRequested: false };
+    },
+    setIntervalFn: (fn) => { tick = fn; return 1; },
+  });
+  await reporter.start({ platform: 'x', mode: 'all' });
+  tick();
+  tick();
+  tick();
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 3);
+});
+
+test('does not start heartbeat after rejected start and stops it on controller rejection', async () => {
+  const { createSocialImportProgress } = await progress();
+  let scheduled = 0;
+  const rejected = createSocialImportProgress({
+    hostName: HOST_NAME,
+    randomUUID: () => 'run-1',
+    sendNativeMessage: async () => ({ ok: false }),
+    setIntervalFn: () => { scheduled += 1; return 1; },
+  });
+  await rejected.start({ platform: 'x', mode: 'all' });
+  assert.equal(scheduled, 0);
+
+  let clears = 0;
+  const active = createSocialImportProgress({
+    hostName: HOST_NAME,
+    randomUUID: () => 'run-2',
+    sendNativeMessage: async (_host, payload) => ({ ok: payload.stage === 'starting' }),
+    setIntervalFn: () => 9,
+    clearIntervalFn: () => { clears += 1; },
+  });
+  await active.start({ platform: 'x', mode: 'all' });
+  await active.update({ stage: 'scanning', scanned: 1 });
+  assert.equal(clears, 1);
+});

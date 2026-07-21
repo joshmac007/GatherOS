@@ -175,6 +175,40 @@ test('fixed transport observes cancellation returned by per-item progress update
   assert.equal(saves, 1);
 });
 
+test('external stop request blocks later catch-up and fixed saves within current batch', async () => {
+  const { runCatchUpTransportBatch, runFixedTransportBatch } = await transport();
+  const catchUp = { ...catchUpState(), known: 0, failed: 0 };
+  const catchUpSaves = [];
+  await runCatchUpTransportBatch({
+    state: catchUp,
+    entries: [{ tweetId: 'a' }, { tweetId: 'b' }],
+    classify: async () => ['new', 'new'],
+    save: async (entry) => {
+      catchUpSaves.push(entry.tweetId);
+      catchUp.stopRequested = true;
+      return { ok: true, id: entry.tweetId };
+    },
+    isAccepted: (response) => response.ok,
+    isNew: (response) => !!response.id,
+  });
+  assert.deepEqual(catchUpSaves, ['a']);
+
+  const fixed = { active: true, mode: 'all', limit: Infinity, processed: new Set(), imported: 0, known: 0, failed: 0 };
+  const fixedSaves = [];
+  await runFixedTransportBatch({
+    state: fixed,
+    entries: [{ tweetId: 'a' }, { tweetId: 'b' }],
+    save: async (entry) => {
+      fixedSaves.push(entry.tweetId);
+      fixed.stopRequested = true;
+      return { ok: true, id: entry.tweetId };
+    },
+    isAccepted: (response) => response.ok,
+    isNew: (response) => !!response.id,
+  });
+  assert.deepEqual(fixedSaves, ['a']);
+});
+
 test('background wires catch-up adapter into API and scroll and preserves fallback mode', () => {
   const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
   const fallbackCalls = source.match(/runXScrollImport\(limit, mode, progress, reservation\)/g) || [];
@@ -193,4 +227,39 @@ test('explicit X and Instagram imports reserve before their first await', () => 
     assert.ok(body.indexOf('reserveSocialImport(') >= 0);
     assert.ok(body.indexOf('reserveSocialImport(') < body.indexOf('await '));
   }
+});
+
+test('automated X parser and save payload retain Article-only bookmarks', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
+  assert.match(source, /function pollExtractArticle\(tweet\)/);
+  assert.match(source, /&& !article\) return null/);
+  assert.match(source, /article: b\.article \|\| null/);
+  assert.match(source, /&& !b\.article\) \{/);
+});
+
+test('all imports derive mode before leasing and scroll finalization is single-flight', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
+  const xStart = source.indexOf('async function handleImportBookmarks');
+  const xBody = source.slice(xStart, source.indexOf('async function requestXBookmarkStatus', xStart));
+  assert.ok(xBody.indexOf("? 'fixed' : 'all'") < xBody.indexOf("reserveSocialImport('x')"));
+  assert.match(xBody, /return \{ ok: false, busy: true, error:/);
+  assert.match(source, /stopRequested: false,\n\s+stopReason: null,\n\s+finalizePromise: null,\n\s+ended: false/);
+  assert.match(source, /run\.finalizePromise = Promise\.resolve\(run\.batchQueue\?\.whenIdle\(\)\)/);
+  assert.match(source, /void endImport\('stopped'\); return;/);
+});
+
+test('finalization pauses the X page once even after setting stopRequested', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
+  const start = source.indexOf('function pauseImportScroll');
+  const body = source.slice(start, source.indexOf('\n}', start));
+  assert.doesNotMatch(body, /stopRequested/);
+  assert.match(body, /state\.scrollPaused/);
+  const endStart = source.indexOf('function endImport');
+  const endBody = source.slice(endStart, source.indexOf('\n}', endStart));
+  assert.ok(endBody.indexOf('run.stopRequested = true;') < endBody.indexOf('pauseImportScroll(run);'));
+});
+
+test('panel keeps actionable start errors visible', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../extension/panel.js'), 'utf8');
+  assert.match(source, /showText\(msgEl, resp\.error \|\| 'Could not start import\. Try again\.'\);/);
 });

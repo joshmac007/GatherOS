@@ -48,6 +48,13 @@ function createAiRuntime({ authorize, routes = {} } = {}) {
     }
   }
 
+  function isUsable(capability) {
+    const adapter = routeFor(capability);
+    if (!adapter || !isConfigured(capability)) return false;
+    if (typeof adapter.isUsable !== 'function') return true;
+    try { return Boolean(adapter.isUsable()); } catch { return false; }
+  }
+
   function providerFor(capability) {
     return providerId(routeFor(capability));
   }
@@ -135,6 +142,7 @@ function createAiRuntime({ authorize, routes = {} } = {}) {
   const runtime = {
     capabilities: CAPABILITIES,
     isConfigured,
+    isUsable,
     providerFor,
     modelFor,
     health,

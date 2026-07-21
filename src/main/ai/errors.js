@@ -5,6 +5,7 @@ const CODES = Object.freeze({
   CAPABILITY_UNCONFIGURED: 'AI_CAPABILITY_UNCONFIGURED',
   AUTH_REQUIRED: 'AI_AUTH_REQUIRED',
   PROVIDER_UNAVAILABLE: 'AI_PROVIDER_UNAVAILABLE',
+  PROVIDER_FORBIDDEN: 'AI_PROVIDER_FORBIDDEN',
   MODEL_MISSING: 'AI_MODEL_MISSING',
   TIMEOUT: 'AI_TIMEOUT',
   ABORTED: 'AI_ABORTED',
@@ -47,6 +48,10 @@ function codeFromError(error) {
   switch (error?.code) {
     case 'unauthenticated':
     case 'auth_required':
+    case 'AI_AUTH_FAILED':
+    case 'AI_AUTH_EXCHANGE_FAILED':
+    case 'AI_AUTH_PERSIST_FAILED':
+    case 'AI_AUTH_UNAVAILABLE':
       return CODES.AUTH_REQUIRED;
     case 'not_entitled':
       return CODES.NOT_ENTITLED;

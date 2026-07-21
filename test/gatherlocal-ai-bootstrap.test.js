@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createDefaultAiRuntime } = require('../src/main/ai/bootstrap');
+const { createDefaultAiRuntime, getAiRuntime, installAiRuntime } = require('../src/main/ai/bootstrap');
 const { CAPABILITIES } = require('../src/main/ai/runtime');
 
 test('default runtime composes the selected GatherLocal capability routes', () => {
@@ -16,11 +16,11 @@ test('default runtime composes the selected GatherLocal capability routes', () =
           [CAPABILITIES.EMBEDDING]: 'ollama',
           [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
         },
-        codex: { bin: 'codex' },
+        codex: { model: 'gpt-5.6-sol' },
         ollama: { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
       },
       dependencies: {
-        codex: { spawnSync: () => ({ status: 0 }) },
+        codex: { auth: { snapshot: () => ({ state: 'signed_out' }), credentials: async () => {} } },
         ollama: { fetch: async () => ({ ok: true, text: async () => '{"embeddings":[[1,0]]}' }) },
       },
     },
@@ -55,4 +55,10 @@ test('explicit runtime authorization denial blocks transport', async () => {
   await assert.rejects(runtime.completeJson({ input: 'x' }), (error) => error.code === 'AI_NOT_ENTITLED');
   await assert.rejects(runtime.embed({ text: 'x' }), (error) => error.code === 'AI_NOT_ENTITLED');
   assert.equal(calls, 0);
+});
+
+test('installed runtime becomes the single runtime returned by bootstrap', () => {
+  const runtime = { completeJson: async () => ({ installed: true }) };
+  assert.equal(installAiRuntime(runtime), runtime);
+  assert.equal(getAiRuntime(), runtime);
 });

@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { app } = require('electron');
+const { throwIfCancelled } = require('./save-cancellation');
 
 function getImagesDir() {
   // Resolved per-call so library switches are picked up without
@@ -21,14 +22,15 @@ function ensureStorageDirs() {
   }
 }
 
-async function saveImageFromBase64(dataUrl) {
+async function saveImageFromBase64(dataUrl, { signal, onCreated } = {}) {
+  throwIfCancelled(signal);
   const sharp = require('sharp');
   const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/s);
   if (!match) throw new Error('Invalid image data URL');
 
   const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
   const buffer = Buffer.from(match[2], 'base64');
-  return _writeImageFiles(buffer, ext, sharp);
+  return _writeImageFiles(buffer, ext, sharp, { signal, onCreated });
 }
 
 async function saveImageFromFile(sourcePath) {
@@ -38,9 +40,10 @@ async function saveImageFromFile(sourcePath) {
   return _writeImageFiles(buffer, ext, sharp);
 }
 
-async function saveImageFromBuffer(buffer, ext = 'png') {
+async function saveImageFromBuffer(buffer, ext = 'png', { signal, onCreated } = {}) {
+  throwIfCancelled(signal);
   const sharp = require('sharp');
-  return _writeImageFiles(buffer, ext, sharp);
+  return _writeImageFiles(buffer, ext, sharp, { signal, onCreated });
 }
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp']);
@@ -69,17 +72,19 @@ function extFromUrl(url) {
   }
 }
 
-async function saveImageFromUrl(url) {
+async function saveImageFromUrl(url, { signal, onCreated } = {}) {
+  throwIfCancelled(signal);
   const sharp = require('sharp');
 
   if (url.startsWith('data:')) {
-    return saveImageFromBase64(url);
+    return saveImageFromBase64(url, { signal, onCreated });
   }
   if (url.startsWith('blob:')) {
     throw new Error('Blob URLs only exist inside the browser; drag the image directly instead.');
   }
 
   const res = await fetch(url, {
+    signal,
     redirect: 'follow',
     headers: {
       'User-Agent':
@@ -96,13 +101,15 @@ async function saveImageFromUrl(url) {
   }
   const ext = extFromMime(contentType) || extFromUrl(url) || 'png';
   const buffer = Buffer.from(await res.arrayBuffer());
+  throwIfCancelled(signal);
   if (buffer.length === 0) {
     throw new Error('Empty image response');
   }
-  return _writeImageFiles(buffer, ext, sharp);
+  return _writeImageFiles(buffer, ext, sharp, { signal, onCreated });
 }
 
-async function _writeImageFiles(buffer, ext, sharp) {
+async function _writeImageFiles(buffer, ext, sharp, { signal, onCreated } = {}) {
+  throwIfCancelled(signal);
   // Hash first. If the same bytes already live in the library
   // (non-trashed), short-circuit — no file writes, no palette work.
   // The caller (ipc/capture) is responsible for surfacing the
@@ -123,6 +130,7 @@ async function _writeImageFiles(buffer, ext, sharp) {
   const thumbPath = path.join(getThumbsDir(), `${id}.jpg`);
 
   const meta = await sharp(buffer).metadata();
+  throwIfCancelled(signal);
 
   // Store the primary image optimized by default — cap the longest edge
   // and re-encode to WebP — which is the bulk of the space win for large
@@ -145,6 +153,7 @@ async function _writeImageFiles(buffer, ext, sharp) {
         .toBuffer();
       // Only adopt it if it actually saved space — re-encoding an
       // already-small/efficient image can come out larger.
+      throwIfCancelled(signal);
       if (optimized.length < buffer.length) {
         storeBuffer = optimized;
         storeExt = 'webp';
@@ -155,35 +164,51 @@ async function _writeImageFiles(buffer, ext, sharp) {
   }
 
   const filePath = path.join(getImagesDir(), `${id}.${storeExt}`);
-  fs.writeFileSync(filePath, storeBuffer);
+  let wroteFile = false;
+  let wroteThumb = false;
+  try {
+    throwIfCancelled(signal);
+    fs.writeFileSync(filePath, storeBuffer);
+    wroteFile = true;
+    onCreated?.(filePath);
 
   // Stored-image dimensions (an optimized resize may have shrunk them);
   // fall back to the source metadata when we kept the original bytes.
-  const storedMeta = storeBuffer === buffer
-    ? meta
-    : await sharp(storeBuffer).metadata();
-  await sharp(buffer)
-    .resize(400, 300, { fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: 80 })
-    .toFile(thumbPath);
+    const storedMeta = storeBuffer === buffer
+      ? meta
+      : await sharp(storeBuffer).metadata();
+    throwIfCancelled(signal);
+    await sharp(buffer)
+      .resize(400, 300, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toFile(thumbPath);
+    wroteThumb = true;
+    onCreated?.(thumbPath);
+    throwIfCancelled(signal);
 
-  let palette = null;
-  try {
-    palette = await extractPalette(buffer, sharp, 8);
-  } catch (err) {
-    console.error('Palette extraction failed:', err);
+    let palette = null;
+    try {
+      palette = await extractPalette(buffer, sharp, 8);
+    } catch (err) {
+      console.error('Palette extraction failed:', err);
+    }
+    throwIfCancelled(signal);
+
+    return {
+      id,
+      filePath,
+      thumbPath,
+      width: storedMeta.width || meta.width || null,
+      height: storedMeta.height || meta.height || null,
+      fileSize: storeBuffer.length,
+      palette,
+      contentHash,
+    };
+  } catch (error) {
+    if (wroteFile) { try { fs.unlinkSync(filePath); } catch {} }
+    if (wroteThumb) { try { fs.unlinkSync(thumbPath); } catch {} }
+    throw error;
   }
-
-  return {
-    id,
-    filePath,
-    thumbPath,
-    width: storedMeta.width || meta.width || null,
-    height: storedMeta.height || meta.height || null,
-    fileSize: storeBuffer.length,
-    palette,
-    contentHash,
-  };
 }
 
 // Get up to 6 semantically-named swatches (Vibrant / Muted / DarkVibrant /
@@ -289,10 +314,11 @@ function deleteImageFiles(filePath, thumbPath) {
 // tweet_meta media list, referenced by its local absolute path. Returns
 // { path, isVideo } or null on any failure (caller keeps the remote URL
 // as a best-effort fallback).
-async function saveAuxMedia(url) {
+async function saveAuxMedia(url, { signal, onCreated } = {}) {
   if (!url || !/^https?:\/\//i.test(url)) return null;
   try {
     const res = await fetch(url, {
+      signal,
       redirect: 'follow',
       headers: {
         'User-Agent':
@@ -302,6 +328,7 @@ async function saveAuxMedia(url) {
     });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
+    throwIfCancelled(signal);
     if (buf.length === 0) return null;
     const ct = res.headers.get('content-type') || '';
     const isVideo = /^video\//i.test(ct) || /\.mp4(\?|$)/i.test(url);
@@ -309,8 +336,10 @@ async function saveAuxMedia(url) {
     const id = crypto.randomUUID();
     const p = path.join(getImagesDir(), `${id}.${ext}`);
     fs.writeFileSync(p, buf);
+    onCreated?.(p);
     return { path: p, isVideo };
   } catch (err) {
+    if (signal?.aborted) throw err;
     console.warn('[gatheros] aux media download failed:', err?.message || err);
     return null;
   }
@@ -513,10 +542,12 @@ async function composeMoodBoardGif(saves, outputPath, opts = {}) {
 // saveImageFromUrl so the caller can spread the result into
 // insertSave without special-casing. Dedups by SHA-256 of the
 // video bytes — re-bookmarking the same video is a silent no-op.
-async function saveVideoFromUrl(videoUrl, posterUrl) {
+async function saveVideoFromUrl(videoUrl, posterUrl, { signal, onCreated } = {}) {
   if (!videoUrl) throw new Error('videoUrl required');
+  throwIfCancelled(signal);
 
   const vres = await fetch(videoUrl, {
+    signal,
     redirect: 'follow',
     headers: {
       'User-Agent':
@@ -528,6 +559,7 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
     throw new Error(`Failed to fetch video: ${vres.status} ${vres.statusText}`);
   }
   const videoBuffer = Buffer.from(await vres.arrayBuffer());
+  throwIfCancelled(signal);
   if (videoBuffer.length === 0) {
     throw new Error('Empty video response');
   }
@@ -550,7 +582,14 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
   const id = crypto.randomUUID();
   const ext = (extFromUrl(videoUrl) || 'mp4').toLowerCase();
   const filePath = path.join(getImagesDir(), `${id}.${ext}`);
-  fs.writeFileSync(filePath, videoBuffer);
+  let thumbPath = null;
+  let wroteVideo = false;
+  let wroteThumb = false;
+  try {
+    fs.writeFileSync(filePath, videoBuffer);
+    wroteVideo = true;
+    onCreated?.(filePath);
+    throwIfCancelled(signal);
 
   // Try to parse the video's pixel dimensions out of the twimg URL.
   // Twitter encodes them in the path (e.g. /vid/avc1/1280x720/...).
@@ -568,11 +607,11 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
   // need sharp anyway to downscale the poster to thumb size; same
   // 400x300 cap the image pipeline uses so grid layout math stays
   // identical between image and video saves.
-  let thumbPath = null;
   if (posterUrl) {
     try {
       const sharp = require('sharp');
       const pres = await fetch(posterUrl, {
+        signal,
         redirect: 'follow',
         headers: {
           'User-Agent':
@@ -582,12 +621,16 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
       });
       if (pres.ok) {
         const pbuf = Buffer.from(await pres.arrayBuffer());
+        throwIfCancelled(signal);
         if (pbuf.length > 0) {
           thumbPath = path.join(getThumbsDir(), `${id}.jpg`);
           await sharp(pbuf)
             .resize(400, 300, { fit: 'inside', withoutEnlargement: true })
             .jpeg({ quality: 80 })
             .toFile(thumbPath);
+          wroteThumb = true;
+          onCreated?.(thumbPath);
+          throwIfCancelled(signal);
           if (!width || !height) {
             const pmeta = await sharp(pbuf).metadata();
             width = width || pmeta.width || null;
@@ -596,10 +639,12 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
         }
       }
     } catch (err) {
+      if (signal?.aborted) throw err;
       console.warn('[gatheros] video poster fetch failed:', err.message);
     }
   }
 
+  throwIfCancelled(signal);
   return {
     id,
     filePath,
@@ -611,6 +656,11 @@ async function saveVideoFromUrl(videoUrl, posterUrl) {
     contentHash,
     kind: 'video',
   };
+  } catch (error) {
+    if (wroteVideo) { try { fs.unlinkSync(filePath); } catch {} }
+    if (wroteThumb && thumbPath) { try { fs.unlinkSync(thumbPath); } catch {} }
+    throw error;
+  }
 }
 
 // Sum the byte size of every file directly inside a dir (non-recursive;

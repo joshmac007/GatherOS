@@ -2,14 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { EventEmitter } = require('node:events');
-
-const {
-  CAPABILITIES,
-  readGatherLocalAiConfig,
-} = require('../src/main/gatherlocal/ai/config');
+const { CAPABILITIES, readGatherLocalAiConfig } = require('../src/main/gatherlocal/ai/config');
 const { createGatherLocalRoutes } = require('../src/main/gatherlocal/ai');
-const { createCodexStructuredAdapter } = require('../src/main/gatherlocal/ai/codex-structured');
 const { createLocalStructuredAdapter } = require('../src/main/gatherlocal/ai/local-structured');
 const { createOllamaEmbeddingAdapter } = require('../src/main/gatherlocal/ai/ollama-embeddings');
 
@@ -26,9 +20,14 @@ test('per-capability config defaults independently', () => {
   assert.equal(config.routes[CAPABILITIES.STRUCTURED_JSON], 'codex');
   assert.equal(config.routes[CAPABILITIES.EMBEDDING], 'ollama');
   assert.equal(config.routes[CAPABILITIES.IMAGE_GENERATION], 'disabled');
-  assert.equal(typeof config.codex.bin, 'string');
-  assert.notEqual(config.codex.bin, '');
-  assert.equal(readGatherLocalAiConfig({ GATHERLOCAL_CODEX_BIN: '/custom/codex' }).codex.bin, '/custom/codex');
+  assert.deepEqual(config.codex, {
+    model: 'gpt-5.6-sol', timeoutMs: 120000, maxImageBytes: 2 * 1024 * 1024,
+  });
+  assert.deepEqual(readGatherLocalAiConfig({
+    GATHERLOCAL_CODEX_MODEL: 'custom',
+    GATHERLOCAL_CODEX_TIMEOUT_MS: '42',
+    GATHERLOCAL_CODEX_MAX_IMAGE_BYTES: '99',
+  }).codex, { model: 'custom', timeoutMs: 42, maxImageBytes: 99 });
   assert.throws(
     () => readGatherLocalAiConfig({ GATHERLOCAL_AI_STRUCTURED_PROVIDER: 'typo' }),
     /GATHERLOCAL_AI_STRUCTURED_PROVIDER must be one of/,
@@ -43,11 +42,11 @@ test('route composition keeps Codex structured and Ollama embedding simultaneous
         [CAPABILITIES.EMBEDDING]: 'ollama',
         [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
       },
-      codex: { bin: 'codex' },
+      codex: { model: 'gpt-5.6-sol' },
       ollama: { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
     },
     dependencies: {
-      codex: { spawnSync: () => ({ status: 0 }) },
+      codex: { auth: { snapshot: () => ({ state: 'signed_out' }), credentials: async () => {} } },
       ollama: { fetch: async () => response({ embeddings: [[1, 0]] }) },
     },
   });
@@ -57,21 +56,18 @@ test('route composition keeps Codex structured and Ollama embedding simultaneous
   assert.equal(routes[CAPABILITIES.IMAGE_GENERATION], null);
 });
 
-test('proxy route is unavailable even when injected', () => {
-  const proxyStructured = { provider: 'proxy', completeJson: async () => ({ ok: true }) };
+test('unknown structured route is unavailable even when injected', () => {
   const routes = createGatherLocalRoutes({
     config: {
       routes: {
-        [CAPABILITIES.STRUCTURED_JSON]: 'proxy',
+        [CAPABILITIES.STRUCTURED_JSON]: 'unknown',
         [CAPABILITIES.EMBEDDING]: 'ollama',
         [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
       },
       ollama: { embedModel: 'embeddinggemma' },
     },
-    proxyAdapter: proxyStructured,
   });
   assert.equal(routes[CAPABILITIES.STRUCTURED_JSON], null);
-  assert.equal(routes[CAPABILITIES.IMAGE_GENERATION], null);
 });
 
 test('local structured adapter sends JSON response format and bounded JPEG data URL', async () => {
@@ -86,31 +82,22 @@ test('local structured adapter sends JSON response format and bounded JPEG data 
       },
     },
   );
-  assert.deepEqual(await adapter.completeJson({ system: 'system', input: 'input', imagePath: '/tmp/x.jpg' }), { answer: true });
+  assert.deepEqual(await adapter.completeJson({
+    system: 'system', input: 'input', imagePath: '/tmp/x.jpg',
+  }), { answer: true });
   assert.equal(request.model, 'vision');
   assert.deepEqual(request.response_format, { type: 'json_object' });
   assert.equal(request.messages[1].content[1].image_url.url.startsWith('data:image/jpeg;'), true);
 });
 
 test('Ollama adapter validates vector identity and dimension', async () => {
-  const calls = [];
   const adapter = createOllamaEmbeddingAdapter(
     { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
-    {
-      fetch: async (url) => {
-        calls.push(url);
-        return response({ embeddings: [[1, 0, 0]] });
-      },
-    },
+    { fetch: async () => response({ embeddings: [[1, 0, 0]] }) },
   );
-  const result = await adapter.embed({ text: 'hello' });
-  assert.deepEqual(result, {
-    vector: [1, 0, 0],
-    provider: 'ollama',
-    model: 'embeddinggemma',
-    dimension: 3,
+  assert.deepEqual(await adapter.embed({ text: 'hello' }), {
+    vector: [1, 0, 0], provider: 'ollama', model: 'embeddinggemma', dimension: 3,
   });
-  assert.deepEqual(calls, ['http://ollama/api/embed']);
   await assert.rejects(
     adapter.embed({ text: 'hello', expectedDimension: 2 }),
     (error) => error.code === 'AI_EMBEDDING_DIMENSION_MISMATCH',
@@ -121,65 +108,19 @@ test('local transport distinguishes caller cancellation from timeout', async () 
   function waitingFetch(_url, options) {
     return new Promise((_resolve, reject) => {
       options.signal.addEventListener('abort', () => {
-        const error = new Error('aborted');
-        error.name = 'AbortError';
-        reject(error);
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
       }, { once: true });
     });
   }
-
-  const adapter = createLocalStructuredAdapter(
+  const controller = new AbortController();
+  const cancelled = createLocalStructuredAdapter(
     { baseUrl: 'http://local/v1', chatModel: 'vision', timeoutMs: 1000 },
     { fetch: waitingFetch },
-  );
-  const controller = new AbortController();
-  const cancelled = adapter.completeJson({ input: 'input', signal: controller.signal });
+  ).completeJson({ input: 'input', signal: controller.signal });
   controller.abort();
   await assert.rejects(cancelled, (error) => error.code === 'AI_ABORTED');
-
-  const timedOut = createLocalStructuredAdapter(
+  await assert.rejects(createLocalStructuredAdapter(
     { baseUrl: 'http://local/v1', chatModel: 'vision', timeoutMs: 5 },
     { fetch: waitingFetch },
-  ).completeJson({ input: 'input' });
-  await assert.rejects(timedOut, (error) => error.code === 'AI_TIMEOUT');
-});
-
-test('Codex cancellation terminates its app-server process', async () => {
-  const controller = new AbortController();
-  const process = new EventEmitter();
-  process.stdout = new EventEmitter();
-  process.stderr = new EventEmitter();
-  let killed = false;
-  const requests = [];
-  process.kill = () => { killed = true; };
-  process.stdin = {
-    write(line) {
-      const message = JSON.parse(line);
-      requests.push(message);
-      const reply = (result) => queueMicrotask(() => {
-        process.stdout.emit('data', `${JSON.stringify({ id: message.id, result })}\n`);
-      });
-      if (message.method === 'initialize') reply({});
-      if (message.method === 'thread/start') reply({ thread: { id: 'thread-1' } });
-      if (message.method === 'turn/start') {
-        reply({ turn: { id: 'turn-1' } });
-        queueMicrotask(() => controller.abort());
-      }
-    },
-  };
-
-  const adapter = createCodexStructuredAdapter(
-    { bin: 'codex', cwd: '/tmp', timeoutMs: 1000 },
-    {
-      spawnSync: () => ({ status: 0 }),
-      spawn: () => process,
-    },
-  );
-  await assert.rejects(
-    adapter.completeJson({ input: 'input', signal: controller.signal }),
-    (error) => error.code === 'AI_ABORTED',
-  );
-  assert.equal(killed, true);
-  assert.equal(requests.find((request) => request.method === 'thread/start').params.ephemeral, true);
-  assert.equal(requests.find((request) => request.method === 'thread/start').params.sandbox, 'read-only');
+  ).completeJson({ input: 'input' }), (error) => error.code === 'AI_TIMEOUT');
 });

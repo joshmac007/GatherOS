@@ -140,6 +140,59 @@ test('smart-category profiles, memberships, aliases, and alias search remain rel
   assert.equal(replayed.category.description, 'Updated description');
 }));
 
+test('smart-category assignment state is durable, stale-aware, and backoff-bounded', withTempDb((db) => {
+  for (const [id, createdAt] of [['assigned', 10], ['unmatched', 20], ['future', 30], ['exhausted', 40]]) {
+    insertSave(db, `save-${id}`, { createdAt });
+    db.upsertSaveTopicProfile({ saveId: `save-${id}`, summary: id, concepts: ['one', 'two', 'three'], updatedAt: 100 });
+  }
+  const fingerprint = db.getSmartCategoryTaxonomyFingerprint();
+  db.completeSmartCategoryAssignment({
+    saveId: 'save-assigned', profileVersion: 100, taxonomyFingerprint: fingerprint, outcome: 'assigned', now: 110,
+  });
+  db.completeSmartCategoryAssignment({
+    saveId: 'save-unmatched', profileVersion: 100, taxonomyFingerprint: fingerprint, outcome: 'unmatched', now: 110,
+  });
+  db.failSmartCategoryAssignment({
+    saveId: 'save-future', profileVersion: 100, taxonomyFingerprint: fingerprint,
+    phase: 'assignment', retryable: true, retryAt: 1000, now: 100,
+  });
+  db.failSmartCategoryAssignment({
+    saveId: 'save-exhausted', profileVersion: 100, taxonomyFingerprint: fingerprint,
+    phase: 'profile', retryable: false, now: 100,
+  });
+
+  assert.deepEqual(db.getPendingSmartCategorySaves({ taxonomyFingerprint: fingerprint, now: 200 }), []);
+  assert.deepEqual(db.getSmartCategoryPendingState({ taxonomyFingerprint: fingerprint, now: 200 }), {
+    eligibleCount: 0,
+    nextRetryAt: 1000,
+  });
+  assert.deepEqual(
+    db.getPendingSmartCategorySaves({ taxonomyFingerprint: fingerprint, now: 1000 }).map((row) => row.id),
+    ['save-future'],
+  );
+
+  db.upsertSaveTopicProfile({ saveId: 'save-unmatched', summary: 'changed', concepts: ['one', 'two', 'three'], updatedAt: 200 });
+  assert.deepEqual(
+    db.getPendingSmartCategorySaves({ taxonomyFingerprint: fingerprint, now: 200 }).map((row) => row.id),
+    ['save-unmatched'],
+  );
+  db.completeSmartCategoryAssignment({
+    saveId: 'save-unmatched', profileVersion: 200, taxonomyFingerprint: fingerprint, outcome: 'unmatched', now: 250,
+  });
+
+  const changedFingerprint = db.getSmartCategoryTaxonomyFingerprint({ categories: [{ id: 'cat', status: 'visible', name: 'Design', description: 'Changed', aliases: [] }] });
+  assert.notEqual(changedFingerprint, fingerprint);
+  assert.ok(db.getSmartCategoryPendingState({ taxonomyFingerprint: changedFingerprint, now: 200 }).eligibleCount >= 3);
+
+  assert.equal(db.getSmartCategoryAssignmentState('save-exhausted').state, 'exhausted');
+  db.resetSmartCategoryAssignmentFailures({ saveIds: ['save-exhausted'], now: 300 });
+  assert.deepEqual(
+    db.getPendingSmartCategorySaves({ taxonomyFingerprint: fingerprint, now: 300 }).map((row) => row.id),
+    ['save-exhausted'],
+  );
+  assert.equal(db.getSmartCategoryAssignmentState('save-assigned').state, 'completed');
+}));
+
 test('semantic rebuild atomically activates only after valid vectors complete', withTempDb((db) => {
   insertSave(db, 'save-a');
   insertSave(db, 'save-b');

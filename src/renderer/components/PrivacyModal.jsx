@@ -6,7 +6,7 @@ import styles from './PrivacyModal.module.css';
 // enough to scan in one sitting; for the full long-form text the
 // "View full policy" link opens the GitHub copy.
 
-const POLICY_URL = 'https://github.com/BrettfromDJ/GatherOS/blob/main/PRIVACY.md';
+const POLICY_URL = 'https://github.com/joshmac007/GatherOS/blob/local/PRIVACY.md';
 const SUPPORT_EMAIL = 'hey@gatheros.co';
 
 const SECTIONS = [
@@ -14,35 +14,34 @@ const SECTIONS = [
     title: 'Local-first',
     body:
       'Every save, collection, tag, and note lives in ' +
-      '~/Library/Application Support/GatherOS/ on your machine. ' +
-      'GatherOS doesn’t run servers — nothing in that folder is uploaded by us.',
+      '~/Library/Application Support/GatherLocal/ on your machine. ' +
+      'GatherLocal does not upload that folder.',
   },
   {
     title: 'No tracking',
     body:
       'We don’t collect analytics, telemetry, or crash reports. ' +
-      'We don’t require an account. We don’t show ads or share ' +
-      'data with third parties.',
+      'We don’t require a GatherLocal account, sell your data, show ads, ' +
+      'or collect analytics. OpenAI receives relevant data only when you use enabled AI features.',
   },
   {
-    title: 'Your OpenAI key',
+    title: 'ChatGPT sign-in',
     body:
-      'When you supply an OpenAI key, it’s stored in the macOS ' +
-      'Keychain (encrypted by the OS). It’s used only to authenticate ' +
-      'requests sent directly from your machine to api.openai.com. ' +
-      'We never see it.',
+      'OAuth tokens are stored as ciphertext encrypted by Electron safeStorage, ' +
+      'backed by macOS Keychain. Tokens are sent only to auth.openai.com and ' +
+      'chatgpt.com. Log out in Local AI settings to remove them.',
   },
   {
     title: 'AI features and OpenAI',
     body:
-      'When AI features are on, GatherOS sends image data and short ' +
-      'text snippets to OpenAI on your behalf. OpenAI handles that data ' +
-      'under their own terms. Toggle the features off and no calls are made.',
+      'When ChatGPT Codex features are enabled, GatherLocal sends relevant ' +
+      'images and text directly to OpenAI. Credentials are excluded from ' +
+      'GatherLocal exports and snapshots, though system backups may contain encrypted ciphertext.',
   },
   {
     title: 'Auto-updates',
     body:
-      'GatherOS checks GitHub Releases for new builds over HTTPS. ' +
+      'GatherLocal checks GitHub Releases for new builds over HTTPS. ' +
       'GitHub logs standard request info; nothing app-specific is added.',
   },
 ];

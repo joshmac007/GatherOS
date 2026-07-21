@@ -7,19 +7,45 @@
 const { getAiRuntime } = require('./ai/bootstrap');
 const { CAPABILITIES } = require('./ai/runtime');
 const { providerAccess } = require('./gatherlocal/ai/authorization');
+const {
+  IMAGE_ANALYSIS_OUTPUT_SCHEMA,
+  IMAGE_PROMPT_OUTPUT_SCHEMA,
+} = require('./gatherlocal/ai/schema-registry');
 
-function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
+const AUTO_TAG_OUTPUT_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    tags: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 6,
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 80,
+      },
+    },
+  },
+  required: ['tags'],
+  additionalProperties: false,
+});
+
+function createOpenAiFacade({ runtime = null, runtimeResolver = getAiRuntime } = {}) {
+  const resolveRuntime = runtime ? () => runtime : runtimeResolver;
+
   function hasSession() {
-    // Compatibility name: callers use this as "AI is configured".
-    return runtime.isConfigured(CAPABILITIES.STRUCTURED_JSON);
+    return resolveRuntime().isUsable(CAPABILITIES.STRUCTURED_JSON);
   }
 
   function capabilityAccess(capability) {
-    const provider = runtime.providerFor(capability);
+    const runtimeValue = resolveRuntime();
+    const provider = runtimeValue.providerFor(capability);
+    const available = runtimeValue.isConfigured(capability);
     return {
       capability,
       provider,
-      configured: runtime.isConfigured(capability),
+      available,
+      configured: runtimeValue.isUsable(capability),
       ...providerAccess(provider),
     };
   }
@@ -33,7 +59,8 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
   }
 
   async function autoTagImage(filePath, { signal } = {}) {
-    const parsed = await runtime.completeJson({
+    const runtimeValue = resolveRuntime();
+    const parsed = await runtimeValue.completeJson({
       system:
         'You suggest short, useful tags for visual inspiration. Return JSON only: ' +
         '{"tags": ["tag1", "tag2", ...]}. Provide 3-6 lowercase tags. ' +
@@ -41,19 +68,20 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
         'mood, or use case. Avoid generic words like "image", "design", "art".',
       input: 'Tag this image.',
       imagePath: filePath,
+      outputSchema: AUTO_TAG_OUTPUT_SCHEMA,
       maxOutputTokens: 120,
       signal,
     });
     const raw = Array.isArray(parsed?.tags) ? parsed.tags : [];
-    return raw
+    return [...new Set(raw
       .filter((tag) => typeof tag === 'string')
       .map((tag) => tag.trim().toLowerCase().replace(/^#+/, ''))
-      .filter(Boolean)
+      .filter(Boolean))]
       .slice(0, 6);
   }
 
   async function analyzeImage(filePath, { signal } = {}) {
-    const parsed = await runtime.completeJson({
+    const parsed = await resolveRuntime().completeJson({
       system:
         'You write designer-friendly metadata for visual inspiration. ' +
         'Return JSON: {"title": "...", "description": "...", "text": "..."}. ' +
@@ -72,6 +100,7 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
         'if no text is visible.',
       input: 'Analyze this image.',
       imagePath: filePath,
+      outputSchema: IMAGE_ANALYSIS_OUTPUT_SCHEMA,
       maxOutputTokens: 800,
       signal,
     });
@@ -93,7 +122,7 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
   }
 
   async function generateImagePrompt(filePath, { signal } = {}) {
-    const parsed = await runtime.completeJson({
+    const parsed = await resolveRuntime().completeJson({
       system:
         'You write image-generation prompts that recreate the visual ' +
         'style and content of a reference image. The prompts are used ' +
@@ -109,6 +138,7 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
         '- Not start with "An image of" or "A picture of" — describe directly',
       input: 'Write a prompt that recreates this image.',
       imagePath: filePath,
+      outputSchema: IMAGE_PROMPT_OUTPUT_SCHEMA,
       maxOutputTokens: 280,
       signal,
     });
@@ -121,7 +151,7 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
   async function embedText(text, { expectedDimension = null, signal } = {}) {
     const trimmed = (text || '').trim();
     if (!trimmed) throw new Error('Cannot embed empty text');
-    const result = await runtime.embed({
+    const result = await resolveRuntime().embed({
       text: trimmed.slice(0, 8000),
       expectedDimension,
       signal,
@@ -130,7 +160,7 @@ function createOpenAiFacade({ runtime = getAiRuntime() } = {}) {
   }
 
   async function getUsage({ signal } = {}) {
-    return runtime.getUsage(CAPABILITIES.STRUCTURED_JSON, { signal });
+    return resolveRuntime().getUsage(CAPABILITIES.STRUCTURED_JSON, { signal });
   }
 
   return {

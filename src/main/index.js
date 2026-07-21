@@ -7,6 +7,7 @@ const {
   nativeImage,
   nativeTheme,
   protocol,
+  safeStorage,
   session,
   shell,
 } = require('electron');
@@ -67,11 +68,15 @@ const {
   recordSmartCategoryRun, getPendingSmartCategorySaves, getSemanticIndexState,
   getSemanticVector, getActiveSemanticVectors, getSmartCategoryMembers,
   upsertSmartCategory, upsertSmartCategoryAlias, applySmartCategoryTaxonomyChanges,
-  listSmartCategoryRuns,
+  listSmartCategoryRuns, getSmartCategoryTaxonomyFingerprint,
+  getSmartCategoryAssignmentState, completeSmartCategoryAssignment,
+  failSmartCategoryAssignment, resetSmartCategoryAssignmentFailures,
+  getSmartCategoryPendingState,
 } = databaseRepository;
 const { getPref } = require('./settings');
-const { analyzeImage } = require('./openai');
-const { getAiRuntime } = require('./ai/bootstrap');
+const openAiFacade = require('./openai');
+const { analyzeImage } = openAiFacade;
+const { createPostReadyAiBackend, getAiRuntime } = require('./ai/bootstrap');
 const { CAPABILITIES } = require('./ai/runtime');
 const { createSaveTopicProfile } = require('./save-topic-profiles');
 const { assignSaveToExistingSmartCategories } = require('./smart-category-memberships');
@@ -92,7 +97,7 @@ const { createForegroundActivityTracker } = require('./foreground-activity');
 const { createSaveBackgroundRouter } = require('./save-background-router');
 const { createSocialImportState } = require('./social-import-state');
 const { ensureStorageDirs, saveImageFromFile } = require('./storage');
-const { registerIpcHandlers } = require('./ipc');
+const { registerIpcHandlers, sanitizeAiAuthStatus } = require('./ipc');
 const {
   registerCaptureHotkey,
   unregisterCaptureHotkey,
@@ -126,6 +131,7 @@ let backgroundRuntime = null;
 let foregroundActivity = null;
 let saveBackgroundRouter = null;
 let structuredProvider = null;
+let codexAuth = null;
 
 function sendBackgroundEvent(event, payload) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -500,7 +506,7 @@ function notifyDuplicateInRenderer(existing) {
 async function enrichImageSaveInBackground(record) {
   if (!record?.id || !record.file_path) return;
   if (!shouldUseImageAi(record)) return;
-  if (!structuredProvider || !getAiRuntime().isConfigured(CAPABILITIES.STRUCTURED_JSON)) return;
+  if (!structuredProvider || !getAiRuntime().isUsable(CAPABILITIES.STRUCTURED_JSON)) return;
 
   const wantName = getPref('autoNameOnSave', true) && !(record.title && record.title.trim());
   const wantSemantic = getPref('semanticSearch', true);
@@ -962,6 +968,21 @@ function stripFramingHeaders(sessionInstance) {
 }
 
 app.whenReady().then(() => {
+  const aiBackend = createPostReadyAiBackend({
+    app,
+    safeStorage,
+    dependencies: {
+      tracer: (event) => {
+        if (event?.event !== 'auth-state') return;
+        const status = sanitizeAiAuthStatus(event);
+        for (const win of BrowserWindow.getAllWindows()) {
+          try { win.webContents.send('ai:auth:status', status); } catch { /* renderer may be closing */ }
+        }
+      },
+    },
+  });
+  codexAuth = aiBackend.codexAuth;
+
   // Install the header-strip on the partitions the URL features use.
   // session.fromPartition lazily creates the session if it doesn't
   // exist, so doing this before the first capture / webview mount
@@ -1063,14 +1084,39 @@ app.whenReady().then(() => {
   });
   smartCategoryRefresh = createBackgroundSmartCategoryRefresh({
     getPendingSmartCategorySaves,
+    getSmartCategoryPendingState,
+    getSmartCategoryTaxonomyFingerprint,
+    resetSmartCategoryAssignmentFailures,
     listSmartCategories,
     getLastTaxonomyRefreshAt: () => {
       const run = listSmartCategoryRuns({ limit: 100 })
-        .find((row) => row.run_type === 'taxonomy_refresh');
+        .find((row) => row.run_type === 'taxonomy_refresh'
+          && Number(row.failed_count) === 0
+          && !row.error);
       return Number(run?.finished_at || run?.started_at) || 0;
     },
-    hasProvider: () => aiRuntime.isConfigured(CAPABILITIES.STRUCTURED_JSON),
-    runRefresh: async ({ pendingSaves, categories, shouldContinue, taxonomyRequested, signal }) => {
+    hasProvider: () => aiRuntime.isUsable(CAPABILITIES.STRUCTURED_JSON),
+    runRefresh: async ({ pendingSaves, categories, shouldContinue, taxonomyRequested, taxonomyOnly = false, signal }) => {
+      const refreshTaxonomy = () => runSmartCategoryTaxonomyRefresh({
+        categories: withSmartCategoryAliases(listSmartCategories()),
+        structuredProvider,
+        providerName: aiRuntime.providerFor(CAPABILITIES.STRUCTURED_JSON),
+        storage: { applySmartCategoryTaxonomyChanges, recordSmartCategoryRun },
+        signal,
+      });
+      if (taxonomyOnly) {
+        const taxonomy = await refreshTaxonomy();
+        return {
+          ok: taxonomy?.ok === true,
+          reason: taxonomy?.reason || (taxonomy?.ok ? null : 'taxonomy-failed'),
+          retryable: taxonomy?.retryable === true,
+          processedCount: 0,
+          completedCount: 0,
+          assignedCount: 0,
+          failedCount: taxonomy?.ok ? 0 : (Number(taxonomy?.failedCount) || 1),
+          taxonomy,
+        };
+      }
       const incremental = await runIncrementalSmartCategoryRefresh({
         pendingSaves,
         categories,
@@ -1106,16 +1152,27 @@ app.whenReady().then(() => {
           getSemanticVector,
           getActiveSemanticVectors,
           getSmartCategoryMembers,
+          getSmartCategoryTaxonomyFingerprint,
+          getSmartCategoryAssignmentState,
+          completeSmartCategoryAssignment,
+          failSmartCategoryAssignment,
         },
       });
-      if (!taxonomyRequested || !shouldContinue?.()) return incremental;
-      const taxonomy = await runSmartCategoryTaxonomyRefresh({
-        categories: withSmartCategoryAliases(listSmartCategories()),
-        structuredProvider,
-        providerName: aiRuntime.providerFor(CAPABILITIES.STRUCTURED_JSON),
-        storage: { applySmartCategoryTaxonomyChanges, recordSmartCategoryRun },
-        signal,
-      });
+      // Taxonomy changes only follow a clean incremental pass. A profile or
+      // assignment failure must remain durable item work, never mutate the
+      // taxonomy in the same cycle.
+      if (!taxonomyRequested || !incremental?.ok || incremental.failedCount > 0 || !shouldContinue?.()) return incremental;
+      const taxonomy = await refreshTaxonomy();
+      if (!taxonomy?.ok) {
+        return {
+          ...incremental,
+          ok: false,
+          reason: taxonomy?.reason || 'taxonomy-failed',
+          retryable: taxonomy?.retryable === true,
+          failedCount: (Number(incremental.failedCount) || 0) + (Number(taxonomy.failedCount) || 1),
+          taxonomy,
+        };
+      }
       return { ...incremental, taxonomy };
     },
   });
@@ -1128,6 +1185,10 @@ app.whenReady().then(() => {
       all ? backgroundRuntime.cleanupAllDerived() : backgroundRuntime.cleanupSaveDerived(saveId)
     ),
     socialImportState,
+    aiFacade: openAiFacade,
+    aiRuntime,
+    aiAuth: codexAuth,
+    onAiAuthenticated: () => smartCategoryRefresh?.requestRefresh?.(),
   });
   createMainWindow();
   // Apply the macOS application menu now that mainWindow exists so
@@ -1248,7 +1309,14 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 
 let backgroundDrainedForQuit = false;
 let backgroundQuitDrain = null;
+let aiAuthDisposedForQuit = false;
 app.on('before-quit', (event) => {
+  if (!aiAuthDisposedForQuit) {
+    aiAuthDisposedForQuit = true;
+    try { codexAuth?.dispose(); } catch (error) {
+      console.error('[ai] auth dispose failed:', error?.message || error);
+    }
+  }
   if (!backgroundRuntime || backgroundDrainedForQuit) {
     destroyToastWindow();
     return;

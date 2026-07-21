@@ -6,6 +6,28 @@ const { normalizeVector, cosineSimilarity, meanEmbedding } = require('./smart-ca
 const PRIMARY_MEMBERSHIP_THRESHOLD = 0.75;
 const SECONDARY_MEMBERSHIP_THRESHOLD = 0.45;
 
+const SMART_CATEGORY_MEMBERSHIP_OUTPUT_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    memberships: {
+      type: 'array', maxItems: 40,
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          category_id: { type: 'string', minLength: 1, maxLength: 120 },
+          weight: { type: 'number', minimum: 0, maximum: 1 },
+          evidence: { type: 'string', maxLength: 220 },
+        },
+        required: ['category_id', 'weight', 'evidence'],
+      },
+    },
+    needs_new_category: { type: 'boolean' },
+    new_category_hint: { type: ['string', 'null'], maxLength: 120 },
+  },
+  required: ['memberships', 'needs_new_category', 'new_category_hint'],
+});
+
 function clean(value, max = 1000) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
 }
@@ -221,10 +243,16 @@ async function assignSmartCategoryMemberships({
         '"needs_new_category":false,"new_category_hint":null}. Use only supplied category IDs.',
       input: JSON.stringify(input),
       maxOutputTokens: 700,
+      outputSchema: SMART_CATEGORY_MEMBERSHIP_OUTPUT_SCHEMA,
       signal,
     });
   } catch (error) {
-    return { ok: false, reason: error?.code || 'provider-error', detail: error?.message || String(error) };
+    return {
+      ok: false,
+      reason: error?.code || 'provider-error',
+      detail: error?.message || String(error),
+      retryable: error?.retryable === true,
+    };
   }
   const validation = validateSmartCategoryMemberships(parsed, { candidateCategories: input.candidate_categories });
   if (!validation.ok) return validation;
@@ -265,6 +293,7 @@ async function assignSaveToExistingSmartCategories({
 module.exports = {
   PRIMARY_MEMBERSHIP_THRESHOLD,
   SECONDARY_MEMBERSHIP_THRESHOLD,
+  SMART_CATEGORY_MEMBERSHIP_OUTPUT_SCHEMA,
   buildMembershipScoringInput,
   computeSemanticCategoryCentroid,
   assignSmartCategoryMembershipsWithSemanticIndex,

@@ -446,6 +446,39 @@ const MIGRATIONS = [
   (database) => {
     addColumnIfMissing(database, 'saves', 'viewed_at', 'INTEGER');
   },
+  // X Articles live in tweet_meta beside the post that shared them. Rebuild
+  // FTS with their title and excerpt so older saves become searchable too.
+  (database) => {
+    const safe = (col) => `(CASE WHEN json_valid(${col}) THEN ${col} END)`;
+    const tweetText = (col) => `
+      COALESCE(json_extract(${safe(col)},'$.caption'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.authorName'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.authorHandle'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.thread'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.quoted.caption'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.quoted.authorName'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.quoted.authorHandle'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.article.title'),'') || ' ' ||
+      COALESCE(json_extract(${safe(col)},'$.article.excerpt'),'')`;
+    database.exec(`
+      DROP TRIGGER IF EXISTS saves_fts_ai;
+      DROP TRIGGER IF EXISTS saves_fts_au;
+      CREATE TRIGGER saves_fts_ai AFTER INSERT ON saves BEGIN
+        INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+        VALUES (new.id, COALESCE(new.title,''), COALESCE(new.ocr_text,''), ${tweetText('new.tweet_meta')});
+      END;
+      CREATE TRIGGER saves_fts_au
+      AFTER UPDATE OF title, ocr_text, tweet_meta ON saves BEGIN
+        DELETE FROM saves_fts WHERE save_id = new.id;
+        INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+        VALUES (new.id, COALESCE(new.title,''), COALESCE(new.ocr_text,''), ${tweetText('new.tweet_meta')});
+      END;
+      DELETE FROM saves_fts;
+      INSERT INTO saves_fts (save_id, title, ocr_text, tweet_text)
+      SELECT id, COALESCE(title,''), COALESCE(ocr_text,''), ${tweetText('saves.tweet_meta')}
+      FROM saves;
+    `);
+  },
 ];
 
 function repairMissingXTweetCreatedAt(database) {
@@ -1096,13 +1129,15 @@ function getAllSaves({ search = '', sort = 'newest', collectionId = null, colorH
         OR json_extract(tweet_meta, '$.quoted.caption') LIKE ?
         OR json_extract(tweet_meta, '$.quoted.authorName') LIKE ?
         OR json_extract(tweet_meta, '$.quoted.authorHandle') LIKE ?
+        OR json_extract(tweet_meta, '$.article.title') LIKE ?
+        OR json_extract(tweet_meta, '$.article.excerpt') LIKE ?
         OR id IN (
           SELECT save_id FROM save_tags
           JOIN tags ON save_tags.tag_id = tags.id
           WHERE tags.name LIKE ?
         ))`);
       const like = `%${text}%`;
-      params.push(like, like, like, like, like, like, like, like, like, like);
+      params.push(like, like, like, like, like, like, like, like, like, like, like, like);
     }
   }
 
@@ -1211,6 +1246,93 @@ function findActiveSaveBySourceKey(key) {
   return getDatabase().prepare(
     'SELECT * FROM saves WHERE source_key = ? AND deleted_at IS NULL LIMIT 1',
   ).get(key);
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function fillMissingObject(existing, incoming) {
+  const target = isPlainObject(existing) ? { ...existing } : {};
+  let changed = false;
+  if (!isPlainObject(incoming)) return { value: target, changed: false };
+  for (const [key, incomingValue] of Object.entries(incoming)) {
+    const current = target[key];
+    const missing = current === null || current === undefined
+      || (typeof current === 'string' && !current.trim());
+    const incomingMissing = incomingValue === null || incomingValue === undefined
+      || (typeof incomingValue === 'string' && !incomingValue.trim());
+    if (missing && !incomingMissing) {
+      target[key] = incomingValue;
+      changed = true;
+    } else if (isPlainObject(current) && isPlainObject(incomingValue)) {
+      const nested = fillMissingObject(current, incomingValue);
+      if (nested.changed) {
+        target[key] = nested.value;
+        changed = true;
+      }
+    }
+  }
+  return { value: target, changed };
+}
+
+// An automated capture can arrive after a low-detail passive watcher save.
+// Keep the canonical row (and all user-managed columns) while filling only
+// structured data that the earlier capture did not have. The outbox reset is
+// inside this same transaction: changed source material must be re-indexed;
+// an unchanged duplicate remains terminal.
+function enrichActiveSaveBySourceKey(key, incomingTweetMeta) {
+  if (!key || !isPlainObject(incomingTweetMeta)) return { record: null, changed: false };
+  const database = getDatabase();
+  const enrich = database.transaction(() => {
+    const existing = database.prepare(
+      'SELECT * FROM saves WHERE source_key = ? AND deleted_at IS NULL LIMIT 1',
+    ).get(key);
+    if (!existing) return { record: null, changed: false };
+    let currentMeta;
+    try { currentMeta = existing.tweet_meta ? JSON.parse(existing.tweet_meta) : {}; }
+    catch { currentMeta = {}; }
+    if (!isPlainObject(currentMeta)) currentMeta = {};
+    const nextMeta = { ...currentMeta };
+    let changed = false;
+    for (const field of ['article', 'quoted']) {
+      if (!isPlainObject(incomingTweetMeta[field])) continue;
+      const merged = fillMissingObject(currentMeta[field], incomingTweetMeta[field]);
+      if (merged.changed) {
+        nextMeta[field] = merged.value;
+        changed = true;
+      }
+    }
+    for (const field of ['thread', 'media']) {
+      if (Array.isArray(currentMeta[field]) && currentMeta[field].length > 0) continue;
+      if (!Array.isArray(incomingTweetMeta[field]) || incomingTweetMeta[field].length === 0) continue;
+      nextMeta[field] = incomingTweetMeta[field];
+      changed = true;
+    }
+    const existingCreatedAt = Number(currentMeta.tweetCreatedAt);
+    const incomingCreatedAt = Number(incomingTweetMeta.tweetCreatedAt);
+    if ((!Number.isFinite(existingCreatedAt) || existingCreatedAt <= 0)
+      && Number.isFinite(incomingCreatedAt) && incomingCreatedAt > 0) {
+      nextMeta.tweetCreatedAt = incomingCreatedAt;
+      changed = true;
+    }
+    if (!changed) return { record: existing, changed: false };
+    database.prepare('UPDATE saves SET tweet_meta = ? WHERE id = ?')
+      .run(JSON.stringify(nextMeta), existing.id);
+    // Do not disturb an in-flight route; a completed route becomes pending
+    // exactly when its semantic source changed.
+    database.prepare(`
+      UPDATE save_background_routes
+         SET state = 'pending', retry_count = 0, available_at = ?,
+             updated_at = ?, started_at = NULL, finished_at = NULL, error = NULL
+       WHERE save_id = ? AND state = 'completed'
+    `).run(Date.now(), Date.now(), existing.id);
+    return {
+      record: database.prepare('SELECT * FROM saves WHERE id = ?').get(existing.id),
+      changed: true,
+    };
+  });
+  return enrich();
 }
 
 // Classify ordered X bookmark URLs against desktop save/tombstone history.
@@ -1896,6 +2018,36 @@ function getSmartCategoryAliases(categoryId) {
     .all(categoryId);
 }
 
+// Taxonomy evidence intentionally excludes mutable presentation/derived data
+// (updated_at, member counts, centroids, memberships). Assignment staleness
+// follows semantic taxonomy changes only.
+function getSmartCategoryTaxonomyFingerprint(options = {}) {
+  const categories = Array.isArray(options) ? options : options?.categories;
+  const source = Array.isArray(categories)
+    ? categories
+    : listSmartCategories({ includeArchived: false });
+  const semantics = source
+    .filter((category) => category?.status === 'visible' || category?.status === 'candidate')
+    .map((category) => {
+      const aliases = Array.isArray(category.aliases)
+        ? category.aliases.map((alias) => typeof alias === 'string' ? alias : alias?.alias)
+        : getSmartCategoryAliases(category.id).map((alias) => alias.alias);
+      return {
+        id: String(category.id || '').trim(),
+        status: String(category.status || '').trim(),
+        name: category.name == null ? null : String(category.name).trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 160),
+        description: category.description == null ? null : String(category.description).trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 400),
+        aliases: [...new Set(aliases
+          .map((alias) => String(alias || '').trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 160))
+          .filter(Boolean))]
+          .sort((a, b) => a < b ? -1 : a > b ? 1 : 0),
+      };
+    })
+    .filter((category) => category.id)
+    .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  return crypto.createHash('sha256').update(JSON.stringify(semantics)).digest('hex');
+}
+
 function findSmartCategoryAliases(alias) {
   const q = (alias || '').trim();
   if (!q) return [];
@@ -2120,28 +2272,264 @@ function listSmartCategoryRuns({ limit = 20 } = {}) {
     .all(n);
 }
 
-function getPendingSmartCategorySaves({ limit = 50 } = {}) {
+const SMART_CATEGORY_ASSIGNMENT_RETRY_BASE_MS = 5_000;
+const SMART_CATEGORY_ASSIGNMENT_MAX_BACKOFF_MS = 15 * 60 * 1000;
+const SMART_CATEGORY_ASSIGNMENT_MAX_RETRIES = 3;
+
+function sanitizeSmartCategoryAssignmentError(error, max = 500) {
+  const raw = typeof error === 'string'
+    ? error
+    : error?.message || error?.detail || error?.reason || String(error || '');
+  return raw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) || null;
+}
+
+function normalizeSmartCategoryAssignmentState(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    profile_version: row.profile_version == null ? null : Number(row.profile_version),
+    retry_count: Math.max(0, Number(row.retry_count) || 0),
+  };
+}
+
+function getSmartCategoryAssignmentState(saveId) {
+  if (!saveId) return null;
+  return normalizeSmartCategoryAssignmentState(
+    getDatabase().prepare(
+      'SELECT * FROM smart_category_assignment_state WHERE save_id = ?',
+    ).get(saveId),
+  );
+}
+
+function writeSmartCategoryAssignmentState({
+  saveId,
+  profileVersion = null,
+  taxonomyFingerprint = '',
+  phase = 'profile',
+  state = 'retry_wait',
+  outcome = null,
+  retryCount = 0,
+  availableAt,
+  error = null,
+  updatedAt,
+  completedAt = null,
+} = {}) {
+  if (!saveId) return { ok: false, reason: 'missing-save' };
+  if (!['profile', 'assignment'].includes(phase)) return { ok: false, reason: 'invalid-phase' };
+  if (!['retry_wait', 'exhausted', 'completed'].includes(state)) return { ok: false, reason: 'invalid-state' };
+  if (outcome != null && !['assigned', 'unmatched'].includes(outcome)) {
+    return { ok: false, reason: 'invalid-outcome' };
+  }
+  const timestamp = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+  const record = {
+    save_id: saveId,
+    profile_version: Number.isFinite(profileVersion) ? profileVersion : null,
+    taxonomy_fingerprint: String(taxonomyFingerprint || ''),
+    phase,
+    state,
+    outcome,
+    retry_count: Math.max(0, Number(retryCount) || 0),
+    available_at: Number.isFinite(availableAt) ? availableAt : timestamp,
+    error: sanitizeSmartCategoryAssignmentError(error),
+    updated_at: timestamp,
+    completed_at: Number.isFinite(completedAt) ? completedAt : null,
+  };
+  getDatabase().prepare(`
+    INSERT INTO smart_category_assignment_state
+      (save_id, profile_version, taxonomy_fingerprint, phase, state, outcome,
+       retry_count, available_at, error, updated_at, completed_at)
+    VALUES
+      (@save_id, @profile_version, @taxonomy_fingerprint, @phase, @state, @outcome,
+       @retry_count, @available_at, @error, @updated_at, @completed_at)
+    ON CONFLICT(save_id) DO UPDATE SET
+      profile_version = excluded.profile_version,
+      taxonomy_fingerprint = excluded.taxonomy_fingerprint,
+      phase = excluded.phase,
+      state = excluded.state,
+      outcome = excluded.outcome,
+      retry_count = excluded.retry_count,
+      available_at = excluded.available_at,
+      error = excluded.error,
+      updated_at = excluded.updated_at,
+      completed_at = excluded.completed_at
+  `).run(record);
+  return { ok: true, state: normalizeSmartCategoryAssignmentState(record) };
+}
+
+const upsertSmartCategoryAssignmentState = writeSmartCategoryAssignmentState;
+
+function completeSmartCategoryAssignment({
+  saveId,
+  profileVersion = null,
+  taxonomyFingerprint = '',
+  outcome = 'unmatched',
+  phase = 'assignment',
+  now,
+} = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  if (!['assigned', 'unmatched'].includes(outcome)) return { ok: false, reason: 'invalid-outcome' };
+  return writeSmartCategoryAssignmentState({
+    saveId, profileVersion, taxonomyFingerprint, phase, outcome,
+    state: 'completed', retryCount: 0, availableAt: timestamp,
+    error: null, updatedAt: timestamp, completedAt: timestamp,
+  });
+}
+
+function failSmartCategoryAssignment({
+  saveId,
+  profileVersion = null,
+  taxonomyFingerprint = '',
+  phase = 'profile',
+  error = null,
+  retryable = false,
+  retryAt,
+  now,
+  maxRetries = SMART_CATEGORY_ASSIGNMENT_MAX_RETRIES,
+} = {}) {
+  if (!saveId) return { ok: false, reason: 'missing-save' };
+  if (!['profile', 'assignment'].includes(phase)) return { ok: false, reason: 'invalid-phase' };
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const database = getDatabase();
+  const fail = database.transaction(() => {
+    const current = database.prepare(
+      'SELECT * FROM smart_category_assignment_state WHERE save_id = ?',
+    ).get(saveId);
+    const currentProfileVersion = Number.isFinite(profileVersion) ? profileVersion : null;
+    const evidenceChanged = current
+      && (current.profile_version !== currentProfileVersion
+        || String(current.taxonomy_fingerprint || '') !== String(taxonomyFingerprint || ''));
+    const previousRetries = evidenceChanged ? 0 : Math.max(0, Number(current?.retry_count) || 0);
+    const retryCount = previousRetries + 1;
+    const budget = Math.max(1, Number(maxRetries) || SMART_CATEGORY_ASSIGNMENT_MAX_RETRIES);
+    const exhausted = !retryable || retryCount >= budget;
+    const backoff = Math.min(
+      SMART_CATEGORY_ASSIGNMENT_RETRY_BASE_MS * (2 ** Math.max(0, retryCount - 1)),
+      SMART_CATEGORY_ASSIGNMENT_MAX_BACKOFF_MS,
+    );
+    const availableAt = exhausted
+      ? timestamp
+      : Number.isFinite(retryAt)
+        ? Math.min(Math.max(timestamp, retryAt), timestamp + SMART_CATEGORY_ASSIGNMENT_MAX_BACKOFF_MS)
+        : timestamp + backoff;
+    return writeSmartCategoryAssignmentState({
+      saveId,
+      profileVersion,
+      taxonomyFingerprint,
+      phase,
+      state: exhausted ? 'exhausted' : 'retry_wait',
+      outcome: null,
+      retryCount,
+      availableAt,
+      error,
+      updatedAt: timestamp,
+      completedAt: null,
+    });
+  });
+  return fail();
+}
+
+function resetSmartCategoryAssignmentFailures({ saveIds = null, now } = {}) {
+  const timestamp = Number.isFinite(now) ? now : Date.now();
+  const database = getDatabase();
+  const scoped = Array.isArray(saveIds) && saveIds.length > 0;
+  const placeholders = scoped ? saveIds.map(() => '?').join(',') : '';
+  const params = [timestamp, timestamp];
+  if (scoped) params.push(...saveIds);
+  const result = database.prepare(`
+    UPDATE smart_category_assignment_state
+       SET state = 'retry_wait', retry_count = 0, available_at = ?,
+           error = NULL, updated_at = ?, completed_at = NULL
+     WHERE state != 'completed'
+       ${scoped ? `AND save_id IN (${placeholders})` : ''}
+  `).run(...params);
+  return { ok: true, count: result.changes };
+}
+
+function pendingSmartCategoryPredicate({ taxonomyFingerprint = '', now = Date.now(), includeExhausted = false } = {}) {
+  return {
+    sql: `
+      s.deleted_at IS NULL
+      AND (
+        a.save_id IS NULL
+        OR COALESCE(a.profile_version, -1) != COALESCE(p.updated_at, -1)
+        OR COALESCE(a.taxonomy_fingerprint, '') != @taxonomyFingerprint
+        OR (a.state = 'retry_wait' AND a.available_at <= @now)
+        ${includeExhausted ? "OR a.state = 'exhausted'" : ''}
+      )
+    `,
+    params: { taxonomyFingerprint: String(taxonomyFingerprint || ''), now },
+  };
+}
+
+function getSmartCategoryPendingState({ taxonomyFingerprint = null, now = Date.now(), includeExhausted = false } = {}) {
+  const fingerprint = taxonomyFingerprint == null
+    ? getSmartCategoryTaxonomyFingerprint()
+    : String(taxonomyFingerprint);
+  const predicate = pendingSmartCategoryPredicate({ taxonomyFingerprint: fingerprint, now, includeExhausted });
+  const database = getDatabase();
+  const row = database.prepare(`
+    SELECT COUNT(*) AS eligible_count
+      FROM saves s
+      LEFT JOIN save_topic_profiles p ON p.save_id = s.id
+      LEFT JOIN smart_category_assignment_state a ON a.save_id = s.id
+     WHERE ${predicate.sql}
+  `).get(predicate.params);
+  const next = database.prepare(`
+    SELECT MIN(a.available_at) AS next_retry_at
+      FROM saves s
+      LEFT JOIN save_topic_profiles p ON p.save_id = s.id
+      JOIN smart_category_assignment_state a ON a.save_id = s.id
+     WHERE s.deleted_at IS NULL
+       AND a.state = 'retry_wait'
+       AND a.available_at > @now
+       AND COALESCE(a.profile_version, -1) = COALESCE(p.updated_at, -1)
+       AND COALESCE(a.taxonomy_fingerprint, '') = @taxonomyFingerprint
+  `).get({ taxonomyFingerprint: fingerprint, now });
+  return {
+    eligibleCount: Math.max(0, Number(row?.eligible_count) || 0),
+    nextRetryAt: Number.isFinite(next?.next_retry_at) ? Number(next.next_retry_at) : null,
+  };
+}
+
+function getPendingSmartCategorySaves({
+  taxonomyFingerprint = null,
+  limit = 50,
+  now = Date.now(),
+  includeExhausted = false,
+} = {}) {
   const n = Math.max(1, Math.min(500, Number(limit) || 50));
+  const fingerprint = taxonomyFingerprint == null
+    ? getSmartCategoryTaxonomyFingerprint()
+    : String(taxonomyFingerprint);
+  const predicate = pendingSmartCategoryPredicate({ taxonomyFingerprint: fingerprint, now, includeExhausted });
   return getDatabase()
     .prepare(`
-      SELECT ${SAVE_LIST_COLUMNS.split(', ').map((column) => `s.${column}`).join(', ')}
+      SELECT ${SAVE_LIST_COLUMNS.split(', ').map((column) => `s.${column}`).join(', ')},
+             a.profile_version AS smart_category_profile_version,
+             a.taxonomy_fingerprint AS smart_category_taxonomy_fingerprint,
+             a.phase AS smart_category_phase,
+             a.state AS smart_category_state,
+             a.outcome AS smart_category_outcome,
+             a.retry_count AS smart_category_retry_count,
+             a.available_at AS smart_category_available_at,
+             a.error AS smart_category_error,
+             a.updated_at AS smart_category_state_updated_at,
+             a.completed_at AS smart_category_completed_at
         FROM saves s
         LEFT JOIN save_topic_profiles p ON p.save_id = s.id
-       WHERE s.deleted_at IS NULL
-         AND (
-           p.save_id IS NULL
-           OR NOT EXISTS (
-             SELECT 1
-               FROM smart_category_members m
-               JOIN smart_categories c ON c.id = m.category_id
-              WHERE m.save_id = s.id
-                AND c.status IN ('visible', 'candidate')
-           )
-         )
-       ORDER BY s.created_at DESC
-       LIMIT ?
+        LEFT JOIN smart_category_assignment_state a ON a.save_id = s.id
+       WHERE ${predicate.sql}
+       ORDER BY
+         CASE WHEN a.state = 'retry_wait' AND a.available_at <= @now THEN 0
+              WHEN a.save_id IS NULL OR COALESCE(a.profile_version, -1) != COALESCE(p.updated_at, -1)
+                OR COALESCE(a.taxonomy_fingerprint, '') != @taxonomyFingerprint THEN 0
+              ELSE 1 END,
+         COALESCE(a.available_at, s.created_at) ASC,
+         s.created_at ASC,
+         s.id ASC
+       LIMIT @limit
     `)
-    .all(n);
+    .all({ ...predicate.params, limit: n });
 }
 
 
@@ -3656,6 +4044,7 @@ module.exports = {
   igKeyFromUrl,
   sourceKeyFromUrl,
   findActiveSaveBySourceKey,
+  enrichActiveSaveBySourceKey,
   classifyXBookmarkUrls,
   isTweetDismissed,
   dismissTweet,
@@ -3695,6 +4084,7 @@ module.exports = {
   applySmartCategoryTaxonomyChanges,
   getSmartCategoryAliases,
   findSmartCategoryAliases,
+  getSmartCategoryTaxonomyFingerprint,
   upsertSaveTopicProfile,
   getSaveTopicProfile,
   listSaveTopicProfiles,
@@ -3705,6 +4095,12 @@ module.exports = {
   getSmartCategoriesForSave,
   recordSmartCategoryRun,
   listSmartCategoryRuns,
+  getSmartCategoryAssignmentState,
+  upsertSmartCategoryAssignmentState,
+  completeSmartCategoryAssignment,
+  failSmartCategoryAssignment,
+  resetSmartCategoryAssignmentFailures,
+  getSmartCategoryPendingState,
   getPendingSmartCategorySaves,
   // Semantic index
   createSemanticGeneration,

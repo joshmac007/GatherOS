@@ -15,6 +15,7 @@
 
 const { BrowserWindow } = require('electron');
 const { saveImageFromBuffer } = require('./storage');
+const { throwIfCancelled } = require('./save-cancellation');
 
 // Card width in CSS px. The capture happens at the display's scale
 // factor, so text stays crisp on retina. Edge-to-edge — the grid's
@@ -110,7 +111,8 @@ function buildHtml(meta) {
   </body></html>`;
 }
 
-async function captureTweetCard(meta) {
+async function captureTweetCard(meta, { signal, onCreated } = {}) {
+  throwIfCancelled(signal);
   const html = buildHtml(meta || {});
   const win = new BrowserWindow({
     show: false,
@@ -149,6 +151,7 @@ async function captureTweetCard(meta) {
       }, LOAD_TIMEOUT_MS);
       win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(reject);
     });
+    throwIfCancelled(signal);
 
     // Measure the rendered card so the capture is sized exactly to it
     // (no trailing whitespace, no clipping of a tall tweet).
@@ -167,8 +170,9 @@ async function captureTweetCard(meta) {
     const image = await win.webContents.capturePage({
       x: 0, y: 0, width: CARD_WIDTH, height,
     });
+    throwIfCancelled(signal);
     const buffer = image.toPNG();
-    return await saveImageFromBuffer(buffer, 'png');
+    return await saveImageFromBuffer(buffer, 'png', { signal, onCreated });
   } finally {
     if (!win.isDestroyed()) win.destroy();
   }

@@ -77,6 +77,18 @@ test('new starting run resets terminal counter baseline', () => {
   assert.equal(state.get().scanned, 0);
 });
 
+test('new starting run recovers a stale nonterminal lease', () => {
+  let now = 1_000;
+  const state = createSocialImportState({ now: () => now });
+  state.update(snapshot({ stage: 'scanning', scanned: 3 }));
+  now += 30_000;
+  assert.deepEqual(
+    state.update(snapshot({ runId: 'run-2', stage: 'starting', scanned: 0, saved: 0 })),
+    { ok: true, cancelRequested: false },
+  );
+  assert.equal(state.get().runId, 'run-2');
+});
+
 test('terminal run rejects late progress from overlapping work', () => {
   const state = createSocialImportState();
   state.update(snapshot());

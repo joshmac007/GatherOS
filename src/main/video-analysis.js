@@ -25,6 +25,38 @@ const RESERVED_TAGS = new Set([
 ]);
 const VIDEO_EVIDENCE = new Set(['visual', 'post_context']);
 
+const VIDEO_SUGGESTIONS_OUTPUT_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    tags: {
+      type: 'array',
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 64 },
+          confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+          evidence: {
+            type: 'array',
+            maxItems: 2,
+            items: { type: 'string', enum: ['visual', 'post_context'] },
+          },
+          conflict: { type: 'boolean' },
+        },
+        required: ['name', 'confidence', 'evidence', 'conflict'],
+      },
+    },
+    warnings: {
+      type: 'array',
+      maxItems: 12,
+      items: { type: 'string', maxLength: 240 },
+    },
+  },
+  required: ['tags', 'warnings'],
+});
+
 class VideoSuggestionValidationError extends Error {
   constructor(field, reason) {
     super(`Invalid video suggestion output: ${field} ${reason}`);
@@ -338,6 +370,7 @@ function videoSuggestionPrompt(input) {
       '- Avoid generic tags such as video, clip, bookmark, image, design, or content.',
     input: JSON.stringify(input || {}),
     maxOutputTokens: 600,
+    outputSchema: VIDEO_SUGGESTIONS_OUTPUT_SCHEMA,
   };
 }
 
@@ -492,6 +525,7 @@ function createVideoAnalysisService({
 
 module.exports = {
   VIDEO_ANALYSIS_PROMPT_VERSION,
+  VIDEO_SUGGESTIONS_OUTPUT_SCHEMA,
   VideoSuggestionValidationError,
   buildCanonicalVideoContext,
   buildVideoRequestContext,

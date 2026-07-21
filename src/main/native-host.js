@@ -206,7 +206,6 @@ function postToApp(body, token, path = '/save') {
           // the extension's local agent.
           Origin: 'chrome-extension://gatheros-native-host',
         },
-        timeout: 30_000,
       },
       (res) => {
         const chunks = [];
