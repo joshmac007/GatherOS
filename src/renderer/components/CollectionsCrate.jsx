@@ -152,11 +152,7 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
               <div className={styles.covw}>
                 <div className={styles.c3d}>
                   <div className={styles.cov}>
-                    {face ? (
-                      <img src={fileUrl(face)} alt="" draggable={false} />
-                    ) : (
-                      <span className={styles.letter}>{(c.name || '?').trim().charAt(0).toUpperCase()}</span>
-                    )}
+                    {face && <img src={fileUrl(face)} alt="" draggable={false} />}
                     <i className={styles.shade} />
                   </div>
                   <div className={styles.edge} />

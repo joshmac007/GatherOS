@@ -154,17 +154,6 @@
   object-fit: cover;
   -webkit-user-drag: none;
 }
-/* Empty-collection sleeve: big serif initial on dark stock. */
-.letter {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: ui-serif, Georgia, serif;
-  font-size: 130px;
-  color: rgba(255, 255, 255, 0.85);
-}
 
 /* Raking light: the face is lit at its near (left) edge and falls into
    deep shadow across its width. The vertical gradient dissolves each
