@@ -27,8 +27,13 @@
 
   /* ── The crate ─────────────────────────────────────────── */
   .stage{position:fixed;inset:0;background:#000;overflow:hidden}
-  .row{position:absolute;inset:0;display:flex}
-  .slot{flex:1;position:relative;animation:rise .8s var(--ease) backwards;animation-delay:calc(var(--i)*55ms)}
+  /* The crate scrolls horizontally — the fan is anchored to the viewport,
+     not the list, so any number of collections pass through it. */
+  .row{position:absolute;inset:0;display:flex;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .row::-webkit-scrollbar{display:none}
+  .slot{flex:none;width:122px;position:relative;cursor:pointer;animation:rise .8s var(--ease) backwards;animation-delay:calc(min(var(--i),14)*55ms)}
+  .slot:first-child{margin-left:9vw}
+  .slot:last-child{margin-right:9vw}
   @keyframes rise{from{opacity:0;transform:translateY(70px)}}
 
   .lab{position:absolute;top:13vh;left:10px;right:4px;opacity:.4;transition:opacity .25s;cursor:pointer;z-index:500}
@@ -46,7 +51,7 @@
      element itself would flatten the edges.) */
   .c3d{position:relative;width:100%;height:100%;transform-style:preserve-3d;
     transform:perspective(950px) rotateY(var(--ry));
-    transition:transform .55s var(--ease)}
+    transition:transform .45s var(--ease)}
   .cov{position:absolute;inset:0;overflow:hidden;border-radius:3px;backface-visibility:hidden;
     box-shadow:0 12px 30px rgba(0,0,0,.6),0 42px 90px rgba(0,0,0,.55)}
   .cov::before{content:'';position:absolute;inset:0;background:linear-gradient(105deg,rgba(255,255,255,.15),transparent 34%);pointer-events:none;z-index:3}
@@ -55,23 +60,26 @@
      The near-side spine is what reads as thickness when a sleeve sits
      edge-on; the far one hides behind the face. */
   .edge{position:absolute;top:0;bottom:0;width:14px;
-    background:linear-gradient(180deg,#dcd7cd 0%,#c6c1b7 55%,#a8a299 100%);
-    box-shadow:inset 0 0 0 1px rgba(0,0,0,.10)}
+    background:linear-gradient(180deg,
+      color-mix(in srgb, var(--spine, #b9b4aa) 78%, #fff) 0%,
+      var(--spine, #b9b4aa) 48%,
+      color-mix(in srgb, var(--spine, #b9b4aa) 68%, #000) 100%);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
   .edge.l{left:0;transform-origin:left center;transform:rotateY(90deg)}
   .edge.r{right:0;transform-origin:right center;transform:rotateY(-90deg)}
-  .slot:hover .c3d{transform:perspective(950px) translateZ(52px) rotateY(calc(var(--ry)*0.6))}
-  .slot:hover .covw{filter:brightness(1.06)}
-  .slot.sel .c3d{transform:perspective(950px) translateZ(26px) rotateY(calc(var(--ry)*0.76))}
+  .slot.sel .c3d{transform:perspective(950px) translateZ(26px) rotateY(calc(var(--ry)*0.78))}
   .slot.sel .covw{filter:brightness(1.03)}
-  /* Layering: the hovered sleeve lifts above its neighbors instantly, and
-     keeps that raised layer until the swing-back finishes (the 0s-duration,
-     .55s-delay z-index transition) so it never clips through mid-animation. */
-  .slot{transition:z-index 0s linear .55s}
-  .slot:hover{z-index:360 !important;transition:z-index 0s}
-  .slot.sel{z-index:340 !important}
-  /* The row parts around the hovered sleeve to give it room to open. */
-  .slot:hover ~ .slot .covw{transform:translateX(34px)}
-  .slot:has(~ .slot:hover) .covw{transform:translateX(-34px)}
+  .slot:hover .c3d{transform:perspective(950px) translateZ(42px) translateY(-14px) rotateY(calc(var(--ry)*0.7))}
+  .slot:hover .covw{filter:brightness(1.08)}
+  /* Hover is driven by the slot's even-width column, not the overlapping
+     cover planes — so sweeping across the crate hits each sleeve in order
+     instead of whichever plane happens to be stacked on top. Layering is
+     handled in JS: the newest-hovered sleeve always takes the top layer
+     and keeps it until its swing-back settles. */
+  .covw{pointer-events:none}
+  /* The row parts gently around the hovered sleeve to give it room. */
+  .slot:hover ~ .slot .covw{transform:translateX(24px)}
+  .slot:has(~ .slot:hover) .covw{transform:translateX(-24px)}
 
   /* Atmosphere: tops of the sleeves dissolve into the dark header zone,
      bottoms sink under the deck gradient. */
@@ -147,22 +155,40 @@
 (() => {
   'use strict';
 
-  /* Collections — GatherOS-flavored placeholder data. s = cover style,
-     styles ordered to echo the reference palette left → right. */
+  /* Collections — GatherOS-flavored placeholder data. s = cover style.
+     24 entries to prove the crate handles any number of collections. */
   const C = [
-    { n:'Album art',         c:162, u:'updated 5h ago', s:1  },
-    { n:'Type specimens',    c:128, u:'updated 2d ago', s:2  },
-    { n:'Film stills',       c:118, u:'updated 8h ago', s:10 },
-    { n:'Motion frames',     c:41,  u:'updated 4d ago', s:4  },
-    { n:'Editorial layouts', c:203, u:'updated 6h ago', s:5  },
-    { n:'Brand refs',        c:86,  u:'updated 1d ago', s:7  },
-    { n:'Color studies',     c:33,  u:'updated 1w ago', s:8  },
-    { n:'Architecture',      c:95,  u:'updated 2d ago', s:9  },
-    { n:'Interiors',         c:54,  u:'updated 3d ago', s:6  },
-    { n:'Posters',           c:149, u:'updated 3d ago', s:4  },
-    { n:'UI patterns',       c:240, u:'updated 1h ago', s:1  },
-    { n:'Product shots',     c:77,  u:'updated 6d ago', s:3  },
+    { n:'Album art',          c:162, u:'updated 5h ago', s:1  },
+    { n:'Type specimens',     c:128, u:'updated 2d ago', s:2  },
+    { n:'Film stills',        c:118, u:'updated 8h ago', s:10 },
+    { n:'Motion frames',      c:41,  u:'updated 4d ago', s:4  },
+    { n:'Editorial layouts',  c:203, u:'updated 6h ago', s:5  },
+    { n:'Brand refs',         c:86,  u:'updated 1d ago', s:7  },
+    { n:'Color studies',      c:33,  u:'updated 1w ago', s:8  },
+    { n:'Architecture',       c:95,  u:'updated 2d ago', s:9  },
+    { n:'Interiors',          c:54,  u:'updated 3d ago', s:6  },
+    { n:'Posters',            c:149, u:'updated 3d ago', s:4  },
+    { n:'UI patterns',        c:240, u:'updated 1h ago', s:1  },
+    { n:'Product shots',      c:77,  u:'updated 6d ago', s:3  },
+    { n:'Logotypes',          c:64,  u:'updated 2d ago', s:2  },
+    { n:'Packaging',          c:112, u:'updated 9h ago', s:9  },
+    { n:'Textures',           c:58,  u:'updated 5d ago', s:6  },
+    { n:'Web design',         c:187, u:'updated 3h ago', s:5  },
+    { n:'Photography',        c:221, u:'updated 1d ago', s:10 },
+    { n:'Illustration',       c:143, u:'updated 7h ago', s:7  },
+    { n:'Typography posters', c:91,  u:'updated 4d ago', s:8  },
+    { n:'Menus',              c:27,  u:'updated 2w ago', s:2  },
+    { n:'Signage',            c:73,  u:'updated 6d ago', s:4  },
+    { n:'Book covers',        c:134, u:'updated 12h ago', s:3 },
+    { n:'Ads',                c:49,  u:'updated 1w ago', s:1  },
+    { n:'Screenshots',        c:312, u:'updated 30m ago', s:5 },
   ];
+
+  /* Strongest color in each cover style — the sleeve spine inherits it. */
+  const SPINE = {
+    1:'#1a2bd8', 2:'#c79c2e', 3:'#0d5044', 4:'#b3320d', 5:'#20202a',
+    6:'#d6d6cf', 7:'#e0509a', 8:'#ded2ba', 9:'#14442a', 10:'#55555a',
+  };
 
   /* Inline SVG art for the styles that need more than a gradient. */
   function waves() {
@@ -188,44 +214,82 @@
     return '';
   }
 
-  /* The fan: sleeves near the center sit almost edge-on and open toward
-     the viewer as they move outward — left half faces right, right half
-     faces left, exactly like standing in front of the middle of a crate.
-     Angle magnitude eases from ~84° (center) down to ~40° (edges). */
+  /* The fan is anchored to the VIEWPORT, not the list: whichever sleeve is
+     at the center of the screen sits almost edge-on (~84°), and sleeves
+     open toward the viewer as they approach the edges (~40°) — left half
+     faces right, right half faces left, like standing in front of the
+     middle of a crate. The row scrolls horizontally underneath, so any
+     number of collections pass through the lens. */
   const N = C.length;
-  const MID = (N - 1) / 2;
   const TH_MAX = 84, TH_MIN = 40;
 
   const row = document.getElementById('row');
   let sel = 4;
 
   C.forEach((c, i) => {
-    const d = i - MID;
-    const t = Math.abs(d) / MID;
-    const th = TH_MAX - (TH_MAX - TH_MIN) * Math.pow(t, 1.1);
-    const ry = (d < 0 ? 1 : -1) * th;               // left opens right, right opens left
-    const br = (0.66 + (1 - th / 90) * 0.5).toFixed(2); // edge-on sleeves sit in shadow
-    const z = 10 + Math.round(Math.abs(d) * 20);    // outer sleeves stack in front
-
     const slot = document.createElement('div');
     slot.className = 'slot';
-    slot.style.cssText = `--i:${i};--ry:${ry.toFixed(1)}deg;--br:${br};z-index:${z}`;
+    slot.style.cssText = `--i:${i};--ry:0deg;--spine:${SPINE[c.s]}`;
     slot.innerHTML = `
       <div class="lab"><div class="n">${c.n}</div><div class="m">${c.c} saves</div><div class="p">▸</div></div>
       <div class="covw"><div class="c3d"><div class="cov cv${c.s}">${covInner(c.s)}</div><div class="edge l"></div><div class="edge r"></div></div></div>`;
     slot.addEventListener('click', () => select(i));
+    /* Layering: the newest-hovered sleeve always takes the top layer and
+       keeps it until its swing-back settles, so it never clips through a
+       neighbor mid-animation. */
+    slot.addEventListener('mouseenter', () => {
+      slot.dataset.raised = '1';
+      slot.style.zIndex = String(hoverZ++);
+    });
+    slot.addEventListener('mouseleave', () => {
+      setTimeout(() => {
+        if (slot.dataset.raised && !slot.matches(':hover')) {
+          delete slot.dataset.raised;
+          layout();
+        }
+      }, 650);
+    });
     row.appendChild(slot);
   });
+  let hoverZ = 900;
 
-  function select(i) {
-    sel = (i + N) % N;
+  /* Recompute each sleeve's angle, shading, and stacking from its current
+     position on screen. Runs on scroll/resize; the CSS transition on the
+     transform gives the fan a soft damped chase as you scroll. */
+  function layout() {
+    const vw = row.clientWidth;
+    const center = vw / 2;
+    [...row.children].forEach((slot) => {
+      const r = slot.getBoundingClientRect();
+      const dx = (r.left + r.width / 2) - center;
+      const t = Math.min(1, Math.abs(dx) / (vw * 0.55));
+      const th = TH_MAX - (TH_MAX - TH_MIN) * Math.pow(t, 1.1);
+      const ry = (dx < 0 ? 1 : -1) * th;              // left opens right, right opens left
+      const br = 0.66 + (1 - th / 90) * 0.5;          // edge-on sleeves sit in shadow
+      slot.style.setProperty('--ry', ry.toFixed(1) + 'deg');
+      slot.style.setProperty('--br', br.toFixed(2));
+      if (!slot.dataset.raised) slot.style.zIndex = String(10 + Math.round(t * 60));
+    });
+  }
+  let ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => { ticking = false; layout(); });
+  }
+  row.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+
+  function select(i, instant) {
+    sel = Math.max(0, Math.min(N - 1, i));
     [...row.children].forEach((el, j) => el.classList.toggle('sel', j === sel));
     const c = C[sel];
     document.getElementById('dbig').textContent = c.n;
-    document.getElementById('dsub').textContent = `${c.c} saves · ${c.u}`;
+    document.getElementById('dsub').textContent = `${c.c} saves · ${c.u} · ${sel + 1} of ${N}`;
     document.getElementById('nvn').textContent = c.n;
     document.getElementById('disc').className = `art cov cv${c.s}`;
     document.getElementById('disc').innerHTML = covInner(c.s);
+    row.children[sel].scrollIntoView({ behavior: instant ? 'instant' : 'smooth', inline: 'center', block: 'nearest' });
   }
 
   document.getElementById('prev').addEventListener('click', () => select(sel - 1));
@@ -235,7 +299,8 @@
     if (e.key === 'ArrowRight') { select(sel + 1); e.preventDefault(); }
   });
 
-  select(sel);
+  select(sel, true);
+  layout();
 })();
 </script>
 </body>
