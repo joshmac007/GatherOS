@@ -29,8 +29,8 @@ export const RELEASE_NOTES = [
       },
       {
         Icon: WindowIcon,
-        title: 'Save straight from Cosmos',
-        description: 'Cosmos joins X and Instagram. Save an image or video on cosmos.so and it syncs into your library right away, or backfill your whole profile and every collection with one Import.',
+        title: 'Cosmos support, coming soon',
+        description: 'Cosmos is joining X and Instagram as a place you can save from — images and videos from cosmos.so, synced straight into your library. It arrives with an upcoming browser-extension update.',
       },
       {
         Icon: GlassIcon,
