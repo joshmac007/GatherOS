@@ -668,6 +668,78 @@ function formatBytes(n) {
   return `${mb.toFixed(1)} MB`;
 }
 
+function formatTokens(value) {
+  const count = Number(value) || 0;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(count >= 10_000_000 ? 0 : 1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(count >= 10_000 ? 0 : 1)}K`;
+  return count.toLocaleString();
+}
+
+function routeMetrics(scope, route, capability) {
+  if (!scope || !route?.provider || !route?.model) return null;
+  return scope.providers?.[route.provider]?.models?.[route.model]?.capabilities?.[capability] || null;
+}
+
+function AiUsageCard({ usage, error }) {
+  const structured = usage?.routes?.['structured-json'];
+  const embedding = usage?.routes?.embedding;
+  const structuredMonth = routeMetrics(usage?.currentMonth, structured, 'structured-json');
+  const structuredLifetime = routeMetrics(usage?.lifetime, structured, 'structured-json');
+  const embeddingMonth = routeMetrics(usage?.currentMonth, embedding, 'embedding');
+  const embeddingLifetime = routeMetrics(usage?.lifetime, embedding, 'embedding');
+  const monthLabel = usage?.month
+    ? new Date(`${usage.month}-01T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    : 'This month';
+  const lastUsed = usage?.lastUsedAt
+    ? new Date(usage.lastUsedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : 'No recorded activity';
+  const storageMessage = usage?.storageStatus === 'unavailable'
+    ? 'Usage history cannot be saved on this Mac.'
+    : usage?.storageStatus === 'recovered'
+      ? 'Usage history was reset after its local file could not be read.'
+      : null;
+
+  const lane = (label, route, month, lifetime, detail) => (
+    <div className={styles.aiUsageLane}>
+      <div className={styles.aiUsageLaneHeader}>
+        <span>
+          <span className={styles.aiConnectionTitle}>{label}</span>
+          <span className={styles.aiUsageScope}>
+            {route?.provider && route?.model ? `${route.provider} · ${route.model}` : 'Not configured'}
+          </span>
+        </span>
+        <span className={styles.aiUsageTotal}>{formatTokens(month?.totalTokens)} tokens</span>
+      </div>
+      <span className={styles.aiUsageDetail}>
+        {month?.attempts || 0} requests in {monthLabel} · {lifetime?.attempts || 0} lifetime
+      </span>
+      <span className={styles.aiUsageDetail}>{detail(month)}</span>
+    </div>
+  );
+
+  return (
+    <div className={styles.aiUsageCard}>
+      <div className={styles.aiUsageHeader}>
+        <span>
+          <span className={styles.aiConnectionTitle}>Observed usage</span>
+          <span className={styles.aiUsageScope}>On this Mac</span>
+        </span>
+        <span className={styles.aiUsageScope}>Last used: {lastUsed}</span>
+      </div>
+      {lane('Structured AI', structured, structuredMonth, structuredLifetime, (value) =>
+        `Input ${formatTokens(value?.inputTokens)} · output ${formatTokens(value?.outputTokens)} · reasoning ${formatTokens(value?.reasoningTokens)} · cache ${formatTokens((value?.cacheReadTokens || 0) + (value?.cacheWriteTokens || 0))}`)}
+      {lane('Embeddings', embedding, embeddingMonth, embeddingLifetime, (value) =>
+        `Input ${formatTokens(value?.inputTokens)} · ${value?.failed || 0} failed · ${value?.unmeasured || 0} unmeasured`)}
+      {(error || storageMessage) && (
+        <span className={styles.aiUsageWarning}>{error ? 'Usage could not be read.' : storageMessage}</span>
+      )}
+      <span className={styles.aiUsageNote}>
+        Local observed activity, not your remaining ChatGPT plan allowance. No prompts or responses are stored.
+      </span>
+    </div>
+  );
+}
+
 // Settings → Storage. Library size readout, the optimized-import toggle,
 // and the opt-in "reclaim space" sweep (re-encodes existing originals).
 function StoragePage({ prefs, updatePref }) {
@@ -832,6 +904,8 @@ export default function SettingsModal({
   const [tagShowAll, setTagShowAll] = useState(false);
   const [acksOpen, setAcksOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [aiUsage, setAiUsage] = useState(null);
+  const [aiUsageError, setAiUsageError] = useState(false);
   const appVersion = window.moodmark?.app?.version || '';
 
   async function handleWipeLibrary() {
@@ -904,6 +978,24 @@ export default function SettingsModal({
     setHasAi(configured);
     onConfiguredChange?.(configured);
   }, [aiAccess, onConfiguredChange]);
+
+  useEffect(() => {
+    if (!open || activePage !== 'ai' || typeof window.moodmark?.ai?.usage !== 'function') return undefined;
+    let alive = true;
+    const refresh = () => window.moodmark.ai.usage()
+      .then((value) => {
+        if (!alive) return;
+        setAiUsage(value?.ok ? value : null);
+        setAiUsageError(value?.ok === false);
+      })
+      .catch(() => { if (alive) setAiUsageError(true); });
+    refresh();
+    const interval = window.setInterval(refresh, 15_000);
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+    };
+  }, [open, activePage]);
 
   async function togglePref(name) {
     const next = !prefs[name];
@@ -1335,6 +1427,8 @@ export default function SettingsModal({
                   </div>
                 </div>
               )}
+
+              <AiUsageCard usage={aiUsage} error={aiUsageError} />
 
               {!hasAi && (
                 <div className={styles.statusRow}>

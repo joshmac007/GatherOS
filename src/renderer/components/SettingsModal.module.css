@@ -697,53 +697,64 @@
 
 .tagDeleteBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* AI usage meter — lives on the AI page when the user is signed in.
-   Thin bar against the soft cap; tints amber when nearing it and
-   error-red once past it. Soft fail: we don't block requests, just
-   warn here so the visual nudge precedes any messaging. */
-.usageMeter {
-  margin-top: 10px;
-  margin-bottom: 4px;
+/* Local aggregate accounting only. There is deliberately no percentage or
+   quota bar because ChatGPT plan allowance is not exposed to the app. */
+.aiUsageCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
 }
 
-.usageMeterRow {
+.aiUsageHeader {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  margin-bottom: 6px;
+  gap: 16px;
 }
 
-.usageMeterTokens {
-  font-variant-numeric: tabular-nums;
-}
-
-.usageMeterTrack {
-  height: 4px;
-  background: var(--hover-bg-strong);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.usageMeterFill {
-  height: 100%;
-  background: var(--accent);
-  transition: width var(--dur-medium) ease, background var(--dur-medium) ease;
-}
-
-.usageMeterFillWarn {
-  background: #d99;
-}
-
-.usageMeterFillOver {
-  background: var(--status-error);
-}
-
-.usageMeterOverNote {
-  font-size: var(--text-xs);
+.aiUsageScope,
+.aiUsageDetail,
+.aiUsageNote {
+  display: block;
   color: var(--text-tertiary);
-  margin-top: 6px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.aiUsageScope { margin-top: 2px; }
+
+.aiUsageTotal {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.aiUsageLane {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.aiUsageLaneHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.aiUsageWarning {
+  color: var(--status-error);
+  font-size: var(--text-xs);
+  line-height: 1.45;
 }
 
 /* Libraries settings page — replaces the inline rename / delete

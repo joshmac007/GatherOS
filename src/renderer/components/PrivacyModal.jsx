@@ -39,6 +39,12 @@ const SECTIONS = [
       'GatherLocal exports and snapshots, though system backups may contain encrypted ciphertext.',
   },
   {
+    title: 'AI usage history',
+    body:
+      'GatherLocal keeps aggregate request and token counts on this Mac so Settings can show observed usage. ' +
+      'The ledger does not contain prompts, images, responses, or credentials.',
+  },
+  {
     title: 'Auto-updates',
     body:
       'GatherLocal checks GitHub Releases for new builds over HTTPS. ' +

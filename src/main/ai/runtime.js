@@ -24,7 +24,7 @@ function assertCapability(capability) {
   }
 }
 
-function createAiRuntime({ authorize, routes = {} } = {}) {
+function createAiRuntime({ authorize, routes = {}, usage = null } = {}) {
   if (typeof authorize !== 'function') {
     throw new TypeError('AI runtime requires an authorization function');
   }
@@ -126,17 +126,21 @@ function createAiRuntime({ authorize, routes = {} } = {}) {
     }
   }
 
-  async function getUsage(capability = CAPABILITIES.STRUCTURED_JSON, options = {}) {
-    // Usage is inspection, not inference: it remains available for health/UI
-    // surfaces without entitlement. It still follows exactly one explicit
-    // capability route; never silently switch providers/capabilities.
-    const adapter = routeFor(capability);
-    if (!adapter || typeof adapter.getUsage !== 'function' || !isConfigured(capability)) return null;
-    try {
-      return await adapter.getUsage(options);
-    } catch (error) {
-      throw toAiRuntimeError(error, { capability, provider: providerId(adapter) });
+  function getUsage() {
+    // Inspection is global and capability-neutral. It never contacts a
+    // provider, requires entitlement, or implies remaining plan allowance.
+    if (!usage || typeof usage.snapshot !== 'function') return null;
+    const snapshot = usage.snapshot();
+    const activeRoutes = {};
+    for (const capability of CAPABILITY_LIST) {
+      activeRoutes[capability] = {
+        provider: providerFor(capability),
+        model: modelFor(capability),
+        configured: isConfigured(capability),
+        usable: isUsable(capability),
+      };
     }
+    return { ...snapshot, routes: activeRoutes };
   }
 
   const runtime = {

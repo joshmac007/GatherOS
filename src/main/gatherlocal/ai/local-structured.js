@@ -24,27 +24,45 @@ function createLocalStructuredAdapter(config = {}, dependencies = {}) {
   const timeoutMs = timeoutValue(config.timeoutMs, 120000);
   const maxImageBytes = timeoutValue(config.maxImageBytes, 2 * 1024 * 1024);
   const fetchImpl = dependencies.fetch || globalThis.fetch;
+  const recordUsage = typeof dependencies.recordUsage === 'function' ? dependencies.recordUsage : () => {};
+
+  function record(outcome, usage) {
+    try {
+      recordUsage({
+        provider: PROVIDER, model, capability: CAPABILITIES.STRUCTURED_JSON,
+        outcome, usage, usageFormat: 'openai',
+      });
+    } catch {}
+  }
 
   function configured() {
     return Boolean(baseUrl && model);
   }
 
   async function request(body, signal) {
-    const data = await requestJson({
-      fetchImpl,
-      url: `${baseUrl}/chat/completions`,
-      options: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders(config) },
-        body: JSON.stringify(body),
-      },
-      timeoutMs,
-      signal,
-      capability: CAPABILITIES.STRUCTURED_JSON,
-      provider: PROVIDER,
-      dependencies,
-    });
-    return parseJsonObject(contentFromResponse(data), PROVIDER, CAPABILITIES.STRUCTURED_JSON);
+    let data;
+    try {
+      data = await requestJson({
+        fetchImpl,
+        url: `${baseUrl}/chat/completions`,
+        options: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders(config) },
+          body: JSON.stringify(body),
+        },
+        timeoutMs,
+        signal,
+        capability: CAPABILITIES.STRUCTURED_JSON,
+        provider: PROVIDER,
+        dependencies,
+      });
+      const result = parseJsonObject(contentFromResponse(data), PROVIDER, CAPABILITIES.STRUCTURED_JSON);
+      record('succeeded', data?.usage);
+      return result;
+    } catch (error) {
+      record('failed', data?.usage);
+      throw error;
+    }
   }
 
   return {

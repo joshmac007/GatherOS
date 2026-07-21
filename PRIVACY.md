@@ -1,6 +1,6 @@
 # GatherLocal privacy policy
 
-_Last updated: July 20, 2026_
+_Last updated: July 21, 2026_
 
 GatherLocal is a local-first desktop app for saving, browsing, and organizing visual references. Almost nothing leaves your machine; optional network features send only data needed for work you enable or request.
 
@@ -39,6 +39,11 @@ When ChatGPT Codex features are enabled, GatherLocal sends relevant images and t
 - **Auto-tag** and **Image prompts** send the selected image when you invoke them.
 - Smart-category work can send relevant save text and image-derived metadata when enabled.
 - Semantic embeddings use the locally configured embedding provider by default; its data handling depends on that provider.
+
+GatherLocal stores aggregate AI request outcomes and token counts in `ai-usage.json`
+under the local application-data directory. This powers the observed-usage panel in
+Settings. It does not store prompts, images, responses, or credentials, and it does
+not represent remaining ChatGPT plan allowance.
 
 OpenAI handles submitted data under its [terms of use](https://openai.com/policies/terms-of-use) and [privacy policy](https://openai.com/policies/privacy-policy). Leave ChatGPT disconnected and use local providers to avoid Codex requests.
 

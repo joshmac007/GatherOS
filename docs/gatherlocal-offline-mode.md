@@ -29,10 +29,14 @@ include encrypted ciphertext. Logging out removes stored credentials.
 Optional Codex tuning:
 
 ```text
-GATHERLOCAL_CODEX_MODEL=gpt-5.6-sol
+GATHERLOCAL_CODEX_MODEL=gpt-5.6-luna
 GATHERLOCAL_CODEX_TIMEOUT_MS=120000
 GATHERLOCAL_CODEX_MAX_IMAGE_BYTES=2097152
 ```
+
+Settings shows aggregate requests and tokens observed by GatherLocal on this Mac.
+This local ledger contains counts only, not prompts, images, responses, or OAuth
+credentials. It is not a ChatGPT plan quota and cannot show remaining allowance.
 
 Alternative local structured provider:
 

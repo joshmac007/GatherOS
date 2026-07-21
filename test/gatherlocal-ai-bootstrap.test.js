@@ -3,7 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createDefaultAiRuntime, getAiRuntime, installAiRuntime } = require('../src/main/ai/bootstrap');
+const {
+  createDefaultAiRuntime, createPostReadyAiBackend, getAiRuntime, installAiRuntime,
+} = require('../src/main/ai/bootstrap');
 const { CAPABILITIES } = require('../src/main/ai/runtime');
 
 test('default runtime composes the selected GatherLocal capability routes', () => {
@@ -16,7 +18,7 @@ test('default runtime composes the selected GatherLocal capability routes', () =
           [CAPABILITIES.EMBEDDING]: 'ollama',
           [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
         },
-        codex: { model: 'gpt-5.6-sol' },
+        codex: { model: 'gpt-5.6-luna' },
         ollama: { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
       },
       dependencies: {
@@ -61,4 +63,40 @@ test('installed runtime becomes the single runtime returned by bootstrap', () =>
   const runtime = { completeJson: async () => ({ installed: true }) };
   assert.equal(installAiRuntime(runtime), runtime);
   assert.equal(getAiRuntime(), runtime);
+});
+
+test('post-ready backend injects one usage ledger into configured routes', async () => {
+  const recorded = [];
+  const usageLedger = {
+    record: (entry) => recorded.push(entry),
+    snapshot: () => ({ ok: true, currentMonth: { totals: {} }, lifetime: { totals: {} } }),
+  };
+  const backend = createPostReadyAiBackend({
+    app: { getPath: () => '/virtual/user-data', getVersion: () => 'test' },
+    safeStorage: { isEncryptionAvailable: () => false },
+    env: {
+      GATHERLOCAL_AI_STRUCTURED_PROVIDER: 'local',
+      GATHERLOCAL_LOCAL_VISION_MODEL: 'vision',
+    },
+    dependencies: {
+      usageLedger,
+      local: {
+        fetch: async () => ({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            choices: [{ message: { content: '{"ok":true}' } }],
+            usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+          }),
+        }),
+      },
+    },
+  });
+
+  assert.equal(backend.usageLedger, usageLedger);
+  assert.deepEqual(await backend.runtime.completeJson({ input: 'x' }), { ok: true });
+  assert.equal(recorded.length, 1);
+  assert.equal(recorded[0].provider, 'local');
+  assert.equal(backend.runtime.getUsage().routes[CAPABILITIES.STRUCTURED_JSON].model, 'vision');
+  backend.codexAuth.dispose();
 });

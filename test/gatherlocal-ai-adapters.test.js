@@ -21,7 +21,7 @@ test('per-capability config defaults independently', () => {
   assert.equal(config.routes[CAPABILITIES.EMBEDDING], 'ollama');
   assert.equal(config.routes[CAPABILITIES.IMAGE_GENERATION], 'disabled');
   assert.deepEqual(config.codex, {
-    model: 'gpt-5.6-sol', timeoutMs: 120000, maxImageBytes: 2 * 1024 * 1024,
+    model: 'gpt-5.6-luna', timeoutMs: 120000, maxImageBytes: 2 * 1024 * 1024,
   });
   assert.deepEqual(readGatherLocalAiConfig({
     GATHERLOCAL_CODEX_MODEL: 'custom',
@@ -42,7 +42,7 @@ test('route composition keeps Codex structured and Ollama embedding simultaneous
         [CAPABILITIES.EMBEDDING]: 'ollama',
         [CAPABILITIES.IMAGE_GENERATION]: 'disabled',
       },
-      codex: { model: 'gpt-5.6-sol' },
+      codex: { model: 'gpt-5.6-luna' },
       ollama: { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
     },
     dependencies: {
@@ -72,14 +72,19 @@ test('unknown structured route is unavailable even when injected', () => {
 
 test('local structured adapter sends JSON response format and bounded JPEG data URL', async () => {
   let request;
+  const usage = [];
   const adapter = createLocalStructuredAdapter(
     { baseUrl: 'http://local/v1', chatModel: 'vision', timeoutMs: 1000, maxImageBytes: 100 },
     {
       imageToDataUrl: async () => 'data:image/jpeg;base64,ZmFrZQ==',
       fetch: async (_url, options) => {
         request = JSON.parse(options.body);
-        return response({ choices: [{ message: { content: '{"answer":true}' } }] });
+        return response({
+          choices: [{ message: { content: '{"answer":true}' } }],
+          usage: { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 },
+        });
       },
+      recordUsage: (entry) => usage.push(entry),
     },
   );
   assert.deepEqual(await adapter.completeJson({
@@ -88,12 +93,22 @@ test('local structured adapter sends JSON response format and bounded JPEG data 
   assert.equal(request.model, 'vision');
   assert.deepEqual(request.response_format, { type: 'json_object' });
   assert.equal(request.messages[1].content[1].image_url.url.startsWith('data:image/jpeg;'), true);
+  assert.deepEqual(usage, [{
+    provider: 'local', model: 'vision', capability: CAPABILITIES.STRUCTURED_JSON,
+    outcome: 'succeeded',
+    usage: { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 },
+    usageFormat: 'openai',
+  }]);
 });
 
 test('Ollama adapter validates vector identity and dimension', async () => {
+  const usage = [];
   const adapter = createOllamaEmbeddingAdapter(
     { baseUrl: 'http://ollama', embedModel: 'embeddinggemma' },
-    { fetch: async () => response({ embeddings: [[1, 0, 0]] }) },
+    {
+      fetch: async () => response({ embeddings: [[1, 0, 0]], prompt_eval_count: 4 }),
+      recordUsage: (entry) => usage.push(entry),
+    },
   );
   assert.deepEqual(await adapter.embed({ text: 'hello' }), {
     vector: [1, 0, 0], provider: 'ollama', model: 'embeddinggemma', dimension: 3,
@@ -102,6 +117,10 @@ test('Ollama adapter validates vector identity and dimension', async () => {
     adapter.embed({ text: 'hello', expectedDimension: 2 }),
     (error) => error.code === 'AI_EMBEDDING_DIMENSION_MISMATCH',
   );
+  assert.equal(usage.length, 2);
+  assert.equal(usage[0].outcome, 'succeeded');
+  assert.equal(usage[0].usage.prompt_eval_count, 4);
+  assert.equal(usage[1].outcome, 'failed');
 });
 
 test('local transport distinguishes caller cancellation from timeout', async () => {

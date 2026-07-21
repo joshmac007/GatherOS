@@ -44,6 +44,7 @@ function createOpenAiFacade({ runtime = null, runtimeResolver = getAiRuntime } =
     return {
       capability,
       provider,
+      model: runtimeValue.modelFor(capability),
       available,
       configured: runtimeValue.isUsable(capability),
       ...providerAccess(provider),
@@ -159,8 +160,8 @@ function createOpenAiFacade({ runtime = null, runtimeResolver = getAiRuntime } =
     return result.vector;
   }
 
-  async function getUsage({ signal } = {}) {
-    return resolveRuntime().getUsage(CAPABILITIES.STRUCTURED_JSON, { signal });
+  async function getUsage() {
+    return resolveRuntime().getUsage();
   }
 
   return {

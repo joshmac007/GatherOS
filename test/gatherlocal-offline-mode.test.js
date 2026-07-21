@@ -83,6 +83,7 @@ test('Electron installs post-ready AI backend before runtime consumers', () => {
   assert.ok(runtime > backend);
   assert.ok(ipc > runtime);
   assert.match(main, /codexAuth\?\.dispose\(\)/);
+  assert.match(main, /aiUsageLedger\?\.dispose\(\)/);
   assert.match(main, /getAiRuntime\(\)\.isUsable\(CAPABILITIES\.STRUCTURED_JSON\)/);
   assert.match(main, /hasProvider: \(\) => aiRuntime\.isUsable\(CAPABILITIES\.STRUCTURED_JSON\)/);
   assert.doesNotMatch(main, /isConfigured\(CAPABILITIES\.STRUCTURED_JSON\)/);
@@ -107,6 +108,7 @@ test('privacy surfaces document encrypted OAuth boundaries without custom callba
 
 test('renderer gates ChatGPT connection UI to Codex provider and subscribes app-wide', () => {
   const app = read('src/renderer/App.jsx');
+  const main = read('src/main/index.js');
   const settings = read('src/renderer/components/SettingsModal.jsx');
   assert.match(app, /ai\.auth\?\.onStatus/);
   assert.match(settings, /provider === 'codex'/);
@@ -115,6 +117,11 @@ test('renderer gates ChatGPT connection UI to Codex provider and subscribes app-
     'authenticated', 'corrupt', 'unavailable',
   ]) assert.match(settings, new RegExp(`${state}:|'${state}'`));
   assert.doesNotMatch(settings, /API key|model picker/i);
+  assert.match(settings, /Observed usage/);
+  assert.match(settings, /not your remaining ChatGPT plan allowance/);
+  assert.match(settings, /moodmark\.ai\.usage\(\)/);
+  assert.doesNotMatch(settings, /quota|soft cap|percent/i);
+  assert.match(main, /backgroundRuntime\.stopAndDrain\(\)[\s\S]*disposeAiUsageForQuit\(\)[\s\S]*app\.quit\(\)/);
 });
 
 test('final Codex composition contains no staged provider or child-process route', () => {

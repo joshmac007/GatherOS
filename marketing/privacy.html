@@ -70,13 +70,14 @@
     <a href="/" class="crumb">← Back to GatherLocal</a>
 
     <h1>Privacy policy</h1>
-    <p class="updated">Last updated: July 20, 2026</p>
+    <p class="updated">Last updated: July 21, 2026</p>
 
     <p>GatherLocal is a local-first desktop app. Its library lives under <code>~/Library/Application Support/GatherLocal/</code>. GatherLocal does not collect analytics or telemetry and does not operate a server that stores your library.</p>
 
     <h2>Optional ChatGPT Codex features</h2>
     <p>If you connect ChatGPT, OAuth tokens are stored as ciphertext encrypted by Electron <code>safeStorage</code>, backed by macOS Keychain. Tokens are sent only to <code>auth.openai.com</code> for authentication and <code>chatgpt.com</code> for enabled Codex requests. Relevant images and text are sent directly to OpenAI when those features are enabled.</p>
     <p>Credentials are excluded from GatherLocal library exports and snapshots, although system-level backups may contain encrypted vault ciphertext. Log out in <strong>Settings → Local AI</strong> to remove saved ChatGPT credentials and cancel active AI requests.</p>
+    <p>GatherLocal stores aggregate AI request outcomes and token counts in <code>ai-usage.json</code> on this Mac so Settings can show observed usage. This ledger does not contain prompts, images, responses, or credentials, and it does not represent remaining ChatGPT plan allowance.</p>
 
     <p>The GatherLocal browser extension does not sell captured data. It sends captures only to the GatherLocal desktop application running on your computer, except for service-specific requests described below.</p>
 

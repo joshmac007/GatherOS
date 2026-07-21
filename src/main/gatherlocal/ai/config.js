@@ -63,7 +63,7 @@ function readGatherLocalAiConfig(env = process.env) {
       [CAPABILITIES.IMAGE_GENERATION]: imageProvider,
     },
     codex: {
-      model: clean(source.GATHERLOCAL_CODEX_MODEL) || 'gpt-5.6-sol',
+      model: clean(source.GATHERLOCAL_CODEX_MODEL) || 'gpt-5.6-luna',
       timeoutMs: positiveInteger(source.GATHERLOCAL_CODEX_TIMEOUT_MS, 120000),
       maxImageBytes: positiveInteger(source.GATHERLOCAL_CODEX_MAX_IMAGE_BYTES, 2 * 1024 * 1024),
     },

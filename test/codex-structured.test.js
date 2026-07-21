@@ -2,11 +2,14 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createCodexStructuredAdapter, createCodexFetch, CODEX_ENDPOINT } = require('../src/main/gatherlocal/ai/codex-structured');
+const {
+  createCodexStructuredAdapter, createCodexFetch, CODEX_ENDPOINT, SOURCE_ENDPOINT,
+} = require('../src/main/gatherlocal/ai/codex-structured');
 
 test('Codex fetch rewrites only exact responses POST and replays 401 with same session', async () => {
   const calls = [];
   const authCalls = [];
+  let sends = 0;
   const auth = {
     async credentials(options = {}) {
       authCalls.push(options);
@@ -17,7 +20,7 @@ test('Codex fetch rewrites only exact responses POST and replays 401 with same s
     },
   };
   const fetch = createCodexFetch({
-    auth, sessionId: 'session', userAgent: 'GatherLocal/test',
+    auth, sessionId: 'session', userAgent: 'GatherLocal/test', onSend: () => { sends += 1; },
     fetchImpl: async (url, init) => {
       calls.push({ url, init });
       return { status: calls.length === 1 ? 401 : 200 };
@@ -28,6 +31,7 @@ test('Codex fetch rewrites only exact responses POST and replays 401 with same s
   });
   assert.equal(response.status, 200);
   assert.equal(calls.length, 2);
+  assert.equal(sends, 2);
   for (const call of calls) {
     assert.equal(call.url, CODEX_ENDPOINT);
     assert.equal(call.init.redirect, 'error');
@@ -49,18 +53,27 @@ test('Codex fetch rewrites only exact responses POST and replays 401 with same s
 test('completeJson uses SDK streaming contract and retries one invalid output in original attempt', async () => {
   const calls = [];
   const attempts = [];
+  const usage = [];
   const sessionIds = ['attempt-one', 'attempt-two'];
   const values = [
-    Promise.reject(Object.assign(new Error('bad'), { name: 'JSONParseError' })),
-    Promise.resolve({ ok: true }),
+    () => Promise.reject(Object.assign(new Error('bad'), { name: 'JSONParseError' })),
+    () => Promise.resolve({ ok: true }),
   ];
-  const adapter = createCodexStructuredAdapter({ model: 'gpt-5.6-sol', timeoutMs: 1000 }, {
+  const adapter = createCodexStructuredAdapter({ model: 'gpt-5.6-luna', timeoutMs: 1000 }, {
     auth: { credentials: async () => ({ accessToken: 'x', refreshToken: 'r', expiresAt: 9e15, generation: 1 }) },
     randomUUID: () => sessionIds.shift(),
     tracer: (event) => { if (event.event === 'attempt') attempts.push(event.sessionId); },
+    fetch: async () => ({ status: 200 }),
+    recordUsage: (entry) => usage.push(entry),
     sdk: {
-      createOpenAI: () => ({ responses: (model) => ({ model }) }),
-      streamText(options) { calls.push(options); return { output: values.shift() }; },
+      createOpenAI: ({ fetch }) => ({ responses: (model) => ({ model, fetch }) }),
+      streamText(options) {
+        calls.push(options);
+        return {
+          output: options.model.fetch(SOURCE_ENDPOINT, { method: 'POST' }).then(values.shift()),
+          totalUsage: Promise.resolve({ inputTokens: 2, outputTokens: 1, totalTokens: 3 }),
+        };
+      },
       Output: { object: ({ schema }) => ({ schema }) },
       jsonSchema: (schema) => schema,
     },
@@ -71,12 +84,14 @@ test('completeJson uses SDK streaming contract and retries one invalid output in
   };
   assert.deepEqual(await adapter.completeJson({ input: 'x', outputSchema: schema, maxOutputTokens: 1 }), { ok: true });
   assert.equal(calls.length, 2);
-  assert.equal(calls[0].model.model, 'gpt-5.6-sol');
+  assert.equal(calls[0].model.model, 'gpt-5.6-luna');
   assert.equal(calls[0].maxOutputTokens, undefined);
   assert.equal(calls[0].maxRetries, 0);
   assert.equal(typeof calls[0].onError, 'function');
   assert.deepEqual(calls[0].providerOptions, { openai: { store: false, reasoningEffort: 'low' } });
   assert.deepEqual(attempts, ['attempt-one', 'attempt-two']);
+  assert.deepEqual(usage.map((entry) => entry.outcome), ['failed', 'succeeded']);
+  assert.deepEqual(usage.map((entry) => entry.usage.totalTokens), [3, 3]);
 });
 
 test('completeJson never begins OAuth when signed out', async () => {
@@ -162,8 +177,9 @@ test('deadline exists before credentials and maps SDK timeout/abort/status error
 
 test('real AI SDK emits expected Codex responses wire shape', async () => {
   const requests = [];
+  const usage = [];
   const events = [
-    { type: 'response.created', response: { id: 'resp', created_at: 1, model: 'gpt-5.6-sol' } },
+    { type: 'response.created', response: { id: 'resp', created_at: 1, model: 'gpt-5.6-luna' } },
     { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'message' } },
     { type: 'response.output_text.delta', item_id: 'message', delta: '{"ok":true}' },
     { type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'message' } },
@@ -173,7 +189,7 @@ test('real AI SDK emits expected Codex responses wire shape', async () => {
     },
   ];
   const body = `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')}data: [DONE]\n\n`;
-  const adapter = createCodexStructuredAdapter({ model: 'gpt-5.6-sol', timeoutMs: 1000 }, {
+  const adapter = createCodexStructuredAdapter({ model: 'gpt-5.6-luna', timeoutMs: 1000 }, {
     auth: {
       async credentials() { return { accessToken: 'token', generation: 1 }; },
     },
@@ -182,6 +198,7 @@ test('real AI SDK emits expected Codex responses wire shape', async () => {
       requests.push({ url, init });
       return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
     },
+    recordUsage: (entry) => usage.push(entry),
   });
   const schema = {
     type: 'object', additionalProperties: false,
@@ -196,6 +213,11 @@ test('real AI SDK emits expected Codex responses wire shape', async () => {
   assert.equal(requestBody.store, false);
   assert.equal(requestBody.max_output_tokens, undefined);
   assert.equal(requestBody.reasoning.effort, 'low');
+  assert.equal(usage.length, 1);
+  assert.equal(usage[0].outcome, 'succeeded');
+  assert.equal(usage[0].provider, 'codex');
+  assert.equal(usage[0].usage.inputTokens, 1);
+  assert.equal(usage[0].usage.outputTokens, 1);
 });
 
 test('hung image preprocessing settles at request deadline and ignores late result', async () => {

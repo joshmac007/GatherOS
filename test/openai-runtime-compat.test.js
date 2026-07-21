@@ -64,6 +64,7 @@ test('openai facade reports provider ownership per capability', () => {
   const facade = createOpenAiFacade({
     runtime: {
       providerFor: (capability) => providers[capability] || null,
+      modelFor: (capability) => capability === 'structured-json' ? 'gpt-5.6-luna' : null,
       isConfigured: (capability) => capability !== 'image-generation',
       isUsable: (capability) => capability === 'structured-json',
     },
@@ -72,6 +73,7 @@ test('openai facade reports provider ownership per capability', () => {
   assert.deepEqual(facade.getAccess().structuredJson, {
     capability: 'structured-json',
     provider: 'codex',
+    model: 'gpt-5.6-luna',
     available: true,
     configured: true,
     ownership: 'user',
@@ -80,6 +82,7 @@ test('openai facade reports provider ownership per capability', () => {
   assert.deepEqual(facade.getAccess().imageGeneration, {
     capability: 'image-generation',
     provider: null,
+    model: null,
     available: false,
     configured: false,
     ownership: 'unknown',
@@ -90,13 +93,14 @@ test('openai facade reports provider ownership per capability', () => {
 test('openai facade resolves runtime at call time and uses usability for sessions', () => {
   let current = {
     providerFor: () => 'codex',
+    modelFor: () => 'gpt-5.6-luna',
     isConfigured: () => true,
     isUsable: () => false,
   };
   const facade = createOpenAiFacade({ runtimeResolver: () => current });
   assert.equal(facade.hasSession(), false);
   assert.deepEqual(facade.getAccess().structuredJson, {
-    capability: 'structured-json', provider: 'codex', available: true,
+    capability: 'structured-json', provider: 'codex', model: 'gpt-5.6-luna', available: true,
     configured: false, ownership: 'user', requiresPro: false,
   });
   current = { ...current, isUsable: () => true };
@@ -108,6 +112,7 @@ test('local structured provider remains a usable session without OAuth', () => {
   const facade = createOpenAiFacade({
     runtime: {
       providerFor: () => 'local',
+      modelFor: () => 'llama3.2-vision',
       isConfigured: () => true,
       isUsable: () => true,
     },

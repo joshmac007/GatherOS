@@ -132,6 +132,7 @@ let foregroundActivity = null;
 let saveBackgroundRouter = null;
 let structuredProvider = null;
 let codexAuth = null;
+let aiUsageLedger = null;
 
 function sendBackgroundEvent(event, payload) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -982,6 +983,7 @@ app.whenReady().then(() => {
     },
   });
   codexAuth = aiBackend.codexAuth;
+  aiUsageLedger = aiBackend.usageLedger;
 
   // Install the header-strip on the partitions the URL features use.
   // session.fromPartition lazily creates the session if it doesn't
@@ -1310,6 +1312,14 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 let backgroundDrainedForQuit = false;
 let backgroundQuitDrain = null;
 let aiAuthDisposedForQuit = false;
+let aiUsageDisposedForQuit = false;
+function disposeAiUsageForQuit() {
+  if (aiUsageDisposedForQuit) return;
+  aiUsageDisposedForQuit = true;
+  try { aiUsageLedger?.dispose(); } catch (error) {
+    console.error('[ai] usage flush failed:', error?.message || error);
+  }
+}
 app.on('before-quit', (event) => {
   if (!aiAuthDisposedForQuit) {
     aiAuthDisposedForQuit = true;
@@ -1318,6 +1328,7 @@ app.on('before-quit', (event) => {
     }
   }
   if (!backgroundRuntime || backgroundDrainedForQuit) {
+    disposeAiUsageForQuit();
     destroyToastWindow();
     return;
   }
@@ -1332,6 +1343,7 @@ app.on('before-quit', (event) => {
     .finally(() => {
       backgroundDrainedForQuit = true;
       foregroundActivity?.dispose();
+      disposeAiUsageForQuit();
       destroyToastWindow();
       app.quit();
     });

@@ -51,6 +51,7 @@ function createCodexFetch({
   signal,
   deadline,
   tracer = () => {},
+  onSend = () => {},
 } = {}) {
   if (!auth || typeof auth.credentials !== 'function') throw new TypeError('Codex fetch requires auth');
   return async (input, init = {}) => {
@@ -63,6 +64,7 @@ function createCodexFetch({
     }
     const first = await auth.credentials({ signal, deadline });
     const send = (credentials) => {
+      onSend();
       const headers = headersWithoutAuthorization(init.headers);
       headers.set('Authorization', `Bearer ${credentials.accessToken}`);
       if (credentials.accountId) headers.set('ChatGPT-Account-Id', credentials.accountId);
@@ -86,7 +88,7 @@ function createCodexFetch({
 }
 
 function createCodexStructuredAdapter(config = {}, dependencies = {}) {
-  const model = typeof config.model === 'string' && config.model.trim() ? config.model.trim() : 'gpt-5.6-sol';
+  const model = typeof config.model === 'string' && config.model.trim() ? config.model.trim() : 'gpt-5.6-luna';
   const timeoutMs = timeoutValue(config.timeoutMs, 120000);
   const maxImageBytes = timeoutValue(config.maxImageBytes, 2 * 1024 * 1024);
   const auth = dependencies.auth;
@@ -96,8 +98,18 @@ function createCodexStructuredAdapter(config = {}, dependencies = {}) {
   const now = dependencies.now || Date.now;
   const setTimer = dependencies.setTimer || setTimeout;
   const clearTimer = dependencies.clearTimer || clearTimeout;
+  const recordUsage = typeof dependencies.recordUsage === 'function' ? dependencies.recordUsage : () => {};
   const version = typeof config.appVersion === 'string' && config.appVersion ? config.appVersion : 'unknown';
   const userAgent = `GatherLocal/${version} (${os.platform()} ${os.release()}; ${os.arch()})`;
+
+  function record(outcome, usage) {
+    try {
+      recordUsage({
+        provider: PROVIDER, model, capability: CAPABILITIES.STRUCTURED_JSON,
+        outcome, usage, usageFormat: 'ai-sdk',
+      });
+    } catch {}
+  }
 
   function configured() {
     return Boolean(auth && typeof auth.credentials === 'function');
@@ -165,6 +177,8 @@ function createCodexStructuredAdapter(config = {}, dependencies = {}) {
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const sessionId = randomUUID();
+      let sent = false;
+      let observedUsage;
       const remaining = deadline - now();
       if (remaining <= 0) {
         throw runtimeError('AI_TIMEOUT', 'Codex request timed out', {
@@ -181,6 +195,7 @@ function createCodexStructuredAdapter(config = {}, dependencies = {}) {
           signal: requestController.signal,
           deadline,
           tracer,
+          onSend: () => { sent = true; },
         });
         const openai = loaded.createOpenAI({ apiKey: 'oauth-dummy', fetch: codexFetch });
         const result = loaded.streamText({
@@ -194,13 +209,21 @@ function createCodexStructuredAdapter(config = {}, dependencies = {}) {
           providerOptions: { openai: { store: false, reasoningEffort: 'low' } },
           onError: () => {},
         });
-        const value = await result.output;
+        const [outputResult, usageResult] = await Promise.allSettled([
+          result.output,
+          result.totalUsage,
+        ]);
+        if (usageResult.status === 'fulfilled') observedUsage = usageResult.value;
+        if (outputResult.status === 'rejected') throw outputResult.reason;
+        const value = outputResult.value;
         const validation = schemaRegistry.validate(outputSchema, value);
         if (!validation.ok) throw runtimeError('AI_INVALID_RESPONSE', 'Codex returned invalid structured JSON', {
           capability: CAPABILITIES.STRUCTURED_JSON, provider: PROVIDER, retryable: attempt === 0,
         });
+        if (sent) record('succeeded', observedUsage);
         return value;
       } catch (cause) {
+        if (sent) record('failed', observedUsage);
         if (timedOut || /TimeoutError/i.test(String(cause?.name || ''))) {
           throw runtimeError('AI_TIMEOUT', 'Codex request timed out', {
             capability: CAPABILITIES.STRUCTURED_JSON, provider: PROVIDER, retryable: true, cause,

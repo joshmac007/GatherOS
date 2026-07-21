@@ -51,6 +51,16 @@ function createOllamaEmbeddingAdapter(config = {}, dependencies = {}) {
     ? config.expectedDimension
     : null;
   const fetchImpl = dependencies.fetch || globalThis.fetch;
+  const recordUsage = typeof dependencies.recordUsage === 'function' ? dependencies.recordUsage : () => {};
+
+  function record(outcome, usage) {
+    try {
+      recordUsage({
+        provider: PROVIDER, model, capability: CAPABILITIES.EMBEDDING,
+        outcome, usage, usageFormat: 'ollama',
+      });
+    } catch {}
+  }
 
   function configured() {
     return Boolean(baseUrl && model);
@@ -132,7 +142,18 @@ function createOllamaEmbeddingAdapter(config = {}, dependencies = {}) {
           provider: PROVIDER,
           dependencies,
         });
+        const vector = invalidVector(data?.embeddings?.[0], expectedDimension);
+        if (observedDimension == null) observedDimension = vector.length;
+        invalidVector(vector, observedDimension);
+        record('succeeded', data);
+        return {
+          vector,
+          provider: PROVIDER,
+          model,
+          dimension: vector.length,
+        };
       } catch (error) {
+        record('failed', data);
         if (error?.status === 404) {
           const missing = modelMissing();
           missing.cause = error;
@@ -140,15 +161,6 @@ function createOllamaEmbeddingAdapter(config = {}, dependencies = {}) {
         }
         throw error;
       }
-      const vector = invalidVector(data?.embeddings?.[0], expectedDimension);
-      if (observedDimension == null) observedDimension = vector.length;
-      invalidVector(vector, observedDimension);
-      return {
-        vector,
-        provider: PROVIDER,
-        model,
-        dimension: vector.length,
-      };
     },
   };
 }

@@ -105,3 +105,33 @@ test('runtime reports provider usability without blocking adapter auth errors', 
   assert.equal(calls, 1);
   assert.equal(localRuntime.isUsable(CAPABILITIES.STRUCTURED_JSON), true);
 });
+
+test('runtime reports local observed usage across all active routes without authorization', () => {
+  let authorizationCalls = 0;
+  const runtime = createAiRuntime({
+    authorize: () => { authorizationCalls += 1; return false; },
+    usage: { snapshot: () => ({ ok: true, month: '2026-07', currentMonth: { totals: { attempts: 3 } } }) },
+    routes: {
+      [CAPABILITIES.STRUCTURED_JSON]: adapter('codex', { model: 'gpt-5.6-luna', isUsable: () => false }),
+      [CAPABILITIES.EMBEDDING]: adapter('ollama', { model: 'embeddinggemma' }),
+    },
+  });
+
+  assert.deepEqual(runtime.getUsage(), {
+    ok: true,
+    month: '2026-07',
+    currentMonth: { totals: { attempts: 3 } },
+    routes: {
+      [CAPABILITIES.STRUCTURED_JSON]: {
+        provider: 'codex', model: 'gpt-5.6-luna', configured: true, usable: false,
+      },
+      [CAPABILITIES.EMBEDDING]: {
+        provider: 'ollama', model: 'embeddinggemma', configured: true, usable: true,
+      },
+      [CAPABILITIES.IMAGE_GENERATION]: {
+        provider: null, model: null, configured: false, usable: false,
+      },
+    },
+  });
+  assert.equal(authorizationCalls, 0);
+});

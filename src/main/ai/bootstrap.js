@@ -7,6 +7,7 @@ const { createGatherLocalAuthorization } = require('../gatherlocal/ai/authorizat
 const { readGatherLocalAiConfig, CAPABILITIES } = require('../gatherlocal/ai/config');
 const { createEncryptedAuthVault } = require('../gatherlocal/ai/codex-auth-vault');
 const { createCodexOAuthAuth } = require('../gatherlocal/ai/codex-oauth');
+const { createAiUsageLedger } = require('../gatherlocal/ai/usage-ledger');
 
 let cachedRuntime = null;
 
@@ -16,10 +17,12 @@ function createDefaultAiRuntime({
   authorize = defaultAuthorize,
   routes = null,
   gatherLocalOptions = {},
+  usage = null,
 } = {}) {
   return createAiRuntime({
     authorize,
     routes: routes || createGatherLocalRoutes(gatherLocalOptions),
+    usage,
   });
 }
 
@@ -61,19 +64,30 @@ function createPostReadyAiBackend({
     tracer: dependencies.tracer,
   });
   codexAuth.initialize();
+  const usageLedger = dependencies.usageLedger || createAiUsageLedger({
+    filePath: path.join(app.getPath('userData'), 'ai-usage.json'),
+    fileSystem: dependencies.fileSystem,
+    now: dependencies.now,
+    setTimer: dependencies.setTimer,
+    clearTimer: dependencies.clearTimer,
+    onError: dependencies.usageOnError,
+  });
   const config = readGatherLocalAiConfig(env);
   config.codex.appVersion = typeof app.getVersion === 'function' ? app.getVersion() : 'unknown';
   const routes = createGatherLocalRoutes({
     config,
     dependencies: {
       ...dependencies,
-      codex: { ...dependencies.codex, auth: codexAuth },
+      codex: { ...dependencies.codex, auth: codexAuth, recordUsage: usageLedger.record },
+      local: { ...dependencies.local, recordUsage: usageLedger.record },
+      ollama: { ...dependencies.ollama, recordUsage: usageLedger.record },
     },
   });
-  const runtime = installAiRuntime(createAiRuntime({ authorize, routes }));
+  const runtime = installAiRuntime(createAiRuntime({ authorize, routes, usage: usageLedger }));
   return {
     runtime,
     codexAuth,
+    usageLedger,
     vault,
     codexSelected: config.routes[CAPABILITIES.STRUCTURED_JSON] === 'codex',
   };
