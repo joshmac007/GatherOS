@@ -86,11 +86,15 @@
   color: rgba(255, 255, 255, 0.7);
   margin-top: 3px;
 }
+/* The ▸ tick only marks the active sleeve (hovered or keyboard-selected). */
 .labTick {
   font-size: 9px;
   margin-top: 10px;
   color: rgba(255, 255, 255, 0.8);
+  opacity: 0;
+  transition: opacity 0.2s;
 }
+.slot.active .labTick { opacity: 1; }
 
 .covw {
   position: absolute;
