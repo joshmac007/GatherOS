@@ -61,11 +61,38 @@
     }
   }
 
+  // Pull every cdn.cosmos.so image id out of a response (deduped, lowercased).
+  function extractCdnUuids(data) {
+    const uuids = [];
+    const seen = new Set();
+    try {
+      const re = /cdn\.cosmos\.so\/([^/?#"'\s\\]+)/gi;
+      const str = JSON.stringify(data);
+      let m;
+      while ((m = re.exec(str)) !== null) {
+        const id = m[1].toLowerCase();
+        if (!seen.has(id)) { seen.add(id); uuids.push(id); }
+      }
+    } catch { /* ignore */ }
+    return uuids;
+  }
+
   function handle(reqBody, data) {
     if (data) learn(data, null);
     let op, vars;
     try { const j = JSON.parse(reqBody); op = j.operationName; vars = j.variables; }
     catch { return; }
+    // A collection page appends a "Similar" recommendations grid below the real
+    // saves — same markup, no divider — so the DOM scraper can't separate them.
+    // GetClusterRecommendations *is* that grid, so hand its image ids to the
+    // watcher as an exclude list; the real saves come from GetClusterElements.
+    if (/Recommendation/i.test(op || '') && data) {
+      const uuids = extractCdnUuids(data);
+      if (uuids.length) {
+        console.log('[gatheros] cosmos: excluding', uuids.length, 'similar/recommended image(s)');
+        window.postMessage({ source: 'gatheros-cosmos-interceptor', type: 'exclude', uuids }, window.location.origin);
+      }
+    }
     // A save = connecting element(s) to cluster(s). (Disconnect-only calls
     // have an empty clusterIdsToConnect and are ignored.)
     if (op === 'EditElementsConnectionsToClusters'

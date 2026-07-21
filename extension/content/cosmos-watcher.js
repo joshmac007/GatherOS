@@ -14,6 +14,10 @@
 const CDN_HOST = 'cdn.cosmos.so';
 const COSMOS_USERNAME_KEY = 'gatherosCosmosUsername';
 const seen = new Set();
+// Image ids the interceptor flagged as "Similar" recommendations (from the
+// GetClusterRecommendations query) — never import these. Scoped per page load,
+// which resets naturally as the crawl navigates from collection to collection.
+const excludedUuids = new Set();
 
 // Remember the owner's username the first time we're on their own profile,
 // so the panel's "Import saves" backfill knows which profile URL to open.
@@ -35,7 +39,14 @@ function rememberUsername() {
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
   const d = event.data;
-  if (!d || d.source !== 'gatheros-cosmos-interceptor' || d.type !== 'save') return;
+  if (!d || d.source !== 'gatheros-cosmos-interceptor') return;
+  // "Similar" recommendation ids to keep out of the grid scrape (collection
+  // pages). Handle before the save-only guard below.
+  if (d.type === 'exclude' && Array.isArray(d.uuids)) {
+    for (const u of d.uuids) excludedUuids.add(String(u).toLowerCase());
+    return;
+  }
+  if (d.type !== 'save') return;
   if (!d.mediaUrl) return; // image not seen yet — the profile/grid reader backfills it later
   const m = /cdn\.cosmos\.so\/([^/?#]+)/i.exec(d.mediaUrl);
   const id = m ? m[1] : String(d.elementId);
@@ -114,6 +125,7 @@ function collectElements() {
     if (img.getClientRects().length === 0) continue;          // hidden / preload
     const id = idFromCdnUrl(src);
     if (!id || seen.has(id)) continue;
+    if (excludedUuids.has(id.toLowerCase())) continue;        // "Similar" recommendation, not a save
     const mediaUrl = `https://${CDN_HOST}/${id}?format=webp`;  // full-res
     const a = img.closest('a[href]');
     let pageUrl = mediaUrl;
