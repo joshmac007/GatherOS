@@ -121,7 +121,7 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
   const rowRef = useRef(null);
   const slotRefs = useRef([]);
   const [hovIdx, setHovIdx] = useState(null);
-  const [sel, setSel] = useState(0);
+  const [sel, setSel] = useState(-1); // -1 = nothing active until hover/arrow
   const lastPoint = useRef(null);
 
   // Spine colors, sampled from the sleeve's own rendered <img>/<video> as
@@ -180,7 +180,7 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
 
   // Reset per open so the entrance replays and stale hover can't linger.
   useEffect(() => {
-    if (open) { setHovIdx(null); setSel(0); lastPoint.current = null; }
+    if (open) { setHovIdx(null); setSel(-1); lastPoint.current = null; }
   }, [open]);
 
   const centerOn = useCallback((i, instant) => {
