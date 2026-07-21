@@ -142,6 +142,11 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
           const face = coverOf(c);
           const faceIsVideo = isVideoSrc(face);
           const poster = posterOf(c);
+          // Small, already-cached thumb to fill the sleeve instantly while
+          // the full-quality cover decodes — the page fills at once instead
+          // of dark sleeves popping to image. Only when it differs from the
+          // sharp cover (a manually-set cover may not match the newest thumb).
+          const base = !faceIsVideo && poster && poster !== face ? poster : null;
           const cls = [
             styles.slot,
             i === activeIdx ? styles.active : '',
@@ -180,14 +185,31 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
                         onLoadedData={(e) => sampleSpine(c.id, face, e.currentTarget)}
                       />
                     ) : face ? (
-                      <img
-                        src={fileUrl(face)}
-                        alt=""
-                        draggable={false}
-                        loading="lazy"
-                        decoding="async"
-                        onLoad={(e) => sampleSpine(c.id, face, e.currentTarget)}
-                      />
+                      <>
+                        {base && (
+                          <img
+                            className={styles.covBase}
+                            src={fileUrl(base)}
+                            alt=""
+                            aria-hidden="true"
+                            draggable={false}
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        )}
+                        <img
+                          className={styles.covFull}
+                          src={fileUrl(face)}
+                          alt=""
+                          draggable={false}
+                          loading="lazy"
+                          decoding="async"
+                          onLoad={(e) => {
+                            e.currentTarget.classList.add(styles.loaded);
+                            sampleSpine(c.id, face, e.currentTarget);
+                          }}
+                        />
+                      </>
                     ) : null}
                     <i className={styles.shade} />
                   </div>

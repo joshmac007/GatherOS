@@ -166,6 +166,23 @@
   object-fit: cover;
   -webkit-user-drag: none;
 }
+/* Progressive load: the small (cached) thumb fills the sleeve instantly,
+   slightly blurred to read as a placeholder; the full-quality cover fades
+   in over it once decoded. The page fills at once instead of dark sleeves
+   popping to image. */
+.covBase {
+  z-index: 1;
+  filter: blur(5px);
+  transform: scale(1.05); /* hide the blur's soft edges */
+}
+.covFull {
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.covFull.loaded {
+  opacity: 1;
+}
 
 /* Raking light: the face is lit at its near (left) edge and falls into
    deep shadow across its width. The vertical gradient dissolves each
