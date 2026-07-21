@@ -135,15 +135,34 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
     sampledRef.current.add(key);
     const measure = () => {
       try {
+        const S = 24;
         const cv = document.createElement('canvas');
-        cv.width = 8; cv.height = 8;
+        cv.width = S; cv.height = S;
         const ctx = cv.getContext('2d');
-        ctx.drawImage(el, 0, 0, 8, 8);
-        const d = ctx.getImageData(0, 0, 8, 8).data;
-        let r = 0, g = 0, b = 0;
-        for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
-        const n = d.length / 4;
-        setSpines((prev) => ({ ...prev, [id]: `rgb(${Math.round(r / n)} ${Math.round(g / n)} ${Math.round(b / n)})` }));
+        ctx.drawImage(el, 0, 0, S, S);
+        const d = ctx.getImageData(0, 0, S, S).data;
+        // Saturation-weighted average: colorful pixels count far more than
+        // the (often black) background, so the spine picks up the cover's
+        // vivid color instead of a muddy overall average.
+        let wr = 0, wg = 0, wb = 0, wsum = 0;
+        let ar = 0, ag = 0, ab = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i + 1], b = d[i + 2];
+          ar += r; ag += g; ab += b; n += 1;
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          const sat = mx === 0 ? 0 : (mx - mn) / mx;
+          const w = sat * sat * (mx / 255); // vivid + bright pixels dominate
+          wr += r * w; wg += g * w; wb += b * w; wsum += w;
+        }
+        let R, G, B;
+        if (wsum > 0.4) { R = wr / wsum; G = wg / wsum; B = wb / wsum; }
+        else { R = ar / n; G = ag / n; B = ab / n; } // truly mono cover → plain average
+        // Mild saturation boost around luma so the edge reads as a real color.
+        const l = 0.3 * R + 0.59 * G + 0.11 * B;
+        const amt = 1.3;
+        const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+        R = clamp(l + (R - l) * amt); G = clamp(l + (G - l) * amt); B = clamp(l + (B - l) * amt);
+        setSpines((prev) => ({ ...prev, [id]: `rgb(${R} ${G} ${B})` }));
       } catch { /* tainted — keep the fallback spine */ sampledRef.current.delete(key); }
     };
     // decoding="async" means load can fire before the bitmap is ready, so
