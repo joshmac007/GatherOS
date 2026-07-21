@@ -69,13 +69,20 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
 
   useEffect(() => {
     if (!open) return undefined;
+    // Arrow navigation hands control to the keyboard: clear the pointer
+    // hover (and the stored pointer position, so the centering scroll
+    // doesn't re-derive hover from a stationary cursor) so the keyboard
+    // selection becomes the active sleeve. A real mouse move re-takes over.
+    const toKeyboard = () => { lastPoint.current = null; setHovIdx(null); };
     const onKey = (e) => {
       if (e.key === 'Escape' && onClose) { e.preventDefault(); onClose(); return; }
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
+        toKeyboard();
         setSel((s) => { const next = Math.max(0, s - 1); centerOn(next); return next; });
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
+        toKeyboard();
         setSel((s) => { const next = Math.min(N - 1, s + 1); centerOn(next); return next; });
       } else if (e.key === 'Enter') {
         e.preventDefault();
