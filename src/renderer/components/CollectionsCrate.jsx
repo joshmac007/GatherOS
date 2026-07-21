@@ -173,15 +173,17 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
                 <div className={styles.c3d}>
                   <div className={styles.cov}>
                     {faceIsVideo ? (
-                      // Video cover: the #t fragment + preload="metadata"
-                      // paints its first frame at rest without fetching the
-                      // whole clip; the poster is a pre-decode fallback.
+                      // Video cover: autoplay muted + loop so the sleeve is
+                      // alive. The poster (placeholder thumb) shows until the
+                      // first frame is ready.
                       <video
-                        src={`${fileUrl(face)}#t=0.001`}
+                        src={fileUrl(face)}
                         poster={poster ? fileUrl(poster) : undefined}
+                        autoPlay
                         muted
+                        loop
                         playsInline
-                        preload="metadata"
+                        preload="auto"
                         onLoadedData={(e) => sampleSpine(c.id, face, e.currentTarget)}
                       />
                     ) : face ? (
