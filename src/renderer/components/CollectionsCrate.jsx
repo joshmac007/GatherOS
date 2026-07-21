@@ -5,62 +5,24 @@ import { fileUrl } from '../lib/fileUrl.js';
 // Collections crate — a full-screen browse mode that presents every
 // collection as a record sleeve leaning in a crate: uniform rake, layered
 // left to right (leftmost in front), raking light falling across each
-// face, and a colored spine picked up from the artwork. Hovering pulls a
-// sleeve toward the viewer like drawing a book from a shelf; clicking a
-// sleeve opens that collection. ← / → step through (Enter opens), Esc
-// exits. The stage is deliberately dark in both themes — it's a
-// theatre-style browse mode, not a document surface.
+// face, and a colored spine picked up from the artwork. Hovering (or
+// keyboard-selecting) pulls a sleeve toward the viewer like drawing a book
+// from a shelf; clicking a sleeve opens that collection. ← / → step through
+// (Enter opens), Esc exits. The stage is deliberately dark in both themes.
 
 const FALLBACK_SPINE = '#55555a';
-
-// Average color of a collection's cover → its sleeve spine, so the folded
-// edge matches the face (including after the cover is changed). Sampled
-// through a tiny canvas; wrapped in try/catch so a tainted/unreadable
-// image just keeps the neutral fallback. Keyed by id+cover so changing a
-// collection's cover re-samples the spine rather than reusing the old one.
-// A video file can't be painted into an <img>. Cosmos videos have no
-// poster thumbnail, so their cover resolves to the .mp4 itself — treat
-// that as "no face" (blank sleeve) rather than a broken image.
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|mkv|m4v|avi)$/i;
+const isVideoSrc = (s) => !!s && VIDEO_EXT_RE.test(s);
+
+// The full-quality cover (preview/original) for the big sleeve face —
+// thumb_path is grid-tile sized and reads blurry at 320px wide.
 function coverOf(c) {
-  const src = c.cover || (Array.isArray(c.thumbs) ? c.thumbs[0] : null);
-  if (src && VIDEO_EXT_RE.test(src)) return null;
-  return src;
+  return c.cover || (Array.isArray(c.thumbs) ? c.thumbs[0] : null);
 }
-function useSpineColors(collections, open) {
-  const [colors, setColors] = useState({});
-  const done = useRef(new Set());
-  useEffect(() => {
-    if (!open) return undefined;
-    let alive = true;
-    for (const c of collections) {
-      const src = coverOf(c);
-      const key = `${c.id}:${src || ''}`;
-      if (!src || done.current.has(key)) continue;
-      done.current.add(key);
-      const img = new Image();
-      img.onload = () => {
-        if (!alive) return;
-        try {
-          const cv = document.createElement('canvas');
-          cv.width = 8; cv.height = 8;
-          const ctx = cv.getContext('2d');
-          ctx.drawImage(img, 0, 0, 8, 8);
-          const d = ctx.getImageData(0, 0, 8, 8).data;
-          let r = 0, g = 0, b = 0;
-          for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
-          const n = d.length / 4;
-          setColors((prev) => ({
-            ...prev,
-            [c.id]: `rgb(${Math.round(r / n)} ${Math.round(g / n)} ${Math.round(b / n)})`,
-          }));
-        } catch { /* tainted canvas — keep the fallback spine */ }
-      };
-      img.src = fileUrl(src);
-    }
-    return () => { alive = false; };
-  }, [collections, open]);
-  return colors;
+// A still image to poster a video cover / sample its spine from, if any.
+function posterOf(c) {
+  const t = Array.isArray(c.thumbs) ? c.thumbs.find((x) => !isVideoSrc(x)) : null;
+  return t || null;
 }
 
 export default function CollectionsCrate({ open, collections, onOpenCollection, onCreateCollection, onClose }) {
@@ -69,7 +31,28 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
   const [hovIdx, setHovIdx] = useState(null);
   const [sel, setSel] = useState(0);
   const lastPoint = useRef(null);
-  const spines = useSpineColors(collections || [], open);
+
+  // Spine colors, sampled from the sleeve's own rendered <img>/<video> as
+  // it loads — no second full-res fetch. Keyed by id+src so a changed
+  // cover re-samples rather than reusing the old edge color.
+  const [spines, setSpines] = useState({});
+  const sampledRef = useRef(new Set());
+  const sampleSpine = useCallback((id, src, el) => {
+    const key = `${id}:${src || ''}`;
+    if (!el || sampledRef.current.has(key)) return;
+    sampledRef.current.add(key);
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = 8; cv.height = 8;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(el, 0, 0, 8, 8);
+      const d = ctx.getImageData(0, 0, 8, 8).data;
+      let r = 0, g = 0, b = 0;
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+      const n = d.length / 4;
+      setSpines((prev) => ({ ...prev, [id]: `rgb(${Math.round(r / n)} ${Math.round(g / n)} ${Math.round(b / n)})` }));
+    } catch { /* tainted/undecoded — keep the fallback spine */ sampledRef.current.delete(key); }
+  }, []);
 
   const items = Array.isArray(collections) ? collections : [];
   const N = items.length;
@@ -106,8 +89,8 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
 
   // Hover is derived from the pointer's slot column — never CSS :hover,
   // which goes stale when the row scrolls under a stationary mouse (no
-  // mouseleave fires) and leaves a sleeve stuck pulled-out. Re-derived on
-  // every mousemove AND every scroll.
+  // mouseleave fires) and leaves a sleeve stuck pulled-out. A pointer
+  // hover overrides the keyboard selection's active state.
   const hovFromPoint = useCallback((x, y) => {
     const el = document.elementFromPoint(x, y);
     const slot = el ? el.closest(`.${styles.slot}`) : null;
@@ -125,6 +108,11 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
 
   if (!open) return null;
 
+  // The active sleeve = the hovered one if the pointer is over a sleeve,
+  // otherwise the keyboard selection. So arrow keys always light exactly
+  // one sleeve (and its label), and the mouse takes over when used.
+  const activeIdx = hovIdx != null ? hovIdx : sel;
+
   return (
     <div className={styles.scrim} role="dialog" aria-label="Browse collections">
       <div
@@ -135,13 +123,12 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
         onScroll={onScroll}
       >
         {items.map((c, i) => {
-          // Full-quality cover (preview/original) for the big sleeve face —
-          // thumb_path is grid-tile sized and reads blurry at 320px wide.
           const face = coverOf(c);
+          const faceIsVideo = isVideoSrc(face);
+          const poster = posterOf(c);
           const cls = [
             styles.slot,
-            i === hovIdx ? styles.hov : '',
-            i === sel ? styles.sel : '',
+            i === activeIdx ? styles.active : '',
           ].filter(Boolean).join(' ');
           return (
             <div
@@ -164,7 +151,28 @@ export default function CollectionsCrate({ open, collections, onOpenCollection, 
               <div className={styles.covw}>
                 <div className={styles.c3d}>
                   <div className={styles.cov}>
-                    {face && <img src={fileUrl(face)} alt="" draggable={false} />}
+                    {faceIsVideo ? (
+                      // Video cover: the #t fragment + preload="metadata"
+                      // paints its first frame at rest without fetching the
+                      // whole clip; the poster is a pre-decode fallback.
+                      <video
+                        src={`${fileUrl(face)}#t=0.001`}
+                        poster={poster ? fileUrl(poster) : undefined}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        onLoadedData={(e) => sampleSpine(c.id, face, e.currentTarget)}
+                      />
+                    ) : face ? (
+                      <img
+                        src={fileUrl(face)}
+                        alt=""
+                        draggable={false}
+                        loading="lazy"
+                        decoding="async"
+                        onLoad={(e) => sampleSpine(c.id, face, e.currentTarget)}
+                      />
+                    ) : null}
                     <i className={styles.shade} />
                   </div>
                   <div className={styles.edge} />

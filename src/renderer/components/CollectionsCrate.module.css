@@ -50,8 +50,9 @@
   from { transform: translateY(-115vh); }
 }
 
-/* Labels: only the hovered sleeve's label is fully lit — everything
-   else (selected included) rests at 50%.
+/* Labels: only the active sleeve's label is fully lit — the active sleeve
+   is whichever one the pointer is over, or the keyboard selection when the
+   pointer isn't on a sleeve. Everything else rests at 50%.
 
    Horizontal anchor: the sleeve's visible left edge. At this rake
    (perspective 950, cover 320 wide) a cover's near/right edge projects
@@ -68,7 +69,7 @@
   transition: opacity 0.25s;
   z-index: 500;
 }
-.slot.hov .lab { opacity: 1; }
+.slot.active .lab { opacity: 1; }
 .labName {
   font-size: 12.5px;
   font-weight: 600;
@@ -102,8 +103,7 @@
   filter: brightness(1);
   transition: filter 0.55s;
 }
-.slot.hov .covw { filter: brightness(1.1); }
-.slot.sel .covw { filter: brightness(1.03); }
+.slot.active .covw { filter: brightness(1.1); }
 
 /* 3D group: the art face plus a real folded-back spine, so each sleeve
    has cardboard thickness. (Brightness lives on the wrapper — a filter
@@ -116,13 +116,12 @@
   transform: perspective(950px) rotateY(-58deg);
   transition: transform 0.45s var(--ease-out, cubic-bezier(0.32, 0.72, 0, 1));
 }
-/* Hover = pulling a book from the shelf: the sleeve comes toward the
+/* Active = pulling a book from the shelf: the sleeve comes toward the
    viewer AND slides right, out from under its left neighbor — the
    rightward component is what reveals the hidden left side of the
-   cover. Rake, layering, and neighbors stay untouched. */
-.slot.hov .c3d { transform: perspective(950px) translateZ(60px) translateX(52px) rotateY(-58deg); }
-.slot.sel .c3d { transform: perspective(950px) translateZ(26px) rotateY(-45deg); }
-.slot.hov.sel .c3d { transform: perspective(950px) translateZ(60px) translateX(52px) rotateY(-58deg); }
+   cover. Rake, layering, and neighbors stay untouched. Applies whether
+   the sleeve is active by hover or by keyboard selection. */
+.slot.active .c3d { transform: perspective(950px) translateZ(60px) translateX(52px) rotateY(-58deg); }
 
 .cov {
   position: absolute;
@@ -140,7 +139,7 @@
     0 60px 120px rgba(0, 0, 0, 0.6);
   transition: box-shadow 0.45s var(--ease-out, cubic-bezier(0.32, 0.72, 0, 1));
 }
-.slot.hov .cov {
+.slot.active .cov {
   box-shadow:
     44px 0 44px -12px rgba(0, 0, 0, 0.95),
     110px 0 130px -16px rgba(0, 0, 0, 0.8),
@@ -158,7 +157,8 @@
     linear-gradient(90deg, rgba(255, 255, 255, 0.30) 0%, rgba(255, 255, 255, 0) 7%),
     linear-gradient(105deg, rgba(255, 255, 255, 0.12), transparent 30%);
 }
-.cov img {
+.cov img,
+.cov video {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -181,8 +181,7 @@
     linear-gradient(90deg, rgba(0, 0, 0, 0) 4%, rgba(0, 0, 0, 0.28) 48%, rgba(0, 0, 0, 0.85) 100%);
   transition: opacity 0.45s var(--ease-out, cubic-bezier(0.32, 0.72, 0, 1));
 }
-.slot.hov .shade { opacity: 0.28; }
-.slot.sel .shade { opacity: 0.5; }
+.slot.active .shade { opacity: 0.28; }
 
 /* Cardboard spine: a thin plane folded 90° back from the right edge (the
    near side at this rake), tinted by the artwork's average color. Only
