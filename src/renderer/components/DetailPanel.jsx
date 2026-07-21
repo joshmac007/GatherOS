@@ -157,14 +157,16 @@ function XGlyphIcon() {
   );
 }
 
-// Placeholder Cosmos mark (planet + orbit) — swap for the real cosmos.so
-// brand asset when we have it.
+// The cosmos.so mark: six dots in a hexagonal ring, tinted via currentColor.
 function CosmosGlyphIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" />
-      <ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)" />
+    <svg viewBox="0 0 38 42" width="15" height="15" fill="currentColor" aria-hidden="true">
+      <circle cx="19.02" cy="5.95" r="5.95" />
+      <circle cx="19.02" cy="35.99" r="5.95" />
+      <circle cx="5.97" cy="13.46" r="5.95" />
+      <circle cx="32.08" cy="13.46" r="5.95" />
+      <circle cx="5.97" cy="28.48" r="5.95" />
+      <circle cx="32.08" cy="28.48" r="5.95" />
     </svg>
   );
 }

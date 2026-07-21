@@ -27,7 +27,6 @@
     open: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
     close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     instagram: '<rect width="20" height="20" x="2" y="2" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>',
-    cosmos: '<circle cx="12" cy="12" r="4"/><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/>',
   };
   const svg = (paths, w = 17) =>
     `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -35,6 +34,10 @@
   // can't go through the stroke-based svg() helper above.
   const xLogo = (w = 15) =>
     `<svg viewBox="0 0 1200 1227" width="${w}" height="${w}" fill="currentColor" aria-hidden="true"><path d="M714 519L1161 0h-106L667 451 357 0H0l469 682L0 1226h106l410-476 327 476h357L714 519zM569 688l-47-68L144 80h163l305 436 48 68 396 567H892L569 688z"/></svg>`;
+  // The real cosmos.so mark: six dots in a hexagonal ring. Fill-based (like
+  // the X logo), so it tints with currentColor beside the other glyphs.
+  const cosmosLogo = (w = 15) =>
+    `<svg viewBox="0 0 38 42" width="${w}" height="${w}" fill="currentColor" aria-hidden="true"><circle cx="19.02" cy="5.95" r="5.95"/><circle cx="19.02" cy="35.99" r="5.95"/><circle cx="5.97" cy="13.46" r="5.95"/><circle cx="32.08" cy="13.46" r="5.95"/><circle cx="5.97" cy="28.48" r="5.95"/><circle cx="32.08" cy="28.48" r="5.95"/></svg>`;
 
   // The app icon, served from the extension as a web-accessible
   // resource. Loading it via chrome-extension:// (rather than a data:
@@ -200,7 +203,7 @@
           </div>
         </div>
         <div class="import" id="cosmosImport">
-          <button class="row" id="importCosmos"><span class="ico">${svg(ICONS.cosmos, 15)}</span><span class="txt"><span class="label">Import saves</span><span class="sub" id="cosmosSub">Backfill your Cosmos saves</span></span></button>
+          <button class="row" id="importCosmos"><span class="ico">${cosmosLogo(15)}</span><span class="txt"><span class="label">Import saves</span><span class="sub" id="cosmosSub">Backfill your Cosmos saves</span></span></button>
           <div class="scope" id="cosmosScope" hidden>
             <button class="primary" id="cosmosGo">Import all saves</button>
             <div class="scope-note">Cosmos saves aren't dated, so this imports everything — your profile and each collection — in the background. Duplicates are skipped.</div>
