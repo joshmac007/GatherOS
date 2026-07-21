@@ -37,7 +37,7 @@
   @keyframes rise{from{opacity:0;transform:translateY(70px)}}
 
   .lab{position:absolute;top:13vh;left:10px;right:4px;opacity:.4;transition:opacity .25s;cursor:pointer;z-index:500}
-  .slot:hover .lab,.slot.sel .lab{opacity:1}
+  .slot.hov .lab,.slot.sel .lab{opacity:1}
   .lab .n{font-size:12.5px;font-weight:600;letter-spacing:-.01em;line-height:1.32}
   .lab .m{font-size:10.5px;color:rgba(255,255,255,.55);margin-top:3px}
   .lab .p{font-size:9px;margin-top:10px;color:rgba(255,255,255,.8)}
@@ -59,7 +59,7 @@
   /* Cardboard spines: thin planes folded 90° back from each vertical edge.
      The near-side spine is what reads as thickness when a sleeve sits
      edge-on; the far one hides behind the face. */
-  .edge{position:absolute;top:0;bottom:0;width:14px;
+  .edge{position:absolute;top:0;bottom:0;width:12px;
     background:linear-gradient(180deg,
       color-mix(in srgb, var(--spine, #b9b4aa) 78%, #fff) 0%,
       var(--spine, #b9b4aa) 48%,
@@ -67,19 +67,22 @@
     box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
   .edge.l{left:0;transform-origin:left center;transform:rotateY(90deg)}
   .edge.r{right:0;transform-origin:right center;transform:rotateY(-90deg)}
+  /* Only the spine facing the viewer renders — under perspective the far
+     edge is visible "around" the face's silhouette as a phantom slab. */
+  .slot.lft .edge.r{display:none}
+  .slot:not(.lft) .edge.l{display:none}
   .slot.sel .c3d{transform:perspective(950px) translateZ(26px) rotateY(calc(var(--ry)*0.78))}
   .slot.sel .covw{filter:brightness(1.03)}
-  .slot:hover .c3d{transform:perspective(950px) translateZ(42px) translateY(-14px) rotateY(calc(var(--ry)*0.7))}
-  .slot:hover .covw{filter:brightness(1.08)}
-  /* Hover is driven by the slot's even-width column, not the overlapping
-     cover planes — so sweeping across the crate hits each sleeve in order
-     instead of whichever plane happens to be stacked on top. Layering is
-     handled in JS: the newest-hovered sleeve always takes the top layer
-     and keeps it until its swing-back settles. */
+  .slot.hov .c3d{transform:perspective(950px) translateZ(42px) translateY(-14px) rotateY(calc(var(--ry)*0.7))}
+  .slot.hov .covw{filter:brightness(1.08)}
+  /* Hover is the .hov class, applied by JS from the pointer's slot column —
+     never CSS :hover. :hover goes stale when the row scrolls under a
+     stationary mouse (no mouseleave fires), which left sleeves stuck on a
+     raised layer. JS re-derives hover on every mousemove AND every scroll. */
   .covw{pointer-events:none}
   /* The row parts gently around the hovered sleeve to give it room. */
-  .slot:hover ~ .slot .covw{transform:translateX(24px)}
-  .slot:has(~ .slot:hover) .covw{transform:translateX(-24px)}
+  .slot.hov ~ .slot .covw{transform:translateX(24px)}
+  .slot:has(~ .slot.hov) .covw{transform:translateX(-24px)}
 
   /* Atmosphere: tops of the sleeves dissolve into the dark header zone,
      bottoms sink under the deck gradient. */
@@ -234,31 +237,43 @@
       <div class="lab"><div class="n">${c.n}</div><div class="m">${c.c} saves</div><div class="p">▸</div></div>
       <div class="covw"><div class="c3d"><div class="cov cv${c.s}">${covInner(c.s)}</div><div class="edge l"></div><div class="edge r"></div></div></div>`;
     slot.addEventListener('click', () => select(i));
-    /* Layering: the newest-hovered sleeve always takes the top layer and
-       keeps it until its swing-back settles, so it never clips through a
-       neighbor mid-animation. */
-    slot.addEventListener('mouseenter', () => {
-      slot.dataset.raised = '1';
-      slot.style.zIndex = String(hoverZ++);
-    });
-    slot.addEventListener('mouseleave', () => {
-      setTimeout(() => {
-        if (slot.dataset.raised && !slot.matches(':hover')) {
-          delete slot.dataset.raised;
-          layout();
-        }
-      }, 650);
-    });
     row.appendChild(slot);
   });
-  let hoverZ = 900;
 
-  /* Recompute each sleeve's angle, shading, and stacking from its current
-     position on screen. Runs on scroll/resize; the CSS transition on the
-     transform gives the fan a soft damped chase as you scroll. */
+  /* Hover, tracked in JS: the pointer's slot column is re-derived on every
+     mousemove AND every scroll, so hover can never go stale mid-scroll
+     (the cause of sleeves stuck on the wrong layer). A sleeve that just
+     lost hover keeps a mid "settling" layer for 550ms so its swing-back
+     never clips through neighbors. */
+  let hovSlot = null;
+  const settling = new Map(); // slot -> timestamp when its settle window ends
+  let lastX = null, lastY = null;
+  function setHov(s) {
+    if (s === hovSlot) return;
+    if (hovSlot) { hovSlot.classList.remove('hov'); settling.set(hovSlot, performance.now() + 550); }
+    hovSlot = s;
+    if (s) { s.classList.add('hov'); settling.delete(s); }
+  }
+  row.addEventListener('mousemove', (e) => {
+    lastX = e.clientX; lastY = e.clientY;
+    setHov(e.target.closest ? e.target.closest('.slot') : null);
+  });
+  row.addEventListener('mouseleave', () => { lastX = lastY = null; setHov(null); });
+  row.addEventListener('scroll', () => {
+    if (lastX === null) return;
+    const el = document.elementFromPoint(lastX, lastY);
+    setHov(el ? el.closest('.slot') : null);
+  }, { passive: true });
+
+  /* Every frame: recompute each sleeve's angle, shading, near-side spine,
+     and stacking from its current position on screen. layout() is the
+     single owner of z-index — hovered on top, recently-hovered settling
+     just below, everything else stacked by distance from center. The CSS
+     transition on the transform gives the fan its damped chase. */
   function layout() {
     const vw = row.clientWidth;
     const center = vw / 2;
+    const now = performance.now();
     [...row.children].forEach((slot) => {
       const r = slot.getBoundingClientRect();
       const dx = (r.left + r.width / 2) - center;
@@ -268,17 +283,19 @@
       const br = 0.66 + (1 - th / 90) * 0.5;          // edge-on sleeves sit in shadow
       slot.style.setProperty('--ry', ry.toFixed(1) + 'deg');
       slot.style.setProperty('--br', br.toFixed(2));
-      if (!slot.dataset.raised) slot.style.zIndex = String(10 + Math.round(t * 60));
+      slot.classList.toggle('lft', dx < 0);           // which spine faces the viewer
+      let z = 10 + Math.round(t * 60);
+      if (slot === hovSlot) z = 999;
+      else if (settling.has(slot)) {
+        const leftMs = settling.get(slot) - now;
+        if (leftMs <= 0) settling.delete(slot);
+        else z = 700 + Math.round(leftMs / 10);       // most recent settles highest
+      }
+      slot.style.zIndex = String(z);
     });
   }
-  let ticking = false;
-  function onScroll() {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => { ticking = false; layout(); });
-  }
-  row.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onScroll);
+  (function tick() { layout(); requestAnimationFrame(tick); })();
+  window.addEventListener('resize', layout);
 
   function select(i, instant) {
     sel = Math.max(0, Math.min(N - 1, i));
