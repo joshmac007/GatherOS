@@ -37,17 +37,41 @@
   .lab .m{font-size:10.5px;color:rgba(255,255,255,.55);margin-top:3px}
   .lab .p{font-size:9px;margin-top:10px;color:rgba(255,255,255,.8)}
 
-  .covw{position:absolute;left:50%;top:27vh;width:320px;height:70vh;margin-left:-160px;cursor:pointer}
-  .cov{position:relative;overflow:hidden;width:100%;height:100%;border-radius:3px;backface-visibility:hidden;
-    transform:perspective(950px) rotateY(var(--ry));
-    transition:transform .55s var(--ease),filter .55s;
+  .covw{position:absolute;left:50%;top:27vh;width:320px;height:70vh;margin-left:-160px;cursor:pointer;
     filter:brightness(var(--br,1));
+    transition:filter .55s,transform .55s var(--ease)}
+  /* 3D group: the art face plus real folded-back spines, so each sleeve
+     has cardboard thickness instead of being a zero-width plane.
+     (Brightness lives on the wrapper — a filter on the preserve-3d
+     element itself would flatten the edges.) */
+  .c3d{position:relative;width:100%;height:100%;transform-style:preserve-3d;
+    transform:perspective(950px) rotateY(var(--ry));
+    transition:transform .55s var(--ease)}
+  .cov{position:absolute;inset:0;overflow:hidden;border-radius:3px;backface-visibility:hidden;
     box-shadow:0 12px 30px rgba(0,0,0,.6),0 42px 90px rgba(0,0,0,.55)}
   .cov::before{content:'';position:absolute;inset:0;background:linear-gradient(105deg,rgba(255,255,255,.15),transparent 34%);pointer-events:none;z-index:3}
   .cov svg{position:absolute;inset:0;width:100%;height:100%}
-  .slot:hover .cov{transform:perspective(950px) translateZ(46px) rotateY(calc(var(--ry)*0.62));filter:brightness(1.06)}
-  .slot.sel .cov{transform:perspective(950px) translateZ(24px) rotateY(calc(var(--ry)*0.76));filter:brightness(1.03)}
-  .slot:hover{z-index:350 !important}
+  /* Cardboard spines: thin planes folded 90° back from each vertical edge.
+     The near-side spine is what reads as thickness when a sleeve sits
+     edge-on; the far one hides behind the face. */
+  .edge{position:absolute;top:0;bottom:0;width:14px;
+    background:linear-gradient(180deg,#dcd7cd 0%,#c6c1b7 55%,#a8a299 100%);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.10)}
+  .edge.l{left:0;transform-origin:left center;transform:rotateY(90deg)}
+  .edge.r{right:0;transform-origin:right center;transform:rotateY(-90deg)}
+  .slot:hover .c3d{transform:perspective(950px) translateZ(52px) rotateY(calc(var(--ry)*0.6))}
+  .slot:hover .covw{filter:brightness(1.06)}
+  .slot.sel .c3d{transform:perspective(950px) translateZ(26px) rotateY(calc(var(--ry)*0.76))}
+  .slot.sel .covw{filter:brightness(1.03)}
+  /* Layering: the hovered sleeve lifts above its neighbors instantly, and
+     keeps that raised layer until the swing-back finishes (the 0s-duration,
+     .55s-delay z-index transition) so it never clips through mid-animation. */
+  .slot{transition:z-index 0s linear .55s}
+  .slot:hover{z-index:360 !important;transition:z-index 0s}
+  .slot.sel{z-index:340 !important}
+  /* The row parts around the hovered sleeve to give it room to open. */
+  .slot:hover ~ .slot .covw{transform:translateX(34px)}
+  .slot:has(~ .slot:hover) .covw{transform:translateX(-34px)}
 
   /* Atmosphere: tops of the sleeves dissolve into the dark header zone,
      bottoms sink under the deck gradient. */
@@ -188,7 +212,7 @@
     slot.style.cssText = `--i:${i};--ry:${ry.toFixed(1)}deg;--br:${br};z-index:${z}`;
     slot.innerHTML = `
       <div class="lab"><div class="n">${c.n}</div><div class="m">${c.c} saves</div><div class="p">▸</div></div>
-      <div class="covw"><div class="cov cv${c.s}">${covInner(c.s)}</div></div>`;
+      <div class="covw"><div class="c3d"><div class="cov cv${c.s}">${covInner(c.s)}</div><div class="edge l"></div><div class="edge r"></div></div></div>`;
     slot.addEventListener('click', () => select(i));
     row.appendChild(slot);
   });
