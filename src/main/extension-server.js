@@ -187,6 +187,19 @@ async function handleSave(req, res) {
   // value can't orphan a row out of the existing views.
   const ALLOWED_SOURCES = new Set(['x', 'instagram', 'cosmos']);
   const source = ALLOWED_SOURCES.has(body?.source) ? body.source : 'x';
+
+  // Cosmos: keep only the first image, even if the post carried several.
+  // Enforced here (not the extension) so it holds regardless of the
+  // installed extension version — a Cosmos element is one visual, and
+  // extra entries were showing up as blank second pages.
+  if (source === 'cosmos' && tweetMeta) {
+    if (Array.isArray(tweetMeta.media) && tweetMeta.media.length > 1) {
+      tweetMeta.media = tweetMeta.media.slice(0, 1);
+    }
+    if (Array.isArray(tweetMeta.imageUrls) && tweetMeta.imageUrls.length > 1) {
+      tweetMeta.imageUrls = tweetMeta.imageUrls.slice(0, 1);
+    }
+  }
   // Need at least one of: an image, a video, or a page URL. The X-
   // bookmark capture sends videoUrl for video-only tweets; right-click
   // sends an http(s) imageUrl; the extension's "capture page / area"
