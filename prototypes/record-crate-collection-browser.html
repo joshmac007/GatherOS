@@ -53,7 +53,19 @@
     transform:perspective(950px) rotateY(var(--ry));
     transition:transform .45s var(--ease)}
   .cov{position:absolute;inset:0;overflow:hidden;border-radius:3px;backface-visibility:hidden;
-    box-shadow:0 18px 40px rgba(0,0,0,.7),0 60px 120px rgba(0,0,0,.6),-34px 0 60px -10px rgba(0,0,0,.8)}
+    /* Each sleeve throws hard onto the one behind it (to its right):
+       a tight contact shadow, a broad mid throw, and ambient depth. */
+    box-shadow:
+      28px 0 26px -12px rgba(0,0,0,.92),
+      80px 0 90px -18px rgba(0,0,0,.78),
+      0 18px 40px rgba(0,0,0,.7),
+      0 60px 120px rgba(0,0,0,.6);
+    transition:box-shadow .45s var(--ease)}
+  .slot.hov .cov{box-shadow:
+      44px 0 44px -12px rgba(0,0,0,.95),
+      110px 0 130px -16px rgba(0,0,0,.8),
+      0 26px 60px rgba(0,0,0,.75),
+      0 80px 150px rgba(0,0,0,.65)}
   .cov::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:3;
     background:linear-gradient(90deg,rgba(255,255,255,.30) 0%,rgba(255,255,255,0) 7%),
                linear-gradient(105deg,rgba(255,255,255,.12),transparent 30%)}
