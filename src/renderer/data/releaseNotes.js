@@ -20,6 +20,31 @@ import {
 
 export const RELEASE_NOTES = [
   {
+    version: '0.8.0',
+    items: [
+      {
+        Icon: CardsIcon,
+        title: 'Browse collections like a crate',
+        description: 'The Collections tab is now a wall of record sleeves you flip through. Hover to pull one out and read its cover, arrow-key across them, and click to dive in.',
+      },
+      {
+        Icon: WindowIcon,
+        title: 'Save straight from Cosmos',
+        description: 'Cosmos joins X and Instagram. Save an image or video on cosmos.so and it syncs into your library right away, or backfill your whole profile and every collection with one Import.',
+      },
+      {
+        Icon: GlassIcon,
+        title: 'Choose a collection’s cover',
+        description: 'Right-click any save inside a collection and set it as the cover shown on its sleeve. Reset it back to automatic anytime from the new ⋯ menu next to the title.',
+      },
+      {
+        Icon: PermissionIcon,
+        title: 'A redesigned browser panel, and fixes',
+        description: 'The extension panel was rebuilt to match the app, plus fixes to video thumbnails, trackpad scrolling that jumped between screens, and a round of polish.',
+      },
+    ],
+  },
+  {
     version: '0.7.0',
     items: [
       {
