@@ -8,7 +8,7 @@
   /* Below the floating mode pill (z 45) so the Collections tab stays
      switchable while the crate is the active tab's view. */
   z-index: 40;
-  background: #171717;
+  background: #000;
   font-family: var(--font-ui);
   color: #fff;
   -webkit-font-smoothing: antialiased;
