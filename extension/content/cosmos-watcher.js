@@ -27,41 +27,37 @@ const savedElementIds = new Set();
 // clicked. The save button lives inside — or beside — the tile's /e/<id>
 // link, so from the pointer target we can read the exact element id AND its
 // image, then match them to the save mutation that fires a moment later.
-let lastCosmosClick = null; // { elementId, imageId, hasVideo, at }
+let lastCosmosClick = null; // { elementId, imageId, at }
 
-function firstCosmosImgId(scope) {
-  if (!scope || !scope.querySelectorAll) return null;
-  for (const img of scope.querySelectorAll('img')) {
+// Capture the tile under the pointer, by geometry. Feed tiles have no
+// /e/<id> link and the save button is an overlay, so DOM-ancestor walking is
+// unreliable — but the save button sits ON TOP of the tile art, so the
+// pointer coordinates fall inside the tile image's box. Find the smallest
+// cosmos image whose box contains the point: that's the tile being saved.
+function captureCosmosClick(x, y) {
+  let best = null;
+  let bestArea = Infinity;
+  for (const img of document.querySelectorAll('img')) {
+    if (img.closest('#gatheros-cosmos-debug')) continue; // our own debug thumbs
     const id = cosmosImageId(img.currentSrc || img.src);
-    if (id) return id;
+    if (!id) continue;
+    if (img.getClientRects().length === 0) continue;
+    const r = img.getBoundingClientRect();
+    if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
+    const area = r.width * r.height;
+    if (area < bestArea) { bestArea = area; best = { id, el: img }; }
   }
-  return null;
-}
-
-function captureCosmosClick(start) {
-  if (!(start instanceof Element)) return;
-  // The saved tile is the closest /e/<id> link, or — when the save button is
-  // an overlay sibling rather than a child of the link — the nearest ancestor
-  // that contains one.
-  let a = start.closest('a[href*="/e/"]');
-  let container = a;
-  if (!a) {
-    let node = start;
-    for (let depth = 0; node && depth < 12; depth += 1, node = node.parentElement) {
-      const found = node.querySelector && node.querySelector('a[href*="/e/"]');
-      if (found) { a = found; container = node; break; }
-    }
-  }
-  if (!a) return;
-  const m = /\/e\/(\d+)/.exec(a.getAttribute('href') || '');
-  if (!m) return;
-  // Prefer an image inside the link itself (the tile art) over the container.
-  const imageId = firstCosmosImgId(a) || firstCosmosImgId(container);
-  const hasVideo = !!((container || a).querySelector && (container || a).querySelector('video'));
-  lastCosmosClick = { elementId: m[1], imageId, hasVideo, at: Date.now() };
+  if (!best) return;
+  // Element id too, when the tile happens to expose an /e/<id> link — lets the
+  // save handler confirm the match. Feed tiles often don't, so it may be null
+  // and the handler matches on recency instead.
+  let elementId = null;
+  const a = best.el.closest('a[href*="/e/"]');
+  if (a) { const m = /\/e\/(\d+)/.exec(a.getAttribute('href') || ''); if (m) elementId = m[1]; }
+  lastCosmosClick = { elementId, imageId: best.id, at: Date.now() };
 }
 document.addEventListener('pointerdown', (e) => {
-  try { captureCosmosClick(e.target); } catch { /* never break the page */ }
+  try { captureCosmosClick(e.clientX, e.clientY); } catch { /* never break the page */ }
 }, true);
 // Image ids the interceptor flagged as "Similar" recommendations (from the
 // GetClusterRecommendations query) — never import these. Scoped per page load,
@@ -108,10 +104,13 @@ window.addEventListener('message', (event) => {
   //  3. The interceptor's element→image guess (walks Cosmos's GraphQL; can
   //     mis-key multi-image/video elements — a "random image" that isn't
   //     even the saved tile).
-  const clickId = (lastCosmosClick
-    && elKey && lastCosmosClick.elementId === elKey
-    && (Date.now() - lastCosmosClick.at) < 6000)
-    ? lastCosmosClick.imageId : null;
+  // A click counts if it's recent and either its tile's element id matches the
+  // save, or the tile exposed no element id (feed tiles) — in which case the
+  // click immediately preceding the mutation is the save target.
+  const clickRecent = lastCosmosClick && (Date.now() - lastCosmosClick.at) < 5000;
+  const clickUsable = clickRecent && lastCosmosClick.imageId
+    && (!lastCosmosClick.elementId || lastCosmosClick.elementId === elKey);
+  const clickId = clickUsable ? lastCosmosClick.imageId : null;
   const fromClick = clickId ? `https://${CDN_HOST}/${clickId}?format=webp` : '';
   const domMediaUrl = fromClick || resolveCosmosImageFromDom(d.elementId);
   const mediaUrl = domMediaUrl || d.mediaUrl;
@@ -150,9 +149,9 @@ function logCosmosSaveDiagnostic(elementId, interceptorUrl, domUrl, source) {
   }
   const dialogFound = !!dialogRoot;
   const videoFound = document.querySelector('video') != null; // whole page, not scoped
-  const clickInfo = (lastCosmosClick && lastCosmosClick.elementId === String(elementId))
-    ? `el ${lastCosmosClick.elementId} · img ${(lastCosmosClick.imageId || 'none').slice(0, 8)}${lastCosmosClick.hasVideo ? ' · video' : ''}`
-    : (lastCosmosClick ? `stale (el ${lastCosmosClick.elementId})` : 'none');
+  const clickInfo = lastCosmosClick
+    ? `img ${(lastCosmosClick.imageId || 'none').slice(0, 8)} · el ${lastCosmosClick.elementId || '—'} · ${Math.round((Date.now() - lastCosmosClick.at))}ms ago`
+    : 'none';
 
   // Every <img> (any src form) that resolves to a cosmos image, big→small.
   const big = [];
