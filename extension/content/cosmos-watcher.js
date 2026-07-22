@@ -38,7 +38,6 @@ function captureCosmosClick(x, y) {
   let best = null;
   let bestArea = Infinity;
   for (const img of document.querySelectorAll('img')) {
-    if (img.closest('#gatheros-cosmos-debug')) continue; // our own debug thumbs
     const id = cosmosImageId(img.currentSrc || img.src);
     if (!id) continue;
     if (img.getClientRects().length === 0) continue;
@@ -114,11 +113,6 @@ window.addEventListener('message', (event) => {
   const fromClick = clickId ? `https://${CDN_HOST}/${clickId}?format=webp` : '';
   const domMediaUrl = fromClick || resolveCosmosImageFromDom(d.elementId);
   const mediaUrl = domMediaUrl || d.mediaUrl;
-  // Diagnostic: if a save ever records the wrong image, this one line shows
-  // exactly what was on screen and what each source proposed — no guessing.
-  try {
-    logCosmosSaveDiagnostic(d.elementId, d.mediaUrl, domMediaUrl, fromClick ? 'click' : (domMediaUrl ? 'view' : 'interceptor'));
-  } catch { /* never let logging break a save */ }
   if (!mediaUrl) return; // image not seen yet — the profile/grid reader backfills it later
   const m = /cdn\.cosmos\.so\/([^/?#]+)/i.exec(mediaUrl);
   const id = m ? m[1] : String(d.elementId);
@@ -131,100 +125,10 @@ window.addEventListener('message', (event) => {
       type: 'gatheros:cosmos-saved-batch',
       elements: [{ id, mediaUrl, pageUrl: d.pageUrl || mediaUrl, type: 'image', caption: '', collection: null, realtime: true }],
     });
-    console.log('[gatheros] cosmos: real-time save →', mediaUrl, domMediaUrl ? '(from view)' : '(from interceptor)');
+    console.log('[gatheros] cosmos: real-time save →', mediaUrl,
+      fromClick ? '(from click)' : domMediaUrl ? '(from view)' : '(from interceptor)');
   } catch { /* extension reloaded */ }
 });
-
-// Temporary, on-page debug panel (screenshot-friendly) shown when a save
-// fires, so the wrong-image bug can be diagnosed from a screenshot instead
-// of another blind guess. Shows: the element id, whether a dialog/lightbox
-// was detected, what each source proposed (with a thumbnail), and every
-// large cdn image on screen (with thumbnails + sizes). Remove once fixed.
-let cosmosSaveDiagCount = 0;
-function logCosmosSaveDiagnostic(elementId, interceptorUrl, domUrl, source) {
-  cosmosSaveDiagCount += 1;
-  let dialogRoot = null;
-  for (const d of document.querySelectorAll('[role="dialog"], [aria-modal="true"]')) {
-    if (d.getClientRects().length > 0) { dialogRoot = d; break; }
-  }
-  const dialogFound = !!dialogRoot;
-  const videoFound = document.querySelector('video') != null; // whole page, not scoped
-  const clickInfo = lastCosmosClick
-    ? `img ${(lastCosmosClick.imageId || 'none').slice(0, 8)} · el ${lastCosmosClick.elementId || '—'} · ${Math.round((Date.now() - lastCosmosClick.at))}ms ago`
-    : 'none';
-
-  // Every <img> (any src form) that resolves to a cosmos image, big→small.
-  const big = [];
-  for (const img of document.querySelectorAll('img')) {
-    const id = cosmosImageId(img.currentSrc || img.src);
-    if (!id) continue;
-    if (img.getClientRects().length === 0) continue;
-    const r = img.getBoundingClientRect();
-    if (Math.min(r.width, r.height) < 120) continue;
-    big.push({ id, w: Math.round(r.width), h: Math.round(r.height) });
-  }
-  big.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-
-  // Raw <img> srcs inside the dialog — reveals the viewer's true src form
-  // (e.g. a _next/image proxy or a non-cdn host) when nothing else matches.
-  const dialogSrcs = [];
-  if (dialogRoot) {
-    for (const img of dialogRoot.querySelectorAll('img')) {
-      if (img.getClientRects().length === 0) continue;
-      const r = img.getBoundingClientRect();
-      if (Math.min(r.width, r.height) < 100) continue;
-      const raw = (img.currentSrc || img.src || '').replace(/^https?:\/\//, '');
-      dialogSrcs.push({ w: Math.round(r.width), h: Math.round(r.height), raw });
-    }
-    dialogSrcs.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-  }
-
-  console.log(
-    '[gatheros] cosmos save diag — element', elementId, '| dialog:', dialogFound,
-    '| chose:', domUrl ? `DOM ${cosmosImageId(domUrl)}` : `interceptor ${cosmosImageId(interceptorUrl) || 'none'}`,
-    '| dialog img srcs:', dialogSrcs.map((s) => `${s.w}×${s.h} ${s.raw}`),
-  );
-
-  const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
-  const thumb = (id) => id
-    ? `<img src="https://${CDN_HOST}/${id}?format=webp&w=64" style="width:38px;height:38px;object-fit:cover;border-radius:4px;flex:none;background:#222">`
-    : '<span style="width:38px;height:38px;border-radius:4px;background:#333;flex:none;display:inline-block"></span>';
-  const chosenId = cosmosImageId(domUrl) || cosmosImageId(interceptorUrl) || '';
-  const rows = big.map((b) => `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">${thumb(b.id)}<span>${b.id.slice(0, 8)} · ${b.w}×${b.h}</span></div>`).join('');
-  const dsrc = dialogSrcs.slice(0, 5).map((s) => `<div style="margin-top:4px;color:#bcd;word-break:break-all">${s.w}×${s.h} · ${esc(s.raw.slice(0, 90))}</div>`).join('');
-
-  let panel = document.getElementById('gatheros-cosmos-debug');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'gatheros-cosmos-debug';
-    panel.style.cssText = [
-      'position:fixed', 'left:16px', 'bottom:16px', 'z-index:2147483647',
-      'width:300px', 'max-height:70vh', 'overflow:auto', 'padding:12px 14px',
-      'background:#0b0b0c', 'color:#eaeaea', 'border:1px solid #2a2a2c', 'border-radius:10px',
-      'font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace',
-      'box-shadow:0 10px 40px rgba(0,0,0,.5)',
-    ].join(';');
-    document.body.appendChild(panel);
-  }
-  panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <b style="color:#8ad">GatherOS save debug</b>
-      <span style="cursor:pointer;color:#888" onclick="this.closest('#gatheros-cosmos-debug').remove()">✕</span>
-    </div>
-    <div>save #${cosmosSaveDiagCount} · element: <b>${elementId}</b></div>
-    <div>dialog: <b>${dialogFound}</b> · video: <b>${videoFound}</b></div>
-    <div style="margin-top:4px;color:#9aa">clicked tile: ${clickInfo}</div>
-    <div style="margin-top:8px;color:#7fd77f">SAVED (chosen)</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:2px">${thumb(chosenId)}<span>${chosenId.slice(0, 8) || 'none'}<br>via ${source || (domUrl ? 'on-screen' : 'interceptor')}</span></div>
-    <div style="margin-top:8px;color:#d7a77f">interceptor guessed</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:2px">${thumb(cosmosImageId(interceptorUrl))}<span>${(cosmosImageId(interceptorUrl) || 'none').slice(0, 8)}</span></div>
-    <div style="margin-top:8px;color:#9aa">dialog img srcs (${dialogSrcs.length})</div>
-    ${dsrc || '<div style="color:#666;margin-top:4px">(none / no dialog)</div>'}
-    <div style="margin-top:8px;color:#9aa">on-screen big images (${big.length})</div>
-    ${rows || '<div style="color:#666;margin-top:4px">(none ≥120px)</div>'}
-    <div style="margin-top:10px;color:#666">Screenshot this &amp; send it over.</div>
-  `;
-}
 
 // Extract a cosmos image id from ANY image url the page might use, not just
 // a bare cdn url. The lightbox viewer runs its image through Next.js's
