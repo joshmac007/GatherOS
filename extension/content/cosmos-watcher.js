@@ -14,6 +14,12 @@
 const CDN_HOST = 'cdn.cosmos.so';
 const COSMOS_USERNAME_KEY = 'gatherosCosmosUsername';
 const seen = new Set();
+// Element ids already saved live this page-load. A video element carries two
+// cdn assets (its poster still and the video itself) and can re-fire the save
+// mutation, so the same element could otherwise be sent twice under two
+// different image ids — landing a real save plus a dead blank tile. Dedupe by
+// element id so one element saves exactly once per session.
+const savedElementIds = new Set();
 // Image ids the interceptor flagged as "Similar" recommendations (from the
 // GetClusterRecommendations query) — never import these. Scoped per page load,
 // which resets naturally as the crawl navigates from collection to collection.
@@ -47,6 +53,11 @@ window.addEventListener('message', (event) => {
     return;
   }
   if (d.type !== 'save') return;
+  // One element saves once per page-load, no matter how many cdn assets it
+  // has (poster + video) or how often its save mutation re-fires. Without
+  // this, a video landed a real save plus a dead blank tile.
+  const elKey = d.elementId != null ? String(d.elementId) : null;
+  if (elKey && savedElementIds.has(elKey)) return;
   // Trust what's on screen over the interceptor's guess. The interceptor
   // maps element→image by walking Cosmos's GraphQL response, which for a
   // multi-image element (or nested element/media sub-objects) can attach
@@ -66,6 +77,7 @@ window.addEventListener('message', (event) => {
   const id = m ? m[1] : String(d.elementId);
   if (seen.has(id)) return;
   seen.add(id);
+  if (elKey) savedElementIds.add(elKey);
   if (!chrome.runtime || !chrome.runtime.id) return;
   try {
     chrome.runtime.sendMessage({
@@ -81,12 +93,15 @@ window.addEventListener('message', (event) => {
 // of another blind guess. Shows: the element id, whether a dialog/lightbox
 // was detected, what each source proposed (with a thumbnail), and every
 // large cdn image on screen (with thumbnails + sizes). Remove once fixed.
+let cosmosSaveDiagCount = 0;
 function logCosmosSaveDiagnostic(elementId, interceptorUrl, domUrl) {
+  cosmosSaveDiagCount += 1;
   let dialogRoot = null;
   for (const d of document.querySelectorAll('[role="dialog"], [aria-modal="true"]')) {
     if (d.getClientRects().length > 0) { dialogRoot = d; break; }
   }
   const dialogFound = !!dialogRoot;
+  const videoFound = (dialogRoot || document).querySelector('video') != null;
 
   // Every <img> (any src form) that resolves to a cosmos image, big→small.
   const big = [];
@@ -146,7 +161,8 @@ function logCosmosSaveDiagnostic(elementId, interceptorUrl, domUrl) {
       <b style="color:#8ad">GatherOS save debug</b>
       <span style="cursor:pointer;color:#888" onclick="this.closest('#gatheros-cosmos-debug').remove()">✕</span>
     </div>
-    <div>element: <b>${elementId}</b> · dialog: <b>${dialogFound}</b></div>
+    <div>save #${cosmosSaveDiagCount} · element: <b>${elementId}</b></div>
+    <div>dialog: <b>${dialogFound}</b> · video: <b>${videoFound}</b></div>
     <div style="margin-top:8px;color:#7fd77f">SAVED (chosen)</div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:2px">${thumb(chosenId)}<span>${chosenId.slice(0, 8) || 'none'}<br>via ${domUrl ? 'on-screen' : 'interceptor'}</span></div>
     <div style="margin-top:8px;color:#d7a77f">interceptor guessed</div>
@@ -308,6 +324,11 @@ function collectElements() {
       try { pageUrl = new URL(a.getAttribute('href'), location.origin).href; }
       catch { /* keep the fallback */ }
     }
+    // Skip an element already saved live this session — its poster tile
+    // carries a different cdn id than the live save used, so uuid dedup
+    // alone would let it through as a duplicate/blank second save.
+    const eid = /\/e\/(\d+)/.exec(pageUrl);
+    if (eid && savedElementIds.has(eid[1])) continue;
     seen.add(id);
     out.push({ id, mediaUrl, pageUrl, type: 'image', caption: img.alt || '', collection });
   }
