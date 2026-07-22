@@ -20,6 +20,49 @@ const seen = new Set();
 // different image ids — landing a real save plus a dead blank tile. Dedupe by
 // element id so one element saves exactly once per session.
 const savedElementIds = new Set();
+
+// The tile the user last interacted with, captured on pointer-down. Most
+// saves are grid/feed saves with no viewer open, so the interceptor's
+// element→image guess (and a whole-page image scan) can't tell which tile was
+// clicked. The save button lives inside — or beside — the tile's /e/<id>
+// link, so from the pointer target we can read the exact element id AND its
+// image, then match them to the save mutation that fires a moment later.
+let lastCosmosClick = null; // { elementId, imageId, hasVideo, at }
+
+function firstCosmosImgId(scope) {
+  if (!scope || !scope.querySelectorAll) return null;
+  for (const img of scope.querySelectorAll('img')) {
+    const id = cosmosImageId(img.currentSrc || img.src);
+    if (id) return id;
+  }
+  return null;
+}
+
+function captureCosmosClick(start) {
+  if (!(start instanceof Element)) return;
+  // The saved tile is the closest /e/<id> link, or — when the save button is
+  // an overlay sibling rather than a child of the link — the nearest ancestor
+  // that contains one.
+  let a = start.closest('a[href*="/e/"]');
+  let container = a;
+  if (!a) {
+    let node = start;
+    for (let depth = 0; node && depth < 12; depth += 1, node = node.parentElement) {
+      const found = node.querySelector && node.querySelector('a[href*="/e/"]');
+      if (found) { a = found; container = node; break; }
+    }
+  }
+  if (!a) return;
+  const m = /\/e\/(\d+)/.exec(a.getAttribute('href') || '');
+  if (!m) return;
+  // Prefer an image inside the link itself (the tile art) over the container.
+  const imageId = firstCosmosImgId(a) || firstCosmosImgId(container);
+  const hasVideo = !!((container || a).querySelector && (container || a).querySelector('video'));
+  lastCosmosClick = { elementId: m[1], imageId, hasVideo, at: Date.now() };
+}
+document.addEventListener('pointerdown', (e) => {
+  try { captureCosmosClick(e.target); } catch { /* never break the page */ }
+}, true);
 // Image ids the interceptor flagged as "Similar" recommendations (from the
 // GetClusterRecommendations query) — never import these. Scoped per page load,
 // which resets naturally as the crawl navigates from collection to collection.
@@ -58,19 +101,24 @@ window.addEventListener('message', (event) => {
   // this, a video landed a real save plus a dead blank tile.
   const elKey = d.elementId != null ? String(d.elementId) : null;
   if (elKey && savedElementIds.has(elKey)) return;
-  // Trust what's on screen over the interceptor's guess. The interceptor
-  // maps element→image by walking Cosmos's GraphQL response, which for a
-  // multi-image element (or nested element/media sub-objects) can attach
-  // the wrong cdn url — surfacing as a "random image" that isn't even one
-  // of the element's frames. The image the user is actually looking at is
-  // in the DOM, so resolve from there first and only fall back to the
-  // interceptor's mediaUrl when the DOM can't answer.
-  const domMediaUrl = resolveCosmosImageFromDom(d.elementId);
+  // Resolution order, most reliable first:
+  //  1. The tile the user just clicked (matched by element id) — the only
+  //     signal that survives a grid/feed save with no viewer open.
+  //  2. The image on screen (lightbox/detail viewer).
+  //  3. The interceptor's element→image guess (walks Cosmos's GraphQL; can
+  //     mis-key multi-image/video elements — a "random image" that isn't
+  //     even the saved tile).
+  const clickId = (lastCosmosClick
+    && elKey && lastCosmosClick.elementId === elKey
+    && (Date.now() - lastCosmosClick.at) < 6000)
+    ? lastCosmosClick.imageId : null;
+  const fromClick = clickId ? `https://${CDN_HOST}/${clickId}?format=webp` : '';
+  const domMediaUrl = fromClick || resolveCosmosImageFromDom(d.elementId);
   const mediaUrl = domMediaUrl || d.mediaUrl;
   // Diagnostic: if a save ever records the wrong image, this one line shows
   // exactly what was on screen and what each source proposed — no guessing.
   try {
-    logCosmosSaveDiagnostic(d.elementId, d.mediaUrl, domMediaUrl);
+    logCosmosSaveDiagnostic(d.elementId, d.mediaUrl, domMediaUrl, fromClick ? 'click' : (domMediaUrl ? 'view' : 'interceptor'));
   } catch { /* never let logging break a save */ }
   if (!mediaUrl) return; // image not seen yet — the profile/grid reader backfills it later
   const m = /cdn\.cosmos\.so\/([^/?#]+)/i.exec(mediaUrl);
@@ -94,14 +142,17 @@ window.addEventListener('message', (event) => {
 // was detected, what each source proposed (with a thumbnail), and every
 // large cdn image on screen (with thumbnails + sizes). Remove once fixed.
 let cosmosSaveDiagCount = 0;
-function logCosmosSaveDiagnostic(elementId, interceptorUrl, domUrl) {
+function logCosmosSaveDiagnostic(elementId, interceptorUrl, domUrl, source) {
   cosmosSaveDiagCount += 1;
   let dialogRoot = null;
   for (const d of document.querySelectorAll('[role="dialog"], [aria-modal="true"]')) {
     if (d.getClientRects().length > 0) { dialogRoot = d; break; }
   }
   const dialogFound = !!dialogRoot;
-  const videoFound = (dialogRoot || document).querySelector('video') != null;
+  const videoFound = document.querySelector('video') != null; // whole page, not scoped
+  const clickInfo = (lastCosmosClick && lastCosmosClick.elementId === String(elementId))
+    ? `el ${lastCosmosClick.elementId} · img ${(lastCosmosClick.imageId || 'none').slice(0, 8)}${lastCosmosClick.hasVideo ? ' · video' : ''}`
+    : (lastCosmosClick ? `stale (el ${lastCosmosClick.elementId})` : 'none');
 
   // Every <img> (any src form) that resolves to a cosmos image, big→small.
   const big = [];
@@ -163,8 +214,9 @@ function logCosmosSaveDiagnostic(elementId, interceptorUrl, domUrl) {
     </div>
     <div>save #${cosmosSaveDiagCount} · element: <b>${elementId}</b></div>
     <div>dialog: <b>${dialogFound}</b> · video: <b>${videoFound}</b></div>
+    <div style="margin-top:4px;color:#9aa">clicked tile: ${clickInfo}</div>
     <div style="margin-top:8px;color:#7fd77f">SAVED (chosen)</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:2px">${thumb(chosenId)}<span>${chosenId.slice(0, 8) || 'none'}<br>via ${domUrl ? 'on-screen' : 'interceptor'}</span></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:2px">${thumb(chosenId)}<span>${chosenId.slice(0, 8) || 'none'}<br>via ${source || (domUrl ? 'on-screen' : 'interceptor')}</span></div>
     <div style="margin-top:8px;color:#d7a77f">interceptor guessed</div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:2px">${thumb(cosmosImageId(interceptorUrl))}<span>${(cosmosImageId(interceptorUrl) || 'none').slice(0, 8)}</span></div>
     <div style="margin-top:8px;color:#9aa">dialog img srcs (${dialogSrcs.length})</div>
